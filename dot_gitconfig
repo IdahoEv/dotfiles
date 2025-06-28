@@ -1,0 +1,6 @@
+[user]
+	name = evan@idahoev.com
+[init]
+	defaultBranch = main
+[pull]
+	rebase = false
