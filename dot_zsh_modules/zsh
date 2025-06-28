@@ -1,0 +1,2 @@
+echo "loading 'zsh' module"
+alias reload="source ~/.zshrc"
