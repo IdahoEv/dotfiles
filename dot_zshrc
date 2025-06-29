@@ -11,7 +11,7 @@ eval "$(oh-my-posh init zsh --config ~/.config/oh-my-posh/theme.json)"
 for file in ~/.zsh_modules/*
     do 
         if [ -f "$file" ]
-        echo "loading $file"
+        # echo "loading $file"
         then source "$file" 
         fi 
     done
