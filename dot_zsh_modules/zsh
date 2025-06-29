@@ -1,4 +1,3 @@
-echo "loading 'zsh' module"
 alias reload="source ~/.zshrc"
 export EDITOR="/Applications/Cursor.app/Contents/MacOS/Cursor" # macOS
   
