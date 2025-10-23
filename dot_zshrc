@@ -1,20 +1,28 @@
 eval "$(/opt/homebrew/bin/brew shellenv)"
 # eval "$(oh-my-posh init zsh --config ~/.config/oh-my-posh/theme.json)"
-eval "$(oh-my-posh init zsh --config ~/.config/oh-my-posh/dev.omp.json)"
+# eval "$(oh-my-posh init zsh --config ~/.config/oh-my-posh/dev.omp.json)"
 # alias cheat="curl cht.sh"
+# oh-my-posh init zsh --config  $(brew --prefix oh-my-posh)/themes/jandedobbeleer.omp.json
+eval "$(oh-my-posh init zsh --config  $(brew --prefix oh-my-posh)/themes/quick-term.omp.json)"
+
 
 export PATH="$HOME/bin:$PATH"
- 
+# source ~/.zsh_modules/zsh
+# source ~/.zsh_modules/git
+# source ~/.zsh_modules/chezmoi
+
  # load modules
 for file in ~/.zsh_modules/*
-    do 
+    do
         if [ -f "$file" ]
         # echo "loading $file"
-        then source "$file" 
-        fi 
+        then source "$file"
+        fi
     done
 
-# query cheat.sh
-c() {
-  curl -m 10 "http://cheat.sh/${1}" 2>/dev/null || printf '%s\n' "[ERROR] Something broke"
-}
+# # query cheat.sh
+# c() {
+#   curl -m 10 "http://cheat.sh/${1}" 2>/dev/null || printf '%s\n' "[ERROR] Something broke" | less -R
+# }
+
+eval "$(direnv hook zsh)"

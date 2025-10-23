@@ -1,25 +1,7 @@
 [user]
 	name = Evan Dorn
-	email = {{ .email }}
+	email = evan@idahoev.com
 [init]
 	defaultBranch = main
 [pull]
 	rebase = false
-
-{{ if .is_work }}
-[includeIf "gitdir:~/personal/"]
-	path = ~/.gitconfig-personal
-
-[url "git@github.com-work"]
-	insteadOf = git@github.com:
-
-{{ else }}
-
-[includeIf "gitdir:~/work/"]
-	path = ~/.gitconfig-work
-	insteadOf = git@github.com:
-
-[url "git@github.com-personal"]
-	insteadOf = git@github.com:
-
-{{ end }}	

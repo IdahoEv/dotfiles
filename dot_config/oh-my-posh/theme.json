@@ -139,28 +139,28 @@
           "template": " \uf0ad ",
           "type": "root"
         },
-        {
-          "background": "#83769c",
-          "foreground": "#ffffff",
-          "properties": {
-            "always_enabled": true
-          },
-          "style": "plain",
-          "template": "<transparent>\ue0b0</> \ueba2 {{ .FormattedMs }}\u2800",
-          "type": "executiontime"
-        },
+        // {
+        //   "background": "#83769c",
+        //   "foreground": "#ffffff",
+        //   "properties": {
+        //     "always_enabled": true
+        //   },
+        //   "style": "plain",
+        //   "template": "<transparent>\ue0b0</> \ueba2 {{ .FormattedMs }}\u2800",
+        //   "type": "executiontime"
+        // },
         {
         // "background": "#83769c",
         "background": "#00897b",
-          "background_templates": [
-            "{{ if gt .Code 0 }}#e91e63{{ end }}"
-          ],
+          // "background_templates": [
+          //   "{{ if gt .Code 0 }}#e91e63{{ end }}"
+          // ],
           "foreground": "#ffffff",
           "properties": {
             "always_enabled": true
           },
           "style": "diamond",
-          "template": "<parentBackground>\ue0b0</> \ue23a ",
+            // "template": "<parentBackground>\ue0b0</> \ue23a ",
           "trailing_diamond": "\ue0b4",
           "type": "status"
         }
