@@ -86,6 +86,75 @@ alias gwta='git worktree add'
 alias gwtl='git worktree list'
 alias gwtr='git worktree remove'
 
+
+# ===== GIT COMPLETION FOR ALIASES =====
+
+  # Load git completion functions if not already loaded
+  if (( ! $+functions[_git] )); then
+      autoload -Uz compinit && compinit
+  fi
+
+  # Tell zsh to use git's completion for our aliases
+  compdef g=git
+  compdef ga=git
+  compdef gaa=git
+  compdef gau=git
+  compdef gap=git
+  compdef gs=git
+  compdef gss=git
+  compdef gc=git
+  compdef gcm=git
+  compdef gca=git
+  compdef gcam=git
+  compdef gcf=git
+  compdef gce=git
+  compdef gcne=git
+  compdef gb=git
+  compdef gba=git
+  compdef gbd=git
+  compdef gco=git
+  compdef gcb=git
+  compdef gsw=git
+  compdef gswc=git
+  compdef gst=git
+  compdef gstp=git
+  compdef gstl=git
+  compdef gsts=git
+  compdef gstd=git
+  compdef gf=git
+  compdef gfa=git
+  compdef gp=git
+  compdef gpo=git
+  compdef gpu=git
+  compdef gpf=git
+  compdef gpl=git
+  compdef gpr=git
+  compdef gd=git
+  compdef gds=git
+  compdef gdh=git
+  compdef gdt=git
+  compdef grh=git
+  compdef grha=git
+  compdef grhh=git
+  compdef grs=git
+  compdef grss=git
+  compdef grb=git
+  compdef grbi=git
+  compdef grbc=git
+  compdef grba=git
+  compdef gm=git
+  compdef gmn=git
+  compdef gcp=git
+  compdef gcpc=git
+  compdef gcpa=git
+  compdef gt=git
+  compdef gts=git
+  compdef gtl=git
+  compdef gwt=git
+  compdef gwta=git
+  compdef gwtl=git
+  compdef gwtr=gits
+
 # ===== ADVANCED GIT FUNCTIONS =====
 
 # Function to create and switch to a new branch from current branch
