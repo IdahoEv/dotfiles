@@ -1,5 +1,7 @@
 
 # Python related shell init
+export PYTHON_ROOT="{{ .python_root }}"
+export PATH="$PYTHON_ROOT:$PATH"
 export PYENV_ROOT="$HOME/.pyenv"
 command -v pyenv >/dev/null || export PATH="$PYENV_ROOT/bin:$PATH"
 eval "$(pyenv init -)"
