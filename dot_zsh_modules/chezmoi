@@ -1,1 +1,110 @@
 alias cm="chezmoi"
+
+# ===== CHEZMOI CHECK CONFIGURATION =====
+# Directories to check for unmanaged files (relative to $HOME)
+CM_CHECK_DIRS=(
+    .zsh_modules
+    .claude
+)
+
+# File patterns to check in $HOME (supports globs)
+# Example: .gitconfig, .zshrc, .vimrc, etc.
+CM_CHECK_HOME_PATTERNS=(
+    '.*'
+    '.gitconfig*'
+    '.zshrc*'
+    '.clauderc'
+    '.gitignore_global'
+)
+
+# Patterns to exclude from checks (supports shell globs)
+# These apply to basenames (not full paths)
+CM_EXCLUDE_PATTERNS=(
+    "*-local"           # Excludes access-keys-local, directories-local, etc.
+    "*.log"
+    "*.cache"
+    "debug"
+    "file-history"
+    "history.jsonl"
+    "session-env"
+    "shell-snapshots"
+    "todos"
+    "projects"
+    ".DS_Store"
+)
+
+# ===== HELPER FUNCTIONS =====
+
+# Check if a basename matches any exclude pattern
+_cm_should_exclude() {
+    local basename="$1"
+    local pattern
+
+    for pattern in "${CM_EXCLUDE_PATTERNS[@]}"; do
+        # Use zsh's pattern matching
+        if [[ "$basename" == $~pattern ]]; then
+            return 0  # Should exclude
+        fi
+    done
+
+    return 1  # Should not exclude
+}
+
+# Detect drift between actual dotfiles and chezmoi
+cm-check() {
+    echo "=== Modified managed files ==="
+    chezmoi diff
+
+    echo "\n=== Unmanaged files in tracked directories ==="
+
+    # Cache the list of managed files for performance
+    local managed_files=$(chezmoi managed)
+
+    # Check directories
+    local dir
+    for dir in "${CM_CHECK_DIRS[@]}"; do
+        local full_path="$HOME/$dir"
+
+        if [ ! -d "$full_path" ]; then
+            continue
+        fi
+
+        # Find all files and directories in this location (maxdepth 1 = non-recursive)
+        while IFS= read -r item; do
+            local basename=$(basename "$item")
+            local rel_path="$dir/$basename"
+
+            # Skip if matches exclude pattern
+            if _cm_should_exclude "$basename"; then
+                continue
+            fi
+
+            # Check if managed by chezmoi
+            if ! echo "$managed_files" | grep -q "^${rel_path}\$"; then
+                echo "  ~/$rel_path (not managed)"
+            fi
+        done < <(find "$full_path" -mindepth 1 -maxdepth 1)
+    done
+
+    # Check home directory file patterns
+    local pattern
+    for pattern in "${CM_CHECK_HOME_PATTERNS[@]}"; do
+        # Expand glob pattern in $HOME
+        setopt local_options null_glob
+        for file in $HOME/$~pattern(N); do
+            local basename=$(basename "$file")
+
+            # Skip if matches exclude pattern
+            if _cm_should_exclude "$basename"; then
+                continue
+            fi
+
+            # Check if managed by chezmoi
+            if ! echo "$managed_files" | grep -q "^${basename}\$"; then
+                echo "  ~/$basename (not managed)"
+            fi
+        done
+    done
+
+    echo "\n=== Use 'chezmoi add <path>' or 'chezmoi add --template <path>' to track files ==="
+}

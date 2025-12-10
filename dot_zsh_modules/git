@@ -206,10 +206,24 @@ ginit() {
     fi
 }
 
+gshow-cleanable() {
+    git fetch --prune
+    echo "Merged:"
+    git branch --merged | grep -v "\*\|main\|master\|develop"
+    echo "\nSquash-merged:"
+    git branch -vv | grep ': gone]' | awk '{print $1}'
+}
+
 # Function to clean up merged branches
 gclean() {
     git branch --merged | grep -v "\*\|main\|master\|develop" | xargs -n 1 git branch -d
 }
+
+gclean-squashed() {
+    git fetch --prune
+    git branch -vv | grep ': gone]' | awk '{print $1}' | xargs -r git branch -D
+}
+
 
 # Function to show current branch name (useful for prompts)
 current_branch() {

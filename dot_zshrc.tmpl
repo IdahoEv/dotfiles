@@ -1,6 +1,16 @@
 eval "$(/opt/homebrew/bin/brew shellenv)"
 eval "$(oh-my-posh init zsh --config  $(brew --prefix oh-my-posh)/themes/quick-term.omp.json)"
 
+# Set editor based on OS
+{{- if eq .chezmoi.os "darwin" }}
+export EDITOR="code --wait"
+{{- else if eq .chezmoi.os "linux" }}
+export EDITOR="code --wait"
+{{- else if eq .chezmoi.os "windows" }}
+export EDITOR="code.cmd --wait"
+{{- else }}
+export EDITOR="pico"
+{{- end }}
 
 export PATH="$HOME/bin:$PATH"
 
