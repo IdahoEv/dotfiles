@@ -1,0 +1,59 @@
+{
+  "cleanupPeriodDays": 30,
+  "env": {
+    "BASH_DEFAULT_TIMEOUT_MS": "300000",
+    "DISABLE_TELEMETRY": "true",
+    "DISABLE_ERROR_REPORTING": "true"
+  },
+  "includeCoAuthoredBy": true,
+  "permissions": {
+    "allow": [
+      "Bash(yarn live)",
+      "Bash(yarn build)",
+      "Bash(yarn build:*)",
+      "Bash(yarn test)",
+      "Bash(yarn test:*)",
+      "Bash(yarn lint:*)",
+      "Bash(yarn db:*)",
+      "Bash(docker-compose:*)",
+      "Bash(wellth-ci:*)",
+      "Bash(yarn tsc:*)",
+      "Bash(git:*)",
+      "Bash(ast-grep:*)",
+      "Bash(sg:*)",
+      "Bash(short:*)"
+    ],
+    "deny": [
+      "Bash(curl:*)",
+      "Bash(wget:*)",
+      "Read(./secrets/**)",
+      "Read(**/credentials*)",
+      "Read(**/*_rsa)",
+      "Read(**/*.pem)",
+      "Read(**/*.key)",
+      "Read(./coverage/**)",
+      "Read(./node_modules/**)",
+      "Write(./.env*)",
+      "Write(./secrets/**)"
+    ],
+    "additionalDirectories": []
+  },
+  "model": "sonnet",
+  "enableAllProjectMcpServers": true,
+  "enabledMcpjsonServers": [],
+  "disabledMcpjsonServers": [],
+  "hooks": {
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "yarn lint:fix && yarn tsc --noEmit",
+            "timeout": 60
+          }
+        ]
+      }
+    ]
+  },
+  "alwaysThinkingEnabled": false
+}

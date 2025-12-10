@@ -5,6 +5,8 @@ alias cm="chezmoi"
 CM_CHECK_DIRS=(
     .zsh_modules
     .claude
+    .claude/commands 
+    .claude/agents 
 )
 
 # File patterns to check in $HOME (supports globs)
