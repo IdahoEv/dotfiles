@@ -3,28 +3,50 @@ alias cm="chezmoi"
 # ===== CHEZMOI CHECK CONFIGURATION =====
 # Directories to check for unmanaged files (relative to $HOME)
 CM_CHECK_DIRS=(
-    .zsh_modules
+    .shell_modules
     .claude
-    .claude/commands 
-    .claude/agents 
 )
 
 # File patterns to check in $HOME (supports globs)
 # Example: .gitconfig, .zshrc, .vimrc, etc.
 CM_CHECK_HOME_PATTERNS=(
     '.*'
-    '.gitconfig*'
-    '.zshrc*'
-    '.clauderc'
-    '.gitignore_global'
-)
+) 
 
 # Patterns to exclude from checks (supports shell globs)
 # These apply to basenames (not full paths)
 CM_EXCLUDE_PATTERNS=(
-    "*-local"           # Excludes access-keys-local, directories-local, etc.
-    "*.log"
-    "*.cache"
+    # Machine-local configs
+    "*-local"           # Excludes access-keys-local, directories-local, settings.local.json, etc.
+
+    # Cache and state directories
+    ".DS_Store"
+    ".docker"
+    ".npm"
+    ".yarn"
+    ".yarnrc"
+    ".cargo"
+    ".pyenv"
+    ".local"
+    ".vscode"
+    ".cursor"
+    ".hex"
+    ".mix"
+    "bun"
+    ".bun"
+    ".cups"
+    "statsig"
+
+    # History and session files
+    ".zsh_history"
+    ".zsh_sessions"
+    ".zcompdump*"
+    ".psql_history"
+    ".node_repl_history"
+    ".viminfo"
+    ".lesshst"
+
+    # Claude Code session data
     "debug"
     "file-history"
     "history.jsonl"
@@ -32,7 +54,21 @@ CM_EXCLUDE_PATTERNS=(
     "shell-snapshots"
     "todos"
     "projects"
-    ".DS_Store"
+    ".claude-code"
+    ".claude.json"
+    ".claude.json.backup"
+    "productivity-plan.md"
+    ".claude/settings.local.json"
+
+    # SSH keys (config is OK, but not keys)
+    ".ssh"
+
+    # Misc
+    ".Trash"
+    ".CFUserTextEncoding"
+    ".pnp.cjs"
+    "*.log"
+    "*.cache"
 )
 
 # ===== HELPER FUNCTIONS =====
