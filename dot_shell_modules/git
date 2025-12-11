@@ -1,5 +1,7 @@
 # ===== GIT ALIASES AND SHORTCUTS =====
 
+require_command git "git not installed" || return
+
 # Basic Git shortcuts
 alias g='git'
 alias ga='git add'
@@ -27,12 +29,18 @@ alias gcne='git commit --amend --no-edit'
 alias gb='git branch'
 alias gba='git branch -a'       # All branches
 alias gbd='git branch -d'       # Delete branch
+
 # Smart git checkout: if no args, launch fzf picker for branches/tags/refs.
 # Otherwise pass through to git checkout.
 gco() {
   if [ $# -eq 0 ]; then
-    local ref=$(_fzf_git_each_ref --no-multi)
-    [ -n "$ref" ] && git checkout "$ref"
+    if has_command fzf; then
+      local ref=$(_fzf_git_each_ref --no-multi)
+      [ -n "$ref" ] && git checkout "$ref"
+    else
+      echo "fzf not installed. Use 'gco <branch>' or install fzf: brew install fzf" >&2
+      return 1
+    fi
   else
     git checkout "$@"
   fi

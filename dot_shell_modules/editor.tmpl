@@ -1,14 +1,8 @@
 export FALLBACK_EDITOR="pico"
 
 # Set editor based on availability
-{{- if or (eq .chezmoi.os "darwin") (eq .chezmoi.os "linux") }}
-    if command -v code &> /dev/null; then
-        export PREFERRED_EDITOR="code --wait"
-    fi  
-{{- else if eq .chezmoi.os "windows" }}
-    if command -v code.cmd &> /dev/null; then
-        export PREFERRED_EDITOR="code.cmd --wait"
-    fi
-{{- end }}
+if has_command code; then
+    export PREFERRED_EDITOR="code --wait"
+fi
 
 export EDITOR="${PREFERRED_EDITOR:-$FALLBACK_EDITOR}"
