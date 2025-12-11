@@ -27,7 +27,16 @@ alias gcne='git commit --amend --no-edit'
 alias gb='git branch'
 alias gba='git branch -a'       # All branches
 alias gbd='git branch -d'       # Delete branch
-alias gco='git checkout'
+# Smart git checkout: if no args, launch fzf picker for branches/tags/refs.
+# Otherwise pass through to git checkout.
+gco() {
+  if [ $# -eq 0 ]; then
+    local ref=$(_fzf_git_each_ref --no-multi)
+    [ -n "$ref" ] && git checkout "$ref"
+  else
+    git checkout "$@"
+  fi
+}
 alias gcb='git checkout -b'     # Create and checkout new branch
 alias gsw='git switch'          # Modern alternative to checkout
 alias gswc='git switch -c'      # Create and switch to new branch
@@ -112,7 +121,7 @@ alias gwtr='git worktree remove'
   compdef gb=git
   compdef gba=git
   compdef gbd=git
-  compdef gco=git
+  # gco is now a function, not an alias - no compdef needed
   compdef gcb=git
   compdef gsw=git
   compdef gswc=git
@@ -153,7 +162,7 @@ alias gwtr='git worktree remove'
   compdef gwt=git
   compdef gwta=git
   compdef gwtl=git
-  compdef gwtr=gits
+  compdef gwtr=git
 
 # ===== ADVANCED GIT FUNCTIONS =====
 
