@@ -1,3 +1,5 @@
+require_command chezmoi "chezmoi not installed. Install with: brew install chezmoi" || return
+
 alias cm="chezmoi"
 
 # ===== CHEZMOI CHECK CONFIGURATION =====
@@ -18,6 +20,8 @@ CM_CHECK_HOME_PATTERNS=(
 CM_EXCLUDE_PATTERNS=(
     # Machine-local configs
     "*-local"           # Excludes access-keys-local, directories-local, settings.local.json, etc.
+    "*.local"
+    "*.local.json"
 
     # Cache and state directories
     ".DS_Store"

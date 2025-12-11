@@ -1,0 +1,10 @@
+# ===== FZF INTEGRATION =====
+# Named zz-fzf to load last and override other completions
+
+require_command fzf "fzf not installed. Install with: brew install fzf" || return
+
+# Load fzf shell integrations
+# - completion.zsh: Enables ** tab completion and context-sensitive fuzzy completion
+# - key-bindings.zsh: Ctrl+R (history), Ctrl+T (files), Alt+C (cd to dir)
+source $(brew --prefix)/opt/fzf/shell/completion.zsh
+source $(brew --prefix)/opt/fzf/shell/key-bindings.zsh

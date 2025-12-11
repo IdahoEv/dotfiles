@@ -1,0 +1,41 @@
+# ===== UTILITY FUNCTIONS FOR DOTFILES =====
+# Loaded first (00- prefix) to make utilities available to other modules
+
+# Check if a command exists. Returns 0 if found, 1 if not.
+# Usage:
+#   has_command fzf || echo "fzf not installed"
+#   has_command fzf || return
+has_command() {
+  command -v "$1" &>/dev/null
+}
+
+# Check if command exists, warn if missing, return status.
+# Usage:
+#   require_command fzf "Install with: brew install fzf"
+#   require_command fzf "fzf features disabled" || return
+require_command() {
+  local cmd="$1"
+  local msg="${2:-$cmd not found}"
+
+  if ! has_command "$cmd"; then
+    echo "Warning: $msg" >&2
+    return 1
+  fi
+  return 0
+}
+
+# Check multiple commands at once
+# Usage:
+#   require_commands fzf bat delta || return
+require_commands() {
+  local missing=()
+  for cmd in "$@"; do
+    has_command "$cmd" || missing+=("$cmd")
+  done
+
+  if [ ${#missing[@]} -gt 0 ]; then
+    echo "Warning: Missing commands: ${missing[*]}" >&2
+    return 1
+  fi
+  return 0
+}

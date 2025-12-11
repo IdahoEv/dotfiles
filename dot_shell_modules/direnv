@@ -1,0 +1,6 @@
+# ===== DIRENV INTEGRATION =====
+# Automatically loads/unloads environment variables based on .envrc files in directories
+
+require_command direnv "direnv not installed. Install with: brew install direnv" || return
+
+eval "$(direnv hook zsh)"
