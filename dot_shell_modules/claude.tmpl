@@ -1,3 +1,8 @@
-{{- if .is_work }}
-export ANTHROPIC_API_KEY="{{ .anthropic_api_key }}"
-{{- end }}
+# Check if Claude Code is installed
+if ! has_command claude; then
+    echo "Warning: Claude Code not installed. Download from: https://claude.ai/download" >&2
+fi
+
+{{ if .anthropic_api_key }}
+export ANTHROPIC_API_KEY="{{- .anthropic_api_key }}"
+{{ end }}

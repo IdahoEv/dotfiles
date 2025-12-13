@@ -5,8 +5,10 @@ alias cm="chezmoi"
 # ===== CHEZMOI CHECK CONFIGURATION =====
 # Directories to check for unmanaged files (relative to $HOME)
 CM_CHECK_DIRS=(
-    .shell_modules
     .claude
+    .hammerspoon    
+    .shell_modules
+    .productivity
 )
 
 # File patterns to check in $HOME (supports globs)
