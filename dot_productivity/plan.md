@@ -65,6 +65,7 @@
 | 41 | Shell | **Oh-my-posh customization for git status** | ⭐⭐⭐⭐ | 1 day | **Visual git workflow efficiency** | |
 | 42 | VSCode | Keyboard shortcuts customization | ⭐⭐⭐⭐ | 2 days | Optimize for your Dvorak Kinesis layout | |
 | 43 | Integration | VSCode + GitHub integration | ⭐⭐⭐ | 1 day | Review PRs, create issues without browser | |
+| 44 | VSCode | **Code completion tools mastery (Copilot, IntelliSense)** | ⭐⭐⭐⭐ | 2 days | **Understand what's suggesting what and how to use each tool effectively** | |
 
 ---
 

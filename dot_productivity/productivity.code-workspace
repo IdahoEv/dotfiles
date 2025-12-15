@@ -1,0 +1,21 @@
+{
+  "folders": [
+	{
+		"name": ".claude",
+		"path": "../.claude"
+	},
+	{
+		"name": ".config",
+		"path": "../.config"
+	},
+	{
+		"name": ".productivity",
+		"path": "."
+	},
+	{
+		"name": ".shell_modules",
+		"path": "../.shell_modules"
+	}
+],
+  "settings": {}
+}

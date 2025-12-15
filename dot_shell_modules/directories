@@ -1,0 +1,4 @@
+export DEV=/Users/evan/Documents/Development
+
+alias dev="cd $DEV"
+alias prod="cd $HOME/.productivity"
