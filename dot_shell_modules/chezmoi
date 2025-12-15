@@ -21,8 +21,8 @@ CM_CHECK_HOME_PATTERNS=(
 # These apply to basenames (not full paths)
 CM_EXCLUDE_PATTERNS=(
     # Machine-local configs
-    "*-local"           # Excludes access-keys-local, directories-local, settings.local.json, etc.
-    "*.local"
+    "*local"           # Excludes access-keys-local, directories-local, settings.local.json, etc.
+    "*local"
     "*.local.json"
 
     # Cache and state directories
@@ -75,6 +75,21 @@ CM_EXCLUDE_PATTERNS=(
     ".pnp.cjs"
     "*.log"
     "*.cache"
+
+    # Non-shared configs
+    "*.v8flags*"
+    ".aspnet"
+    ".cht.sh"
+    ".dotnet"
+    ".elm"
+    ".emacs.d"
+    ".grass7"
+    ".nix-profile"
+    ".nuget"
+    ".omnisharp"
+    ".ServiceHub"
+    ".templateengine"
+    ".thumbnails"
 )
 
 # ===== HELPER FUNCTIONS =====

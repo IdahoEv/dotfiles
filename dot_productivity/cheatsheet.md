@@ -11,31 +11,39 @@ html body table td, html body table th {
 
 <div class="section-group">
 
-## iTerm2
-
-### Panes
+### iTerm2 Panes
 
 | Function | Key |
 |---|---|
 | Split Pane V | ⌘D |
 | Split Pane H | ⌘⇧D |
 
-</div>
-
-<div class="section-group">
-
-## VSCode
-
-### Editor Groups (#9)
+### VSCode Groups
 
 | Function | Key |
 |---|---|
 | Split editor | ⌘H ⌘S *dir* |
 | Focus group | ⌘H ⌘F *dir* |
 | Move to group | ⌘H ⌘M *dir* |
+| Resize group | ⌘K ⌘←/→ |
 | Close all in group | ⌘K W |
 
-### Code Folding (#15)
+</div>
+
+<div class="section-group">
+
+### Editing / Selecting
+
+| Function | Key |
+|---|---|
+| Shift Line/Block | ⌥*dir* |
+| Duplicate Line/Block | ⌥⇧*dir* |
+| Add Match | cmd-D |
+| Add Prev-Match | cmd-shift-D |
+| Skip Match | cmd-opt-D |
+| Skip Prev-Match | cmd-opt-shift-D |
+
+### Code Folding
 
 | Function | Key |
 |---|---|
@@ -51,9 +59,7 @@ html body table td, html body table th {
 
 <div class="section-group">
 
-## -
-
-### Problems Panel (#18)
+### Problems Panel
 
 | Function | Key |
 |---|---|
@@ -62,7 +68,7 @@ html body table td, html body table th {
 | Go to previous error | ⇧F8 |
 | Open Problems Panel | ⌘⇧M |
 
-### Zen/Focus Modes (#22)
+### Zen/Focus Modes
 
 | Function | Key |
 |---|---|
