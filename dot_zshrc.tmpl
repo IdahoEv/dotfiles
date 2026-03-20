@@ -2,6 +2,8 @@ eval "$(/opt/homebrew/bin/brew shellenv)"
 eval "$(oh-my-posh init zsh --config  $(brew --prefix oh-my-posh)/themes/quick-term.omp.json)"
 
 export PATH="$HOME/bin:$PATH"
+eval "$(/usr/libexec/path_helper)" # might cause issues at work where I haven't installed latex
+
 
 # load modules
 for file in ~/.shell_modules/*
