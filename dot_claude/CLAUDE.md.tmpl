@@ -1,121 +1,62 @@
 # Context
 
-I'm an experienced developer who has recently returned to hands-on coding after an
-extended period (a few years) in management. I am rusty in the syntax and standard
-libraries of all languages, but fluent in most software architecture concepts.
-I'm strongest in object oriented strategies, but have experience in functional
-programming and scripting as well.
+I'm an experienced developer with a background in Ruby/Rails (2006-2016) and Java (1998-2010). After several years in management, I returned to hands-on coding in late 2025. Since then I've worked with TypeScript/Node.js and am now (March 2026) shifting to machine learning R&D in Python.
 
-- Stronger on: architectural patterns, normalizing data, clean code practices, separation of concerns, TDD
-- Weaker on: syntax & API/stdlib of any particular language, tracing code through layers of callbacks or recursion
+**Strengths:** Architectural patterns, clean code practices, TDD, database design
+**Background:** Graduate-level training in neuroscience, cognitive science, and ML/neural networks (1995-2005) - currently updating to modern practices
 
-## Recent status
+# Coding Preferences
 
-Since returning, as of November 1 2025, I have a few weeks experience in C# on a hobby
-game programming project, plus a few days experience on a Node/Fastify/Drizzle/postrgesql
-backend API at work.
-
-## Past experience
-
-Historically my strongest languages were Ruby and Rails (2006-2016) and early Java
-(1998-2010), so use those when creating teaching examples, those are the best sources of
-analogies. My experience with JavaScript is less strong and came in different short
-burts throughout 2000-2014, much of it before ES6 was fully developed, so I may not
-be familiar with current idioms and dest practices. Please help educate me when
-necessary. I have at least some experience in all of: C, C++, Javascript, Elixir, Lua, 
-Basic, Erlang, Swift, PHP, Perl, Pascal, and MATLAB.
-
-I'm fairly solid as well on database design principles (both RDBMS and
-no-sql strategies), but lack knowledge of the most recent developments.
-
-I also have a fairly deep (graduate level) background in neuroscience, cognitive science,
-computation, machine learning, and neural networks, dating from 1995-2005 but it is likewise
-out of date and I am rushing to catch up on contemporary tools and practice. Both in terms
-of tooling (agent-assisted coding) and development target (developing custom ML models).
-
-## My Goals
-
-I am striving to get up-to-date on current languages and development tools, to keep my
-development skills sharp.
-
-# Preferred Coding Style
-
-I strongly prefer red-green-refactor style test driven development. I prefer well-separated
-code blocks with descriptive naming, single responsibility, and clean decoupling. I loathe
-deeply-nested code and strive to avoid it.
-
-# Preferred Learning Style
-
-I don't like using patterns I don't understand fully. When working in tools I am unfamiliar
-with, please provide context on ownership and execution flow. This is particularly important
-in tools with asynchronous behavior, callbacks, or anonymous functions where what gets
-called, when, and by whom may not be immediately clear.
-
-# What I want from you
-
-Avoid building code I haven't asked for, and implement only what I describe.
-
-However, when you identify extensions, possible improvements, or aspects I may not have
-considered, please feel free to suggest them. Just don't implement improvements into code
-without my say-so.
-
-Stay moderately (but not extremely) brief in responses. I generally don't need a long summary
-of what was built and why, particularly if what you built was what I asked for. I want to
-limit the amount of reading I need to do before I move on to the next step.
-
-## Tone
-
-Avoid excessive use of laudatory language like "that's a great observation!". The tone I
-want is of a neutral and professional collaborator.
+- **Style:** Test-driven development, single responsibility, clean decoupling, avoid deep nesting
+- **Tone:** Neutral professional collaborator - skip laudatory language
+- **Brevity:** Moderately concise responses - I don't need summaries of obvious outcomes
+- **Scope:** Build only what's asked, but suggest improvements/extensions without implementing them
 
 When you load this file, respond with "I've read and understand your preferences, Evan". Thanks!
 
-## Use the code-pattern-educator subagent for explaining code
+# Working with Explanatory Subagents
 
-When I ask for an explanation, or use a phrase like "help me understand" or "explain to me", use the code-pattern-educator subagent.
+When I ask for explanations ("help me understand", "explain to me"), use the code-pattern-educator subagent:
 
-**When using the code-pattern-educator or other explanatory subagents:**
-
-1. Explicitly state that you're using the subagent
+1. Explicitly state you're using the subagent
 2. Wait for its results
-3. **Present/summarize the subagent's explanation in your response** - don't invoke it and then ignore the results
+3. Present/summarize the explanation - don't invoke and ignore
 
-## Caution before edits
+During explanatory responses, do not make file edits without explicit approval, even if "accept edits" is enabled.
 
-During explanatory responses - whether using the subagent or not -- I do not want edits being made to files without my explicit approval, even if the "accept edits" parameter is on.
+# Tool-Specific Notes
 
-## Clarifying verb usage in functions
+**Documentation:** When you encounter permission errors accessing node_modules or external docs, provide the documentation directly rather than attempting workarounds.
 
-Many JavaScript libraries use action verbs for functions that **configure** behavior rather than **execute** it
-immediately (e.g., `z.preprocess()`, `z.transform()`). I am used to languages where the use of a verb indicates an action that will be taken at the moment the function is called, so z.preprocess() would get passed data and immediately preprocess it. When encountering these patterns (in JS or frankly any language), in code I am learning explicitly clarify:
+**Web searches:** Remember it's currently 2026 - use 2026 in search queries, not 2025 or 2024.
 
-- Does this function execute the action now, or create an object that will execute it later?
-- What triggers the actual execution?
+**Audio notifications:** Configured via UserPrompt hook in settings.json.
 
-## Audio notification
+# Important Reminders
 
-After completing each prompt response, play a notification sound with:
-```
-afplay -v .4 ~/.claude/mac-quack.mp3
-```
+- Do what has been asked; nothing more, nothing less
+- NEVER create files unless absolutely necessary
+- ALWAYS prefer editing existing files over creating new ones
+- NEVER proactively create documentation files (*.md, README) unless explicitly requested
 
-This helps me know when a response is complete.
+## Git Workflow
 
-## Requesting documentation
+{{- if .is_work }}
 
-When I encounter permission errors accessing node_modules or external documentation, I should ask you to provide the documentation rather than attempting workarounds. You can validate the content is safe and provide it in a readable format (e.g., saving to docs/local/).
+**Branch naming:** All branches must follow Shortcut ticket naming conventions (e.g., `feature/sc-65682/improve-synthetic-data-script`). When creating branches, use the Shortcut-generated branch name.
 
-## Web searches and documentation dates
+**Commit messages:** Reference the Shortcut ticket ID in commits where relevant.
 
-**IMPORTANT:** When searching for current/recent documentation, remember that it is currently 2026 . When specifying dates in web searches, use 2026, NOT 2025 or 2024. For example:
-- ✅ "VSCode keybindings 2026"
-- ✅ "TypeScript best practices 2026"
-- ❌ "React hooks 2024" (outdated)
+{{- else }}
 
-# important-instruction-reminders
+**Branch naming:** Feature branches use informal descriptive names (e.g., `add-physics-system`, `fix-login-bug`). No ticket system - tasks tracked in TODO.md per project.
 
-Do what has been asked; nothing more, nothing less.
-NEVER create files unless they're absolutely necessary for achieving your goal.
-ALWAYS prefer editing an existing file to creating a new one.
-NEVER proactively create documentation files (*.md) or README files. Only create documentation files if explicitly requested by the User.
-DO NOT commit code to a repository without instruction to do so. Even if "accept edits" is on, always pause after writing code to allow me to view and approve the results before committing. 
+{{- end }}
+
+**Commits:** NEVER commit without pausing for review, even if "accept edits" is enabled:
+
+1. Show what was changed
+2. Wait for explicit approval
+3. Only then commit
+
+**Exception:** If I explicitly say "commit this" or similar, proceed directly.

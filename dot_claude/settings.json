@@ -43,6 +43,17 @@
   "enabledMcpjsonServers": [],
   "disabledMcpjsonServers": [],
   "hooks": {
+    "UserPrompt": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "afplay -v .4 ~/.claude/mac-quack.mp3",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
     "SessionEnd": [
       {
         "hooks": [
