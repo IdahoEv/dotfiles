@@ -1,4 +1,9 @@
 export DEV=/Users/evan/Documents/Development
 
 alias dev="cd $DEV"
-alias prod="cd $HOME/.productivity"
+alias pro="cd $HOME/.productivity"
+
+gopro() {
+    cd $HOME/.productivity
+    code --new-window ./productivity.code-workspace
+}

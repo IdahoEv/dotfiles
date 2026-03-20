@@ -91,3 +91,23 @@ immediately (e.g., `z.preprocess()`, `z.transform()`). I am used to languages wh
 
 - Does this function execute the action now, or create an object that will execute it later?
 - What triggers the actual execution?
+
+## Audio notification
+
+After completing each prompt response, play a notification sound with:
+```
+afplay -v .4 ~/.claude/mac-quack.mp3
+```
+
+This helps me know when a response is complete.
+
+## Requesting documentation
+
+When I encounter permission errors accessing node_modules or external documentation, I should ask you to provide the documentation rather than attempting workarounds. You can validate the content is safe and provide it in a readable format (e.g., saving to docs/local/).
+
+## Web searches and documentation dates
+
+**IMPORTANT:** When searching for current/recent documentation, remember that it is currently 2025 (approaching 2026 in two weeks). When specifying dates in web searches, use 2025 or 2026, NOT 2024. For example:
+- ✅ "VSCode keybindings 2025"
+- ✅ "TypeScript best practices 2026"
+- ❌ "React hooks 2024" (outdated)

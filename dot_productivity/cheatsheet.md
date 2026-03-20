@@ -1,5 +1,7 @@
 ---
 output: cheatsheet.html
+export_on_save:
+    html: true
 ---
 
 <link rel="stylesheet" href="cheatsheet.css">
@@ -17,16 +19,26 @@ html body table td, html body table th {
 |---|---|
 | Split Pane V | ⌘D |
 | Split Pane H | ⌘⇧D |
+| Toggle Maximize Pane | ⌘⌥⇧M |
 
 ### VSCode Groups
 
 | Function | Key |
 |---|---|
+| Toggle Maximize Pane | ⌘⌥⇧M |
 | Split editor | ⌘H ⌘S *dir* |
 | Focus group | ⌘H ⌘F *dir* |
 | Move to group | ⌘H ⌘M *dir* |
-| Resize group | ⌘K ⌘←/→ |
+| **Resize group** | **⌘H ⌘R** ***dir*** |
 | Close all in group | ⌘K W |
+
+### Navigation
+
+| Function | Key |
+|---|---|
+| Jump by word | ⌥←/→ |
+| Jump to line start/end | ⌘←/→ |
+| Jump to matching bracket | ⌘⇧\ |
 
 </div>
 
@@ -38,10 +50,11 @@ html body table td, html body table th {
 |---|---|
 | Shift Line/Block | ⌥*dir* |
 | Duplicate Line/Block | ⌥⇧*dir* |
-| Add Match | cmd-D |
-| Add Prev-Match | cmd-shift-D |
-| Skip Match | cmd-opt-D |
-| Skip Prev-Match | cmd-opt-shift-D |
+| Add Cursor | ⌥*click* |
+| Add Match | ⌘D |
+| Add Prev-Match | ⌘⇧D |
+| Skip Match | ⌘⌥-D |
+| Skip Prev-Match | ⌘⌥⇧D |
 
 ### Code Folding
 
@@ -59,11 +72,11 @@ html body table td, html body table th {
 
 <div class="section-group">
 
-### Problems Panel
+### Problems & Errors
 
 | Function | Key |
 |---|---|
-| Error info at cursor | ⌘K ⌘I |
+| Error info at cursor | ⌘H ⌘E |
 | Go to next error | F8 |
 | Go to previous error | ⇧F8 |
 | Open Problems Panel | ⌘⇧M |
@@ -72,11 +85,10 @@ html body table td, html body table th {
 
 | Function | Key |
 |---|---|
-| Toggle Maximize Group | ⌘K ⌘M |
 | Toggle Zen Mode | ⌘K Z |
 | Exit Zen Mode | ESC ESC |
 
 #### Glyphs (Reference)
 
-⌘ ⌃ ⌥ ⇧
+⌘ ⌃ ⌥ ⇧ ⏎
 </div>

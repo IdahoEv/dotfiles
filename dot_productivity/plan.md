@@ -2,9 +2,9 @@
 
 ## Current Focus
 
-**Items In Progress:** #7 (Error Lens), #8 (ESLint keybinding), #9 (Pane resizing), #10 (Tasks), #13 (Editor groups)
-**Items Completed:** #1, #2, #3, #4, #5, #6 (chronological order)
-**Today's Focus:** Error visibility and test feedback acceleration
+**Items In Progress:** #10 (Error visibility workflow - ongoing refinement), #9 (Pane resizing)
+**Items Completed:** #1, #2, #3, #4, #5, #6, #7 (Multi-cursor), #8 (ESLint/auto-fix), #11 (Tasks), #13 (Editor groups), #32 (iTerm layouts), Within-line navigation
+**Last Updated:** 2026-01-08
 **Date Started:** 2025-11-10
 
 ---
@@ -28,11 +28,11 @@
 | 4 | VSCode | ~~Fold/unfold code regions (Cmd+K Cmd+0 through Cmd+K Cmd+J)~~ | ⭐⭐⭐ | 1 day | Focus on relevant code, hide noise | solid |
 | 5 | VSCode | ~~Problems panel workflow (Cmd+Shift+M)~~ | ⭐⭐⭐ | 1 day | Fix errors/warnings without switching windows | in progress |
 | 6 | VSCode | ~~Zen mode (Cmd+K Z) & focus mode~~ | ⭐⭐⭐ | 1 day | Deep work without distractions | in progress |
-| 7 | VSCode | ~~Multi-cursor editing (Cmd+D, Cmd+Shift+L, Option+Click)~~ | ⭐⭐⭐⭐⭐ | 2 days | Transform repetitive edits into seconds of work | in progress |
+| 7 | VSCode | ~~Multi-cursor editing (Cmd+D, Cmd+Shift+L, Option+Click)~~ | ⭐⭐⭐⭐⭐ | 2 days | Transform repetitive edits into seconds of work | completed |
 | 8 | VSCode/iTerm | **Pane resizing keyboard shortcuts** | ⭐⭐⭐⭐ | 1 day | **HIGH PRIORITY: Eliminate mouse dependency for pane management** | |
-| 9 | VSCode | **Custom keybindings for common tasks (ESLint fix, etc.)** | ⭐⭐⭐⭐⭐ | 1 day | **HIGH PRIORITY: One-key fixes for auto-fixable errors** | |
+| 9 | VSCode | ~~Custom keybindings for common tasks (ESLint fix, etc.)~~ | ⭐⭐⭐⭐⭐ | 1 day | One-key fixes for auto-fixable errors | completed |
 | 10 | VSCode | **Extension: Error Lens for inline diagnostics** | ⭐⭐⭐⭐⭐ | 1 day | **HIGH PRIORITY: Eliminates 5-10 minute TypeScript/ESLint error cycles** | |
-| 11 | VSCode | **Tasks and build system integration** | ⭐⭐⭐⭐⭐ | 1 day | **HIGH PRIORITY: Sub-second TDD feedback across all projects** | |
+| 11 | VSCode | ~~Tasks and build system integration~~ | ⭐⭐⭐⭐⭐ | 1 day | Sub-second TDD feedback across all projects | completed |
 | 12 | Shell | **fzf keybindings (Ctrl+R, Ctrl+T, Alt+C)** | ⭐⭐⭐⭐⭐ | 1 day | **Build CLI confidence, address unknown tools anxiety** | |
 | 13 | Claude Code | Custom slash commands for your workflow | ⭐⭐⭐⭐⭐ | 1 day | Automate repetitive Claude interactions you do daily | |
 | 14 | VSCode | Integrated Terminal (Ctrl+\`) & split terminals | ⭐⭐⭐⭐ | 1 day | Stop context-switching to iTerm, stay in one window | |
@@ -53,7 +53,7 @@
 | 29 | VSCode | Timeline view for file history | ⭐⭐⭐ | 1 day | Quick file history without git log |  |
 | 30 | Git | Partial staging with git add -p | ⭐⭐⭐ | 1 day | Commit logical chunks from mixed changes | |
 | 31 | VSCode | Workspace search and replace | ⭐⭐⭐⭐ | 1 day | Refactor across many files safely |  |
-| 32 | iTerm | Split panes and hotkey window | ⭐⭐⭐ | 1 day | Multiple terminals without tab switching | |
+| 32 | iTerm | ~~Split panes and Window Arrangements~~ | ⭐⭐⭐⭐⭐ | 1 day | Per-project terminal layouts with saved configurations | completed |
 | 33 | VSCode | Git integration (staging, diffing, resolving conflicts) | ⭐⭐⭐⭐ | 2 days | Git operations without leaving editor | |
 | 34 | Claude Code | Subagent workflows and parallel execution | ⭐⭐⭐⭐ | 1 day | Faster research and multi-task operations | |
 | 35 | VSCode | Extension: GitLens for advanced git insights | ⭐⭐⭐⭐ | 1 day | See who/when/why code changed inline | |
@@ -66,6 +66,7 @@
 | 42 | VSCode | Keyboard shortcuts customization | ⭐⭐⭐⭐ | 2 days | Optimize for your Dvorak Kinesis layout | |
 | 43 | Integration | VSCode + GitHub integration | ⭐⭐⭐ | 1 day | Review PRs, create issues without browser | |
 | 44 | VSCode | **Code completion tools mastery (Copilot, IntelliSense)** | ⭐⭐⭐⭐ | 2 days | **Understand what's suggesting what and how to use each tool effectively** | |
+| 45 | VSCode | Text replacement/snippets for frequent glyphs | ⭐⭐⭐ | 30 min | Quick insertion of Mac keyboard glyphs (⌘⇧⌥⌃↵) for documentation | |
 
 ---
 
@@ -148,15 +149,17 @@ After these, you'll feel dramatically faster. The rest build on this foundation.
 - **Learning Strategy:** Post-it on monitor as reminder
 - **Goal:** Eliminate sidebar browsing for navigation
 
-### Item 3: Pane Resizing Keyboard Shortcuts (NEW HIGH PRIORITY)
+### Item 8: Pane Resizing Keyboard Shortcuts
 
 - **Date Started:** 2025-12-12
-- **Status:** In Progress - addressing major friction point
-- **Problem:** Constantly reaching for mouse to resize editor groups and terminal panes
-- **Key Commands to Learn:**
-  - VSCode: `Cmd+K Cmd+Left/Right` for group resizing
-  - Custom keybindings for specific resize increments
-  - iTerm: keyboard shortcuts for pane resizing
+- **Date Updated:** 2026-01-08
+- **Status:** In Progress - deferred until navigation is more fluent
+- **Problem:** Still using mouse for pane resizing
+- **Decision:** Focus on pane/group navigation first, then add resize commands
+- **Next Steps:**
+  - Commands already in cheatsheet (Cmd+H Cmd+R + direction)
+  - Consider creating "size for standard line width" command vs generic widen/narrow
+  - Practice after navigation becomes reflexive
 - **Goal:** Never use mouse for pane management
 
 ### Item 4 (Original): Go to Symbol (Cmd+T)
@@ -273,16 +276,26 @@ After these, you'll feel dramatically faster. The rest build on this foundation.
 - Identified Cmd+Option+K as safe personal chord namespace
 - Added Item #41 for future custom keybinding work
 
-### Item 32: Error Lens Extension (HIGH PRIORITY)
+### Item 10: Error Lens Extension & Error Visibility Workflow
 
 - **Date Started:** 2025-12-12
-- **Status:** In Progress - addressing error visibility issues
-- **Problem:** Can't distinguish completion popup from existing code, slow error interpretation
-- **Actions:**
-  - Install Error Lens extension
-  - Configure inline error display
-  - Set up distinct colors for different diagnostic levels
-- **Goal:** Instant error understanding without hover/panel switching
+- **Date Updated:** 2026-01-08
+- **Status:** In Progress - extension installed, workflow needs refinement
+- **Installed:** Error Lens showing inline diagnostics
+- **Remaining Pain Points:**
+  - Inline errors clipped in 2-3 column view → Need Zen/maximize fluency
+  - Cmd+K Cmd+I is awkward on Dvorak Kinesis (K and I both off-home with same finger)
+  - No "jump to error in this line" command known
+  - Within-line navigation not fluent (leads to mouse use or arrow-key spam)
+  - Errors during typing create "cried wolf" phenomenon
+  - Visual confusion between code, suggestions, and error braces
+- **Potential Solutions to Explore:**
+  - Remap Cmd+K Cmd+I to easier chord
+  - Learn within-line navigation commands
+  - Tune Error Lens to reduce mid-typing noise
+  - Practice F8/Shift+F8 for error navigation
+  - Color tuning for suggestion/error distinction
+- **Goal:** Instant error understanding without mouse or awkward navigation
 
 ### Item 34: Tasks Integration (HIGH PRIORITY)
 
@@ -295,16 +308,38 @@ After these, you'll feel dramatically faster. The rest build on this foundation.
   - Create keyboard shortcuts for test running
 - **Goal:** Sub-second test feedback in all projects
 
-### Item 41: ESLint Auto-fix Keybinding (HIGH PRIORITY)
+### Item 7: Multi-cursor Editing
+
+- **Date Started:** 2025-11-10
+- **Date Completed:** 2026-01-08
+- **Status:** Completed - fluent with common cases
+- **Key Commands Mastered:**
+  - `Cmd+D` - Add next match to selection
+  - `Cmd+Shift+L` - Add all matches to selection
+  - `Option+Click` - Add cursor at click location
+  - Column selection with Option+Shift+drag
+- **Key Insight:** Fluent with straight columns and word matches. Ragged edge and click-to-add are available in cheatsheet for when needed.
+- **Goal Achieved:** Rapid multi-location edits without mouse
+
+### Item 8/9: ESLint Auto-fix & Custom Keybindings
 
 - **Date Started:** 2025-12-12
-- **Status:** In Progress - addressing TypeScript/ESLint confusion
-- **Problem:** 5-10 minute cycles to understand and fix ESLint errors
-- **Actions:**
-  - Add Cmd+Option+K F keybinding for ESLint auto-fix
-  - Configure Error Lens to show rule names
-  - Create quick reference for common ESLint patterns
-- **Goal:** One-key fix for auto-fixable ESLint issues
+- **Date Completed:** 2026-01-08
+- **Status:** Completed - effective workflow established
+- **Solution:**
+  - Lint-fix-on-save handles most issues automatically
+  - Command palette for occasional tasks like "Organize Imports"
+  - Could add specific keybinding for organize imports if frequency increases
+- **Goal Achieved:** Fast fixes without manual ESLint work
+
+### Item 11: Tasks Integration
+
+- **Date Started:** 2025-12-12
+- **Date Completed:** 2026-01-08
+- **Status:** Completed for Pulse
+- **Solution:** Test watcher provides sub-second feedback
+- **Known Issue:** Watcher occasionally hangs (tool issue, not workflow gap)
+- **Goal Achieved:** Fast TDD feedback loop in primary project
 
 ### Claude Code TypeScript Optimization (NEW HIGH PRIORITY)
 
@@ -320,14 +355,109 @@ After these, you'll feel dramatically faster. The rest build on this foundation.
 - **Goal:** Claude generates Pulse-compliant TypeScript without manual fixes
 - **Reference:** `/Users/evan/.productivity/claude-typescript-tuning.md`
 
-### Tmux Basics Learning Plan (NEW)
+### Item 32: iTerm Window Arrangements - Per-Project Layouts
 
-- **Status:** Planned for next week
-- **Problem:** Anxiety about tmux vs iTerm choice, unknown tool
-- **Learning approach:**
-  - 30 minutes: basic session management
-  - 30 minutes: pane management
-  - Integration with existing workflow
-- **Goal:** Confident choice between tmux and iTerm based on actual experience
+- **Date Started:** 2026-01-08
+- **Date Completed:** 2026-01-08
+- **Status:** Completed - core workflow established
+- **Problems Solved:**
+  - ✅ Manual pane setup every day (3 panes per project: claude, tests, git)
+  - ✅ New panes open to home instead of project directory
+  - ✅ Claude output doesn't reflow when resizing (too narrow in side columns)
+  - ✅ Terminal takes too much width when showing Claude + tests side-by-side
+- **Solution Implemented:**
+  - Moved Claude to full-width bottom pane (toggle height with Cmd+Option+Shift+M)
+  - Created saved Window Arrangements with all project tabs (Pulse, wellth-api-v3, Productivity)
+  - Configured iTerm profile: "Reuse previous session's directory" for CWD inheritance
+  - Menu access works (keyboard shortcuts had issues, deemed not worth debugging)
+- **Key Insight:** Window Arrangements save entire window including all tabs, not individual projects
+- **Result:** One menu selection restores complete daily workspace
+- **Goal Achieved:** Eliminated daily manual terminal setup
+
+### Within-Line Navigation (NEW)
+
+- **Date Started:** 2026-01-08
+- **Date Completed:** 2026-01-08
+- **Status:** Completed - added to cheatsheet
+- **Problem Solved:** Arrow-key spam or mouse use to reach errors within a line
+- **Commands Added:**
+  - `Option+Left/Right` - Jump by word
+  - `Cmd+Left/Right` - Jump to line start/end
+  - `Cmd+Shift+\` - Jump to matching bracket
+- **Integration:** Added to cheatsheet in new Navigation section
+- **Goal Achieved:** Efficient within-line movement without mouse
+
+### Error Info Keybinding Remap (NEW)
+
+- **Date Started:** 2026-01-08
+- **Date Completed:** 2026-01-08
+- **Status:** Completed
+- **Problem Solved:** Cmd+K Cmd+I awkward on Dvorak Kinesis (K and I both off-home, same finger)
+- **Solution:** Remapped to Cmd+H Cmd+E (comfortable chord in personal namespace)
+- **Implementation:** Added to keybindings.json via `editor.action.showHover`
+- **Updated:** Cheatsheet now shows Cmd+H Cmd+E for "Error info at cursor"
+- **Goal Achieved:** Comfortable error info access
+
+### Cheatsheet Auto-Compile (BONUS)
+
+- **Date Started:** 2026-01-08
+- **Date Completed:** 2026-01-08
+- **Status:** Completed
+- **Problem Solved:** Multi-step menu navigation to compile cheatsheet.md to HTML
+- **Solution:** Added `export_on_save: html: true` to front matter
+- **Result:** Markdown Preview Enhanced auto-exports on save
+- **Goal Achieved:** Zero-friction cheatsheet updates
+
+### Tmux Basics Learning Plan (DEFERRED)
+
+- **Status:** Deferred - starting with iTerm Window Arrangements first
+- **Rationale:** 80% of work is on home monitor with iTerm. Can add tmux later if need persistence/portability.
+- **Will Revisit If:** Need remote work, crash recovery, or cross-machine portability becomes important
+
+---
+
+## Follow-up Items for Later Discussion
+
+### iTerm: Accidental Pane/Tab Closing
+
+- **Date Added:** 2025-12-19
+- **Problem:** Some unknown keystroke is closing panes and/or entire tabs without warning while managing tabs/panes
+- **To investigate:**
+  - Review iTerm keybindings for close commands
+  - Check what key combinations near common tab/pane management shortcuts might close windows
+  - Consider adding confirmation prompts or changing bindings
+
+### iTerm: Per-Tab Default CWD for New Panes
+
+- **Date Added:** 2025-12-19
+- **Date Resolved:** 2026-01-08
+- **Status:** SOLVED
+- **Solution:** iTerm Settings → Profiles → General → Working Directory → "Reuse previous session's directory"
+- **Result:** New panes now inherit CWD from the pane they're split from
+
+### VSCode: Prioritize Errors by Type
+
+- **Date Added:** 2025-12-19
+- **Desired feature:** Demote ESLint formatting complaints while actively writing code, focus on more serious errors first
+- **Use case:** During active code writing, want to focus on logical errors, not style
+- **To investigate:**
+  - Error Lens filtering/priority settings
+  - VSCode problem filters
+  - ESLint configuration for delayed formatting checks
+  - Possible workflow: disable certain rules during draft, enable for final pass
+
+### Test Results: Better Visibility for Pass/Fail Summary
+
+- **Date Added:** 2025-12-19
+- **Problem:** Long test output buries the error summary; hard to see which tests are red/green
+- **Desired features:**
+  - Separate window showing just red/green summary
+  - OR: Extension that highlights test status inline in test files
+  - Ability to jump to next failing test quickly
+- **To investigate:**
+  - VSCode test extensions (Jest Runner, Test Explorer, etc.)
+  - Terminal output filtering/formatting options
+  - Custom tasks with output parsing
+  - Test gutter decorations/inline status
 
 [Continue for each item as you work through them...]
