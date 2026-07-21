@@ -39,3 +39,7 @@ require_commands() {
   fi
   return 0
 }
+
+ssh-init() {
+  ls ~/.ssh/id_* | grep -v "\.pub$" | xargs ssh-add
+}
