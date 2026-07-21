@@ -66,6 +66,22 @@ CM_EXCLUDE_PATTERNS=(
     "productivity-plan.md"
     ".claude/settings.local.json"
 
+    # Claude Code internal runtime state/cache (not user content)
+    "mcp-needs-auth-cache.json"
+    "cache"
+    "policy-limits.json"
+    ".last-cleanup"
+    "paste-cache"
+    "remote-settings.json"
+    "sessions"
+    ".last-update-result.json"
+    "backups"
+    "claude-notifications-go"
+
+    # Other tools' local IDE/runtime state
+    ".copilot"
+    ".vscode-shared"
+
     # SSH keys (config is OK, but not keys)
     ".ssh"
 
@@ -73,6 +89,7 @@ CM_EXCLUDE_PATTERNS=(
     ".Trash"
     ".CFUserTextEncoding"
     ".pnp.cjs"
+    ".pnp.loader.mjs"
     "*.log"
     "*.cache"
 

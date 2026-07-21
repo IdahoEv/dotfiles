@@ -1,0 +1,39 @@
+# Worktree Manager - Git worktree management tool
+#
+# Adds worktree-manager.sh to PATH and provides convenient aliases
+
+# Add git-tools to PATH if not already present
+WORKTREE_MANAGER_DIR="$HOME/Documents/Development/git-tools"
+if [[ -d "$WORKTREE_MANAGER_DIR" ]]; then
+    if [[ ":$PATH:" != *":$WORKTREE_MANAGER_DIR:"* ]]; then
+        export PATH="$WORKTREE_MANAGER_DIR:$PATH"
+    fi
+fi
+
+# Worktree Manager aliases
+alias wm='worktree-manager.sh'
+alias wms='worktree-manager.sh --sc'
+alias wmc='worktree-manager.sh --claude'
+alias wmsc='worktree-manager.sh --claude --sc'
+
+# Optional: add completion hint function
+wm-help() {
+    cat <<'EOF'
+Worktree Manager Aliases:
+  wm              Interactive branch/worktree selection
+  wm --init       Initialize worktree structure in current repo
+  wm <branch>     Create/switch to branch worktree
+  wms <ticket>    Create worktree from Shortcut ticket
+  wmc             Interactive + open Claude
+  wmc <branch>    Create worktree + open Claude
+  wmsc <ticket>   Shortcut ticket + open Claude
+
+Examples:
+  wm --init                    # First-time setup in a repo
+  wm                           # Interactive selection
+  wm feature/new-thing         # Create worktree for branch
+  wms 65682                    # Create from Shortcut ticket
+  wmc                          # Interactive + Claude
+  wmsc 65682                   # Shortcut + Claude
+EOF
+}

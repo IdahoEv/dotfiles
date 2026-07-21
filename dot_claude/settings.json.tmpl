@@ -1,0 +1,87 @@
+{
+  "cleanupPeriodDays": 30,
+  "env": {
+    "BASH_DEFAULT_TIMEOUT_MS": "300000",
+    "DISABLE_TELEMETRY": "true",
+    "DISABLE_ERROR_REPORTING": "true"
+  },
+  "includeCoAuthoredBy": true,
+  "permissions": {
+    "allow": [
+      "Bash(yarn live)",
+      "Bash(yarn build)",
+      "Bash(yarn build:*)",
+      "Bash(yarn test)",
+      "Bash(yarn test:*)",
+      "Bash(yarn lint:*)",
+      "Bash(yarn db:*)",
+      "Bash(docker-compose:*)",
+      "Bash(wellth-ci:*)",
+      "Bash(yarn tsc:*)",
+      "Bash(git:*)",
+      "Bash(ast-grep:*)",
+      "Bash(sg:*)",
+      "Bash(short:*)",
+      "Bash(curl * https://api.app.shortcut.com/*)",
+      "Bash(/Users/evan/.claude/skills/review-comments/poll-pr.sh*)"
+    ],
+    "deny": [
+      "Bash(curl:*)",
+      "Bash(wget:*)",
+      "Read(./secrets/**)",
+      "Read(**/credentials*)",
+      "Read(**/*_rsa)",
+      "Read(**/*.pem)",
+      "Read(**/*.key)",
+      "Read(./coverage/**)",
+      "Read(./node_modules/**)",
+      "Write(./.env*)",
+      "Write(./secrets/**)"
+    ],
+    "additionalDirectories": []
+  },
+  "model": "sonnet[1m]",
+  "enableAllProjectMcpServers": true,
+  "enabledMcpjsonServers": [],
+  "disabledMcpjsonServers": [],
+  "hooks": {},
+  "statusLine": {
+    "type": "command",
+    "command": "input=$(cat); cwd=$(echo \"$input\" | jq -r '.workspace.current_dir'); user=$(whoami); short_path=$(echo \"$cwd\" | awk -F/ '{if (NF <= 4) {print $0} else {printf \"~/…\"; for (i=NF-1; i<=NF; i++) {if ($i != \"\") printf \"/%s\", $i}}}' | sed \"s|^$HOME|~|\"); git_info=\"\"; if git -C \"$cwd\" rev-parse --git-dir > /dev/null 2>&1; then branch=$(git -C \"$cwd\" --no-optional-locks rev-parse --abbrev-ref HEAD 2>/dev/null | head -c 25); if ! git -C \"$cwd\" --no-optional-locks diff --quiet 2>/dev/null; then git_color=\"\\033[38;2;169;116;0m\"; else git_color=\"\\033[38;2;55;133;4m\"; fi; git_info=\" ${git_color} ${branch}\\033[0m\"; fi; printf \"\\033[38;2;215;95;0m \\033[0m\"; printf \"\\033[38;2;78;78;78m ${user}\\033[0m\"; printf \"\\033[38;2;0;135;175m ${short_path}\\033[0m\"; printf \"${git_info}\""
+  },
+  "enabledPlugins": {
+    "claude-notifications-go@claude-notifications-go": true,
+    "slack@claude-plugins-official": true
+  },
+  "extraKnownMarketplaces": {
+    "claude-notifications-go": {
+      "source": {
+        "source": "github",
+        "repo": "777genius/claude-notifications-go"
+      }
+    }
+  },
+  "alwaysThinkingEnabled": true{{ if or .notion_api_token .shortcut_api_token }},
+  "mcpServers": {
+{{- if .notion_api_token }}
+    "notion": {
+      "command": "npx",
+      "args": ["-y", "@notionhq/notion-mcp-server"],
+      "env": {
+        "OPENAPI_MCP_HEADERS": "{\"Authorization\": \"Bearer {{ .notion_api_token }}\", \"Notion-Version\": \"2022-06-28\"}"
+      }
+    }{{ if .shortcut_api_token }},{{ end }}
+{{- end }}
+{{- if .shortcut_api_token }}
+    "shortcut": {
+      "command": "npx",
+      "args": ["-y", "@shortcut/mcp@latest"],
+      "env": {
+        "SHORTCUT_API_TOKEN": "{{ .shortcut_api_token }}"
+      }
+    }
+{{- end }}
+  }
+{{- end }},
+  "installMethod": "homebrew"
+}
