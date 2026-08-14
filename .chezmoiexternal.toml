@@ -1,0 +1,7 @@
+["Documents/Development/git-tools"]
+    type = "git-repo"
+    url = "git@github.com-personal:IdahoEv/git-tools.git"
+    refreshPeriod = "24h"
+
+["Documents/Development/git-tools".pull]
+    args = ["--ff-only"]
