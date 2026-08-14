@@ -372,11 +372,9 @@ This option is for when coderabbit's suggestion is incorrect, overly pedantic, o
 
 ### 5. Summary Report
 
-After processing all comments, show a summary:
+After processing all comments, show a summary using the **structured findings table format** (see below), followed by the roll-up counts:
 
 ```text
-## Review Comments Summary
-
 Total unresolved comments: N
 - Fixed: X (👍 reactions added for coderabbit)
 - Disagreed: Y (👎 reactions added for coderabbit)
@@ -386,6 +384,28 @@ Total unresolved comments: N
 
 Remaining unresolved: N - W (comments marked resolved are no longer unresolved)
 ```
+
+#### Structured findings table format
+
+Every findings summary — the per-round Automatic Mode summary, the Quick Mode up-front summary, and the final report at the end of a run — uses this format:
+
+- Open with a horizontal rule (`---`) immediately before the heading, and close with another horizontal rule (`---`) immediately after the table, so the block is visually separated from surrounding narration.
+- A one-line heading naming the round/batch and a source breakdown, e.g. `### Round 12 — 4 findings, all CodeRabbit` or `### Findings — 6 total (4 CodeRabbit, 2 Copilot)`.
+- A single Markdown table with these columns, in this order:
+
+| # | File : Line | Finding | Verdict |
+|---|---|---|---|
+| 1 | `path/to/file.ts:42` | One-sentence statement of what the comment claims | ✅ **Valid** — fixed |
+| 2 | `path/to/file.ts:88` | One-sentence statement of what the comment claims | ❌ **Rejected** — one-clause reason |
+| 3 | `path/to/other.ts:12` | One-sentence statement of what the comment claims | ⚠️ **Partially valid** — one-clause nuance |
+
+Verdict column rules:
+
+- Always lead with one of these exact glyphs, bolded: `✅ **Valid**`, `❌ **Rejected**`, `⚠️ **Partially valid**`, or `⏭️ **Skipped**` (low confidence / deferred to the user).
+- Follow the glyph with an em-dash and a terse clause — `— fixed`, `— disagreed, replied`, `— already handled elsewhere`, `— verified against the model, claim doesn't hold`. Keep it to a few words; the full reasoning belongs in prose above or below the table, not crammed into the cell.
+- The **File : Line** column always cites the file the finding is anchored to, even when the actual fix landed in a different file (note that in the Finding cell or in surrounding prose).
+- For a comment that "Affects N files" (CodeRabbit's own cross-file annotation) or where you additionally fixed a parallel/duplicate issue you noticed elsewhere, give it its own row rather than folding it into one cell — one row per file:line touched, not one row per source comment.
+- Keep rows in the order the comments were processed (typically file, then line), matching the rest of this skill's ordering convention.
 
 ## Modes
 
@@ -399,13 +419,7 @@ If invoked with no arguments or with "automatically", perform this skill in "Aut
   - If you are not confident in your recommendation or there's a strong reason the user might disagree, skip the comment with no action.
 3. Once all fixes are applied, run validation and formatting (see **Validation & Formatting** below) once across all changed files and resolve anything it surfaces before showing the summary. If a fix can't be made to pass validation, flag it in the summary rather than leaving it broken.
 
-At the end, show a summary of **each comment** with the full context for each one:
-1. The original comment (including the filename, line numbers, code snippet, etc)
-2. Your analysis
-3. Your recommendation
-4. The action that you took
-5. Your rationale behind the action that you took
-6. Validation status for the change, if applicable
+At the end, show a summary using the **structured findings table format** above — one row per file:line touched, verdict glyph plus terse reason in the Verdict column. Put the fuller rationale for any non-obvious verdict (why something was rejected or only partially valid) in a sentence or two above or below the table, not squeezed into a cell. Note validation status (lint/typecheck/tests) as a line beneath the table rather than as a table column.
 
 **After showing the summary**, if any file changes were made, draft a commit message and display it to the user before taking any further action. Then wait — see **Commit, Push & Poll** below for how to proceed.
 
