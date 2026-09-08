@@ -1,0 +1,206 @@
+#!/usr/bin/env python3
+"""chezmoi modify script for ~/.claude/settings.json.
+
+Owns the curated subset of keys in MANAGED below; everything else on
+disk passes through untouched. This lets the fireworks CLI tooling on
+the work machine rewrite its env/model keys (ANTHROPIC_*, model
+routing) without fighting chezmoi, while hooks, permissions, status
+line, plugins, and personal prefs stay synced across machines.
+
+Merge semantics: dicts merge per-key, arrays are replaced wholesale.
+Deleting a key from MANAGED does NOT remove it from disk.
+
+Notable exclusions (left to each machine / fireworks):
+  - env.ANTHROPIC_* and CLAUDE_CODE_SUBAGENT_MODEL (fireworks CLI)
+  - "model" (fireworks owns model routing on the work machine)
+  - installMethod, enabledMcpjsonServers, disabledMcpjsonServers
+    (machine-local state)
+
+Workflow: edit MANAGED here, review with
+  chezmoi diff ~/.claude/settings.json
+then apply with
+  chezmoi apply ~/.claude/settings.json
+"""
+
+import json
+import sys
+
+MANAGED = json.loads(r"""
+{
+  "cleanupPeriodDays": 30,
+  "env": {
+    "BASH_DEFAULT_TIMEOUT_MS": "300000",
+    "DISABLE_TELEMETRY": "1",
+    "DISABLE_ERROR_REPORTING": "true",
+    "CLAUDE_CODE_DISABLE_ADAPTIVE_THINKING": "1",
+    "CLAUDE_CODE_PACKAGE_MANAGER_AUTO_UPDATE": "0",
+    "DO_NOT_TRACK": "1",
+    "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
+    "ENABLE_TOOL_SEARCH": "true"
+  },
+  "includeCoAuthoredBy": true,
+  "permissions": {
+    "allow": [
+      "Bash(yarn live)",
+      "Bash(yarn build)",
+      "Bash(yarn build:*)",
+      "Bash(yarn test)",
+      "Bash(yarn test:*)",
+      "Bash(yarn lint:*)",
+      "Bash(yarn lint:fix)",
+      "Bash(yarn install)",
+      "Bash(yarn db:*)",
+      "Bash(docker-compose:*)",
+      "Bash(wellth-ci:*)",
+      "Bash(yarn tsc:*)",
+      "Bash(git:*)",
+      "Bash(ast-grep:*)",
+      "Bash(sg:*)",
+      "Bash(short:*)",
+      "Bash(curl * https://api.app.shortcut.com/*)",
+      "Bash(/Users/evan/.claude/skills/review-comments/poll-pr.sh*)"
+    ],
+    "deny": [
+      "Bash(curl:*)",
+      "Bash(wget:*)",
+      "Read(./secrets/**)",
+      "Read(**/credentials*)",
+      "Read(**/*_rsa)",
+      "Read(**/*.pem)",
+      "Read(**/*.key)",
+      "Read(./coverage/**)",
+      "Read(./node_modules/**)",
+      "Write(./.env*)",
+      "Write(./secrets/**)"
+    ],
+    "additionalDirectories": []
+  },
+  "enableAllProjectMcpServers": true,
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "[ \"$TERM_PROGRAM\" = iTerm.app ] && printf '\\033]6;1;bg;*;default\\a' 2>/dev/null >/dev/tty; true"
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "[ \"$TERM_PROGRAM\" = iTerm.app ] && printf '\\033]6;1;bg;*;default\\a' 2>/dev/null >/dev/tty; true"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "[ \"$TERM_PROGRAM\" = iTerm.app ] && printf '\\033]6;1;bg;red;brightness;0\\a\\033]6;1;bg;green;brightness;0\\a\\033]6;1;bg;blue;brightness;0\\a' 2>/dev/null >/dev/tty; true"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "[ \"$TERM_PROGRAM\" = iTerm.app ] && printf '\\033]6;1;bg;red;brightness;0\\a\\033]6;1;bg;green;brightness;0\\a\\033]6;1;bg;blue;brightness;0\\a' 2>/dev/null >/dev/tty; true"
+          }
+        ]
+      }
+    ],
+    "PermissionRequest": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "[ \"$TERM_PROGRAM\" = iTerm.app ] && printf '\\033]6;1;bg;red;brightness;0\\a\\033]6;1;bg;green;brightness;123\\a\\033]6;1;bg;blue;brightness;255\\a' 2>/dev/null >/dev/tty; true"
+          }
+        ]
+      }
+    ],
+    "Notification": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "[ \"$TERM_PROGRAM\" = iTerm.app ] && printf '\\033]6;1;bg;red;brightness;0\\a\\033]6;1;bg;green;brightness;123\\a\\033]6;1;bg;blue;brightness;255\\a' 2>/dev/null >/dev/tty; true"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "[ \"$TERM_PROGRAM\" = iTerm.app ] && printf '\\033]6;1;bg;red;brightness;40\\a\\033]6;1;bg;green;brightness;167\\a\\033]6;1;bg;blue;brightness;69\\a' 2>/dev/null >/dev/tty; true"
+          }
+        ]
+      }
+    ]
+  },
+  "statusLine": {
+    "type": "command",
+    "command": "input=$(cat); cwd=$(echo \"$input\" | jq -r '.workspace.current_dir'); user=$(whoami); short_path=$(echo \"$cwd\" | awk -F/ '{if (NF <= 4) {print $0} else {printf \"~/…\"; for (i=NF-1; i<=NF; i++) {if ($i != \"\") printf \"/%s\", $i}}}' | sed \"s|^$HOME|~|\"); git_info=\"\"; if git -C \"$cwd\" rev-parse --git-dir > /dev/null 2>&1; then branch=$(git -C \"$cwd\" --no-optional-locks rev-parse --abbrev-ref HEAD 2>/dev/null | head -c 25); if ! git -C \"$cwd\" --no-optional-locks diff --quiet 2>/dev/null; then git_color=\"\\033[38;2;169;116;0m\"; else git_color=\"\\033[38;2;55;133;4m\"; fi; git_info=\" ${git_color} ${branch}\\033[0m\"; fi; printf \"\\033[38;2;215;95;0m \\033[0m\"; printf \"\\033[38;2;78;78;78m ${user}\\033[0m\"; printf \"\\033[38;2;0;135;175m ${short_path}\\033[0m\"; printf \"${git_info}\""
+  },
+  "enabledPlugins": {
+    "claude-notifications-go@claude-notifications-go": true,
+    "slack@claude-plugins-official": true
+  },
+  "extraKnownMarketplaces": {
+    "claude-notifications-go": {
+      "source": {
+        "source": "github",
+        "repo": "777genius/claude-notifications-go"
+      }
+    }
+  },
+  "alwaysThinkingEnabled": true,
+  "skipWorkflowUsageWarning": true{{ if or .notion_api_token .shortcut_api_token }},
+  "mcpServers": {
+{{- if .notion_api_token }}
+    "notion": {
+      "command": "npx",
+      "args": ["-y", "@notionhq/notion-mcp-server"],
+      "env": {
+        "OPENAPI_MCP_HEADERS": "{\"Authorization\": \"Bearer {{ .notion_api_token }}\", \"Notion-Version\": \"2022-06-28\"}"
+      }
+    }{{ end }}
+{{- if and .notion_api_token .shortcut_api_token }},{{ end }}
+{{- if .shortcut_api_token }}
+    "shortcut": {
+      "command": "npx",
+      "args": ["-y", "@shortcut/mcp@latest"],
+      "env": {
+        "SHORTCUT_API_TOKEN": "{{ .shortcut_api_token }}"
+      }
+    }
+{{- end }}
+  }
+{{- end }}
+}
+""")
+
+
+def merge(base, over):
+    for key, value in over.items():
+        if isinstance(value, dict) and isinstance(base.get(key), dict):
+            merge(base[key], value)
+        else:
+            base[key] = value
+
+
+raw = sys.stdin.read()
+current = json.loads(raw) if raw.strip() else {}
+merge(current, MANAGED)
+json.dump(current, sys.stdout, indent=2, ensure_ascii=False)
+sys.stdout.write("\n")

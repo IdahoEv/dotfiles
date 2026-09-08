@@ -21,6 +21,12 @@ Work through unresolved code review comments on the current branch's pull reques
 
 **DO NOT** automatically commit and push without first showing the proposed commit message and waiting for "execute" or "execute <message>".
 
+**Every GitHub comment body this skill posts** (replies, disagree explanations, anything sent via `gh api .../comments`) is posted under the user's own authenticated GitHub identity, with no `[bot]` marker distinguishing it from a comment the user wrote by hand. To keep that distinction visible to anyone reading the thread, append this line to the end of every comment body this skill posts:
+
+```
+\n\n_🤖 Claude-generated comment_
+```
+
 ## Instructions
 
 When this skill is invoked:
@@ -253,7 +259,7 @@ This option is for when coderabbit's suggestion is incorrect, overly pedantic, o
      -f content="-1"
    ```
 
-2. Based on your earlier analysis, draft a brief reply explaining why the comment is being dismissed. **Always tag `@coderabbitai` in replies to coderabbit comments** so the bot receives the feedback (e.g., "@coderabbitai This is a false positive - the table name comes from a hardcoded enum switch, not user input.").
+2. Based on your earlier analysis, draft a brief reply explaining why the comment is being dismissed. **Always tag `@coderabbitai` in replies to coderabbit comments** so the bot receives the feedback (e.g., "@coderabbitai This is a false positive - the table name comes from a hardcoded enum switch, not user input."). Append the `🤖 Claude-generated comment` disclosure line (see Guardrails) before posting.
 
 3. Ask the user how to handle the reply using AskUserQuestion:
 
@@ -341,7 +347,7 @@ This option is for when coderabbit's suggestion is incorrect, overly pedantic, o
 1. Ask the user what they want to say using AskUserQuestion (free text input via "Other")
 2. Post the reply to GitHub using one of these methods:
 
-   **For review comments (in_reply_to supported):**
+   **For review comments (in_reply_to supported):** (`{reply_text}` must already end with the `🤖 Claude-generated comment` disclosure line from Guardrails)
 
    ```bash
    gh api repos/{owner}/{repo}/pulls/{pr_number}/comments \
@@ -351,7 +357,7 @@ This option is for when coderabbit's suggestion is incorrect, overly pedantic, o
    ```
 
    **For top-level comments (no in_reply_to):**
-   Add a new comment quoting the original:
+   Add a new comment quoting the original (again, `{reply_text}` must end with the disclosure line):
 
    ```bash
    gh api repos/{owner}/{repo}/pulls/{pr_number}/comments \
