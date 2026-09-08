@@ -165,7 +165,8 @@ MANAGED = json.loads(r"""
     }
   },
   "alwaysThinkingEnabled": true,
-  "skipWorkflowUsageWarning": true{{ if or .notion_api_token .shortcut_api_token }},
+  "skipWorkflowUsageWarning": true,
+  "theme": "dark-daltonized"{{ if or .notion_api_token .shortcut_api_token }},
   "mcpServers": {
 {{- if .notion_api_token }}
     "notion": {
