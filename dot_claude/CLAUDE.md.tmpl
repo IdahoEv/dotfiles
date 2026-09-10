@@ -60,3 +60,12 @@ During explanatory responses, do not make file edits without explicit approval, 
 3. Only then commit
 
 **Exception:** If I explicitly say "commit this" or similar, proceed directly.
+
+**Using the Worktree Manager**
+
+worktree-manager.sh <issue#>-slug          # e.g. 5-fix-gdunit4-compile-errors
+worktree-manager.sh --claude <issue#>-slug # same, then launches Claude Code in it (backgrounded)
+
+- Run from any existing worktree directory (it locates the repo itself).
+- Branch name convention varies by environment and possibly by project. At work, use --sc for shortcut integration, at home (e.g. Kardashev) look for instructions like [[kardashev-issue-branch-convention]]
+- Auto-creates the branch from main, places the worktree as a sibling dir at /Users/evan/Documents/Development/Kardashev/<issue#>-slug, and symlinks any untracked .claude/ config and .env* files from the main worktree.
