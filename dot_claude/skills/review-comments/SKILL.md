@@ -486,11 +486,13 @@ After a successful `git push`, run the polling script in the background:
 ~/.claude/skills/review-comments/poll-pr.sh
 ```
 
-The script polls every 45 seconds for up to 2 hours. It exits 0 when unresolved threads appear, exits 1 on timeout.
+The script polls every 45 seconds for up to 2 hours. Exit codes:
 
-When the script exits 0, **immediately re-invoke the review-comments skill in Automatic Mode** without waiting for the user to say anything.
+- **0** — new review activity detected (possible complaints). **Immediately re-invoke the review-comments skill in Automatic Mode** without waiting for the user to say anything.
+- **3** — AI reviewers have signed off (latest non-author activity is a review that is APPROVED or whose body matches a known all-clear marker — Copilot "Merge recommended"/"No issues found", CodeRabbit "Merge approved"/"Verified successful" — and there are zero unresolved threads). Do **not** re-process comments; instead announce to the user, e.g.: **"✅ Reviewers signed off (Copilot, 14:32) — no unresolved threads. PR looks ready to merge."** Then stop and wait for the user.
+- **1** (timeout) — notify the user: "No new bot activity after 2 hours. Polling stopped."
 
-If it exits 1 (timeout), notify the user: "No new bot activity after 2 hours. Polling stopped."
+Note the distinction: exit 0 means "something happened, go look"; exit 3 means "checked, and it's an all-clear." A findings-in-body review (Copilot Suppressed comments, CodeRabbit Outside-diff-range) does not match the sign-off markers, so it correctly exits 0.
 
 ## Error Handling
 
