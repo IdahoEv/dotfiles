@@ -71,48 +71,28 @@ MANAGED = json.loads(r"""
       "Read(./coverage/**)",
       "Read(./node_modules/**)",
       "Write(./.env*)",
-      "Write(./secrets/**)"
+      "Write(./secrets/**)",
+      "WebSearch",
+      "WebFetch"
     ],
     "additionalDirectories": []
   },
   "enableAllProjectMcpServers": true,
   "hooks": {
-    "SessionStart": [
+    "Notification": [
       {
         "hooks": [
           {
             "type": "command",
-            "command": "[ \"$TERM_PROGRAM\" = iTerm.app ] && printf '\\033]6;1;bg;*;default\\a' 2>/dev/null >/dev/tty; true"
+            "command": "[ \"$TERM_PROGRAM\" = iTerm.app ] && printf '\\033]6;1;bg;red;brightness;0\\a\\033]6;1;bg;green;brightness;123\\a\\033]6;1;bg;blue;brightness;255\\a' 2>/dev/null >/dev/tty; true"
           }
         ]
-      }
-    ],
-    "SessionEnd": [
+      },
       {
         "hooks": [
           {
             "type": "command",
-            "command": "[ \"$TERM_PROGRAM\" = iTerm.app ] && printf '\\033]6;1;bg;*;default\\a' 2>/dev/null >/dev/tty; true"
-          }
-        ]
-      }
-    ],
-    "UserPromptSubmit": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "[ \"$TERM_PROGRAM\" = iTerm.app ] && printf '\\033]6;1;bg;red;brightness;0\\a\\033]6;1;bg;green;brightness;0\\a\\033]6;1;bg;blue;brightness;0\\a' 2>/dev/null >/dev/tty; true"
-          }
-        ]
-      }
-    ],
-    "PreToolUse": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "[ \"$TERM_PROGRAM\" = iTerm.app ] && printf '\\033]6;1;bg;red;brightness;0\\a\\033]6;1;bg;green;brightness;0\\a\\033]6;1;bg;blue;brightness;0\\a' 2>/dev/null >/dev/tty; true"
+            "command": "/Users/evan/.config/iterm2/cc-status"
           }
         ]
       }
@@ -125,14 +105,76 @@ MANAGED = json.loads(r"""
             "command": "[ \"$TERM_PROGRAM\" = iTerm.app ] && printf '\\033]6;1;bg;red;brightness;0\\a\\033]6;1;bg;green;brightness;123\\a\\033]6;1;bg;blue;brightness;255\\a' 2>/dev/null >/dev/tty; true"
           }
         ]
-      }
-    ],
-    "Notification": [
+      },
       {
         "hooks": [
           {
             "type": "command",
-            "command": "[ \"$TERM_PROGRAM\" = iTerm.app ] && printf '\\033]6;1;bg;red;brightness;0\\a\\033]6;1;bg;green;brightness;123\\a\\033]6;1;bg;blue;brightness;255\\a' 2>/dev/null >/dev/tty; true"
+            "command": "/Users/evan/.config/iterm2/cc-status"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/Users/evan/.config/iterm2/cc-status"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "[ \"$TERM_PROGRAM\" = iTerm.app ] && printf '\\033]6;1;bg;red;brightness;0\\a\\033]6;1;bg;green;brightness;0\\a\\033]6;1;bg;blue;brightness;0\\a' 2>/dev/null >/dev/tty; true"
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/Users/evan/.config/iterm2/cc-status"
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "[ \"$TERM_PROGRAM\" = iTerm.app ] && printf '\\033]6;1;bg;*;default\\a' 2>/dev/null >/dev/tty; true"
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/Users/evan/.config/iterm2/cc-status"
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "[ \"$TERM_PROGRAM\" = iTerm.app ] && printf '\\033]6;1;bg;*;default\\a' 2>/dev/null >/dev/tty; true"
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/Users/evan/.config/iterm2/cc-status"
           }
         ]
       }
@@ -145,12 +187,59 @@ MANAGED = json.loads(r"""
             "command": "[ \"$TERM_PROGRAM\" = iTerm.app ] && printf '\\033]6;1;bg;red;brightness;40\\a\\033]6;1;bg;green;brightness;167\\a\\033]6;1;bg;blue;brightness;69\\a' 2>/dev/null >/dev/tty; true"
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/Users/evan/.config/iterm2/cc-status"
+          }
+        ]
+      }
+    ],
+    "StopFailure": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/Users/evan/.config/iterm2/cc-status"
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/Users/evan/.config/iterm2/cc-status"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "[ \"$TERM_PROGRAM\" = iTerm.app ] && printf '\\033]6;1;bg;red;brightness;0\\a\\033]6;1;bg;green;brightness;0\\a\\033]6;1;bg;blue;brightness;0\\a' 2>/dev/null >/dev/tty; true"
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/Users/evan/.config/iterm2/cc-status"
+          }
+        ]
       }
     ]
   },
   "statusLine": {
     "type": "command",
-    "command": "input=$(cat); cwd=$(echo \"$input\" | jq -r '.workspace.current_dir'); user=$(whoami); short_path=$(echo \"$cwd\" | awk -F/ '{if (NF <= 4) {print $0} else {printf \"~/…\"; for (i=NF-1; i<=NF; i++) {if ($i != \"\") printf \"/%s\", $i}}}' | sed \"s|^$HOME|~|\"); git_info=\"\"; if git -C \"$cwd\" rev-parse --git-dir > /dev/null 2>&1; then branch=$(git -C \"$cwd\" --no-optional-locks rev-parse --abbrev-ref HEAD 2>/dev/null | head -c 25); if ! git -C \"$cwd\" --no-optional-locks diff --quiet 2>/dev/null; then git_color=\"\\033[38;2;169;116;0m\"; else git_color=\"\\033[38;2;55;133;4m\"; fi; git_info=\" ${git_color} ${branch}\\033[0m\"; fi; printf \"\\033[38;2;215;95;0m \\033[0m\"; printf \"\\033[38;2;78;78;78m ${user}\\033[0m\"; printf \"\\033[38;2;0;135;175m ${short_path}\\033[0m\"; printf \"${git_info}\""
+    "command": "~/.claude/statusline.sh",
+    "refreshInterval": 5
   },
   "enabledPlugins": {
     "claude-notifications-go@claude-notifications-go": true,
