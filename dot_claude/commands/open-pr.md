@@ -34,10 +34,9 @@ git branch --show-current
 
 On `main`/`master`: **stop** — there's nothing to ship.
 
-### 2. Draft and approve
+### 2. Draft
 
-Gather everything that needs approval *before* running `open-pr.sh`. If the
-tree is dirty, view the diff and draft a commit message:
+If the tree is dirty, view the diff and draft a commit message:
 
 ```bash
 git status
@@ -49,14 +48,15 @@ If this branch has no PR yet, also draft the PR title (`Is<NNN>: <short
 title>` — see the repo's `.claude/kickoff-preamble.md`) and body (end with
 `Closes #<NNN>`).
 
-Show all drafted artifacts in full and wait for `execute` / `execute <message>`
-before continuing. One `execute` covers commit + push + PR together.
+Show all drafted artifacts in full, then proceed immediately — running
+`/open-pr` is itself the approval to commit + push + open the PR. Do not wait
+for `execute`.
 
 ### 3. Commit (if dirty)
 
 ```bash
 git add -A
-git commit -m "<approved message>"
+git commit -m "<drafted message>"
 ```
 
 `open-pr.sh` never commits. Append the Co-Authored-By trailer unless the
