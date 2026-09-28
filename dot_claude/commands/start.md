@@ -27,9 +27,14 @@ doesn't). Prints `worktree=<path>` and `kickoff=<path>` on stdout — capture bo
 If it exits non-zero (ticket not open, no provider, CLI not authed), **stop** and
 report why. If the worktree already existed it still succeeds and prints the path.
 
-### 2. Enrich the kickoff
+### 2. Enrich the kickoff (tracker state only — keep it short)
 
-Read the kickoff file. Append a `## Context` section with whatever applies:
+Read the kickoff file. Append a short `## Context` section, limited to cheap
+tracker facts the ticket can't self-update. **Do not open or read source files**:
+pre-reading them here would put those files into context three times (ticket
+author → here → implementer). The ticket body plus the tracker facts below are
+the entire context you add — the implementer session is just as capable of
+locating and reading the code itself.
 
 - **GitHub provider** — parent epic + its still-open sibling sub-issues, one line each:
   ```bash
@@ -42,8 +47,8 @@ Read the kickoff file. Append a `## Context` section with whatever applies:
   progress query exists for Shortcut — skip that line rather than approximating).
 - **Dependencies** (either provider): any `Depends on #X` / `Blocked by #X` /
   linked-story references in the ticket body — fetch each one's state via the
-  provider CLI; warn if still open, but don't block.
-- **Read these first**: source files the ticket body names.
+  provider CLI; warn if still open, but don't block. This is the one fact worth
+  the round-trip: ticket text can't tell you a blocker has since closed.
 
 Write the enriched kickoff back to the same path.
 

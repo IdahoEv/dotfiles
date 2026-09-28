@@ -43,7 +43,11 @@ REPO=$(gh repo view --json name --jq '.name')
 
 # Known all-clear markers across AI reviewers. Bodies are matched case-blind.
 DEFAULT_SIGNOFF='merge recommended|no issues found|merge approved|verified successful|ready to merge|lgtm'
-SIGNOFF_RE="${DEFAULT_SIGNOFF}|${POLL_SIGNOFF_PATTERNS:-}"
+if [ -n "${POLL_SIGNOFF_PATTERNS:-}" ]; then
+  SIGNOFF_RE="${DEFAULT_SIGNOFF}|${POLL_SIGNOFF_PATTERNS}"
+else
+  SIGNOFF_RE="${DEFAULT_SIGNOFF}"
+fi
 
 # One query for everything we care about.
 read -r -d '' QUERY <<'GQL'

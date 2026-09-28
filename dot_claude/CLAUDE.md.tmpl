@@ -24,6 +24,15 @@ When I ask for explanations ("help me understand", "explain to me"), use the cod
 
 During explanatory responses, do not make file edits without explicit approval, even if "accept edits" is enabled.
 
+# Subagent Handoffs
+
+When launching a subagent that will read code itself (implementer, review, research
+agents), hand it a lean prompt — ticket/issue reference plus any boilerplate working
+agreement — and do not pre-read or summarize the source files it will need. Pre-reading
+puts those files into context three times (ticket author → launcher → implementer); the
+subagent can find and read them itself. Keep the handoff to facts a ticket can't
+self-update (e.g. a blocker's current open/closed state), not code contents.
+
 # Tool-Specific Notes
 
 **Documentation:** When you encounter permission errors accessing node_modules or external docs, provide the documentation directly rather than attempting workarounds.
@@ -31,6 +40,16 @@ During explanatory responses, do not make file edits without explicit approval, 
 **Web searches:** Remember it's currently 2026 - use 2026 in search queries, not 2025 or 2024.
 
 **Audio notifications:** Configured via UserPrompt hook in settings.json.
+
+**Signaling "waiting for you" on confirmation checkpoints:** iTerm2's Claude Code
+integration only turns the tab blue ("waiting") for genuine blocking prompts —
+permission requests and the `AskUserQuestion` tool. A turn that just ends with prose
+("let me know when to proceed", "type X to continue") produces a plain `Stop` event,
+which looks identical to a finished/idle session — it's easy to miss. Whenever a
+workflow or skill step calls for pausing on your approval before continuing (e.g.
+"wait for user approval before next phase," reviewing a batch of changes, confirming
+before commit), use the `AskUserQuestion` tool for that checkpoint instead of ending
+the turn with free text, so the tab correctly flips to "waiting" blue.
 
 # Important Reminders
 
@@ -61,6 +80,13 @@ During explanatory responses, do not make file edits without explicit approval, 
 
 **Exception:** If I explicitly say "commit this" or similar, proceed directly.
 
+**Git tools are on PATH — don't hunt for them.** `worktree-manager.sh`,
+`start-ticket.sh`, `open-pr.sh`, and `setup-ticket-profile.sh` all live in
+`~/Documents/Development/git-tools`, which is on `PATH` in every shell. Call them
+directly by name. Don't precede a call with `which`/`command -v`/a filesystem
+`find` to confirm they exist — that's unnecessary and the broad `find` in
+particular needs manual permission approval every time.
+
 **Using the Worktree Manager**
 
 worktree-manager.sh <issue#>-slug          # e.g. 5-fix-gdunit4-compile-errors
@@ -69,3 +95,13 @@ worktree-manager.sh --claude <issue#>-slug # same, then launches Claude Code in 
 - Run from any existing worktree directory (it locates the repo itself).
 - Branch name convention varies by environment and possibly by project. At work, use --sc for shortcut integration, at home (e.g. Kardashev) look for instructions like [[kardashev-issue-branch-convention]]
 - Auto-creates the branch from main, places the worktree as a sibling dir at /Users/evan/Documents/Development/Kardashev/<issue#>-slug, and symlinks any untracked .claude/ config and .env* files from the main worktree.
+
+**Recognizing an already-started ticket session:** `/start` (via `start-ticket.sh`) opens a
+brand-new Claude session in a dedicated worktree and types a kickoff prompt into it —
+the first user message you see. That message always opens with `Working on <ref> in
+this worktree. Branch `<branch>` is checked out.` followed by the ticket title/body and
+a working-agreement section. If your very first message in a session matches this
+shape, the worktree, branch, and ticket-in-progress bookkeeping are **already done** —
+do not ask whether to run `/start` or offer to kick off the ticket workflow. Just begin
+work: read the ticket context given, check current repo/code state, and proceed under
+whatever working agreement the message or repo's CLAUDE.md specifies.

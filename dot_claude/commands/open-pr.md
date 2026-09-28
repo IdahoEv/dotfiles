@@ -16,6 +16,7 @@ and getting your approval, is this command's job.
 /open-pr --review copilot          # default
 /open-pr --review copilot+claude
 /open-pr --provider kardashev      # --env is an alias; kardashev is default (only provider today)
+/open-pr --no-compact              # skip the context compaction that normally runs after shipping
 ```
 
 `--review` levels: `none` (no review request), `copilot` (default — request the
@@ -91,3 +92,9 @@ Shipped Is<NNN> — <title>
 PR #<n>: <url>  (created | reused)
 Reviews requested: <none | copilot | copilot+claude>
 ```
+
+### 7. Compact
+
+The implementation context that got the branch shipped isn't needed for the
+review-poll cycle that follows. Run `/compact` by default after reporting,
+unless `--no-compact` was passed or the user said otherwise for this run.
