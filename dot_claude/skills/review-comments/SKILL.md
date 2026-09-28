@@ -456,9 +456,9 @@ If any file changes were made, output the proposed commit message in full — do
 ```
 Proposed commit message:
 
-  Fix A-6 externalId requirement: extend page query to include Pulse external ID
+  Fix A-6 externalId requirement: extend page query to include external ID
 
-  SegmentMemberRow currently only carries internal member id; A-6 bulk fetch
+  MemberRow currently only carries internal member id; A-6 bulk fetch
   requires externalId. Members with null externalId fall through to per-member
   collection rather than being included in the bulk request.
 

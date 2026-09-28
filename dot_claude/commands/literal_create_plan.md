@@ -1,6 +1,6 @@
 # Create Implementation Plan
 
-You are tasked with creating detailed implementation plans through an interactive, iterative process. You should be thorough, use existing agents for research, and work collaboratively with the user to produce high-quality technical specifications that align with Pulse's architecture and testing practices.
+You are tasked with creating detailed implementation plans through an interactive, iterative process. You should be thorough, use existing agents for research, and work collaboratively with the user to produce high-quality technical specifications that align with the project's own architecture and testing practices.
 
 ## Initial Response
 
@@ -196,7 +196,7 @@ After structure approval:
 ````markdown
 # [Feature/Task Name] Implementation Plan
 
-**Story**: [sc-XXXX](https://app.shortcut.com/wellth/story/XXXX) | **Type**: [Feature/Bug/Chore] | **Team**: [Team Name]
+**Story**: [sc-XXXX](https://app.shortcut.com/[org]/story/XXXX) | **Type**: [Feature/Bug/Chore] | **Team**: [Team Name]
 
 ## Overview
 
@@ -288,7 +288,7 @@ describe('ComponentName', () => {
 ```
 
 #### Integration Tests
-**File**: `src/tests/apps/pulse-api/handlers/[name].test.ts`
+**File**: `src/tests/apps/api/handlers/[name].test.ts`
 
 ```typescript
 // API integration test using supertest
@@ -323,7 +323,7 @@ describe('ComponentName', () => {
 ### Test Files to Create/Update
 - `src/tests/repositories/[name]_repository.test.ts` - Repository tests
 - `src/tests/services/[name]_service.test.ts` - Service tests
-- `src/tests/apps/pulse-api/handlers/[name].test.ts` - API tests
+- `src/tests/apps/api/handlers/[name].test.ts` - API tests
 
 ### Factories Needed
 - `src/tests/factories/[name]_factory.ts` - Test data factory using Fishery
@@ -362,7 +362,7 @@ yarn test --watch src/tests/[component]
 
 ## References
 
-- **Shortcut Story**: [sc-XXXX](https://app.shortcut.com/wellth/story/XXXX)
+- **Shortcut Story**: [sc-XXXX](https://app.shortcut.com/[org]/story/XXXX)
 - **Related Stories**: [Links to related Shortcut stories]
 - **Similar Implementation**: `[file:line]` - [Description]
 - **Test Pattern**: `[test-file:line]` - [Test to follow]
@@ -466,8 +466,8 @@ yarn test --watch src/tests/[component]
 
 #### Automated Verification
 - [ ] TypeScript compiles: `yarn tsc --noEmit`
-- [ ] Unit tests pass: `yarn test src/tests/services/candidate-service.test.ts`
-- [ ] Integration tests pass: `yarn test src/tests/apps/pulse-api/handlers/`
+- [ ] Unit tests pass: `yarn test src/tests/services/[name]-service.test.ts`
+- [ ] Integration tests pass: `yarn test src/tests/apps/api/handlers/`
 - [ ] Linting passes: `yarn lint`
 - [ ] Database migration runs: `yarn db migrate`
 
@@ -478,14 +478,14 @@ yarn test --watch src/tests/[component]
 - [ ] No regressions in [specific related feature]
 ```
 
-## Pulse-Specific Patterns
+## Common Layered-Architecture Patterns
 
 ### For Database Changes
 1. Create migration in `migrations/`
 2. Update schema in `src/db/schema/`
 3. Add/update repository in `src/repositories/`
 4. Update service in `src/services/`
-5. Expose via API in `src/apps/pulse-api/`
+5. Expose via API in `src/apps/api/`
 6. Add tests at each layer
 
 ### For New Features
@@ -537,7 +537,7 @@ The PRD contains:
 ### Linking Plans to Stories
 ```bash
 # Add plan link to story
-short api /stories/12345/links -X POST -f url="https://github.com/wellth/pulse/blob/main/docs/plans/2025-10-01-sc-12345-feature.md"
+short api /stories/12345/links -X POST -f url="https://github.com/[org]/[repo]/blob/main/docs/plans/2025-10-01-sc-12345-feature.md"
 ```
 
 ## Example Interaction Flow

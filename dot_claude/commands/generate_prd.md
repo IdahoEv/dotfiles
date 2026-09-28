@@ -89,7 +89,7 @@ Then wait for story ID.
    Focus on:
    - Services in src/services/
    - Repositories in src/repositories/
-   - API routes in src/apps/pulse-api/
+   - API routes in src/apps/api/
    - Database schemas in src/db/schema/
    - Existing tests
 
@@ -196,7 +196,7 @@ Then wait for story ID.
    ```markdown
    # PRD: [Story Name]
 
-   **Story**: [sc-XXXXX](https://app.shortcut.com/wellth/story/XXXXX) | **Type**: [Type] | **Team**: [Team]
+   **Story**: [sc-XXXXX](https://app.shortcut.com/[org]/story/XXXXX) | **Type**: [Type] | **Team**: [Team]
 
    ## Story Context
 
@@ -288,7 +288,7 @@ Then wait for story ID.
 
 1. **Add external link to Shortcut story**:
    ```bash
-   short api /stories/[story-id]/links -X POST -f url="https://github.com/wellth/pulse/blob/development/docs/prds/[filename].md"
+   short api /stories/[story-id]/links -X POST -f url="https://github.com/[org]/[repo]/blob/development/docs/prds/[filename].md"
    ```
 
 2. **Add comment to Shortcut story**:

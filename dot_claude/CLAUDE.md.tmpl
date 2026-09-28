@@ -105,6 +105,7 @@ wm                             # interactive mode (fzf)
 wm --init                      # convert a plain repo to the worktree structure
 
 - Run from any existing worktree directory (it locates the repo itself).
+- Branch name convention varies by environment and possibly by project. At work, use --sc for shortcut integration; for a given home project, check that project's own CLAUDE.md or memory for its branch-naming convention.
 - New worktrees get symlinked `.env*`, `.claude/`, and `docs/local/`; extra paths via a `.worktree-sync` manifest in the repo root (`link`/`copy` directives).
 - Removing a worktree is manual: `git worktree remove <path>` then `git branch -d <branch>`.
 

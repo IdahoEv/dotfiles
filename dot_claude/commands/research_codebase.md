@@ -94,7 +94,7 @@ Then wait for the user's research query.
      researcher: [Your name/identifier]
      git_commit: [Current commit hash]
      branch: [Current branch name]
-     repository: pulse
+     repository: [Repository name]
      topic: "[User's Question/Topic]"
      tags: [research, codebase, relevant-component-names]
      status: complete
@@ -109,7 +109,7 @@ Then wait for the user's research query.
      **Researcher**: [Researcher name]
      **Git Commit**: [Current commit hash from step 5]
      **Branch**: [Current branch name from step 5]
-     **Repository**: pulse
+     **Repository**: [Repository name]
      **Shortcut Story**: [Link to story if applicable]
 
      ## Research Question
