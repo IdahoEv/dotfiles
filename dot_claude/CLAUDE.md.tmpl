@@ -57,6 +57,13 @@ the turn with free text, so the tab correctly flips to "waiting" blue.
 - NEVER create files unless absolutely necessary
 - ALWAYS prefer editing existing files over creating new ones
 - NEVER proactively create documentation files (*.md, README) unless explicitly requested
+{{- if .is_work }}
+- **Adversarial review telemetry:** after each `adversarial-review` workflow run, append that run's per-model telemetry table to `~/.claude/adversarial-review-telemetry.md` under a dated heading, so model performance accumulates across sessions and repos. Read the existing file first (if any) and append; never overwrite. Three rules for the table:
+  - **Label rows by the actual backend** (`firerouter` / `glm-latest` / `deepseek-flash-latest` / `kimi-latest`), not the Claude Code canonical slot name (`opus` / `sonnet` / `haiku` / `fable`). The backend that ran is in each run's returned per-agent `model` field — use that, not the slot name.
+  - **Maintain a cumulative roll-up at the top of the file** (above the dated sections): total runs, per backend a running `valid` and `unique` count summed across all runs, and a `roundMs` column = the wall-time of that run's full `Workflow()` invocation, measured by the hub (you) around the call — not by the script (the Workflow runtime forbids `Date.now()` inside the script, so per-agent latency can't be tracked from inside). If all agents resolved to one backend in a run, that run contributes to that backend's counts only — the roll-up reflects the actual backends, not the intended panel.
+  - **Latency is hub-measured, round-level only.** The `roundMs` in the roll-up is the wall-time of the entire round (Stage 1 + Stage 2), stamped by the hub around the `Workflow()` call. Per-agent or per-lens latency is not available (no clock inside the script). For the matrix whittle, this means you can compare backends on valid/unique *and* on round cost, but not on per-cell latency — a model that's slow per-round and surfaces few unique findings is a cut candidate; one that's slow per-round but surfaces unique things is a keeper.
+  - This is the one exception to "never create files" — the user explicitly asked for this log.
+{{- end }}
 
 ## Git Workflow
 
@@ -68,9 +75,11 @@ the turn with free text, so the tab correctly flips to "waiting" blue.
 
 {{- else }}
 
-**Branch naming:** Feature branches use informal descriptive names (e.g., `add-physics-system`, `fix-login-bug`). No ticket system - tasks tracked in TODO.md per project.
+**Branch naming:** Varies by project — some use GitHub issues with a per-project convention (check the project's own instructions), others use informal descriptive names (e.g., `add-physics-system`, `fix-login-bug`). Tasks tracked in TODO.md or GitHub issues per project.
 
 {{- end }}
+
+**Worktrees:** Create worktrees and branches via `/start` or the Worktree Manager (`wm`), never raw `git worktree add`. Clean up merged branches with `/finalize`.
 
 **Commits:** NEVER commit without pausing for review, even if "accept edits" is enabled:
 
@@ -87,14 +96,17 @@ directly by name. Don't precede a call with `which`/`command -v`/a filesystem
 `find` to confirm they exist — that's unnecessary and the broad `find` in
 particular needs manual permission approval every time.
 
-**Using the Worktree Manager**
+**Using the Worktree Manager (`wm`)**
 
-worktree-manager.sh <issue#>-slug          # e.g. 5-fix-gdunit4-compile-errors
-worktree-manager.sh --claude <issue#>-slug # same, then launches Claude Code in it (backgrounded)
+wm <branch-name>               # arbitrary branch name (clean it first per branch-naming conventions)
+wms <ticket-id>                # worktree from Shortcut ticket's branch name
+wmc / wmsc                     # same, but opens Claude Code in the new worktree
+wm                             # interactive mode (fzf)
+wm --init                      # convert a plain repo to the worktree structure
 
 - Run from any existing worktree directory (it locates the repo itself).
-- Branch name convention varies by environment and possibly by project. At work, use --sc for shortcut integration, at home (e.g. Kardashev) look for instructions like [[kardashev-issue-branch-convention]]
-- Auto-creates the branch from main, places the worktree as a sibling dir at /Users/evan/Documents/Development/Kardashev/<issue#>-slug, and symlinks any untracked .claude/ config and .env* files from the main worktree.
+- New worktrees get symlinked `.env*`, `.claude/`, and `docs/local/`; extra paths via a `.worktree-sync` manifest in the repo root (`link`/`copy` directives).
+- Removing a worktree is manual: `git worktree remove <path>` then `git branch -d <branch>`.
 
 **Recognizing an already-started ticket session:** `/start` (via `start-ticket.sh`) opens a
 brand-new Claude session in a dedicated worktree and types a kickoff prompt into it —
