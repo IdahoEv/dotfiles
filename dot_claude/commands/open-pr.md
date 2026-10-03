@@ -75,6 +75,17 @@ open-pr.sh --review <level>
 
 Capture `pr_number` from stdout (also prints `pr_url`, `pr_action`).
 
+Then, directly in this session (not through the script), run:
+
+```bash
+git push origin "$(git branch --show-current)"
+```
+
+It's a no-op ("Everything up-to-date") because `open-pr.sh` already pushed. In an
+agent-view background session this lets Claude Code see a push to the branch and
+link the PR on the session's row; the push inside `open-pr.sh` happens in the
+script's own process and may not be picked up. Harmless in any other session.
+
 ### 5. Poll (skip if `--review none`)
 
 ```bash
