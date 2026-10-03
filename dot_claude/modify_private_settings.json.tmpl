@@ -58,7 +58,9 @@ MANAGED = json.loads(r"""
       "Bash(sg:*)",
       "Bash(short:*)",
       "Bash(curl * https://api.app.shortcut.com/*)",
-      "Bash(/Users/evan/.claude/skills/review-comments/poll-pr.sh*)"
+      "Bash(/Users/evan/.claude/skills/review-comments/poll-pr.sh*)",
+      "WebSearch",
+      "WebFetch"
     ],
     "deny": [
       "Bash(curl:*)",
@@ -71,9 +73,7 @@ MANAGED = json.loads(r"""
       "Read(./coverage/**)",
       "Read(./node_modules/**)",
       "Edit(./.env*)",
-      "Edit(./secrets/**)",
-      "WebSearch",
-      "WebFetch"
+      "Edit(./secrets/**)"
     ],
     "additionalDirectories": []
   },
