@@ -58,12 +58,29 @@ Write the enriched kickoff back to the same path.
 start-ticket.sh --tab-only "<worktree>" "<kickoff>"
 ```
 
-Opens a new iTerm tab split into two horizontal panes: `claude` on top (with the
-kickoff typed into its input but **not submitted** — the user reviews and hits
-Enter), a shell in the worktree on the bottom. The kickoff is also on the
-clipboard. Not in iTerm → it prints the `cd` + `claude` command instead.
+How the session starts depends on the **launcher**, which `start-ticket.sh` resolves
+itself (`--launcher` flag → `$START_TICKET_LAUNCHER` → `launcher=` in
+`.start-ticket.conf` or `~/.config/start-ticket/config` → `iterm`). Don't pass
+`--launcher` yourself; the user's per-machine config decides.
+
+- **`iterm`** (default) — opens a new iTerm tab split into two horizontal panes:
+  `claude` on top (with the kickoff typed into its input but **not submitted** —
+  the user reviews and hits Enter), a shell in the worktree on the bottom. The
+  kickoff is also on the clipboard. Not in iTerm → it prints the `cd` + `claude`
+  command instead.
+- **`bg`** — starts a background session for agent view (`claude agents`):
+  `claude --bg --name <label>` run inside the worktree, with the kickoff as its
+  prompt. `<label>` is derived from the worktree's branch slug (prettified), not
+  the ticket title. The kickoff is **submitted immediately**, so the session starts
+  in plan mode by default (`bg_permission_mode`) — it proposes a plan and waits for
+  the user rather than editing. There is no terminal pane; the user finds the
+  session in `claude agents`. If the launch fails over workspace trust, the script
+  prints the one-time `cd <worktree> && claude` fix — relay it.
+- **`none`** — does nothing; no session is started. Use when you only want the
+  worktree + kickoff file and plan to open the session yourself.
 
 ### 4. Report
 
 Worktree path, branch, ticket state, and — if the ticket has a parent epic — the
 epic's sub-issue progress and which sibling tickets remain open (GitHub only).
+With the `bg` launcher, also say the session is running in `claude agents`.
