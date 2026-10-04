@@ -78,10 +78,13 @@ Capture `pr_number` from stdout (also prints `pr_url`, `pr_action`).
 Then, directly in this session (not through the script), run:
 
 ```bash
-git push origin "$(git branch --show-current)"
+git push --no-verify origin "$(git branch --show-current)"
 ```
 
-It's a no-op ("Everything up-to-date") because `open-pr.sh` already pushed. In an
+`--no-verify` skips `pre-push` for this second push — `open-pr.sh` already ran the
+real push and its validation, so there's no need to repeat (or risk re-failing)
+expensive hook checks for a metadata-only no-op. It's a no-op ("Everything
+up-to-date") because `open-pr.sh` already pushed. In an
 agent-view background session this lets Claude Code see a push to the branch and
 link the PR on the session's row; the push inside `open-pr.sh` happens in the
 script's own process and may not be picked up. Harmless in any other session.

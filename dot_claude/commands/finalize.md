@@ -102,9 +102,11 @@ You cannot remove the worktree whose directory you're standing in.
 - If `git worktree remove` complains about a dirty tree, list what's dirty and
   **stop** — don't discard uncommitted work without asking.
 - If it reports the worktree is **locked** (a background agent-view session may
-  hold a lock on its worktree), don't force it with `-f -f`. Add a line to the
-  final report telling the user to stop this session (`Ctrl+X` on its row in
-  `claude agents`, or `claude stop <id>`) and then run
+  hold a lock on its worktree), don't force it with `-f -f`. Stopping the session
+  doesn't clear the lock by itself — `git worktree remove` would just fail again
+  with the same error. Add a line to the final report telling the user to stop
+  this session (`Ctrl+X` on its row in `claude agents`, or `claude stop <id>`),
+  then run `git worktree unlock <this-worktree-path>` before
   `git worktree remove <this-worktree-path>` and `git branch -D <branch>` themselves.
 
 ### 6. Report
