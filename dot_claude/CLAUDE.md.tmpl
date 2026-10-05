@@ -123,8 +123,10 @@ repo/code state, and proceed under whatever working agreement the message or rep
 CLAUDE.md specifies.
 
 **Working inside a background (agent-view) ticket session:** with `launcher=bg` the
-kickoff is submitted for you, so the session starts in plan mode and Evan is not
-necessarily watching it. Present a plan and wait for approval before editing, and
+kickoff is submitted for you and Evan is not necessarily watching the session
+(it usually starts in plan mode, but that's just the configurable `bg_permission_mode`
+default — don't rely on it). Regardless of mode, present a plan and wait for
+approval before editing, and
 raise every decision point through `AskUserQuestion` rather than ending a turn with a
 question in prose — in `claude agents` a prose question is indistinguishable from a
 finished session and can sit unread for hours. The iTerm-specific tab-color rationale

@@ -53,8 +53,12 @@ git branch --show-current
 
 Resolve the repository's default branch (`git symbolic-ref --short
 refs/remotes/origin/HEAD`, stripping `origin/`; don't assume `main`/`master` —
-`development` etc. are common). If the current branch is the default branch:
-**stop** — there's nothing to ship.
+`development` etc. are common). `origin/HEAD` may be unset locally; if the
+command prints nothing, fall back to `git remote show origin` ("HEAD branch:"),
+then the host CLI (`gh repo view --json defaultBranchRef -q
+.defaultBranchRef.name` on GitHub). If you still can't determine it, ask rather
+than proceeding. If the current branch is the default branch: **stop** — there's
+nothing to ship.
 
 ### 2. Draft
 
