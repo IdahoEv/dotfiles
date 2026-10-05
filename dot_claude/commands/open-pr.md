@@ -106,10 +106,13 @@ approved message already has one.
 
 ```bash
 # first ship — create the PR with the approved metadata:
-open-pr.sh --title "<bare short title>" --body-file <tmp-file> --review <level>
+open-pr.sh --title "<bare short title>" --body-file <tmp-file> --review <level> [--provider <name>]
 
 # re-trigger on an existing PR — reuse existing title/body:
-open-pr.sh --review <level>
+open-pr.sh --review <level> [--provider <name>]
+
+# [--provider <name>]: forward the user's --provider/--env argument verbatim to
+# both invocations if they gave one; omit it otherwise.
 ```
 
 Pass the title **bare**, exactly as drafted in step 2 — the provider prefixes it.

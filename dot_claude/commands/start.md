@@ -8,7 +8,8 @@ provider is resolved per-repo by `start-ticket.sh` (`.start-ticket.conf` in the 
 root, else autodetect from installed CLIs) — don't assume which one; if you need to
 know, check for `.start-ticket.conf` or run `gh repo view` / `command -v short`.
 All ticket-state operations go through `start-ticket.sh` and its providers, never
-raw CLI calls, except the enrichment queries below.
+raw CLI calls, except the enrichment queries below and the read-back/repair
+operations in step 1a.
 
 ## Steps
 

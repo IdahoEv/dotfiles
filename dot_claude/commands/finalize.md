@@ -69,9 +69,11 @@ it landed: if step 1 showed the PR `MERGED` but this says `NOT-MERGED`, say whic
 signal disagreed and confirm before deleting anything. Before trusting the PR
 state, also verify the local tip is the PR's head — the PR only proves its
 remote head merged, not commits added locally afterward:
-`[ "$(git rev-parse HEAD)" = "<headRefOid from gh pr view --json headRefOid>" ]`.
+`[ "$(git rev-parse HEAD)" = "<PR head OID>" ]`. Get the head OID from the
+active host's PR/MR (GitHub: `gh pr view --json headRefOid -q .headRefOid`;
+other hosts: the equivalent field from their CLI/API).
 If the tip differs, **stop** and report the local-only commits
-(`git log <headRefOid>..HEAD`) instead of deleting.)
+(`git log <PR head OID>..HEAD`) instead of deleting.)
 
 Carry `$base` forward — steps 4 and 5 both need it.
 
