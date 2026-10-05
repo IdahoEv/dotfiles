@@ -110,11 +110,22 @@ wm --init                      # convert a plain repo to the worktree structure
 - Removing a worktree is manual: `git worktree remove <path>` then `git branch -d <branch>`.
 
 **Recognizing an already-started ticket session:** `/start` (via `start-ticket.sh`) opens a
-brand-new Claude session in a dedicated worktree and types a kickoff prompt into it —
-the first user message you see. That message always opens with `Working on <ref> in
-this worktree. Branch `<branch>` is checked out.` followed by the ticket title/body and
-a working-agreement section. If your very first message in a session matches this
-shape, the worktree, branch, and ticket-in-progress bookkeeping are **already done** —
-do not ask whether to run `/start` or offer to kick off the ticket workflow. Just begin
-work: read the ticket context given, check current repo/code state, and proceed under
-whatever working agreement the message or repo's CLAUDE.md specifies.
+brand-new Claude session in a dedicated worktree with a kickoff prompt as its first
+user message. Depending on the configured launcher that prompt is either typed into an
+iTerm pane unsubmitted (`launcher=iterm`) or submitted immediately in a background
+agent-view session (`launcher=bg`) — either way the message always opens with
+`Working on <ref> in this worktree. Branch `<branch>` is checked out.` followed by the
+ticket title/body and a working-agreement section. If your very first message in a
+session matches this shape, the worktree, branch, and ticket-in-progress bookkeeping
+are **already done** — do not ask whether to run `/start` or offer to kick off the
+ticket workflow. Just begin work: read the ticket context given, check current
+repo/code state, and proceed under whatever working agreement the message or repo's
+CLAUDE.md specifies.
+
+**Working inside a background (agent-view) ticket session:** with `launcher=bg` the
+kickoff is submitted for you, so the session starts in plan mode and Evan is not
+necessarily watching it. Present a plan and wait for approval before editing, and
+raise every decision point through `AskUserQuestion` rather than ending a turn with a
+question in prose — in `claude agents` a prose question is indistinguishable from a
+finished session and can sit unread for hours. The iTerm-specific tab-color rationale
+below doesn't apply here, but the `AskUserQuestion` rule does, more strongly.

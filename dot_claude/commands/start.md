@@ -27,6 +27,25 @@ doesn't). Prints `worktree=<path>` and `kickoff=<path>` on stdout — capture bo
 If it exits non-zero (ticket not open, no provider, CLI not authed), **stop** and
 report why. If the worktree already existed it still succeeds and prints the path.
 
+### 1a. Verify the ticket actually moved to in-progress
+
+`provider::mark_in_progress` is best-effort: it swallows the CLI's stderr and only
+warns, so a tracker CLI that fails *while exiting 0* reports success having done
+nothing. Read the ticket's state back and fix it if it didn't take.
+
+- **GitHub** — `gh issue view <id> --json state,assignees`; assign/reopen as needed.
+- **Shortcut** — the `short` CLI's state-set is **known broken** (`short story
+  update <id> --state …` prints `Error fetching story NaN` and still exits 0), so
+  assume it did nothing and use the Shortcut MCP tools:
+  `mcp__shortcut__stories-get-by-id` to read the current state, and if it isn't
+  already started, `mcp__shortcut__workflows-get-default` (pass the story's team id)
+  to resolve the started-state id, then `mcp__shortcut__stories-update` with
+  `workflow_state_id`. Prefer the state named in `.start-ticket.conf`'s
+  `shortcut_in_progress_state` when it matches one the workflow returns.
+
+Don't block on this — if the state can't be set, say so in the final report and
+continue. But never report "marked in progress" without having read it back.
+
 ### 2. Enrich the kickoff (tracker state only — keep it short)
 
 Read the kickoff file. Append a short `## Context` section, limited to cheap
