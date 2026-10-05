@@ -53,7 +53,10 @@ that, same as the GitHub case.
 Resolve the base branch first — don't assume `main`:
 
 ```bash
-base="$(gh repo view --json defaultBranchRef -q .defaultBranchRef.name)"   # e.g. development
+# host-neutral: read origin's default branch (works on GitHub, GitLab, ...)
+base="$(git symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null | sed 's|^origin/||')"
+# fall back to the host CLI only if that's unset (GitHub shown; adapt for other hosts)
+[ -n "$base" ] || base="$(gh repo view --json defaultBranchRef -q .defaultBranchRef.name)"
 git fetch origin "$base"
 git merge-base --is-ancestor "$(git branch --show-current)" "origin/$base" \
   && echo MERGED || echo NOT-MERGED
@@ -62,8 +65,13 @@ git merge-base --is-ancestor "$(git branch --show-current)" "origin/$base" \
 Local base branch is frequently stale, so always check against `origin/<base>`,
 never the local ref. If this prints `NOT-MERGED`, **stop** and report — do not
 delete anything. (A squash- or rebase-merged PR won't be an ancestor even though
-it landed: if step 1 showed the PR `MERGED` but this says `NOT-MERGED`, trust the
-PR state, say which signal disagreed, and confirm before deleting anything.)
+it landed: if step 1 showed the PR `MERGED` but this says `NOT-MERGED`, say which
+signal disagreed and confirm before deleting anything. Before trusting the PR
+state, also verify the local tip is the PR's head — the PR only proves its
+remote head merged, not commits added locally afterward:
+`[ "$(git rev-parse HEAD)" = "<headRefOid from gh pr view --json headRefOid>" ]`.
+If the tip differs, **stop** and report the local-only commits
+(`git log <headRefOid>..HEAD`) instead of deleting.)
 
 Carry `$base` forward — steps 4 and 5 both need it.
 
