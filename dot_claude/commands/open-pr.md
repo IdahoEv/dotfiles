@@ -17,6 +17,8 @@ and getting your approval, is this command's job.
 /open-pr --review copilot+claude
 /open-pr --provider <name>         # --env is an alias; normally resolved from config, don't pass it
 /open-pr --no-compact              # skip the context compaction that normally runs after shipping
+/open-pr --no-multi                # ship only this repo; skip the sibling-repo fan-out (step 4a)
+/open-pr --repos <dir>[,<dir>...]  # ship these sibling repos instead of auto-detecting them
 ```
 
 `--review` levels: `none` (no review request), `copilot` (default — request the
@@ -143,6 +145,72 @@ agent-view background session this lets Claude Code see a push to the branch and
 link the PR on the session's row; the push inside `open-pr.sh` happens in the
 script's own process and may not be picked up. Harmless in any other session.
 
+### 4a. Fan out to the ticket's other repos
+
+A ticket is often implemented across several repos at once (the API in one, a
+shared schema package in another). Each got its own worktree from
+`worktree-manager.sh`, on a branch carrying the same ticket id. Steps 1–4
+shipped **only the repo you're standing in** — the others still need PRs, and
+each needs its own review cycle.
+
+Skip this entire step if `--no-multi` was passed. Otherwise:
+
+```bash
+sibling-worktrees.sh                       # auto-detect
+sibling-worktrees.sh --repos <dir>,<dir>   # if the user passed --repos, forward it verbatim
+```
+
+Prints one TAB-separated `<repo>\t<worktree>\t<branch>\t<state>` record per
+sibling worktree with unshipped work (`dirty`, `ahead`, or `dirty+ahead`);
+clean worktrees are omitted. **No output means nothing to fan out to** — that's
+the common case, not an error. Say nothing about it and go to step 5. The
+script only reads local state (no network, no writes), so running it on every
+ship is free.
+
+If there *are* matches, list them (repo, branch, state) and proceed — don't ask
+permission for the fan-out itself; invoking `/open-pr` already approved
+shipping this ticket. **Do** stop and ask if a record looks wrong: a repo you
+didn't expect to touch, or a `dirty` state where you expected `ahead` (that
+worktree has uncommitted work the other session will have to judge).
+
+For **each** sibling, write a kickoff file and dispatch a session into its
+existing worktree:
+
+```bash
+kf="$(mktemp "${TMPDIR:-/tmp}/open-pr-sibling-<repo>.XXXXXX.md")"
+cat > "$kf" <<'EOF'
+Working on <ticket-ref> in this worktree. Branch `<branch>` is checked out.
+
+This ticket is being implemented across several repos. The PR for
+<this-repo> is already open (<pr_url>); this session owns the
+<sibling-repo> side of the same ticket, end to end.
+
+Run `/open-pr` here: review the diff, draft the commit message and PR
+title/body for THIS repo's changes, ship it, and then run the review cycle
+(`/review-comments`) through to sign-off.
+
+Draft from what's actually in this worktree — do not assume this repo's
+changes mirror the other repo's. Keep the PR body scoped to these changes,
+and mention the companion PR <pr_url> so a reviewer can find the other half.
+EOF
+
+start-ticket.sh --tab-only "<sibling-worktree>" "$kf"
+```
+
+Don't pass `--launcher` — `start-ticket.sh` resolves it from the user's config
+exactly as in `/start`. Under `bg` each sibling becomes a row in `claude
+agents`, named from its branch; under `iterm` each gets a tab. If the resolved
+launcher is `none`, no session starts: say so and list the
+`cd <worktree> && claude` commands instead of silently doing nothing.
+
+Dispatch failures are per-sibling and **non-fatal** — if one fails (workspace
+trust, missing worktree), report it with the manual fallback and keep going
+with the rest. Never `cd` into a sibling worktree to ship it yourself: that
+repo's diff belongs in that repo's session, and drafting its PR from here
+pulls two codebases into one context.
+
+Append a line per dispatched sibling to the step 6 report.
+
 ### 5. Poll
 
 ```bash
@@ -159,13 +227,25 @@ comment. Under an `auto` provider the bots fire on PR open regardless of
 `--review`, so skipping the poll would strand the PR with unread review
 comments. When in doubt, poll.
 
+Poll **only this session's PR**. Each sibling dispatched in step 4a runs its
+own `/open-pr`, which reaches this step and polls its own PR — one session per
+PR, each owning one review cycle. Polling a sibling's PR from here would race
+that session and leave both replying to the same thread.
+
 ### 6. Report
 
 ```
 Shipped <ticket-ref> — <title>
 PR #<n>: <url>  (created | reused)
 Reviews: <requested: copilot|copilot+claude  |  automatic on PR open (<bots>)  |  none>
+Also on this ticket: <sibling-repo> (<branch>) — session dispatched, will open its own PR
+                     <sibling-repo> (<branch>) — dispatch FAILED: <why>; run `cd <wt> && claude`
 ```
+
+Omit the "Also on this ticket" lines entirely when step 4a found no siblings
+(the normal single-repo case). Report dispatched siblings as *sessions
+started*, not as PRs opened — you don't know their PR numbers and must not
+guess one; each sibling session reports its own.
 
 Use the provider's own ticket dialect in `<ticket-ref>` (`Is42`, `sc-74085`, …)
 — take it from the PR title rather than inventing a format (a `none`-prefix provider has no prefix; use the branch's ticket id or just the title). Under an `auto`
