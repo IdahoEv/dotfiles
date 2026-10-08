@@ -3,13 +3,10 @@
 Prepares a worktree + kickoff for a tracker ticket and opens a Claude session for it.
 Takes a ticket id (`/start 22`). No id → list the repo's open tickets and ask which one.
 
-Ticket tracking is provider-based: **GitHub issues** or **Shortcut stories**. The
-provider is resolved per-repo by `start-ticket.sh` (`.start-ticket.conf` in the repo
-root, else autodetect from installed CLIs) — don't assume which one; if you need to
-know, check for `.start-ticket.conf` or run `gh repo view` / `command -v short`.
-All ticket-state operations go through `start-ticket.sh` and its providers, never
-raw CLI calls, except the enrichment queries below and the read-back/repair
-operations in step 1a.
+Ticket tracking is provider-based (**GitHub issues** or **Shortcut stories**), resolved
+per-repo by `start-ticket.sh`. Don't assume which; all ticket-state operations go through
+the script and its providers, never raw CLI calls, except the enrichment queries in step 2
+and the repairs in step 1a (raw `gh` on GitHub, MCP tools on Shortcut).
 
 ## Steps
 
@@ -19,56 +16,53 @@ operations in step 1a.
 start-ticket.sh <id> --no-tab
 ```
 
-Creates the worktree (via `worktree-manager.sh`; the Shortcut path also writes a
-`.ticket.local.md` with the full story into the worktree), marks the ticket in
-progress, and writes a base kickoff from the repo's `.claude/kickoff-preamble.md`
-(if present — that file carries the project's working agreement, so this command
-doesn't). Prints `worktree=<path>` and `kickoff=<path>` on stdout — capture both.
+Creates the worktree, marks the ticket in progress, and writes a kickoff from the repo's
+`.claude/kickoff-preamble.md` (which carries the project's working agreement, so this
+command doesn't). Prints parseable `key=value` on stdout — capture all of it:
 
-If it exits non-zero (ticket not open, no provider, CLI not authed), **stop** and
-report why. If the worktree already existed it still succeeds and prints the path.
+```
+worktree= kickoff= branch= provider= ticket_state= ticket_in_progress= ticket_parent=
+```
 
-### 1a. Verify the ticket actually moved to in-progress
+Non-zero exit (ticket not open, no provider, CLI not authed) → **stop** and report why.
+An already-existing worktree still succeeds.
 
-`provider::mark_in_progress` is best-effort: it swallows the CLI's stderr and only
-warns, so a tracker CLI that fails *while exiting 0* reports success having done
-nothing. Read the ticket's state back and fix it if it didn't take.
+### 1a. Repair the ticket state, only if needed
 
-- **GitHub** — `gh issue view <id> --json state,assignees`; assign/reopen as needed.
-- **Shortcut** — the `short` CLI's state-set is **known broken** (`short story
-  update <id> --state …` prints `Error fetching story NaN` and still exits 0), so
-  assume it did nothing and use the Shortcut MCP tools:
-  `mcp__shortcut__stories-get-by-id` to read the current state, and if it isn't
-  already started, `mcp__shortcut__workflows-get-default` (pass the story's team id)
-  to resolve the started-state id, then `mcp__shortcut__stories-update` with
-  `workflow_state_id`. Prefer the state named in `.start-ticket.conf`'s
-  `shortcut_in_progress_state` when it matches one the workflow returns.
+The script already read the state back, so trust `ticket_in_progress`:
 
-Don't block on this — if the state can't be set, say so in the final report and
-continue. But never report "marked in progress" without having read it back.
+- **`yes`** — done. No tool calls.
+- **`no` / `unknown`** — the write didn't land (on Shortcut this is expected: the `short`
+  CLI's state-set prints `Error fetching story NaN` and still exits 0). Repair it:
+  - **GitHub** — `gh issue edit <id> --add-assignee @me`, reopening if needed.
+  - **Shortcut** — use the MCP tools, never the CLI: `mcp__shortcut__stories-get-by-id`,
+    then `mcp__shortcut__workflows-get-default` (pass the story's team id) to resolve the
+    started-state id, then `mcp__shortcut__stories-update` with `workflow_state_id`.
+    Prefer the state named in `.start-ticket.conf`'s `shortcut_in_progress_state`.
 
-### 2. Enrich the kickoff (tracker state only — keep it short)
+Read the state back through the same provider after repairing it — `ticket_state` from
+step 1 was captured *before* the repair, so reporting it unchanged would claim a state the
+tracker never reached. Use what you read back in step 4.
 
-Read the kickoff file. Append a short `## Context` section, limited to cheap
-tracker facts the ticket can't self-update. **Do not open or read source files**:
-pre-reading them here would put those files into context three times (ticket
-author → here → implementer). The ticket body plus the tracker facts below are
-the entire context you add — the implementer session is just as capable of
-locating and reading the code itself.
+Don't block on this — if the state can't be set, say so in the report and continue.
 
-- **GitHub provider** — parent epic + its still-open sibling sub-issues, one line each:
+### 2. Enrich the kickoff (tracker facts only)
+
+Read the kickoff file and append a short `## Context` section. **Do not open or read source
+files** — pre-reading puts them into context three times (ticket author → here →
+implementer), and the implementer session can find them itself. Limit to:
+
+- **GitHub** — parent epic (`ticket_parent` from step 1) + its still-open siblings:
   ```bash
   gh issue view <parent> --json title,subIssuesSummary,subIssues \
     -q '"\(.title) (\(.subIssuesSummary.completed)/\(.subIssuesSummary.total))",
         (.subIssues.nodes[] | select(.state=="OPEN") | "#\(.number) \(.title)")'
   ```
-- **Shortcut provider** — read `<worktree>/.ticket.local.md` for story context; if
-  it names an epic or linked/dependent stories, note them (no bulk sub-issue
-  progress query exists for Shortcut — skip that line rather than approximating).
-- **Dependencies** (either provider): any `Depends on #X` / `Blocked by #X` /
-  linked-story references in the ticket body — fetch each one's state via the
-  provider CLI; warn if still open, but don't block. This is the one fact worth
-  the round-trip: ticket text can't tell you a blocker has since closed.
+- **Shortcut** — read `<worktree>/.ticket.local.md`; note any epic or linked stories (no
+  bulk sub-issue progress query exists — skip that line rather than approximating).
+- **Dependencies** (either provider) — `Depends on #X` / `Blocked by #X` / linked-story
+  refs in the ticket body: fetch each one's state, warn if open, don't block. This is the
+  one fact worth the round-trip, since ticket text can't tell you a blocker has closed.
 
 Write the enriched kickoff back to the same path.
 
@@ -78,29 +72,34 @@ Write the enriched kickoff back to the same path.
 start-ticket.sh --tab-only "<worktree>" "<kickoff>"
 ```
 
-How the session starts depends on the **launcher**, which `start-ticket.sh` resolves
-itself (`--launcher` flag → `$START_TICKET_LAUNCHER` → `launcher=` in
-`.start-ticket.conf` or `~/.config/start-ticket/config` → `iterm`). Don't pass
-`--launcher` yourself; the user's per-machine config decides.
+Never pass `--launcher`; the script resolves it from the user's per-machine config.
+What you need for the report: **`iterm`** opens a tab with the kickoff typed but
+unsubmitted; **`bg`** starts a background session (findable in `claude agents`) with the
+kickoff submitted immediately; **`none`** starts nothing. If a `bg` launch fails over
+workspace trust, the script prints a one-time `cd <worktree> && claude` fix — relay it.
 
-- **`iterm`** (default) — opens a new iTerm tab split into two horizontal panes:
-  `claude` on top (with the kickoff typed into its input but **not submitted** —
-  the user reviews and hits Enter), a shell in the worktree on the bottom. The
-  kickoff is also on the clipboard. Not in iTerm → it prints the `cd` + `claude`
-  command instead.
-- **`bg`** — starts a background session for agent view (`claude agents`):
-  `claude --bg --name <label>` run inside the worktree, with the kickoff as its
-  prompt. `<label>` is derived from the worktree's branch slug (prettified), not
-  the ticket title. The kickoff is **submitted immediately**, so the session starts
-  in plan mode by default (`bg_permission_mode`) — it proposes a plan and waits for
-  the user rather than editing. There is no terminal pane; the user finds the
-  session in `claude agents`. If the launch fails over workspace trust, the script
-  prints the one-time `cd <worktree> && claude` fix — relay it.
-- **`none`** — does nothing; no session is started. Use when you only want the
-  worktree + kickoff file and plan to open the session yourself.
+A `bg` session is named `[PLAN] <slug>` — the ticket's **workflow phase**, a third state
+axis in the agent view beside `status` (idle/busy) and `state` (working/blocked/done).
+`agent-phase.sh <PHASE>` sets it; it no-ops outside a bg session.
+
+| Phase | Means | Set by |
+|---|---|---|
+| `PLAN` | awaiting plan approval | `start-ticket.sh` at launch |
+| `WIP` | plan approved, implementing | the ticket session itself |
+| `REVIEW` | PR open | `open-pr.sh` |
+| `MERGED` | merged, ready to finalize | `/finalize` step 1 |
+| `DONE` | finalized; safe to kill | `/finalize` last step |
+
+`PLAN → WIP` is the one transition no script can see, and it belongs to the ticket
+session — `/start` has exited by the time the plan is approved. That rule lives in the
+global CLAUDE.md so it applies however the session was launched. The phase is
+self-reported: a session that dies mid-ticket keeps a stale label, and `/board`
+recomputes true state from git + the tracker when they disagree.
 
 ### 4. Report
 
-Worktree path, branch, ticket state, and — if the ticket has a parent epic — the
-epic's sub-issue progress and which sibling tickets remain open (GitHub only).
-With the `bg` launcher, also say the session is running in `claude agents`.
+Worktree path, branch, ticket state (report what you read back — step 1a's re-read if it
+repaired, else `ticket_state` — never what you intended to set), and for GitHub with a
+parent epic, its sub-issue progress and remaining
+siblings. Under `bg`, say the session is running in `claude agents` and shows as
+`[PLAN]` until its plan is approved.
