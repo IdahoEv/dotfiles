@@ -85,6 +85,9 @@ Capture from stdout: `pr_number`, `pr_url`, `pr_action`, `provider`, `trigger_mo
 `pr_title`, and `pr_title_repaired_from` (present only if the script fixed a doubled
 prefix — mention it in the report). No need to read the title back yourself.
 
+The script also stamps the agent-view row `[REVIEW]` (the ticket's workflow phase, see
+`/start`). Don't set it by hand or report it as a separate action.
+
 Then, directly in this session, run:
 
 ```bash

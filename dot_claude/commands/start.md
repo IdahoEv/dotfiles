@@ -74,8 +74,27 @@ unsubmitted; **`bg`** starts a background session (findable in `claude agents`) 
 kickoff submitted immediately; **`none`** starts nothing. If a `bg` launch fails over
 workspace trust, the script prints a one-time `cd <worktree> && claude` fix — relay it.
 
+A `bg` session is named `[PLAN] <slug>` — the ticket's **workflow phase**, a third state
+axis in the agent view beside `status` (idle/busy) and `state` (working/blocked/done).
+`agent-phase.sh <PHASE>` sets it; it no-ops outside a bg session.
+
+| Phase | Means | Set by |
+|---|---|---|
+| `PLAN` | awaiting plan approval | `start-ticket.sh` at launch |
+| `WIP` | plan approved, implementing | the ticket session itself |
+| `REVIEW` | PR open | `open-pr.sh` |
+| `MERGED` | merged, ready to finalize | `/finalize` step 1 |
+| `DONE` | finalized; safe to kill | `/finalize` last step |
+
+`PLAN → WIP` is the one transition no script can see, and it belongs to the ticket
+session — `/start` has exited by the time the plan is approved. That rule lives in the
+global CLAUDE.md so it applies however the session was launched. The phase is
+self-reported: a session that dies mid-ticket keeps a stale label, and `/board`
+recomputes true state from git + the tracker when they disagree.
+
 ### 4. Report
 
 Worktree path, branch, ticket state (report `ticket_state` as read back, not what you
 intended), and for GitHub with a parent epic, its sub-issue progress and remaining
-siblings. Under `bg`, say the session is running in `claude agents`.
+siblings. Under `bg`, say the session is running in `claude agents` and shows as
+`[PLAN]` until its plan is approved.

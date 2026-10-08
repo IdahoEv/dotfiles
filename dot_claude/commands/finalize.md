@@ -17,7 +17,12 @@ One read-only call answers every mechanical question. It prints:
 ```
 branch= ticket_id= ticket_scheme= base= pr_number= pr_state= pr_merge_commit=
 pr_head_oid= head_oid= head_matches= merged= base_worktree= worktree= verdict=
+agent_phase=
 ```
+
+If `agent_phase` is non-empty, stamp it before the slower steps run so the agent-view row
+matches reality: `agent-phase.sh "$agent_phase"`. Empty means the verdict was "stop and
+look" — leave the label alone rather than relabelling a branch that needs attention.
 
 Act on `verdict`:
 
@@ -89,7 +94,17 @@ You cannot remove the worktree you're standing in.
   agents`, or `claude stop <id>`), then run `git worktree unlock <worktree>` before the
   remove + branch delete themselves.
 
-### 5. Report
+### 5. Mark the session done
+
+```bash
+agent-phase.sh DONE
+```
+
+Last, and only if step 4 actually completed — `DONE` tells the user nothing remains in
+this session. If cleanup was skipped or blocked (dirty, locked, worktree-isolated), leave
+the phase at `MERGED` and say what's outstanding.
+
+### 6. Report
 
 ```
 Finalized <ticket-ref> — <title>

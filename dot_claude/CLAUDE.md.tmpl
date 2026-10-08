@@ -86,3 +86,14 @@ whose first user message begins `Working on <ref> in this worktree. Branch `<bra
 checked out.` If the session opens that way, the worktree, branch, and ticket bookkeeping
 are **already done** — don't ask whether to run `/start`. Read the ticket context given,
 check repo state, present a plan, and wait for approval before editing.
+
+**Workflow phase in the agent view.** Background ticket sessions carry their lifecycle
+phase as a name prefix (`[PLAN] Sc74618 …`) — a third state axis beside `status`
+(idle/busy) and `state` (working/blocked/done). `agent-phase.sh <PHASE>` sets it and
+no-ops outside a bg session. Phases: `PLAN → WIP → REVIEW → MERGED → DONE`.
+
+Scripts own all of them but one: `start-ticket.sh` sets `PLAN`, `open-pr.sh` sets
+`REVIEW`, `/finalize` sets `MERGED` then `DONE`. **You own `PLAN → WIP`** — when I
+approve your plan and you start editing, run `agent-phase.sh WIP`. Approval is the
+trigger, not the first edit: if we're still iterating on the plan, stay at `PLAN`. Don't
+ask before running it and don't report it; it's bookkeeping.
