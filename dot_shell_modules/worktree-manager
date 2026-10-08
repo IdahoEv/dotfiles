@@ -3,7 +3,7 @@
 # Adds worktree-manager.sh to PATH and provides convenient aliases
 
 # Add git-tools to PATH if not already present
-WORKTREE_MANAGER_DIR="$HOME/Documents/Development/git-tools"
+WORKTREE_MANAGER_DIR="$HOME/Documents/Development/git-tools/main"
 if [[ -d "$WORKTREE_MANAGER_DIR" ]]; then
     if [[ ":$PATH:" != *":$WORKTREE_MANAGER_DIR:"* ]]; then
         export PATH="$WORKTREE_MANAGER_DIR:$PATH"
