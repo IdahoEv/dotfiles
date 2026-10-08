@@ -6,7 +6,7 @@ Takes a ticket id (`/start 22`). No id → list the repo's open tickets and ask 
 Ticket tracking is provider-based (**GitHub issues** or **Shortcut stories**), resolved
 per-repo by `start-ticket.sh`. Don't assume which; all ticket-state operations go through
 the script and its providers, never raw CLI calls, except the enrichment queries in step 2
-and the Shortcut repair in step 1a.
+and the repairs in step 1a (raw `gh` on GitHub, MCP tools on Shortcut).
 
 ## Steps
 
@@ -39,6 +39,10 @@ The script already read the state back, so trust `ticket_in_progress`:
     then `mcp__shortcut__workflows-get-default` (pass the story's team id) to resolve the
     started-state id, then `mcp__shortcut__stories-update` with `workflow_state_id`.
     Prefer the state named in `.start-ticket.conf`'s `shortcut_in_progress_state`.
+
+Read the state back through the same provider after repairing it — `ticket_state` from
+step 1 was captured *before* the repair, so reporting it unchanged would claim a state the
+tracker never reached. Use what you read back in step 4.
 
 Don't block on this — if the state can't be set, say so in the report and continue.
 
@@ -94,7 +98,8 @@ recomputes true state from git + the tracker when they disagree.
 
 ### 4. Report
 
-Worktree path, branch, ticket state (report `ticket_state` as read back, not what you
-intended), and for GitHub with a parent epic, its sub-issue progress and remaining
+Worktree path, branch, ticket state (report what you read back — step 1a's re-read if it
+repaired, else `ticket_state` — never what you intended to set), and for GitHub with a
+parent epic, its sub-issue progress and remaining
 siblings. Under `bg`, say the session is running in `claude agents` and shows as
 `[PLAN]` until its plan is approved.

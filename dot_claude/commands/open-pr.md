@@ -129,9 +129,11 @@ This ticket is being implemented across several repos. The PR for
 <this-repo> is already open (<pr_url>); this session owns the
 <sibling-repo> side of the same ticket, end to end.
 
-Run `/open-pr` here: review the diff, draft the commit message and PR
-title/body for THIS repo's changes, ship it, and then run the review cycle
-(`/review-comments`) through to sign-off.
+Run `/open-pr --no-multi` here: review the diff, draft the commit message
+and PR title/body for THIS repo's changes, ship it, and then run the review
+cycle (`/review-comments`) through to sign-off. `--no-multi` is required —
+the session that dispatched you already fanned out to every sibling on this
+ticket, so fanning out again would race it for the same PRs.
 
 Draft from what's actually in this worktree — do not assume this repo's
 changes mirror the other repo's. Keep the PR body scoped to these changes,
