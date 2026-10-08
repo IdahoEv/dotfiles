@@ -39,31 +39,11 @@ self-update (e.g. a blocker's current open/closed state), not code contents.
 
 **Web searches:** Remember it's currently 2026 - use 2026 in search queries, not 2025 or 2024.
 
-**Audio notifications:** Configured via UserPrompt hook in settings.json.
-
-**Signaling "waiting for you" on confirmation checkpoints:** iTerm2's Claude Code
-integration only turns the tab blue ("waiting") for genuine blocking prompts —
-permission requests and the `AskUserQuestion` tool. A turn that just ends with prose
-("let me know when to proceed", "type X to continue") produces a plain `Stop` event,
-which looks identical to a finished/idle session — it's easy to miss. Whenever a
-workflow or skill step calls for pausing on your approval before continuing (e.g.
-"wait for user approval before next phase," reviewing a batch of changes, confirming
-before commit), use the `AskUserQuestion` tool for that checkpoint instead of ending
-the turn with free text, so the tab correctly flips to "waiting" blue.
-
-# Important Reminders
-
-- Do what has been asked; nothing more, nothing less
-- NEVER create files unless absolutely necessary
-- ALWAYS prefer editing existing files over creating new ones
-- NEVER proactively create documentation files (*.md, README) unless explicitly requested
-{{- if .is_work }}
-- **Adversarial review telemetry:** after each `adversarial-review` workflow run, append that run's per-model telemetry table to `~/.claude/adversarial-review-telemetry.md` under a dated heading, so model performance accumulates across sessions and repos. Read the existing file first (if any) and append; never overwrite. Three rules for the table:
-  - **Label rows by the actual backend** (`firerouter` / `glm-latest` / `deepseek-flash-latest` / `kimi-latest`), not the Claude Code canonical slot name (`opus` / `sonnet` / `haiku` / `fable`). The backend that ran is in each run's returned per-agent `model` field — use that, not the slot name.
-  - **Maintain a cumulative roll-up at the top of the file** (above the dated sections): total runs, per backend a running `valid` and `unique` count summed across all runs, and a `roundMs` column = the wall-time of that run's full `Workflow()` invocation, measured by the hub (you) around the call — not by the script (the Workflow runtime forbids `Date.now()` inside the script, so per-agent latency can't be tracked from inside). If all agents resolved to one backend in a run, that run contributes to that backend's counts only — the roll-up reflects the actual backends, not the intended panel.
-  - **Latency is hub-measured, round-level only.** The `roundMs` in the roll-up is the wall-time of the entire round (Stage 1 + Stage 2), stamped by the hub around the `Workflow()` call. Per-agent or per-lens latency is not available (no clock inside the script). For the matrix whittle, this means you can compare backends on valid/unique *and* on round cost, but not on per-cell latency — a model that's slow per-round and surfaces few unique findings is a cut candidate; one that's slow per-round but surfaces unique things is a keeper.
-  - This is the one exception to "never create files" — the user explicitly asked for this log.
-{{- end }}
+**Approval checkpoints:** when a workflow or skill step calls for pausing on my approval
+(review a batch of changes, confirm before commit, "wait for approval before next phase"),
+use the `AskUserQuestion` tool — never end the turn with the question in prose. Only real
+blocking prompts signal "waiting for you"; a prose question looks like a finished session
+and can sit unread.
 
 ## Git Workflow
 
@@ -96,38 +76,24 @@ directly by name. Don't precede a call with `which`/`command -v`/a filesystem
 `find` to confirm they exist — that's unnecessary and the broad `find` in
 particular needs manual permission approval every time.
 
-**Using the Worktree Manager (`wm`)**
+**Worktree Manager (`wm`):** run from any worktree dir; `wm --help` for flags. New
+worktrees get symlinked `.env*`, `.claude/`, and `docs/local/`; extra paths via a
+`.worktree-sync` manifest in the repo root (`link`/`copy` directives). Removal is manual:
+`git worktree remove <path>` then `git branch -d <branch>`.
 
-wm <branch-name>               # arbitrary branch name (clean it first per branch-naming conventions)
-wms <ticket-id>                # worktree from Shortcut ticket's branch name
-wmc / wmsc                     # same, but opens Claude Code in the new worktree
-wm                             # interactive mode (fzf)
-wm --init                      # convert a plain repo to the worktree structure
+**Already-started ticket sessions:** `/start` opens a fresh session in a dedicated worktree
+whose first user message begins `Working on <ref> in this worktree. Branch `<branch>` is
+checked out.` If the session opens that way, the worktree, branch, and ticket bookkeeping
+are **already done** — don't ask whether to run `/start`. Read the ticket context given,
+check repo state, present a plan, and wait for approval before editing.
 
-- Run from any existing worktree directory (it locates the repo itself).
-- Branch name convention varies by environment and possibly by project. At work, use --sc for shortcut integration; for a given home project, check that project's own CLAUDE.md or memory for its branch-naming convention.
-- New worktrees get symlinked `.env*`, `.claude/`, and `docs/local/`; extra paths via a `.worktree-sync` manifest in the repo root (`link`/`copy` directives).
-- Removing a worktree is manual: `git worktree remove <path>` then `git branch -d <branch>`.
+**Workflow phase in the agent view.** Background ticket sessions carry their lifecycle
+phase as a name prefix (`[PLAN] Sc74618 …`) — a third state axis beside `status`
+(idle/busy) and `state` (working/blocked/done). `agent-phase.sh <PHASE>` sets it and
+no-ops outside a bg session. Phases: `PLAN → WIP → REVIEW → MERGED → DONE`.
 
-**Recognizing an already-started ticket session:** `/start` (via `start-ticket.sh`) opens a
-brand-new Claude session in a dedicated worktree with a kickoff prompt as its first
-user message. Depending on the configured launcher that prompt is either typed into an
-iTerm pane unsubmitted (`launcher=iterm`) or submitted immediately in a background
-agent-view session (`launcher=bg`) — either way the message always opens with
-`Working on <ref> in this worktree. Branch `<branch>` is checked out.` followed by the
-ticket title/body and a working-agreement section. If your very first message in a
-session matches this shape, the worktree, branch, and ticket-in-progress bookkeeping
-are **already done** — do not ask whether to run `/start` or offer to kick off the
-ticket workflow. Just begin work: read the ticket context given, check current
-repo/code state, and proceed under whatever working agreement the message or repo's
-CLAUDE.md specifies.
-
-**Working inside a background (agent-view) ticket session:** with `launcher=bg` the
-kickoff is submitted for you and Evan is not necessarily watching the session
-(it usually starts in plan mode, but that's just the configurable `bg_permission_mode`
-default — don't rely on it). Regardless of mode, present a plan and wait for
-approval before editing, and
-raise every decision point through `AskUserQuestion` rather than ending a turn with a
-question in prose — in `claude agents` a prose question is indistinguishable from a
-finished session and can sit unread for hours. The iTerm-specific tab-color rationale
-above doesn't apply here, but the `AskUserQuestion` rule does, more strongly.
+Scripts own all of them but one: `start-ticket.sh` sets `PLAN`, `open-pr.sh` sets
+`REVIEW`, `/finalize` sets `MERGED` then `DONE`. **You own `PLAN → WIP`** — when I
+approve your plan and you start editing, run `agent-phase.sh WIP`. Approval is the
+trigger, not the first edit: if we're still iterating on the plan, stay at `PLAN`. Don't
+ask before running it and don't report it; it's bookkeeping.
