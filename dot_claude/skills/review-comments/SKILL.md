@@ -456,9 +456,9 @@ If any file changes were made, output the proposed commit message in full — do
 ```
 Proposed commit message:
 
-  Fix A-6 externalId requirement: extend page query to include external ID
+  Fix A-6 externalId requirement: extend page query to include Pulse external ID
 
-  MemberRow currently only carries internal member id; A-6 bulk fetch
+  SegmentMemberRow currently only carries internal member id; A-6 bulk fetch
   requires externalId. Members with null externalId fall through to per-member
   collection rather than being included in the bulk request.
 
@@ -477,6 +477,28 @@ Then wait for the user.
 | `execute <text>` | Commit and push using `<text>` as the full commit message instead, then start the polling loop |
 
 Co-author trailer (`Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>`) is always appended unless the user's override message already contains it.
+
+### Re-requesting a Copilot review (after every commit + push)
+
+GitHub only auto-requests Copilot's review once, when the PR is first opened (via `/open-pr`). A later push — including one that fixes the very comments Copilot raised — does **not** trigger another Copilot pass on its own; it has to be re-requested explicitly, or there's nothing to poll for.
+
+After a successful `git push`, ask via **AskUserQuestion** before starting the polling loop:
+
+```text
+Question: "Request another Copilot review round for this push?"
+Header: "Re-review"
+Options:
+  1. **Request Copilot review** - "Fire another Copilot pass on the new commit(s)" (recommended on round 1 of a PR; still useful on later rounds if the fixes were substantial)
+  2. **Skip this round** - "Don't request one — one pass was enough, or you're handling the rest manually" (recommended on round 2+ of a PR, since one round is often sufficient)
+```
+
+If "Request Copilot review": run
+
+```bash
+request-review.sh
+```
+
+(resolves the PR from the current branch; pass `--pr <N>` if needed, or `--level copilot+claude` to also dispatch the `claude.yml` smoke-test review). This is also callable standalone, any time, outside this skill's flow — e.g. if the user just says "request a copilot review."
 
 ### Polling loop (automatic, after every commit + push)
 

@@ -5,7 +5,7 @@
 # pulls it. This module only nags — it does not pull.
 
 _git_tools_freshness() {
-  local d="$HOME/Documents/Development/git-tools"
+  local d="$HOME/Documents/Development/git-tools/main"
   [[ -d "$d/.git" ]] || return 0
   command -v git >/dev/null || return 0
 

@@ -91,7 +91,7 @@ the turn with free text, so the tab correctly flips to "waiting" blue.
 
 **Git tools are on PATH — don't hunt for them.** `worktree-manager.sh`,
 `start-ticket.sh`, `open-pr.sh`, and `setup-ticket-profile.sh` all live in
-`~/Documents/Development/git-tools`, which is on `PATH` in every shell. Call them
+`~/Documents/Development/git-tools/main` (a worktree of the bare `git-tools` repo), which is on `PATH` in every shell. Call them
 directly by name. Don't precede a call with `which`/`command -v`/a filesystem
 `find` to confirm they exist — that's unnecessary and the broad `find` in
 particular needs manual permission approval every time.
