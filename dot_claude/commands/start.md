@@ -8,7 +8,8 @@ provider is resolved per-repo by `start-ticket.sh` (`.start-ticket.conf` in the 
 root, else autodetect from installed CLIs) — don't assume which one; if you need to
 know, check for `.start-ticket.conf` or run `gh repo view` / `command -v short`.
 All ticket-state operations go through `start-ticket.sh` and its providers, never
-raw CLI calls, except the enrichment queries below.
+raw CLI calls, except the enrichment queries below and the read-back/repair
+operations in step 1a.
 
 ## Steps
 
@@ -26,6 +27,25 @@ doesn't). Prints `worktree=<path>` and `kickoff=<path>` on stdout — capture bo
 
 If it exits non-zero (ticket not open, no provider, CLI not authed), **stop** and
 report why. If the worktree already existed it still succeeds and prints the path.
+
+### 1a. Verify the ticket actually moved to in-progress
+
+`provider::mark_in_progress` is best-effort: it swallows the CLI's stderr and only
+warns, so a tracker CLI that fails *while exiting 0* reports success having done
+nothing. Read the ticket's state back and fix it if it didn't take.
+
+- **GitHub** — `gh issue view <id> --json state,assignees`; assign/reopen as needed.
+- **Shortcut** — the `short` CLI's state-set is **known broken** (`short story
+  update <id> --state …` prints `Error fetching story NaN` and still exits 0), so
+  assume it did nothing and use the Shortcut MCP tools:
+  `mcp__shortcut__stories-get-by-id` to read the current state, and if it isn't
+  already started, `mcp__shortcut__workflows-get-default` (pass the story's team id)
+  to resolve the started-state id, then `mcp__shortcut__stories-update` with
+  `workflow_state_id`. Prefer the state named in `.start-ticket.conf`'s
+  `shortcut_in_progress_state` when it matches one the workflow returns.
+
+Don't block on this — if the state can't be set, say so in the final report and
+continue. But never report "marked in progress" without having read it back.
 
 ### 2. Enrich the kickoff (tracker state only — keep it short)
 
@@ -58,12 +78,29 @@ Write the enriched kickoff back to the same path.
 start-ticket.sh --tab-only "<worktree>" "<kickoff>"
 ```
 
-Opens a new iTerm tab split into two horizontal panes: `claude` on top (with the
-kickoff typed into its input but **not submitted** — the user reviews and hits
-Enter), a shell in the worktree on the bottom. The kickoff is also on the
-clipboard. Not in iTerm → it prints the `cd` + `claude` command instead.
+How the session starts depends on the **launcher**, which `start-ticket.sh` resolves
+itself (`--launcher` flag → `$START_TICKET_LAUNCHER` → `launcher=` in
+`.start-ticket.conf` or `~/.config/start-ticket/config` → `iterm`). Don't pass
+`--launcher` yourself; the user's per-machine config decides.
+
+- **`iterm`** (default) — opens a new iTerm tab split into two horizontal panes:
+  `claude` on top (with the kickoff typed into its input but **not submitted** —
+  the user reviews and hits Enter), a shell in the worktree on the bottom. The
+  kickoff is also on the clipboard. Not in iTerm → it prints the `cd` + `claude`
+  command instead.
+- **`bg`** — starts a background session for agent view (`claude agents`):
+  `claude --bg --name <label>` run inside the worktree, with the kickoff as its
+  prompt. `<label>` is derived from the worktree's branch slug (prettified), not
+  the ticket title. The kickoff is **submitted immediately**, so the session starts
+  in plan mode by default (`bg_permission_mode`) — it proposes a plan and waits for
+  the user rather than editing. There is no terminal pane; the user finds the
+  session in `claude agents`. If the launch fails over workspace trust, the script
+  prints the one-time `cd <worktree> && claude` fix — relay it.
+- **`none`** — does nothing; no session is started. Use when you only want the
+  worktree + kickoff file and plan to open the session yourself.
 
 ### 4. Report
 
 Worktree path, branch, ticket state, and — if the ticket has a parent epic — the
 epic's sub-issue progress and which sibling tickets remain open (GitHub only).
+With the `bg` launcher, also say the session is running in `claude agents`.
