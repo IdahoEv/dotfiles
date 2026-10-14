@@ -188,13 +188,31 @@ init_worktree_structure() {
 
     # Restore the real remote URLs (the bare clone pointed them at the
     # now-obsolete local path instead)
+    #
+    # Also restore the fetch refspec. `git clone --bare` deliberately writes
+    # none, and without it `git fetch origin <branch>` updates FETCH_HEAD only
+    # — refs/remotes/origin/* stay frozen at conversion time, silently, for the
+    # life of the repo. Anything reasoning about origin/<base> (finalize-check's
+    # merged test, `git log origin/main..`, ahead/behind counts) then reads
+    # stale refs and is quietly wrong. A remote worth a URL is worth a refspec.
     for entry in "${remote_backup[@]}"; do
         IFS='|' read -r remote fetch_url push_url <<< "$entry"
         git -C "${current_dir}/.git" remote set-url "$remote" "$fetch_url"
         if [ "$push_url" != "$fetch_url" ]; then
             git -C "${current_dir}/.git" remote set-url --push "$remote" "$push_url"
         fi
+        if ! git -C "${current_dir}/.git" config --get "remote.${remote}.fetch" >/dev/null 2>&1; then
+            git -C "${current_dir}/.git" config \
+                "remote.${remote}.fetch" "+refs/heads/*:refs/remotes/${remote}/*"
+        fi
     done
+
+    # Populate refs/remotes/* now that the refspec exists. The bare clone put
+    # the branches in refs/heads/, so without this the tracking refs don't
+    # exist at all until the user's first manual fetch.
+    info "Populating remote-tracking refs..."
+    git -C "${current_dir}/.git" fetch --all --quiet 2>/dev/null \
+        || warning "Could not reach remotes to populate tracking refs; run 'git fetch --all' when back online"
 
     # Now add the first worktree from the final location
     info "Creating main worktree..."
