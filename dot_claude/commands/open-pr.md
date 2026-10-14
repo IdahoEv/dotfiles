@@ -11,7 +11,9 @@ title/body is this command's job.
 
 ```text
 /open-pr
-/open-pr --review none|copilot|copilot+claude    # default: copilot
+/open-pr --review none|copilot|copilot+claude    # default: copilot, EXCEPT when
+                                                 # ~/.config/local-review-only exists (home machine,
+                                                 # Copilot quota out): then default none, after /local-review-with-oversight
 /open-pr --provider <name>         # --env is an alias; normally resolved from config
 /open-pr --no-compact              # skip the post-ship context compaction
 /open-pr --no-multi                # ship only this repo; skip the sibling fan-out

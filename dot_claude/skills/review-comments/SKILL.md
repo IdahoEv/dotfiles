@@ -19,7 +19,9 @@ Work through unresolved code review comments on the current branch's pull reques
 
 ## Guardrails
 
-**DO NOT** automatically commit and push without first showing the proposed commit message and waiting for "execute" or "execute <message>".
+**DO NOT** automatically commit and push without first showing the proposed commit message and getting the user's approval (the commit-approval `AskUserQuestion` described under **Commit, Push & Poll**, or a typed "execute" / "execute <message>").
+
+**The approval prompt must be self-contained.** Text you write before an `AskUserQuestion` call is often not shown to the user (especially in background sessions) — only the question and its options are. So the findings, the verdict table, the description of fixes and the full proposed commit message must appear **inside the `AskUserQuestion` call** (question text and option `preview`), never only in the turn's prose. A question like "Commit these fixes with the proposed message?" with nothing in it is a bug: the user cannot see what they are approving.
 
 **Every GitHub comment body this skill posts** (replies, disagree explanations, anything sent via `gh api .../comments`) is posted under the user's own authenticated GitHub identity, with no `[bot]` marker distinguishing it from a comment the user wrote by hand. To keep that distinction visible to anyone reading the thread, append this line to the end of every comment body this skill posts:
 
@@ -242,7 +244,7 @@ Based on your informed opinion from the previous step and the actions that have 
 2. Read the relevant file and surrounding code for context
 3. Propose a fix based on the reviewer's feedback. If the reviewer left a suggestion, first ask the user if they want to accept the suggestion. Otherwise, propose your own fix.
 4. Run validation and formatting tools on the changed file(s) (see **Validation & Formatting** below) and resolve anything they surface before continuing.
-5. If any changes were applied, use the **AskUserQuestion** tool to ask if they want to commit this change, and include the validation status in the prompt. If the user answers Yes, then use the `/commit` skill to commit the change.
+5. If any changes were applied, use the **AskUserQuestion** tool to ask if they want to commit this change. The prompt itself must contain the comment, the diff/description of the fix, the validation status and the proposed commit message (preceding prose may not be shown). If the user answers Yes, then use the `/commit` skill to commit the change.
 6. **For coderabbit and Copilot comments only:** After successfully implementing the fix, automatically add a 👍 reaction:
 
    ```bash
@@ -433,7 +435,7 @@ If invoked with no arguments or with "automatically", perform this skill in "Aut
 
 At the end, show a summary using the **structured findings table format** above — one row per file:line touched, verdict glyph plus terse reason in the Verdict column. Put the fuller rationale for any non-obvious verdict (why something was rejected or only partially valid) in a sentence or two above or below the table, not squeezed into a cell. Note validation status (lint/typecheck/tests) as a line beneath the table rather than as a table column.
 
-**After showing the summary**, if any file changes were made, draft a commit message and display it to the user before taking any further action. Then wait — see **Commit, Push & Poll** below for how to proceed.
+**After showing the summary**, if any file changes were made, draft a commit message, then ask for approval with a self-contained `AskUserQuestion` — see **Commit, Push & Poll** below for exactly what it must contain. If no files changed, just end with the summary.
 
 ### "Quick Mode"
 
@@ -451,7 +453,14 @@ This section governs the commit/push/poll cycle that follows a completed Automat
 
 ### After showing the summary (Automatic Mode only)
 
-If any file changes were made, output the proposed commit message in full — do not commit yet. Example:
+If any file changes were made, do not commit yet. Print the report as normal text (reviewer findings, structured findings table, short description of each fix, validation status, proposed commit message), **and then repeat the essentials inside a single `AskUserQuestion` call**, because the preceding text may not be visible:
+
+- `question`: the reviewer findings and the structured findings table (compact: file:line, finding, verdict), a one-line description per fix, the validation status line, and the full proposed commit message. End with "Commit and push with this message?".
+- Option 1, "Commit and push (Recommended)": `preview` = the full proposed commit message (plus the `git diff --stat` if short).
+- Option 2, "Commit with a different message": user supplies the text via "Other".
+- Option 3, "Don't commit yet": leave the changes in the working tree.
+
+Never ask the commit question without the table and commit message in it. The commit message format:
 
 ```
 Proposed commit message:
@@ -467,7 +476,7 @@ Proposed commit message:
 Say "execute" to commit and push with this message, or "execute <your message>" to override.
 ```
 
-Then wait for the user.
+Then wait for the user's answer (typed "execute" remains valid as well).
 
 ### "execute" shorthand
 
