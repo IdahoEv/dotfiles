@@ -121,6 +121,15 @@ init_worktree_structure() {
     local current_branch
     current_branch=$(git rev-parse --abbrev-ref HEAD)
 
+    # Detached HEAD reports the literal string "HEAD", and nothing downstream
+    # rejects it: you get a worktree directory named HEAD sitting beside .git,
+    # tracking config for a branch "HEAD" → refs/heads/HEAD, and that path
+    # recorded as worktreeManager.configRoot for every future call. By the time
+    # it's visible the original checkout has already been deleted.
+    if [ "$current_branch" = "HEAD" ]; then
+        error "Detached HEAD — check out a branch before running --init"
+    fi
+
     # Ensure working directory is clean
     if ! git diff-index --quiet HEAD -- 2>/dev/null; then
         error "Working directory has uncommitted changes. Commit or stash them before running --init"
@@ -143,6 +152,24 @@ init_worktree_structure() {
     echo -e "  2. Create main worktree at: ${repo_name}/${main_dir_name}"
     echo -e "  3. Enable sibling worktrees: ${repo_name}/<sanitized-branch-name>"
     echo -e "  (Branch: ${current_branch} → Directory: ${main_dir_name})"
+
+    # `git clone --bare` carries refs/heads and refs/tags and nothing else, and
+    # the original directory is deleted at the end. The clean check above only
+    # looks at tracked modifications, so stashes, untracked and gitignored
+    # files (.env, the very thing this script symlinks later), local git config,
+    # hooks, and info/exclude all go with it. An informed "y" isn't possible
+    # unless the prompt says so — count what's at stake and name it.
+    local n_stash n_untracked
+    n_stash=$(git stash list 2>/dev/null | wc -l | tr -d ' ')
+    n_untracked=$(git ls-files --others --exclude-standard 2>/dev/null | wc -l | tr -d ' ')
+    local n_ignored
+    n_ignored=$(git ls-files --others --ignored --exclude-standard 2>/dev/null | wc -l | tr -d ' ')
+    echo ""
+    echo -e "${YELLOW}This will NOT carry over (the old directory is deleted):${NC}"
+    echo -e "  - ${n_untracked} untracked and ${n_ignored} ignored file(s) — includes .env*"
+    echo -e "  - ${n_stash} stash entr(ies)"
+    echo -e "  - local .git config, hooks, and info/exclude"
+    echo -e "  Back up anything you need before continuing."
     echo ""
 
     read -r -p "Proceed with initialization? [y/N] " confirm
@@ -176,9 +203,12 @@ init_worktree_structure() {
     # (avoids shell being in a deleted directory)
     cd "$parent_dir"
 
-    # Move the old directory out of the way
+    # Move the old directory out of the way. PID-suffixed, like temp_bare: a
+    # plain `.old` is a real human habit, and `mv` into an existing directory
+    # MERGES rather than failing — the rm at the end would then take both.
+    local old_dir="${current_dir}.old.$$"
     info "Reorganizing directories..."
-    mv "$current_dir" "${current_dir}.old"
+    mv "$current_dir" "$old_dir"
 
     # Create new structure directory
     mkdir -p "$current_dir"
@@ -188,13 +218,51 @@ init_worktree_structure() {
 
     # Restore the real remote URLs (the bare clone pointed them at the
     # now-obsolete local path instead)
+    #
+    # Also restore the fetch refspec. `git clone --bare` deliberately writes
+    # none, and without it `git fetch origin <branch>` updates FETCH_HEAD only
+    # — refs/remotes/origin/* stay frozen at conversion time, silently, for the
+    # life of the repo. Anything reasoning about origin/<base> (finalize-check's
+    # merged test, `git log origin/main..`, ahead/behind counts) then reads
+    # stale refs and is quietly wrong. A remote worth a URL is worth a refspec.
     for entry in "${remote_backup[@]}"; do
         IFS='|' read -r remote fetch_url push_url <<< "$entry"
         git -C "${current_dir}/.git" remote set-url "$remote" "$fetch_url"
         if [ "$push_url" != "$fetch_url" ]; then
             git -C "${current_dir}/.git" remote set-url --push "$remote" "$push_url"
         fi
+        if ! git -C "${current_dir}/.git" config --get "remote.${remote}.fetch" >/dev/null 2>&1; then
+            git -C "${current_dir}/.git" config \
+                "remote.${remote}.fetch" "+refs/heads/*:refs/remotes/${remote}/*"
+        fi
     done
+
+    # Populate refs/remotes/* now that the refspec exists. The bare clone put
+    # the branches in refs/heads/, so without this the tracking refs don't
+    # exist at all until the user's first manual fetch.
+    # Check origin specifically rather than reading `fetch --all`'s status:
+    # --all exits non-zero if ANY remote fails, so one dead secondary remote
+    # would warn about a repo whose origin refs were just written correctly.
+    # Keep stderr visible — --quiet already silences the success case, and
+    # hiding it would mask an SSH host-key or credential prompt behind a
+    # motionless "Populating remote-tracking refs...".
+    info "Populating remote-tracking refs..."
+    git -C "${current_dir}/.git" fetch --all --quiet || true
+    #
+    # Three arms, because neither of the first two holds universally.
+    # refs/remotes/origin/HEAD is only auto-created by fetch on git >= 2.48,
+    # and refs/remotes/origin/<current_branch> is absent whenever --init runs
+    # from a brand-new local branch — which is a normal way to reach here. On
+    # older git both are missing after a perfectly good fetch, so fall back to
+    # "did we end up with ANY origin ref at all".
+    if ! git -C "${current_dir}/.git" rev-parse --verify --quiet \
+            refs/remotes/origin/HEAD >/dev/null 2>&1 \
+       && ! git -C "${current_dir}/.git" show-ref --quiet --verify \
+            "refs/remotes/origin/${current_branch}" \
+       && [ -z "$(git -C "${current_dir}/.git" for-each-ref --count=1 \
+            refs/remotes/origin/ 2>/dev/null)" ]; then
+        warning "Could not reach origin to populate tracking refs; run 'git fetch --all' when back online"
+    fi
 
     # Now add the first worktree from the final location
     info "Creating main worktree..."
@@ -216,7 +284,7 @@ init_worktree_structure() {
     git -C "${current_dir}/${main_dir_name}" config worktreeManager.configRoot "${current_dir}/${main_dir_name}"
 
     # Clean up old directory
-    rm -rf "${current_dir}.old"
+    rm -rf "$old_dir"
 
     echo ""
     success "Repository converted to worktree structure!"
