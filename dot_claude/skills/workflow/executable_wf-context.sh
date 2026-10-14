@@ -187,6 +187,25 @@ wf::chezmoi_facts() {
     dirty="$(git -C "$root" status --porcelain 2>/dev/null | wc -l | tr -d ' ')"
   fi
   printf 'chezmoi_source_dirty_files=%s\n' "${dirty:-}"
+
+  # Is the dotfiles repo in step with origin? Both machines push to main, so
+  # editing on a stale checkout is how the merge conflicts start. Fetch first
+  # (bounded; offline just means the counts reflect the last fetch). The keys
+  # are omitted, not zeroed, when there's no upstream to compare against.
+  if [ -n "$root" ] && git -C "$root" rev-parse --git-dir >/dev/null 2>&1; then
+    local counts
+    local bound=""
+    command -v timeout >/dev/null && bound="timeout 10"   # absent on stock macOS
+    # shellcheck disable=SC2086  # $bound is intentionally word-split
+    GIT_TERMINAL_PROMPT=0 $bound git -C "$root" fetch --quiet >/dev/null 2>&1 || true
+    if counts="$(git -C "$root" rev-list --left-right --count 'HEAD...@{upstream}' 2>/dev/null)"; then
+      printf 'chezmoi_source_ahead_origin=%s\n' "${counts%%[[:space:]]*}"
+      printf 'chezmoi_source_behind_origin=%s\n' "${counts##*[[:space:]]}"
+    fi
+    # Anything but "true" means plain `git pull` makes merge commits.
+    printf 'chezmoi_source_pull_rebase=%s\n' \
+      "$(git -C "$root" config --type=bool --get pull.rebase 2>/dev/null || echo unset)"
+  fi
 }
 
 # ---- project ----------------------------------------------------------------

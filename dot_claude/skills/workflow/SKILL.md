@@ -41,6 +41,9 @@ Keys that change what you do:
 | `tool_*=git_tools_only` | Not on this session's PATH; invoke as `$git_tools_dir/<name>.sh`. |
 | `tool_*=missing` | Stop and ask. |
 | `chezmoi_source_dirty_files` > 0 | Dotfiles work already in flight. Say so before adding to it. |
+| `chezmoi_source_behind_origin` > 0 | The other machine pushed. `git -C <chezmoi_source_root> pull --rebase` **before** editing, or the push later becomes a merge. |
+| `chezmoi_source_ahead_origin` > 0 | Unpushed dotfiles commits here — the other machine can't see them. Mention it. |
+| `chezmoi_source_pull_rebase` ≠ `true` | Plain `pull` will make merge commits. Offer `git -C <chezmoi_source_root> config pull.rebase true`; it is per-clone, so each machine needs it. |
 | `chezmoi_healthy=no` | chezmoi can't read its source state — every other `chezmoi_*` key is a false negative. Stop; `chezmoi doctor`. |
 | `default_branch_source=probe` | `origin/HEAD` gave no usable answer (unset, or pointing at a pruned ref), so `default_branch` is a guess from a fixed `development→main→master` order and may name the wrong branch. Don't branch off it without checking. |
 | `default_branch_source=none` | No default branch at all. |
