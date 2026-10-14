@@ -48,15 +48,6 @@ and can sit unread. **The question must be self-contained:** text written before
 fix descriptions, the full commit message) in the question text or option `preview`.
 "Commit with the proposed message?" with no message in it is a bug.
 
-**Local-review mode (home machine only):** if the file `~/.config/local-review-only`
-exists (check with `test -f`), Copilot quota is out on this machine: when implementation
-is done and tests pass, run `/local-review-with-oversight` *before* `/open-pr`. It runs a fresh reviewer
-subagent per round and a triage/fix/commit cycle; you decide how many rounds are worth
-it, never more than 5 without my approval via `AskUserQuestion`. Then ship with
-`/open-pr --review none`, and don't request Copilot reviews. If the file does not exist
-(e.g. my work machine, where Copilot and CodeRabbit run on GitHub), ignore all of this and
-use the normal `/open-pr` + `/review-comments` flow. I delete the file when Copilot returns.
-
 ## Git Workflow
 
 {{- if .is_work }}
