@@ -1,3 +1,8 @@
+---
+description: Act as the governing session for a project — write, evaluate, and shepherd tickets
+argument-hint: [what you want governed, e.g. "what should I work on next"]
+---
+
 # Governor
 
 Act as the **governing session** for a project: write tickets, evaluate and shepherd
@@ -42,6 +47,7 @@ governing without it means guessing at the tracker and the team. Template:
 
 **Project:** <name> — <one line on what it is>
 **People:** <who works on it>
+**Primary worktree:** <path — the one a governor session stays in>
 
 ## Key documents
 - `docs/...` — <what it is>
@@ -59,9 +65,12 @@ governing without it means guessing at the tracker and the team. Template:
 - <anything specific to this project's planning discipline>
 ```
 
-Also read the repo's `CLAUDE.md` and `.claude/workflow-config.json` for the tracker
-provider and any standing ticket. Prefer `.claude/governor.md` where they disagree —
-it's the file written for this purpose.
+Also read the repo's `CLAUDE.md` for layout and conventions. Prefer `.claude/governor.md`
+where the two disagree — it's the file written for this purpose.
+
+**Ignore `standing_ticket` in `.claude/workflow-config.json`.** That marker pins
+`/workflow`'s config edits to one branch; it is not the ticket this session governs.
+A governor session has no standing ticket — it decides which ones exist.
 
 ## Writing tickets
 
