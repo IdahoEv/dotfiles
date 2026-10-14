@@ -1,2 +1,5 @@
 # Claude Code task-tool runtime state (lock files, highwatermarks) — not config.
 .claude/tasks/**
+
+# Repo docs, not deployed.
+docs
