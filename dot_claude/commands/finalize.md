@@ -15,10 +15,35 @@ finalize-check.sh
 One read-only call answers every mechanical question. It prints:
 
 ```
-branch= ticket_id= ticket_scheme= base= pr_number= pr_state= pr_merge_commit=
-pr_head_oid= head_oid= head_matches= merged= base_worktree= worktree= verdict=
-agent_phase=
+branch= ticket_id= ticket_scheme= base= base_source= pr_number= pr_state=
+pr_merge_commit= pr_head_oid= pr_count= pr_open_other= head_oid= head_matches=
+merged= merge_commit_landed= base_fetch= shallow= tracking_refspec=
+base_worktree= worktree= verdict= agent_phase=
 ```
+
+`base` is the branch **the PR targets** (`base_source=pr`), falling back to the repo
+default when there's no PR to ask (`base_source=default`). On a stacked or
+release-branch PR those differ — report the one the script used.
+`base_source=default_pr_base_gone` means the PR's base no longer exists on origin (the
+normal end state for a merged stacked PR), so the repo default was used instead; the
+verdict then describes reaching *that* branch, not the one the PR targeted.
+
+A branch can carry several PRs. The script reports `pr_count`, prefers a
+`MERGED` one when choosing which to describe, and lists any **other** open PR in
+`pr_open_other` — which forces `not-merged` regardless of what the chosen PR
+proves. Name the open PR when you report that stop.
+
+Two of those are health signals rather than facts about the PR, and both are worth
+relaying in the report even when the verdict is `ready`:
+
+- **`base_fetch=failed`** — `origin/<base>` could not be refreshed, so every ancestry
+  answer above came from a possibly-stale ref. Say so; don't silently treat the verdict
+  as freshly-proven.
+- **`tracking_refspec=missing`** — the repo has no `remote.origin.fetch`, so
+  `refs/remotes/origin/*` never advance on fetch. `finalize-check.sh` compensates
+  internally with explicit refspecs, but nothing else does — including the
+  `git -C <base_worktree> pull` in step 3 and any `git log origin/<base>` the user runs
+  next. Relay the repair command the script printed on stderr.
 
 If `agent_phase` is non-empty, stamp it before the slower steps run so the agent-view row
 matches reality: `agent-phase.sh "$agent_phase"`. Empty means the verdict was "stop and
@@ -32,10 +57,22 @@ Act on `verdict`:
 - **`local-commits`** — **stop.** The local tip is ahead of the merged PR head: there's
   work here the PR never contained. Report it (`git log <pr_head_oid>..HEAD`) and delete
   nothing.
-- **`squash-merged`** — the PR says merged but the branch isn't an ancestor, which is
-  normal for squash/rebase merges. Say which signals disagreed and confirm before
-  deleting anything.
-- **`unknown`** — couldn't determine (no `gh`, non-GitHub host, no resolvable base).
+- **`squash-merged`** — the PR says merged, the branch isn't an ancestor, and the merge
+  commit **couldn't be checked** (not fetchable, or the base ref couldn't be refreshed).
+  Evidence is missing, not negative. An ordinary squash/rebase merge whose commit *is*
+  reachable now reports `ready` on its own, so reaching this verdict means a check did
+  not complete — don't wave it through as "normal for squash merges". Say which signal
+  was unavailable (`merge_commit_landed`, `base_fetch`, `shallow`) and confirm before
+  deleting. It leaves `agent_phase` empty for the same reason — don't stamp `MERGED` by
+  hand to compensate.
+- **`not-on-base`** — **stop.** The PR's merge commit is present locally and provably
+  **not** reachable from a freshly-fetched `origin/<base>` — and `<base>` here is the
+  branch the PR itself targets (`base_source=pr`; the verdict is suppressed when the
+  base had to be substituted), so this is not a stacked-PR false alarm. The base was
+  rewritten, or the merge was reverted. This branch may hold the only local ref to work
+  that never reached `<base>`. Report `pr_merge_commit` and `base`; delete nothing.
+- **`unknown`** — couldn't determine (no `gh`, non-GitHub host, no resolvable base, or
+  the PR's head object isn't fetchable so `head_matches` is itself unknown).
   Check that host by branch name yourself; if you still can't confirm the merge, stop.
 
 ### 2. Confirm the ticket is closed
