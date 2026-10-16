@@ -52,7 +52,7 @@ fix descriptions, the full commit message) in the question text or option `previ
 
 {{- if .is_work }}
 
-**Branch naming:** All branches must follow Shortcut ticket naming conventions (e.g., `feature/sc-65682/improve-synthetic-data-script`). When creating branches, use the Shortcut-generated branch name.
+**Branch naming:** All branches must follow Shortcut ticket naming conventions (e.g., `feature/sc-65682/improve-synthetic-data-script`). Create them via `/start` or `wm --sc`, which keep the `sc-<id>` segment Shortcut matches stories on and build the slug from the ticket *title* rather than reusing Shortcut's own generated slug — that slug is a truncation of the whole title, bracketed tags included, so it often arrives as `-a-l--decide-pers-data-deletio`.
 
 **Commit messages:** Reference the Shortcut ticket ID in commits where relevant.
 

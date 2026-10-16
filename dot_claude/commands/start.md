@@ -13,8 +13,14 @@ and the repairs in step 1a (raw `gh` on GitHub, MCP tools on Shortcut).
 ### 1. Setup
 
 ```bash
+start-ticket.sh <id> --print-title     # read-only; creates nothing
 start-ticket.sh <id> --no-tab
 ```
+
+`--print-title` is read-only and prints `title=`, `proposed_label=` and `proposed_slug=`.
+Read the title, write the session label yourself — see **Naming** — and export
+`GT_LABEL_OVERRIDE` for the `--no-tab` call. Run it first: the label is applied during
+`--no-tab`, so one decided afterwards is too late.
 
 Creates the worktree, marks the ticket in progress, and writes a kickoff from the repo's
 `.claude/kickoff-preamble.md` (which carries the project's working agreement, so this
@@ -77,6 +83,34 @@ What you need for the report: **`iterm`** opens a tab with the kickoff typed but
 unsubmitted; **`bg`** starts a background session (findable in `claude agents`) with the
 kickoff submitted immediately; **`none`** starts nothing. If a `bg` launch fails over
 workspace trust, the script prints a one-time `cd <worktree> && claude` fix — relay it.
+
+### Naming
+
+**The session label is yours to write; the branch slug is not.** Two different jobs:
+
+- **Session label** (the agent-view row, the iTerm tab) — what the user scans to pick a
+  session out of a list. Nothing matches on it and `agent-phase.sh` rewrites it on every
+  phase change, so judgment costs nothing here. **Write it from the title.**
+- **Branch slug and worktree directory** — matched against later by `find_ticket_branch`,
+  an open PR, and the user's shell history. A name that varies between two runs of the
+  same ticket is a bug, so these stay deterministic. `proposed_slug` is informational;
+  `GT_LABEL_OVERRIDE` does not affect it.
+
+Set `GT_LABEL_OVERRIDE` to **3–4 title-cased words naming what the work is about** — the
+noun phrase, not the activity. No ticket id (the script prepends `Sc<id>`), no
+punctuation, no verb unless the verb is the point. Use `proposed_label` when you can't do
+better; it comes from a delete-and-slice rule that keeps the last four significant words,
+which is usually right but loses the subject when the title is front-loaded:
+
+| Title | `proposed_label` | Write instead |
+| --- | --- | --- |
+| Rewards structures are wrong in the legacy mapping layer | `Wrong Legacy Mapping Layer` | `Rewards Structures Legacy Mapping` |
+| Investigate why the planner drops subjects with no applicable_date | `Subjects No Applicable Date` | `Planner Drops Subjects` |
+| [A/L] Decide PERS data deletion & retention policy (member deletion) | `Data Deletion Retention Policy` | use it — already right |
+
+Report the label you chose. If you genuinely need the branch named too (rare — a
+deliberate rename, not a nicer wording), `GT_LABEL_SLUG_OVERRIDE` does that; say so in the
+report, since it breaks the reproducible-from-ticket-id property.
 
 A `bg` session is named `[PLAN] <slug>` — the ticket's **workflow phase**, a third state
 axis in the agent view beside `status` (idle/busy) and `state` (working/blocked/done).
