@@ -1111,7 +1111,9 @@ main() {
     # one we just derived — see find_ticket_branch. Renaming the branch to match
     # a retitled ticket would be worse than keeping the old name: the worktree
     # directory, any open PR, and the user's shell history all refer to it.
-    if [ "$use_shortcut" = true ] && [ -n "$ticket_id" ]; then
+    # Not in interactive mode: there the user picked a branch by hand, and a
+    # deliberate selection must outrank a slug match on the same ticket id.
+    if [ "$use_shortcut" = true ] && [ "$interactive_mode" != true ] && [ -n "$ticket_id" ]; then
         local existing_branch
         existing_branch=$(find_ticket_branch "$ticket_id")
         if [ -n "$existing_branch" ] && [ "$existing_branch" != "$branch_name" ]; then
