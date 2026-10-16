@@ -1,14 +1,15 @@
 #!/usr/bin/env bash
 # lib/repo-facts.sh — shared, read-only facts about a repo/branch.
 #
-# Sourced by open-pr.sh, sibling-worktrees.sh, and finalize-check.sh so the
-# conventions below live in exactly one place. These were previously restated in
-# prose inside .claude/commands/*.md, which meant the model re-derived them (and
-# re-ran the probe commands) on every invocation.
+# Sourced by open-pr.sh, sibling-worktrees.sh, finalize-check.sh, start-ticket.sh
+# and worktree-manager.sh so the conventions below live in exactly one place.
+# These were previously restated in prose inside .claude/commands/*.md, which
+# meant the model re-derived them (and re-ran the probe commands) on every
+# invocation.
 #
-# start-ticket.sh does NOT source this: it resolves a ticket id from its
-# argument and a branch name from its provider, so it has no use for either
-# helper. Don't wire it up just for symmetry.
+# start-ticket.sh and worktree-manager.sh use only gt::distill_title /
+# gt::slug_title — they resolve a ticket id from their argument and a branch
+# from the provider, so the branch/default-branch helpers are of no use to them.
 #
 # Everything here is pure inspection: no network beyond the host CLI fallback
 # in gt::default_branch, no writes, no side effects.
@@ -90,4 +91,141 @@ gt::ticket_scheme() {  # <branch> → shortcut | github | unknown
   elif [[ "$b" =~ ^[1-9][0-9]*- ]]; then printf 'github'
   else printf 'unknown'
   fi
+}
+
+# ---- ticket title → short label ---------------------------------------------
+# Distill a ticket title down to the few words that actually identify the work,
+# for agent-view session names, branch slugs, and worktree directory names.
+#
+# The problem this solves: a tracker slug is already lossy. Shortcut turns
+# "[A/L] Decide PERS data deletion & retention policy (member deletion, ...)"
+# into "-a-l--decide-pers-data-deletio", and anything that then truncates THAT
+# is truncating a truncation — the reader is left with "a l decide pers data
+# deletio", whose only informative word is cut in half. Distilling from the
+# title instead keeps the words that distinguish one ticket from another.
+#
+# The rules, in order, and why each one earns its place:
+#   1. Leading [bracketed] tags — track/project markers ([A], [A/L], [ops],
+#      [PERS]) that are constant across many tickets, so they never
+#      discriminate between two rows in a list.
+#   2. (Parentheticals) — in these trackers they elaborate, and the title
+#      already stands without them.
+#   3. Stopwords and project noise. GT_LABEL_NOISE is the per-repo part: the
+#      project's own name is pure overhead in a list where every row shares it.
+#   4. A leading activity verb (Design/Decide/Build), but only when something
+#      survives it — "what" discriminates better than "how" when the budget is
+#      four words, and most tickets in a backlog are Design or Build.
+#   5. Keep the LAST n words, not the first. English puts the head of a noun
+#      phrase at the end: "unified rewards representation" degrades to
+#      "rewards representation", which is still the subject, whereas keeping
+#      the front gives "design unified" — the generic half.
+#
+# Acronyms (APM, ADR, SQL) keep their case; everything else is Title Cased, so
+# the result reads as a name rather than a sentence fragment.
+#
+# Tunable via environment, since the noise list is the only genuinely
+# repo-specific part: GT_LABEL_WORDS (default 4), GT_LABEL_NOISE.
+GT_LABEL_STOPWORDS=" a an the to for of in on and or with into from at by be is are as that this it "
+GT_LABEL_VERBS=" add build create decide define design document enable fix implement investigate make migrate port refactor remove survey update write "
+
+gt::distill_title() {  # <title> [<max-words>] → "Short Label Words"
+  local title="$1" maxw="${2:-${GT_LABEL_WORDS:-4}}" w lw i n start
+  local noise=" ${GT_LABEL_NOISE:-} "
+  local -a kept=() out=()
+
+  # Repeatedly, so "[A] [ops] Thing" loses both tags.
+  while [[ "$title" =~ ^[[:space:]]*\[[^]]*\](.*)$ ]]; do title="${BASH_REMATCH[1]}"; done
+  title="$(printf '%s' "$title" | sed 's/([^)]*)//g')"
+  # Everything non-alphanumeric becomes a separator: this handles em dashes,
+  # ampersands, slashes, dots and snake_case uniformly, so "context_snapshot"
+  # and "dd-trace" split into words rather than surviving as punctuation.
+  title="$(printf '%s' "$title" | tr -c '[:alnum:]' ' ')"
+
+  for w in $title; do
+    lw="$(printf '%s' "$w" | tr '[:upper:]' '[:lower:]')"
+    [[ "$GT_LABEL_STOPWORDS" == *" $lw "* ]] && continue
+    [[ "$noise"             == *" $lw "* ]] && continue
+    kept+=("$w")
+  done
+
+  if [ "${#kept[@]}" -gt 1 ]; then
+    lw="$(printf '%s' "${kept[0]}" | tr '[:upper:]' '[:lower:]')"
+    [[ "$GT_LABEL_VERBS" == *" $lw "* ]] && kept=("${kept[@]:1}")
+  fi
+
+  n=${#kept[@]}
+  [ "$n" -eq 0 ] && return 0
+  start=$(( n > maxw ? n - maxw : 0 ))
+  for ((i = start; i < n; i++)); do
+    w="${kept[i]}"
+    if [[ "$w" =~ ^[A-Z0-9]{2,}$ ]]; then
+      out+=("$w")
+    else
+      out+=("$(printf '%s' "${w:0:1}" | tr '[:lower:]' '[:upper:]')${w:1}")
+    fi
+  done
+  printf '%s' "${out[*]}"
+}
+
+# The same distillation, lowercased and hyphenated for a git branch segment or
+# a directory name. Branch slugs get a wider budget than display labels: a
+# branch name is read deliberately rather than scanned, and `git branch` output
+# has no width pressure.
+gt::slug_title() {  # <title> [<max-words>] → "short-label-words"
+  local d; d="$(gt::label_from_title "$1" "${2:-${GT_LABEL_SLUG_WORDS:-5}}")"
+  [ -n "$d" ] || return 0
+  printf '%s' "$d" | tr '[:upper:]' '[:lower:]' | tr ' ' '-'
+}
+
+# ---- caller-supplied label override -----------------------------------------
+# gt::distill_title deletes and slices; it never reorders, substitutes, or
+# recognizes that two words mean the same thing. That handles the common
+# "<verb> <modifier> <head noun>" title shape at zero cost and zero variance,
+# and visibly degrades when the subject sits at the FRONT: "Rewards structures
+# are wrong in the legacy mapping layer" loses "Rewards", and "Investigate why
+# the planner drops subjects" loses "planner".
+#
+# A model reading the title gets those right. So a caller that has already read
+# the title with judgment available — /start, which is a Claude session — may
+# hand in a label directly via $GT_LABEL_OVERRIDE, and the distiller becomes the
+# fallback for everyone else (`wm --sc` straight from a shell, a cron job, any
+# non-Claude caller). The deterministic path stays the default, not the
+# leftover: an unset, empty, or unusable override silently falls back to it.
+#
+# The override reaches a BRANCH NAME, so it is sanitized rather than trusted:
+# word characters and spaces only, collapsed, trimmed, length-capped. A caller
+# that sends punctuation, a path separator, or a 200-character sentence gets the
+# cleaned version or, if nothing usable survives, the distilled title.
+GT_LABEL_MAX_CHARS="${GT_LABEL_MAX_CHARS:-48}"
+
+gt::sanitize_label() {  # <text> → "Safe Label Words", or nothing
+  local s="$1"
+  # Anything that isn't alphanumeric becomes a space: this is the same rule the
+  # distiller applies, so an override and a distilled title can't produce two
+  # different character sets in a branch name.
+  s="$(printf '%s' "$s" | tr -c '[:alnum:]' ' ')"
+  # Collapse runs of spaces and trim. read -r with the default IFS does both.
+  # shellcheck disable=SC2086
+  set -- $s
+  [ "$#" -gt 0 ] || return 0
+  s="$*"
+  if [ "${#s}" -gt "$GT_LABEL_MAX_CHARS" ]; then
+    # Cut on a word boundary, never mid-word — a half-word is the exact defect
+    # this whole change exists to remove.
+    while [ "${#s}" -gt "$GT_LABEL_MAX_CHARS" ] && [[ "$s" == *" "* ]]; do
+      s="${s% *}"
+    done
+    [ "${#s}" -le "$GT_LABEL_MAX_CHARS" ] || return 0
+  fi
+  printf '%s' "$s"
+}
+
+# The function every consumer should call: override if usable, else distill.
+gt::label_from_title() {  # <title> [<max-words>] → "Short Label Words"
+  local o
+  if [ -n "${GT_LABEL_OVERRIDE:-}" ]; then
+    o="$(gt::sanitize_label "$GT_LABEL_OVERRIDE")"
+    if [ -n "$o" ]; then printf '%s' "$o"; return 0; fi
+  fi
+  gt::distill_title "$1" "${2:-}"
 }

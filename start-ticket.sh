@@ -2,6 +2,7 @@
 # start-ticket.sh — spin up a worktree + Claude session for a tracker ticket.
 #
 #   start-ticket.sh <id> [--provider github|shortcut] [--no-tab] [--launcher iterm|bg|none]
+#   start-ticket.sh <id> --print-title            # read-only: title + proposed label
 #   start-ticket.sh --tab-only <worktree> <kickoff> [--launcher iterm|bg|none]
 #
 # Resolves a ticket (GitHub issue or Shortcut story) to a branch, creates a
@@ -27,6 +28,16 @@
 #   START_TICKET_BG_MAXLEN (agent-view row name length, default 70),
 #   START_TICKET_BG_PERMISSION_MODE or `bg_permission_mode=` in the conf files
 #   (bg launcher only; default "plan"; "default" passes no --permission-mode).
+#
+# Session/tab names are distilled from the ticket TITLE (gt::distill_title in
+# lib/repo-facts.sh), not from the branch — see make_label. Tune with
+# `label_noise=` in .start-ticket.conf (words this repo repeats in every title,
+# e.g. its own name) or GT_LABEL_WORDS (how many words to keep, default 4).
+#
+# A caller that can read the title with judgment available (the /start command,
+# which is a Claude session) may instead pass the label in $GT_LABEL_OVERRIDE;
+# it is sanitized and used verbatim, and anything unusable falls back to the
+# distiller. Use --print-title to fetch a title without creating anything.
 #
 # Providers: <script-dir>/start-ticket-providers/<name>.sh (override with
 # $START_TICKET_PROVIDER_DIR), each defining:
@@ -60,6 +71,8 @@ while [ -h "$_src" ]; do
   [ "${_src#/}" = "$_src" ] && _src="$_dir/$_src"
 done
 SCRIPT_DIR="$(cd -P "$(dirname "$_src")" && pwd)"
+# shellcheck source=lib/repo-facts.sh
+. "$SCRIPT_DIR/lib/repo-facts.sh"
 # Provider lookup (first dir containing <name>.sh wins):
 #   1. $START_TICKET_PROVIDER_DIR (explicit override)
 #   2. <main-repo-root>/.git-tools/start-ticket-providers  (per-repo)
@@ -107,14 +120,28 @@ setting() {
   printf '%s' "${v:-$3}"
 }
 
+# Words that are noise in THIS repo's ticket titles — typically the project's
+# own name, which every ticket repeats and which therefore tells the reader
+# nothing when they're scanning a list of them. Set `label_noise=pers api` in
+# .start-ticket.conf. Consumed by gt::distill_title.
+GT_LABEL_NOISE="$(setting label_noise GT_LABEL_NOISE "")"
+export GT_LABEL_NOISE
+
 # make_label <branch> <maxlen> [pretty] → short tab / agent-view row label.
 # Branch "<n>-<slug>" -> "Is<n> <slug>"; Shortcut "<user>/sc-<id>/<slug>" ->
 # "Sc<id> <slug>". The ticket number is ALWAYS kept; the slug is truncated.
 # "Is" (not "#") disambiguates issue numbers from PR numbers at a glance,
 # since GitHub shares one number sequence between the two. With "pretty",
 # hyphens in the slug become spaces (more readable in agent-view rows).
+#
+# The slug is distilled from $ST_TITLE when the provider supplied one, and only
+# falls back to the branch segment when it didn't. That ordering is the whole
+# point: the branch segment is itself a lossy tracker slug, so truncating it
+# truncates a truncation — Shortcut's "-a-l--decide-pers-data-deletio" becomes
+# the useless "a l decide pers data deletio", while the title it came from
+# distills to "Data Deletion Retention Policy". See gt::distill_title.
 make_label() {
-  local branch="$1" maxlen="$2" pretty="${3:-}" num="" slug="$1"
+  local branch="$1" maxlen="$2" pretty="${3:-}" num="" slug="$1" distilled=""
   if [[ "$branch" =~ ^([0-9]+)-(.+)$ ]]; then
     num="Is${BASH_REMATCH[1]}"
     slug="${BASH_REMATCH[2]}"
@@ -122,16 +149,45 @@ make_label() {
     num="Sc${BASH_REMATCH[2]}"
     slug="${BASH_REMATCH[3]}"
   fi
-  [ -n "$pretty" ] && slug="${slug//-/ }"
+  if [ -n "${ST_TITLE:-}" ] || [ -n "${GT_LABEL_OVERRIDE:-}" ]; then
+    distilled="$(gt::label_from_title "${ST_TITLE:-}")"
+    [ -n "$distilled" ] && slug="$distilled"
+  fi
+  # Only the branch-derived slug needs de-hyphenating; a distilled title is
+  # already spaced words.
+  [ -n "$pretty" ] && [ -z "$distilled" ] && slug="${slug//-/ }"
   if [ -n "$num" ]; then
     # Reserve room for "IsN " and the ellipsis when truncating the slug.
     local budget=$((maxlen - ${#num} - 2))
-    [ "${#slug}" -gt "$budget" ] && slug="${slug:0:$((budget-1))}…"
+    slug="$(fit "$slug" "$budget" "$distilled")"
     printf '%s %s' "$num" "$slug"
   else
-    [ "${#slug}" -gt "$maxlen" ] && slug="${slug:0:$((maxlen-1))}…"
+    slug="$(fit "$slug" "$maxlen" "$distilled")"
     printf '%s' "$slug"
   fi
+}
+
+# fit <text> <maxlen> [whole_words] → text trimmed to maxlen.
+# With <whole_words> non-empty, drop trailing WORDS until it fits rather than
+# cutting mid-word: at the iTerm tab width (30) a distilled label like
+# "Data Deletion Retention Policy" otherwise lands as "Data Deletion Retent…",
+# where the truncated word is the one carrying the meaning. Dropping to
+# "Data Deletion…" costs a word but keeps every word it shows readable.
+# Falls back to a character cut if even the first word is too long.
+fit() {
+  local text="$1" maxlen="$2" whole="${3:-}"
+  [ "${#text}" -le "$maxlen" ] && { printf '%s' "$text"; return; }
+  if [ -n "$whole" ]; then
+    local trimmed="$text"
+    while [ -n "$trimmed" ] && [ "${#trimmed}" -gt "$((maxlen - 1))" ]; do
+      [[ "$trimmed" == *" "* ]] || break
+      trimmed="${trimmed% *}"
+    done
+    if [ -n "$trimmed" ] && [ "${#trimmed}" -le "$((maxlen - 1))" ]; then
+      printf '%s…' "$trimmed"; return
+    fi
+  fi
+  printf '%s…' "${text:0:$((maxlen - 1))}"
 }
 
 # ---- iTerm tab ---------------------------------------------------------------
@@ -263,6 +319,7 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --provider) provider="${2:?--provider needs a value}"; shift 2 ;;
     --no-tab)   mode="no-tab"; shift ;;
+    --print-title) mode="print-title"; shift ;;
     --tab-only) mode="tab-only"
                 tab_wt="${2:?--tab-only needs <worktree> <kickoff>}"
                 tab_kf="${3:?--tab-only needs <worktree> <kickoff>}"
@@ -293,7 +350,7 @@ if [ "$mode" = "tab-only" ]; then
   exit 0
 fi
 
-[ -n "$id" ] || die "usage: start-ticket.sh <id> [--provider github|shortcut] [--no-tab] [--launcher iterm|bg|none]"
+[ -n "$id" ] || die "usage: start-ticket.sh <id> [--provider github|shortcut] [--no-tab|--print-title] [--launcher iterm|bg|none]"
 
 # ---- repo + provider -----------------------------------------------------
 git rev-parse --is-inside-work-tree >/dev/null 2>&1 || die "not inside a git repo"
@@ -325,6 +382,17 @@ ST_TITLE="" ST_BODY="" ST_URL="" ST_PARENT="" ST_BRANCH="" ST_REF=""
 provider::fetch "$id"
 : "${ST_REF:=${provider} ticket ${id}}"
 printf 'start-ticket: %s #%s — %s\n' "$provider" "$id" "${ST_TITLE:-?}" >&2
+
+# --print-title: resolve the ticket and stop. Lets a caller that wants to supply
+# its own label (GT_LABEL_OVERRIDE) read the title FIRST — the branch and the
+# worktree dir are both named during create_worktree below, so an override
+# decided afterwards would come too late for either of them. Read-only: no
+# worktree, no state change, nothing marked in progress.
+if [ "$mode" = "print-title" ]; then
+  printf 'title=%s\nproposed_label=%s\nproposed_slug=%s\n' \
+    "$ST_TITLE" "$(gt::distill_title "$ST_TITLE")" "$(gt::slug_title "$ST_TITLE")"
+  exit 0
+fi
 
 wt="$(provider::create_worktree "$id" | tail -1)"
 [ -d "$wt" ] || die "worktree not created (got '$wt')"

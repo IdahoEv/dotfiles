@@ -36,6 +36,18 @@ set -e
 # checks below don't rely on this alone.
 shopt -s inherit_errexit 2>/dev/null || true
 
+# Resolve this script's real directory (it is typically reached through a
+# PATH symlink) so the shared lib can be sourced.
+_wm_src="${BASH_SOURCE[0]}"
+while [ -L "$_wm_src" ]; do
+    _wm_dir="$(cd -P "$(dirname "$_wm_src")" && pwd)"
+    _wm_src="$(readlink "$_wm_src")"
+    [ "${_wm_src#/}" = "$_wm_src" ] && _wm_src="$_wm_dir/$_wm_src"
+done
+SCRIPT_DIR="$(cd -P "$(dirname "$_wm_src")" && pwd)"
+# shellcheck source=lib/repo-facts.sh
+. "$SCRIPT_DIR/lib/repo-facts.sh"
+
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -397,6 +409,27 @@ detect_primary_branch() {
 # Shortcut Integration
 # ============================================================================
 
+# Read a key from .start-ticket.conf — the same per-repo config start-ticket.sh
+# uses, so `label_noise=` is set once and both tools honor it. In a worktree
+# the file lives in the MAIN repo root, so check that as well as the cwd's
+# toplevel. Prints nothing (rc 0) when unset; callers treat empty as "default".
+wm_conf_get() {  # <key> → value, or empty
+    local key="$1" f v top common main_root=""
+    top="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+    common="$(git rev-parse --git-common-dir 2>/dev/null || true)"
+    if [ -n "$common" ]; then
+        common="$(cd -P "$common" 2>/dev/null && pwd)" && main_root="$(dirname "$common")" || main_root=""
+    fi
+    for f in "${top:-/nonexistent}/.start-ticket.conf" \
+             "${main_root:-/nonexistent}/.start-ticket.conf" \
+             "$HOME/.config/start-ticket/config"; do
+        [ -f "$f" ] || continue
+        v="$(sed -n "s/^${key}=//p" "$f" | head -1)"
+        [ -n "$v" ] && { printf '%s' "$v"; return 0; }
+    done
+    return 0
+}
+
 # Fetch ticket details from Shortcut and generate branch name
 fetch_shortcut_ticket() {
     local ticket_id="$1"
@@ -451,6 +484,36 @@ fetch_shortcut_ticket() {
             fi
             ;;
     esac
+
+    # Replace Shortcut's slug with one distilled from the ticket title.
+    #
+    # Shortcut builds its slug by lowercasing and hyphenating the WHOLE title,
+    # bracketed track tags included, then truncating to a fixed width — so
+    # "[A/L] Decide PERS data deletion & retention policy (...)" arrives as
+    # "-a-l--decide-pers-data-deletio": leading junk, and the one word that
+    # identifies the ticket cut in half. Everything downstream (worktree dir,
+    # agent-view row) inherits that. Distilling the title instead yields
+    # "data-deletion-retention-policy". See gt::slug_title in lib/repo-facts.sh.
+    #
+    # Only the slug segment changes; the sc-<id> segment is preserved exactly,
+    # which is what Shortcut matches branches to stories on.
+    # $GT_LABEL_OVERRIDE, when a caller set one, wins over both — see
+    # gt::label_from_title. It is sanitized there, not trusted, because it
+    # lands in a branch name.
+    local title slug
+    GT_LABEL_NOISE="${GT_LABEL_NOISE:-$(wm_conf_get label_noise)}"
+    title="$(short story "$ticket_id" --quiet 2>/dev/null \
+             | awk 'match($0,/^[Nn]ame:[[:space:]]*/){print substr($0,RLENGTH+1);exit}')" || title=""
+    if [ -n "$title" ] || [ -n "${GT_LABEL_OVERRIDE:-}" ]; then
+        slug="$(gt::slug_title "$title")"
+        if [ -n "$slug" ] && [[ "$branch_name" =~ ^(.*)(sc-[0-9]+)/.+$ ]]; then
+            local rebuilt="${BASH_REMATCH[1]}${BASH_REMATCH[2]}/${slug}"
+            if [ "$rebuilt" != "$branch_name" ]; then
+                info "Branch name from ticket title: $branch_name -> $rebuilt"
+                branch_name="$rebuilt"
+            fi
+        fi
+    fi
 
     echo "$branch_name"
 }
