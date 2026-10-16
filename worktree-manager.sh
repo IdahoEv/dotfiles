@@ -608,6 +608,26 @@ select_branch_interactive() {
         --preview-window=right:50% | sed 's/^\[[^]]*\] //'
 }
 
+# Find a branch for this ticket under ANY slug, or empty.
+#
+# The slug is no longer stable across runs: it is derived from the ticket title
+# (gt::slug_title), so editing the title, changing `label_noise=`, or supplying
+# $GT_LABEL_OVERRIDE on one run but not the next all move it. Matching on the
+# full branch name would then read a retitled ticket as a brand-new branch and
+# build a SECOND worktree beside the first. Before this became title-derived the
+# slug came from Shortcut and never moved, so nothing needed to handle it.
+#
+# The sc-<id> segment is the part deliberately held stable (Shortcut matches
+# stories to branches on it), so that is what we key on. Prints the first match
+# from refs/heads; worktrees are then located by that branch name as usual.
+find_ticket_branch() {  # <ticket-id> → branch name, or empty
+    local id="$1"
+    [ -n "$id" ] || return 0
+    git for-each-ref --format='%(refname:short)' refs/heads 2>/dev/null \
+        | grep -E "(^|/)sc-${id}(/|\$)" \
+        | head -1 || true
+}
+
 # Check if a worktree already exists for the given branch
 find_existing_worktree() {
     local branch_name="$1"
@@ -1085,6 +1105,20 @@ main() {
         info "Branch name: ${branch_name}"
     else
         info "Branch name: ${branch_name}"
+    fi
+
+    # Reuse an existing branch for this ticket even if its slug differs from the
+    # one we just derived — see find_ticket_branch. Renaming the branch to match
+    # a retitled ticket would be worse than keeping the old name: the worktree
+    # directory, any open PR, and the user's shell history all refer to it.
+    if [ "$use_shortcut" = true ] && [ -n "$ticket_id" ]; then
+        local existing_branch
+        existing_branch=$(find_ticket_branch "$ticket_id")
+        if [ -n "$existing_branch" ] && [ "$existing_branch" != "$branch_name" ]; then
+            info "Ticket sc-${ticket_id} already has branch '$existing_branch' — reusing it"
+            info "(the title now distills to '$branch_name'; not renaming)"
+            branch_name="$existing_branch"
+        fi
     fi
 
     # Check if worktree already exists (see the note on check_branch_exists's

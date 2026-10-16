@@ -35,9 +35,13 @@
 # e.g. its own name) or GT_LABEL_WORDS (how many words to keep, default 4).
 #
 # A caller that can read the title with judgment available (the /start command,
-# which is a Claude session) may instead pass the label in $GT_LABEL_OVERRIDE;
-# it is sanitized and used verbatim, and anything unusable falls back to the
+# which is a Claude session) should pass the label in $GT_LABEL_OVERRIDE; it is
+# sanitized and used verbatim, and anything unusable falls back to the
 # distiller. Use --print-title to fetch a title without creating anything.
+#
+# That override reaches the session/tab label ONLY. The branch slug and worktree
+# directory stay deterministic, since both are matched against later; override
+# them deliberately with $GT_LABEL_SLUG_OVERRIDE if you really mean to.
 #
 # Providers: <script-dir>/start-ticket-providers/<name>.sh (override with
 # $START_TICKET_PROVIDER_DIR), each defining:
@@ -389,6 +393,9 @@ printf 'start-ticket: %s #%s — %s\n' "$provider" "$id" "${ST_TITLE:-?}" >&2
 # decided afterwards would come too late for either of them. Read-only: no
 # worktree, no state change, nothing marked in progress.
 if [ "$mode" = "print-title" ]; then
+  # proposed_slug is what the branch and worktree dir WILL be named: it ignores
+  # GT_LABEL_OVERRIDE by design, so printing it here tells the caller the slug
+  # is not theirs to choose (short of GT_LABEL_SLUG_OVERRIDE).
   printf 'title=%s\nproposed_label=%s\nproposed_slug=%s\n' \
     "$ST_TITLE" "$(gt::distill_title "$ST_TITLE")" "$(gt::slug_title "$ST_TITLE")"
   exit 0

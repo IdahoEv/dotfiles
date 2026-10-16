@@ -136,10 +136,19 @@ gt::distill_title() {  # <title> [<max-words>] → "Short Label Words"
   # Repeatedly, so "[A] [ops] Thing" loses both tags.
   while [[ "$title" =~ ^[[:space:]]*\[[^]]*\](.*)$ ]]; do title="${BASH_REMATCH[1]}"; done
   title="$(printf '%s' "$title" | sed 's/([^)]*)//g')"
-  # Everything non-alphanumeric becomes a separator: this handles em dashes,
-  # ampersands, slashes, dots and snake_case uniformly, so "context_snapshot"
-  # and "dd-trace" split into words rather than surviving as punctuation.
-  title="$(printf '%s' "$title" | tr -c '[:alnum:]' ' ')"
+  # Everything outside ASCII alphanumerics becomes a separator: this handles em
+  # dashes, ampersands, slashes, dots and snake_case uniformly, so
+  # "context_snapshot" and "dd-trace" split into words rather than surviving as
+  # punctuation.
+  #
+  # LC_ALL=C with an explicit A-Za-z0-9 range, NOT '[:alnum:]', because the
+  # class is locale-dependent and the result reaches a git ref: under a UTF-8
+  # locale "naïve" passes through into a branch name, while under LC_ALL=C each
+  # byte of a multibyte character is itself a separator, so "Café" becomes
+  # "Caf" — the half-word defect this change exists to remove. A cron caller
+  # typically has C and an interactive shell UTF-8, so without pinning it one
+  # ticket gets two different names depending on who ran the tool.
+  title="$(printf '%s' "$title" | LC_ALL=C tr -c 'A-Za-z0-9' ' ')"
 
   for w in $title; do
     lw="$(printf '%s' "$w" | tr '[:upper:]' '[:lower:]')"
@@ -155,6 +164,12 @@ gt::distill_title() {  # <title> [<max-words>] → "Short Label Words"
 
   n=${#kept[@]}
   [ "$n" -eq 0 ] && return 0
+  # Clamp: maxw <= 0 (GT_LABEL_WORDS=0, a negative, or an explicit 0 argument)
+  # would leave `out` empty, and on bash 3.2 — which is what /usr/bin/env bash
+  # is on macOS — "${out[*]}" on an empty array is an unbound-variable error
+  # under `set -u`, aborting the CALLER rather than just producing a bad label.
+  # Bash >= 4.4 relaxed that rule, so this does not reproduce under 5.x.
+  [ "$maxw" -ge 1 ] 2>/dev/null || maxw=1
   start=$(( n > maxw ? n - maxw : 0 ))
   for ((i = start; i < n; i++)); do
     w="${kept[i]}"
@@ -164,15 +179,28 @@ gt::distill_title() {  # <title> [<max-words>] → "Short Label Words"
       out+=("$(printf '%s' "${w:0:1}" | tr '[:lower:]' '[:upper:]')${w:1}")
     fi
   done
-  printf '%s' "${out[*]}"
+  printf '%s' "${out[*]:-}"
 }
 
 # The same distillation, lowercased and hyphenated for a git branch segment or
 # a directory name. Branch slugs get a wider budget than display labels: a
 # branch name is read deliberately rather than scanned, and `git branch` output
 # has no width pressure.
+#
+# DELIBERATELY ignores $GT_LABEL_OVERRIDE — it calls gt::distill_title, not
+# gt::label_from_title. A branch name and a worktree directory are matched
+# against later (find_ticket_branch, find_existing_worktree, an open PR, the
+# user's shell history), so a name that varies between two runs of the same
+# ticket is a defect, not a nicety. The display label has no such constraint:
+# nothing matches on it and agent-phase.sh rewrites it every phase change, so
+# that is where a caller's judgment is allowed to win. $GT_LABEL_SLUG_OVERRIDE
+# exists for a caller that genuinely means to name the branch too.
 gt::slug_title() {  # <title> [<max-words>] → "short-label-words"
-  local d; d="$(gt::label_from_title "$1" "${2:-${GT_LABEL_SLUG_WORDS:-5}}")"
+  local d
+  if [ -n "${GT_LABEL_SLUG_OVERRIDE:-}" ]; then
+    d="$(gt::sanitize_label "$GT_LABEL_SLUG_OVERRIDE")"
+  fi
+  [ -n "${d:-}" ] || d="$(gt::distill_title "$1" "${2:-${GT_LABEL_SLUG_WORDS:-5}}")"
   [ -n "$d" ] || return 0
   printf '%s' "$d" | tr '[:upper:]' '[:lower:]' | tr ' ' '-'
 }
@@ -189,33 +217,56 @@ gt::slug_title() {  # <title> [<max-words>] → "short-label-words"
 # the title with judgment available — /start, which is a Claude session — may
 # hand in a label directly via $GT_LABEL_OVERRIDE, and the distiller becomes the
 # fallback for everyone else (`wm --sc` straight from a shell, a cron job, any
-# non-Claude caller). The deterministic path stays the default, not the
-# leftover: an unset, empty, or unusable override silently falls back to it.
+# non-Claude caller). An unset, empty, or unusable override silently falls back
+# to it.
+#
+# The override reaches the DISPLAY LABEL only. Branch slugs and worktree
+# directory names stay deterministic — see gt::slug_title for why, and
+# $GT_LABEL_SLUG_OVERRIDE for the escape hatch. The split is the point: the
+# label is what a human scans in the agent view and nothing matches on it, so
+# judgment is free there; a branch name is matched against and must be
+# reproducible from the ticket id alone.
 #
 # The override reaches a BRANCH NAME, so it is sanitized rather than trusted:
 # word characters and spaces only, collapsed, trimmed, length-capped. A caller
 # that sends punctuation, a path separator, or a 200-character sentence gets the
 # cleaned version or, if nothing usable survives, the distilled title.
+# Default only; the value is re-validated at the point of use (see
+# gt::sanitize_label), because a caller can set or change it after this file is
+# sourced and a bad value must not reach the `[ -gt ]` test there.
 GT_LABEL_MAX_CHARS="${GT_LABEL_MAX_CHARS:-48}"
 
 gt::sanitize_label() {  # <text> → "Safe Label Words", or nothing
   local s="$1"
-  # Anything that isn't alphanumeric becomes a space: this is the same rule the
-  # distiller applies, so an override and a distilled title can't produce two
-  # different character sets in a branch name.
-  s="$(printf '%s' "$s" | tr -c '[:alnum:]' ' ')"
-  # Collapse runs of spaces and trim. read -r with the default IFS does both.
+  # A caller's IFS must not change what this function considers a word: with
+  # IFS=, the split below stops splitting on spaces AND "$*" re-joins with a
+  # comma, so "  Rewards/Structures  " kept its padding and emerged as
+  # "--rewards-structures--" — a leading dash in a branch name and a directory
+  # name. Scoped to the function; the caller's IFS is untouched.
+  local IFS=$' \t\n'
+  # Anything outside ASCII alphanumerics becomes a space, matching
+  # gt::distill_title exactly (same LC_ALL=C reasoning as there), so an
+  # override and a distilled title can't produce two different character sets
+  # in a branch name.
+  s="$(printf '%s' "$s" | LC_ALL=C tr -c 'A-Za-z0-9' ' ')"
+  # Collapse runs of spaces and trim, via word splitting on the IFS set above.
   # shellcheck disable=SC2086
   set -- $s
   [ "$#" -gt 0 ] || return 0
   s="$*"
-  if [ "${#s}" -gt "$GT_LABEL_MAX_CHARS" ]; then
+  # Validated here rather than at source time: a caller may set or change this
+  # after the lib is sourced. A non-numeric value made `[ -gt ]` exit 2, which
+  # `if` reads as false — silently skipping the cap entirely and passing an
+  # arbitrarily long override into a branch name.
+  local maxc="$GT_LABEL_MAX_CHARS"
+  [[ "$maxc" =~ ^[1-9][0-9]*$ ]] || maxc=48
+  if [ "${#s}" -gt "$maxc" ]; then
     # Cut on a word boundary, never mid-word — a half-word is the exact defect
     # this whole change exists to remove.
-    while [ "${#s}" -gt "$GT_LABEL_MAX_CHARS" ] && [[ "$s" == *" "* ]]; do
+    while [ "${#s}" -gt "$maxc" ] && [[ "$s" == *" "* ]]; do
       s="${s% *}"
     done
-    [ "${#s}" -le "$GT_LABEL_MAX_CHARS" ] || return 0
+    [ "${#s}" -le "$maxc" ] || return 0
   fi
   printf '%s' "$s"
 }
