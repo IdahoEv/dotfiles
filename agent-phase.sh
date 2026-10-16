@@ -13,9 +13,12 @@
 # display name, which is the only field that is model-writable, unbounded, and
 # visible in both the TUI and `claude agents --json`:
 #
-#   [PLAN]   Sc74618 personalization api
-#   [WIP]    Sc74618 personalization api
-#   [REVIEW] Sc74618 personalization api
+#   [PLAN]   Sc74618 Build Docker Image
+#   [WIP]    Sc74618 Build Docker Image
+#   [REVIEW] Sc74618 Build Docker Image
+#
+# The name after the number is distilled from the ticket title by
+# start-ticket.sh (gt::distill_title); this script only rewrites the prefix.
 #
 # Why the name and not the color: `/color` is declared `terminalOriented` with
 # `requires:{ink:true}` and, unlike `/rename`, carries no `supportsNonInteractive`

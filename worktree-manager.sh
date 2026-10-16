@@ -36,6 +36,18 @@ set -e
 # checks below don't rely on this alone.
 shopt -s inherit_errexit 2>/dev/null || true
 
+# Resolve this script's real directory (it is typically reached through a
+# PATH symlink) so the shared lib can be sourced.
+_wm_src="${BASH_SOURCE[0]}"
+while [ -L "$_wm_src" ]; do
+    _wm_dir="$(cd -P "$(dirname "$_wm_src")" && pwd)"
+    _wm_src="$(readlink "$_wm_src")"
+    [ "${_wm_src#/}" = "$_wm_src" ] && _wm_src="$_wm_dir/$_wm_src"
+done
+SCRIPT_DIR="$(cd -P "$(dirname "$_wm_src")" && pwd)"
+# shellcheck source=lib/repo-facts.sh
+. "$SCRIPT_DIR/lib/repo-facts.sh"
+
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -397,6 +409,27 @@ detect_primary_branch() {
 # Shortcut Integration
 # ============================================================================
 
+# Read a key from .start-ticket.conf — the same per-repo config start-ticket.sh
+# uses, so `label_noise=` is set once and both tools honor it. In a worktree
+# the file lives in the MAIN repo root, so check that as well as the cwd's
+# toplevel. Prints nothing (rc 0) when unset; callers treat empty as "default".
+wm_conf_get() {  # <key> → value, or empty
+    local key="$1" f v top common main_root=""
+    top="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+    common="$(git rev-parse --git-common-dir 2>/dev/null || true)"
+    if [ -n "$common" ]; then
+        common="$(cd -P "$common" 2>/dev/null && pwd)" && main_root="$(dirname "$common")" || main_root=""
+    fi
+    for f in "${top:-/nonexistent}/.start-ticket.conf" \
+             "${main_root:-/nonexistent}/.start-ticket.conf" \
+             "$HOME/.config/start-ticket/config"; do
+        [ -f "$f" ] || continue
+        v="$(sed -n "s/^${key}=//p" "$f" | head -1)"
+        [ -n "$v" ] && { printf '%s' "$v"; return 0; }
+    done
+    return 0
+}
+
 # Fetch ticket details from Shortcut and generate branch name
 fetch_shortcut_ticket() {
     local ticket_id="$1"
@@ -451,6 +484,36 @@ fetch_shortcut_ticket() {
             fi
             ;;
     esac
+
+    # Replace Shortcut's slug with one distilled from the ticket title.
+    #
+    # Shortcut builds its slug by lowercasing and hyphenating the WHOLE title,
+    # bracketed track tags included, then truncating to a fixed width — so
+    # "[A/L] Decide PERS data deletion & retention policy (...)" arrives as
+    # "-a-l--decide-pers-data-deletio": leading junk, and the one word that
+    # identifies the ticket cut in half. Everything downstream (worktree dir,
+    # agent-view row) inherits that. Distilling the title instead yields
+    # "data-deletion-retention-policy". See gt::slug_title in lib/repo-facts.sh.
+    #
+    # Only the slug segment changes; the sc-<id> segment is preserved exactly,
+    # which is what Shortcut matches branches to stories on.
+    # $GT_LABEL_OVERRIDE, when a caller set one, wins over both — see
+    # gt::label_from_title. It is sanitized there, not trusted, because it
+    # lands in a branch name.
+    local title slug
+    GT_LABEL_NOISE="${GT_LABEL_NOISE:-$(wm_conf_get label_noise)}"
+    title="$(short story "$ticket_id" --quiet 2>/dev/null \
+             | awk 'match($0,/^[Nn]ame:[[:space:]]*/){print substr($0,RLENGTH+1);exit}')" || title=""
+    if [ -n "$title" ] || [ -n "${GT_LABEL_OVERRIDE:-}" ]; then
+        slug="$(gt::slug_title "$title")"
+        if [ -n "$slug" ] && [[ "$branch_name" =~ ^(.*)(sc-[0-9]+)/.+$ ]]; then
+            local rebuilt="${BASH_REMATCH[1]}${BASH_REMATCH[2]}/${slug}"
+            if [ "$rebuilt" != "$branch_name" ]; then
+                info "Branch name from ticket title: $branch_name -> $rebuilt"
+                branch_name="$rebuilt"
+            fi
+        fi
+    fi
 
     echo "$branch_name"
 }
@@ -543,6 +606,26 @@ select_branch_interactive() {
         --border \
         --preview="echo {} | sed 's/^\[[^]]*\] //' | xargs -I@ sh -c 'git log --oneline --graph --color=always -10 @ 2>/dev/null || echo \"Branch: @\"'" \
         --preview-window=right:50% | sed 's/^\[[^]]*\] //'
+}
+
+# Find a branch for this ticket under ANY slug, or empty.
+#
+# The slug is no longer stable across runs: it is derived from the ticket title
+# (gt::slug_title), so editing the title, changing `label_noise=`, or supplying
+# $GT_LABEL_OVERRIDE on one run but not the next all move it. Matching on the
+# full branch name would then read a retitled ticket as a brand-new branch and
+# build a SECOND worktree beside the first. Before this became title-derived the
+# slug came from Shortcut and never moved, so nothing needed to handle it.
+#
+# The sc-<id> segment is the part deliberately held stable (Shortcut matches
+# stories to branches on it), so that is what we key on. Prints the first match
+# from refs/heads; worktrees are then located by that branch name as usual.
+find_ticket_branch() {  # <ticket-id> → branch name, or empty
+    local id="$1"
+    [ -n "$id" ] || return 0
+    git for-each-ref --format='%(refname:short)' refs/heads 2>/dev/null \
+        | grep -E "(^|/)sc-${id}(/|\$)" \
+        | head -1 || true
 }
 
 # Check if a worktree already exists for the given branch
@@ -1022,6 +1105,22 @@ main() {
         info "Branch name: ${branch_name}"
     else
         info "Branch name: ${branch_name}"
+    fi
+
+    # Reuse an existing branch for this ticket even if its slug differs from the
+    # one we just derived — see find_ticket_branch. Renaming the branch to match
+    # a retitled ticket would be worse than keeping the old name: the worktree
+    # directory, any open PR, and the user's shell history all refer to it.
+    # Not in interactive mode: there the user picked a branch by hand, and a
+    # deliberate selection must outrank a slug match on the same ticket id.
+    if [ "$use_shortcut" = true ] && [ "$interactive_mode" != true ] && [ -n "$ticket_id" ]; then
+        local existing_branch
+        existing_branch=$(find_ticket_branch "$ticket_id")
+        if [ -n "$existing_branch" ] && [ "$existing_branch" != "$branch_name" ]; then
+            info "Ticket sc-${ticket_id} already has branch '$existing_branch' — reusing it"
+            info "(the title now distills to '$branch_name'; not renaming)"
+            branch_name="$existing_branch"
+        fi
     fi
 
     # Check if worktree already exists (see the note on check_branch_exists's
