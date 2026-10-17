@@ -124,7 +124,10 @@ You cannot remove the worktree you're standing in.
   git worktree remove <worktree>
   git branch -D <branch>        # -D is safe: step 1 proved it's merged
   ```
-- **Dirty tree** → list what's dirty and **stop**; don't discard uncommitted work.
+- **Dirty tree** → list what's dirty and **stop**; don't discard uncommitted work. The one
+  exception: if the repo has `.claude/finalize-notes.md`, read it first — it may name
+  regenerable files (e.g. generated caches) that are safe to discard, and the conditions
+  under which to do so. Apply only what it states; anything it doesn't cover still stops.
 - **Locked** (a background agent-view session holds a lock on its worktree) → don't force
   with `-f -f`. Stopping the session doesn't clear the lock, so the retry fails the same
   way. Report that the user must stop this session (`Ctrl+X` on its row in `claude
