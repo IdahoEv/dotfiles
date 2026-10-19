@@ -175,7 +175,24 @@ changes are a separate reviewable unit, not folded into the project PR.
 - A rule firing every session belongs in `CLAUDE.md`; one firing per task
   belongs in a skill, where it costs nothing until invoked.
 
-## 7. Report
+## 7. Cloud counterparts
+
+Cloud sessions see only what a repo commits: no `~/.claude`, no `git-tools` scripts. So
+a project that runs cloud sessions carries its own self-contained `cloud-*` commands
+(`cloud-start`, `cloud-open-pr`, `cloud-finalize`, `cloud-code-review-cycle`) in
+`.claude/commands/`, written with `git` and `gh` only. Each opens by naming its global
+counterpart.
+
+- **Editing a global `start`, `open-pr`, `finalize` or `local-code-review-cycle`:** if
+  the current repo has the matching `cloud-*` file, check whether the change applies
+  there and say so in the report. Don't edit it unprompted when it is out of scope.
+- **Orienting in a personal project that has no `cloud-*` commands:** suggest creating
+  them, modelled on a project that has them (Kardashev). Suggest once; build only when
+  asked.
+- **Skip this section** when `ticket_provider=shortcut` or the repo is a work repo; cloud
+  workflows aren't used there.
+
+## 8. Report
 
 State what changed by scope (project / global-source / git-tools), what's
 applied vs. awaiting the user (dotfiles commit, approval, PR), and anything you
