@@ -17,13 +17,28 @@ unless the caller explicitly asks for fixes.
 Default is every committed prompt file in the repo — staleness does not appear
 in a diff, so a diff-scoped pass cannot find it. Files in scope:
 
-- `CLAUDE.md` at any depth, `.claude/**` (skills, commands, agents, hooks,
-  settings, `*.md`, `*.json`)
-- chezmoi sources for the above: `dot_claude/**`, `*.tmpl` variants
+- `CLAUDE.md` at any depth
+- `.claude/skills/**/SKILL.md` and the files a skill references
+- `.claude/commands/*.md`
+- `.claude/agents/*.md`
+- `.claude/hooks/*`
+- `.claude/settings.json`, `settings.local.json`, and any other `.claude/*.json`
+- Other `.claude/*.md` a project keeps for context (`governor.md`,
+  kickoff preambles, and the like)
+- chezmoi sources for all of the above: `dot_claude/**`, including
+  `executable_`, `private_`, `modify_`, and `.tmpl` variants
 - `AGENTS.md`, `.cursorrules`, and similar if present
+
+A skill's supporting scripts are in scope as prompts when they emit text the
+model reads, and out of scope as code otherwise. Review what they *say*, not
+how they work.
 
 `--diff [BASE]` narrows to `git diff BASE...HEAD` for the branch-review case.
 Say which scope you ran.
+
+Reviewing a file that is currently instructing you — this one, or anything else
+already in context — needs a deliberate re-read. Its rules arrive twice, so
+redundancy inside it reads as emphasis instead of duplication.
 
 ## The four checks
 
@@ -82,6 +97,14 @@ process, encouragement, restatements of the request. Carry what is
 mentally and name the wrong move that returns. If you can name one, the prose
 is load-bearing — keep it, even if it is long. If you cannot, cut it.
 
+Text that says what to do can pass. Text that says why the model should care
+never does — it is written for a human reader and the model acts the same
+without it.
+
+`prompt-metrics.sh <file>...` (this skill's directory) prints prose words per
+`##` section. A section far out of proportion to what it instructs is where to
+look; compare sections against each other, not against a budget.
+
 This test exists because rationale that looks like decoration is often the
 record of a specific past failure, and a reviewer who doesn't know the incident
 will cut it every time. When in doubt, flag it as a question rather than a
@@ -104,3 +127,14 @@ anything you could not verify and why.
 
 Say "no findings" rather than padding. A clean file is a real result; do not
 manufacture nits to look thorough.
+
+## Then review this process
+
+After the catalog, evaluate the run itself — this skill, the command that
+invoked it, any prompt that shaped the work — for efficiency, cost, or
+clarity. Report under **Process notes**, or say none.
+
+Most valuable: a check that never fires or never discriminates; two
+instructions that pulled against each other; hand-work a script should do;
+and a finding category that recurs, which belongs upstream in the prompt
+generating it rather than in next week's catalog.
