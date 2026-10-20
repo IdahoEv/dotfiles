@@ -184,11 +184,12 @@ files. Don't restate its checks here.
 ## 7. Cloud counterparts
 
 Cloud sessions see only committed files, so projects that use them carry `cloud-start`,
-`cloud-open-pr`, `cloud-finalize` and `cloud-code-review-cycle` in `.claude/commands/`,
-`git` and `gh` only, each naming its global counterpart.
+`cloud-open-pr`, `cloud-finalize`, `cloud-code-review-cycle` and `cloud-governor` in
+`.claude/commands/`, `git` and `gh` only, each naming its global counterpart.
 
-- **Editing a global `start`, `open-pr`, `finalize` or `local-code-review-cycle`:** check
-  the repo's matching `cloud-*` file and report whether it needs the same change.
+- **Editing a global `start`, `open-pr`, `finalize`, `local-code-review-cycle` or
+  `governor`:** check the repo's matching `cloud-*` file and report whether it needs the
+  same change.
 - **Personal project with none:** suggest creating them once, modelled on Kardashev's.
 - **Skip** when `ticket_provider=shortcut` or the repo is a work repo.
 

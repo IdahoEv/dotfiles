@@ -30,6 +30,8 @@ Never push.
 - Baseline: run `FAST`. Red for reasons unrelated to
   this branch → note it and continue; compare later runs against it.
 - `agent-phase.sh REVIEW` (no-ops outside a bg session; don't report it).
+- From here every reply ends with the review state line (global CLAUDE.md), starring
+  `local` while a round runs.
 
 ### 2. Review cycle (at most 5 rounds)
 
@@ -87,10 +89,12 @@ still open, suspected structural cause, 1–2 options with a recommendation.
 
 ### 4. On completion
 
-1. Run `FULL` once; re-run only failures.
-2. Report: rounds run; fixed / skipped (with reasons) / real-but-out-of-scope findings
+1. `agent-phase.sh --no-review` (the review is over; `open-pr.sh` restores `REVIEW` if a
+   bot will review).
+2. Run `FULL` once; re-run only failures.
+3. Report: rounds run; fixed / skipped (with reasons) / real-but-out-of-scope findings
    (listed only: don't open issues or implement them); suite status; commits added.
-3. Next step: `/open-pr` (or `/open-pr --review none` if `~/.config/local-review-only`
+4. Next step: `/open-pr` (or `/open-pr --review none` if `~/.config/local-review-only`
    exists), where that command exists. Put the review-cycle summary in the PR body's "Review cycle" note.
 
 ## Rules

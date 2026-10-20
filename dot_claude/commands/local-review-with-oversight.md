@@ -37,7 +37,8 @@ agent-phase.sh REVIEW
 ```
 
 (`open-pr.sh` sets this later too; setting it now makes the agent-view row show that the
-ticket is in review.) Skip if it's already `REVIEW`.
+ticket is in review.) Skip if it's already `REVIEW`. Every reply ends with the review state line (global
+CLAUDE.md), starring `local` while a round runs.
 
 ### 1. Launch the reviewer (each round)
 
@@ -109,5 +110,6 @@ trailer from the session's attribution reminder), and **do not push**. Then:
 - Another round chosen and round number < 5 → back to step 1 with the updated
   triaged list.
 - Round 5 reached and you still want more → `AskUserQuestion` for approval first.
-- Finished → report: rounds run, findings fixed/dismissed/deferred, issues opened.
+- Finished → run `agent-phase.sh --no-review` (`open-pr.sh` restores `REVIEW` if a bot
+  will review), then report: rounds run, findings fixed/dismissed/deferred, issues opened.
   Then continue with `/open-pr --review none`.

@@ -120,9 +120,11 @@ axis in the agent view beside `status` (idle/busy) and `state` (working/blocked/
 |---|---|---|
 | `PLAN` | awaiting plan approval | `start-ticket.sh` at launch |
 | `WIP` | plan approved, implementing | the ticket session itself |
-| `REVIEW` | PR open | `open-pr.sh` |
+| `REVIEW` | a review (local or GitHub) is running | review commands, `open-pr.sh` |
 | `MERGED` | merged, ready to finalize | `/finalize` step 1 |
 | `DONE` | finalized; safe to kill | `/finalize` last step |
+
+A separate `[PR]` tag (set by `open-pr.sh`) compounds with the phase; see global CLAUDE.md.
 
 `PLAN → WIP` is the one transition no script can see, and it belongs to the ticket
 session — `/start` has exited by the time the plan is approved. That rule lives in the
