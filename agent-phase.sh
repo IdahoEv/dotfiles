@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # agent-phase.sh — stamp a ticket's workflow phase onto its agent-view row.
 #
-#   agent-phase.sh <PLAN|WIP|REVIEW|MERGED|DONE>
+#   agent-phase.sh <PLAN|WIP|REVIEW|REVIEWED|MERGED|DONE>
 #   agent-phase.sh --pr          # add the [PR] tag (a PR has been issued)
-#   agent-phase.sh --no-review   # drop REVIEW, keep [PR] (review finished)
+#   agent-phase.sh --no-review   # REVIEW -> REVIEWED, keep [PR] (review finished)
 #   agent-phase.sh --show
 #   agent-phase.sh --clear
 #
@@ -20,9 +20,11 @@
 #   [REVIEW] Sc74618 Build Docker Image
 #
 # [PR] is a second, compounding tag: set once a PR exists, independent of phase.
-#   [REVIEW]     local review, no PR yet
-#   [REVIEW][PR] PR open and a review (local or GitHub) in progress
-#   [PR]         PR open, no review in progress
+#   [REVIEW]         local review in progress, no PR yet
+#   [REVIEW][PR]     PR open and a review (local or GitHub) in progress
+#   [REVIEWED]       review finished, no PR yet
+#   [REVIEWED][PR]   PR open, review finished
+#   [PR]             PR open, never reviewed (or review skipped)
 # MERGED and DONE drop [PR]; the merge supersedes it.
 #
 # The name after the number is distilled from the ticket title by
@@ -55,7 +57,7 @@ set -euo pipefail
 
 die() { printf 'agent-phase: %s\n' "$*" >&2; exit 1; }
 
-PHASES="PLAN WIP REVIEW MERGED DONE"
+PHASES="PLAN WIP REVIEW REVIEWED MERGED DONE"
 
 usage() {
   printf 'usage: agent-phase.sh <%s>\n       agent-phase.sh --pr | --no-review | --show | --clear\n' \
@@ -135,7 +137,7 @@ elif action == "pr":
     new_pr = True
 elif action == "no-review":
     if cur_phase == "REVIEW":
-        new_phase = None
+        new_phase = "REVIEWED"
 else:
     new_phase = phase
     if phase in ("MERGED", "DONE"):

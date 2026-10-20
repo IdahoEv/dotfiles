@@ -4,6 +4,9 @@
 #   open-pr.sh [--title "Is<NNN>: <short title>"] [--body-file <path>] [--issue <N>]
 #               [--review none|copilot|copilot+claude] [--provider kardashev]
 #
+# --review defaults to copilot, or to none while ~/.config/local-review-only
+# exists (this machine's Copilot quota is out; delete the file to restore it).
+#
 # Assumes the working tree is already committed — this script never commits.
 # It handles the mechanical, judgment-free parts of `/open-pr`: push, PR
 # create-or-reuse, and review-bot triggering. Commit-message drafting, PR
@@ -58,7 +61,7 @@ find_provider_file() {  # <name> → path, or empty
 }
 
 # ---- args -------------------------------------------------------------------
-title="" body_file="" issue="" review="copilot" provider=""
+title="" body_file="" issue="" review="" provider=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --title)          title="${2:?--title needs a value}"; shift 2 ;;
@@ -70,6 +73,15 @@ while [ $# -gt 0 ]; do
     *)                die "unknown arg: $1" ;;
   esac
 done
+
+if [ -z "$review" ]; then
+  if [ -e "$HOME/.config/local-review-only" ]; then
+    review="none"
+    printf 'open-pr: ~/.config/local-review-only present; defaulting to --review none\n' >&2
+  else
+    review="copilot"
+  fi
+fi
 
 case "$review" in
   none|copilot|copilot+claude) ;;

@@ -38,6 +38,9 @@ case "$level" in
   *) die "--level must be copilot or copilot+claude (got '$level')" ;;
 esac
 
+[ ! -e "$HOME/.config/local-review-only" ] \
+  || die "Copilot is unavailable on this machine (~/.config/local-review-only exists); delete it to re-enable"
+
 command -v gh >/dev/null || die "gh CLI not found"
 git rev-parse --is-inside-work-tree >/dev/null 2>&1 || die "not inside a git repo"
 
