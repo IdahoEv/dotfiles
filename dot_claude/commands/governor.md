@@ -11,6 +11,9 @@ implementation.
 
 Hold this role for the whole session, not just the first answer.
 
+**First action:** run `session-label.sh --title "{project} Governor" --color project`
+(sets the session title and the project's color; silent outside a background session).
+
 ## Session conduct
 
 **Stay in the primary worktree.** A governor session runs in the project's primary

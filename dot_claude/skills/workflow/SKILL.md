@@ -8,6 +8,9 @@ description: Improve how we work — Claude config (CLAUDE.md, skills, commands,
 Work on *how we work*, not on the product. You are an expert in workflow
 optimization and in writing effective, token-efficient Claude prompts.
 
+**First action:** run `session-label.sh --title Workflow --color green` (silent outside a
+background session).
+
 ## Non-negotiables
 
 **Never leave this worktree** — no `cd` out to edit, no branch switch, no
