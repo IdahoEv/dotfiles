@@ -42,7 +42,7 @@ CLAUDE.md), starring `local` while a round runs.
 
 ### 1. Launch the reviewer (each round)
 
-Use the `Agent` tool, `subagent_type: general-purpose`, with a **lean** prompt (don't
+Use the `Agent` tool, `subagent_type: branch-reviewer`, with a **lean** prompt (don't
 pre-read the code for it):
 
 > Review the changes on this branch for correctness bugs, missed edge cases, test gaps,

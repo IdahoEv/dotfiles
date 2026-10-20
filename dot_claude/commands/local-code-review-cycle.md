@@ -37,7 +37,7 @@ Never push.
 
 Each round:
 
-1. **Review.** Launch a fresh `Agent` (`subagent_type: general-purpose`) every round;
+1. **Review.** Launch a fresh `Agent` (`subagent_type: branch-reviewer`) every round;
    the implementer never reviews its own work. Lean prompt, do not pre-read code for it.
    **Round 1 only**, add the design question below to the prompt; later rounds omit it:
 
