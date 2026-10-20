@@ -109,7 +109,7 @@ check repo state, present a plan, and wait for approval before editing.
 **Workflow phase in the agent view.** Background ticket sessions carry their lifecycle
 phase as a name prefix (`[PLAN] Sc74618 …`) — a third state axis beside `status`
 (idle/busy) and `state` (working/blocked/done). `agent-phase.sh <PHASE>` sets it and
-no-ops outside a bg session. Phases: `PLAN → WIP → REVIEW → MERGED → DONE`.
+no-ops outside a bg session. Phases: `PLAN → WIP → REVIEW → REVIEWED → MERGED → DONE`.
 
 Scripts and commands own all of them but one: `start-ticket.sh` sets `PLAN`, `open-pr.sh`
 and the review commands set `REVIEW`, `/finalize` sets `MERGED` then `DONE`. **You own `PLAN → WIP`** — when I
@@ -118,9 +118,10 @@ trigger, not the first edit: if we're still iterating on the plan, stay at `PLAN
 ask before running it and don't report it; it's bookkeeping.
 
 A `[PR]` tag compounds with the phase once a PR exists (`open-pr.sh` adds it):
-`[REVIEW]` = local review, no PR; `[REVIEW][PR]` = PR open and a review (local or GitHub)
-running; `[PR]` = PR open, no review running. Review flows run `agent-phase.sh REVIEW`
-when a round starts and `agent-phase.sh --no-review` when review ends.
+`[REVIEW]` = local review running, no PR; `[REVIEW][PR]` = PR open and a review (local or
+GitHub) running; `[REVIEWED]` / `[REVIEWED][PR]` = review finished; `[PR]` alone = PR open,
+never reviewed. Review flows run `agent-phase.sh REVIEW` when a round starts and
+`agent-phase.sh --no-review` (REVIEW → REVIEWED) when review ends.
 
 **Review state line.** Once automated review has begun in a session (local cycle or PR
 bots), end *every* reply with the output of

@@ -491,7 +491,8 @@ Co-author trailer (`Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>`) 
 
 GitHub only auto-requests Copilot's review once, when the PR is first opened (via `/open-pr`). A later push — including one that fixes the very comments Copilot raised — does **not** trigger another Copilot pass on its own; it has to be re-requested explicitly, or there's nothing to poll for.
 
-After a successful `git push`, ask via **AskUserQuestion** before starting the polling loop:
+After a successful `git push`, ask via **AskUserQuestion** before starting the polling loop
+(skip the question and the request while `~/.config/local-review-only` exists; `request-review.sh` refuses then):
 
 ```text
 Question: "Request another Copilot review round for this push?"
@@ -524,8 +525,9 @@ Every reply from this skill ends with the review state line (global CLAUDE.md;
 The script polls every 45 seconds for up to 2 hours. Exit codes:
 
 - **0** — new review activity detected (possible complaints). **Immediately re-invoke the review-comments skill in Automatic Mode** without waiting for the user to say anything.
-- **3** — AI reviewers have signed off (latest non-author activity is a review that is APPROVED or whose body matches a known all-clear marker — Copilot "Merge recommended"/"No issues found", CodeRabbit "Merge approved"/"Verified successful" — and there are zero unresolved threads). Do **not** re-process comments; instead announce to the user, e.g.: **"✅ Reviewers signed off (Copilot, 14:32) — no unresolved threads. PR looks ready to merge."** Run `agent-phase.sh --no-review` (leaves `[PR]`), then stop and wait for the user.
-- **1** (timeout) — notify the user: "No new bot activity after 2 hours. Polling stopped." Run `agent-phase.sh --no-review` too, so the row stops showing a review in flight.
+- **3** — AI reviewers have signed off (latest non-author activity is a review that is APPROVED or whose body matches a known all-clear marker — Copilot "Merge recommended"/"No issues found", CodeRabbit "Merge approved"/"Verified successful" — and there are zero unresolved threads). Do **not** re-process comments; instead announce to the user, e.g.: **"✅ Reviewers signed off (Copilot, 14:32) — no unresolved threads. PR looks ready to merge."** Run `agent-phase.sh --no-review` (sets `[REVIEWED]`, keeps `[PR]`), then stop and wait for the user.
+- **1** (timeout) — notify the user: "No new bot activity after 2 hours. Polling stopped." Run `agent-phase.sh --no-review` too, so the row shows `[REVIEWED]` instead of a review in flight.
+- **4** — a reviewer posted a "job was not started" notice (Actions billing or spending limit) instead of a review. It is not a review round and not a sign-off. Tell the user which reviewer could not run, run `agent-phase.sh --no-review`, and stop; do not re-poll.
 
 Note the distinction: exit 0 means "something happened, go look"; exit 3 means "checked, and it's an all-clear." A findings-in-body review (Copilot Suppressed comments, CodeRabbit Outside-diff-range) does not match the sign-off markers, so it correctly exits 0.
 

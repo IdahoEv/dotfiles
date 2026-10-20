@@ -24,10 +24,14 @@
 # e.g. for a future @claude reviewer:
 #   POLL_SIGNOFF_PATTERNS='@claude.*approved' poll-pr.sh
 #
+# A bot's "job was not started" notice (Actions billing / spending limit) is not
+# a review: it is excluded from the activity above and reported as exit 4. Keep
+# UNAVAILABLE_RE in step with review-state.sh.
+#
 # Usage: poll-pr.sh [pr_number]
 # Exits 0 when new activity (possible complaints) is found; 1 on timeout;
 # 2 on setup error; 3 when AI reviewers have signed off (all-clear, no
-# unresolved threads).
+# unresolved threads); 4 when a reviewer reported it could not run.
 
 INTERVAL=45
 TIMEOUT=7200  # 2 hours
@@ -49,6 +53,9 @@ else
   SIGNOFF_RE="${DEFAULT_SIGNOFF}"
 fi
 
+# Review bodies that mean "the reviewer could not run", not "the reviewer found nothing".
+UNAVAILABLE_RE='job was not started because|spending limit needs to be increased'
+
 # One query for everything we care about.
 read -r -d '' QUERY <<'GQL'
 query($owner: String!, $repo: String!, $pr: Int!) {
@@ -68,7 +75,8 @@ query($owner: String!, $repo: String!, $pr: Int!) {
 }
 GQL
 
-# Prints: "<latest-non-author-ISO-timestamp-or-empty> <unresolved-thread-count> <signoff-flag>"
+# Prints ("-" stands for an empty timestamp so awk fields stay aligned):
+# "<latest-non-author-ISO-timestamp-or-empty> <unresolved-thread-count> <signoff-flag> <latest-unavailable-ts-or-empty>"
 # signoff-flag is 1 only when the single latest non-author item is a review that
 # is APPROVED-state or whose body matches a sign-off marker.
 snapshot() {
@@ -76,7 +84,7 @@ snapshot() {
     .data.repository.pullRequest as $pr
     | ($pr.author.login) as $me
     | [
-        ($pr.reviews.nodes[]  | select(.author.login != $me) | {ts: .submittedAt, kind: "review", state: .state, body: (.body // "")}),
+        ($pr.reviews.nodes[]  | select(.author.login != $me and ((.body // "") | test("'"$UNAVAILABLE_RE"'"; "i") | not)) | {ts: .submittedAt, kind: "review", state: .state, body: (.body // "")}),
         ($pr.comments.nodes[] | select(.author.login != $me) | {ts: .createdAt, kind: "comment"}),
         ($pr.reviewThreads.nodes[].comments.nodes[] | select(.author.login != $me) | {ts: .createdAt, kind: "thread"})
       ]
@@ -87,12 +95,16 @@ snapshot() {
        elif $latest.kind == "review"
          and ($latest.body | test("'"$SIGNOFF_RE"'"; "i"))
        then 1 else 0 end) as $signoff
-    | "\($latest.ts) \($unresolved) \($signoff)"
+    | ([$pr.reviews.nodes[] | select(.author.login != $me and ((.body // "") | test("'"$UNAVAILABLE_RE"'"; "i"))) | .submittedAt] | max // "") as $unavail
+    | "\(if $latest.ts == "" then "-" else $latest.ts end) \($unresolved) \($signoff) \(if $unavail == "" then "-" else $unavail end)"
   ' 2>/dev/null
 }
 
 baseline=$(snapshot)
 base_ts=$(echo "$baseline" | awk '{print $1}')
+base_unavail=$(echo "$baseline" | awk '{print $4}')
+[ "$base_ts" = "-" ] && base_ts=""
+[ "$base_unavail" = "-" ] && base_unavail=""
 echo "Polling PR #$PR_NUMBER ($OWNER/$REPO) every ${INTERVAL}s for up to $((TIMEOUT / 60)) min."
 echo "Baseline latest non-author activity: ${base_ts:-<none>}"
 
@@ -108,6 +120,9 @@ while [ $SECONDS -lt $end ]; do
   cur_ts=$(echo "$cur" | awk '{print $1}')
   unresolved=$(echo "$cur" | awk '{print $2}')
   signoff=$(echo "$cur" | awk '{print $3}')
+  cur_unavail=$(echo "$cur" | awk '{print $4}')
+  [ "$cur_ts" = "-" ] && cur_ts=""
+  [ "$cur_unavail" = "-" ] && cur_unavail=""
 
   echo "$(date '+%H:%M:%S') — latest: ${cur_ts:-<none>}  unresolved threads: ${unresolved:-error}  signoff: ${signoff:-?}"
 
@@ -126,6 +141,12 @@ while [ $SECONDS -lt $end ]; do
   if [ -n "$unresolved" ] && [ "$unresolved" -gt 0 ] 2>/dev/null; then
     echo "Unresolved review threads present ($unresolved)."
     exit 0
+  fi
+
+  if [ -n "$cur_unavail" ] && [ "$cur_unavail" != "$base_unavail" ] \
+     && { [ -z "$base_unavail" ] || [[ "$cur_unavail" > "$base_unavail" ]]; }; then
+    echo "A reviewer reported it could not run ($cur_unavail) — no review will arrive."
+    exit 4
   fi
 done
 

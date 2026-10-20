@@ -89,12 +89,12 @@ still open, suspected structural cause, 1–2 options with a recommendation.
 
 ### 4. On completion
 
-1. `agent-phase.sh --no-review` (the review is over; `open-pr.sh` restores `REVIEW` if a
+1. `agent-phase.sh --no-review` (REVIEW → REVIEWED; `open-pr.sh` restores `REVIEW` if a
    bot will review).
 2. Run `FULL` once; re-run only failures.
 3. Report: rounds run; fixed / skipped (with reasons) / real-but-out-of-scope findings
    (listed only: don't open issues or implement them); suite status; commits added.
-4. Next step: `/open-pr` (or `/open-pr --review none` if `~/.config/local-review-only`
+4. Next step: `/open-pr` (it defaults to `--review none` while `~/.config/local-review-only`
    exists), where that command exists. Put the review-cycle summary in the PR body's "Review cycle" note.
 
 ## Rules

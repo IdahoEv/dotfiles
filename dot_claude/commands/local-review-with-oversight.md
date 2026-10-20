@@ -110,6 +110,6 @@ trailer from the session's attribution reminder), and **do not push**. Then:
 - Another round chosen and round number < 5 → back to step 1 with the updated
   triaged list.
 - Round 5 reached and you still want more → `AskUserQuestion` for approval first.
-- Finished → run `agent-phase.sh --no-review` (`open-pr.sh` restores `REVIEW` if a bot
+- Finished → run `agent-phase.sh --no-review` (sets `REVIEWED`; `open-pr.sh` restores `REVIEW` if a bot
   will review), then report: rounds run, findings fixed/dismissed/deferred, issues opened.
-  Then continue with `/open-pr --review none`.
+  Then continue with `/open-pr` (it defaults to `--review none` here).

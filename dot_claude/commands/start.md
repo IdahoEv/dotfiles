@@ -121,6 +121,7 @@ axis in the agent view beside `status` (idle/busy) and `state` (working/blocked/
 | `PLAN` | awaiting plan approval | `start-ticket.sh` at launch |
 | `WIP` | plan approved, implementing | the ticket session itself |
 | `REVIEW` | a review (local or GitHub) is running | review commands, `open-pr.sh` |
+| `REVIEWED` | review finished, awaiting merge | `agent-phase.sh --no-review` |
 | `MERGED` | merged, ready to finalize | `/finalize` step 1 |
 | `DONE` | finalized; safe to kill | `/finalize` last step |
 

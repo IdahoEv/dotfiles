@@ -11,7 +11,7 @@ title/body is this command's job.
 
 ```text
 /open-pr
-/open-pr --review none|copilot|copilot+claude    # default: copilot
+/open-pr --review none|copilot|copilot+claude    # default: copilot; none while ~/.config/local-review-only exists
 /open-pr --provider <name>         # --env is an alias; normally resolved from config
 /open-pr --no-compact              # skip the post-ship context compaction
 /open-pr --no-multi                # ship only this repo; skip the sibling fan-out
@@ -85,8 +85,8 @@ Capture from stdout: `pr_number`, `pr_url`, `pr_action`, `provider`, `trigger_mo
 `pr_title`, and `pr_title_repaired_from` (present only if the script fixed a doubled
 prefix — mention it in the report). No need to read the title back yourself.
 
-The script also stamps the agent-view row `[REVIEW]` (the ticket's workflow phase, see
-`/start`). Don't set it by hand or report it as a separate action.
+The script also stamps the agent-view row `[REVIEW][PR]` (or `[REVIEWED][PR]` / `[PR]` when no bot will
+review; see global CLAUDE.md). Don't set it by hand or report it as a separate action.
 
 Then, directly in this session, run:
 
@@ -156,7 +156,8 @@ into one context.
 ```
 
 Run in the background. Exit 0 → re-invoke `/review-comments`; 3 → signed off, ready to
-merge; 1 → timeout; 2 → no PR found.
+merge; 1 → timeout; 2 → no PR found; 4 → a reviewer said it couldn't run (e.g. Copilot
+billing): report that, run `agent-phase.sh --no-review`, and don't poll again.
 
 Skip **only** when `--review none` was passed *and* `trigger_mode=manual` — the one case
 where no bot will ever comment. Under `trigger_mode=auto` the bots fire on PR open
