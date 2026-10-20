@@ -43,6 +43,16 @@ README, PRD, planning doc. Lead with the conclusion and the real numbers; measur
 words, not total (tables are the deliverable); never justify why a section exists. This
 applies *while drafting*, not only when I ask you to shorten something.
 
+**Never `cd` into a directory to read or search it.** Every tool takes absolute
+paths. Use `Read` with `offset`/`limit` for a line range and `Grep` to search — not
+`sed -n`/`cat`/`head` and not `rg`/`grep` in Bash. To run a command elsewhere, pass the
+path (`rg PATTERN /abs/dir`, `yarn --cwd /abs/dir test`). Never batch output into a
+`/tmp` file to read back: Claude Code *always* stops for manual approval on a compound
+command mixing `cd` with a redirect or write — the allowlist cannot override it — so
+batching turns several free tool calls into a blocking prompt plus a second call. A
+`PreToolUse` hook denies that shape; the point is not to reach for it. This applies to
+subagents, which hit it most.
+
 **Web searches:** Remember it's currently 2026 - use 2026 in search queries, not 2025 or 2024.
 
 **Approval checkpoints:** when a workflow or skill step calls for pausing on my approval

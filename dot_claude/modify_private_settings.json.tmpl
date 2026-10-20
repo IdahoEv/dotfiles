@@ -127,6 +127,15 @@ MANAGED = json.loads(r"""
     ],
     "PreToolUse": [
       {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/Users/evan/.claude/hooks/no-cd-write.py"
+          }
+        ]
+      },
+      {
         "hooks": [
           {
             "type": "command",
