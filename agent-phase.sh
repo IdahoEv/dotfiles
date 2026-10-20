@@ -2,6 +2,8 @@
 # agent-phase.sh — stamp a ticket's workflow phase onto its agent-view row.
 #
 #   agent-phase.sh <PLAN|WIP|REVIEW|MERGED|DONE>
+#   agent-phase.sh --pr          # add the [PR] tag (a PR has been issued)
+#   agent-phase.sh --no-review   # drop REVIEW, keep [PR] (review finished)
 #   agent-phase.sh --show
 #   agent-phase.sh --clear
 #
@@ -16,6 +18,12 @@
 #   [PLAN]   Sc74618 Build Docker Image
 #   [WIP]    Sc74618 Build Docker Image
 #   [REVIEW] Sc74618 Build Docker Image
+#
+# [PR] is a second, compounding tag: set once a PR exists, independent of phase.
+#   [REVIEW]     local review, no PR yet
+#   [REVIEW][PR] PR open and a review (local or GitHub) in progress
+#   [PR]         PR open, no review in progress
+# MERGED and DONE drop [PR]; the merge supersedes it.
 #
 # The name after the number is distilled from the ticket title by
 # start-ticket.sh (gt::distill_title); this script only rewrites the prefix.
@@ -50,7 +58,7 @@ die() { printf 'agent-phase: %s\n' "$*" >&2; exit 1; }
 PHASES="PLAN WIP REVIEW MERGED DONE"
 
 usage() {
-  printf 'usage: agent-phase.sh <%s>\n       agent-phase.sh --show | --clear\n' \
+  printf 'usage: agent-phase.sh <%s>\n       agent-phase.sh --pr | --no-review | --show | --clear\n' \
     "$(echo "$PHASES" | tr ' ' '|')" >&2
 }
 
@@ -59,6 +67,8 @@ phase="" action="set"
 case "${1:-}" in
   --show)    action="show" ;;
   --clear)   action="clear" ;;
+  --pr)      action="pr" ;;
+  --no-review) action="no-review" ;;
   -h|--help) sed -n '2,/^set -euo/p' "$0" | sed '$d'; exit 0 ;;
   "")        usage; exit 1 ;;
   -*)        usage; die "unknown option: $1" ;;
@@ -107,17 +117,32 @@ name = state.get("name")
 if not isinstance(name, str):
     sys.exit(0)
 
-# Strip any prefix we previously applied. Anchored to the known phase set so a
-# ticket whose real title happens to start with bracketed text (e.g.
-# "[spike] try X") keeps it.
-bare = re.sub(r"^\[(?:%s)\]\s*" % "|".join(phases), "", name)
+# Parse the prefix we previously applied: an optional phase tag, then an
+# optional [PR] tag. Anchored to the known phase set so a ticket whose real
+# title happens to start with bracketed text (e.g. "[spike] try X") keeps it.
+m = re.match(r"^(?:\[(%s)\])?(\[PR\])?\s*" % "|".join(phases), name)
+cur_phase, cur_pr = m.group(1), bool(m.group(2))
+bare = name[m.end():]
 
 if action == "show":
-    m = re.match(r"^\[(%s)\]" % "|".join(phases), name)
-    print(m.group(1) if m else "")
+    print("".join(["[%s]" % cur_phase] * bool(cur_phase)) + "[PR]" * cur_pr)
     sys.exit(0)
 
-new = bare if action == "clear" else "[%s] %s" % (phase, bare)
+new_phase, new_pr = cur_phase, cur_pr
+if action == "clear":
+    new_phase, new_pr = None, False
+elif action == "pr":
+    new_pr = True
+elif action == "no-review":
+    if cur_phase == "REVIEW":
+        new_phase = None
+else:
+    new_phase = phase
+    if phase in ("MERGED", "DONE"):
+        new_pr = False
+
+tags = ("[%s]" % new_phase if new_phase else "") + ("[PR]" if new_pr else "")
+new = "%s %s" % (tags, bare) if tags else bare
 if new == name:
     sys.exit(0)
 
