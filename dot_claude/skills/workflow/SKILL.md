@@ -175,6 +175,12 @@ changes are a separate reviewable unit, not folded into the project PR.
 - A rule firing every session belongs in `CLAUDE.md`; one firing per task
   belongs in a skill, where it costs nothing until invoked.
 
+Those are the rules for *writing* one. For judging prompts that already exist —
+staleness, bloat, scope leakage, duplication — use the `prompt-review` skill,
+which holds the criteria and the evidence bar. `/prompt-audit [repo]` runs it
+over a whole repo; `branch-reviewer` picks it up when a diff touches prompt
+files. Don't restate its checks here.
+
 ## 7. Cloud counterparts
 
 Cloud sessions see only committed files, so projects that use them carry `cloud-start`,
