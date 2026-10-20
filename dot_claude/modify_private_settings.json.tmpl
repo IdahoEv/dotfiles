@@ -131,7 +131,7 @@ MANAGED = json.loads(r"""
         "hooks": [
           {
             "type": "command",
-            "command": "/Users/evan/.claude/hooks/no-cd-write.py"
+            "command": "{{ .chezmoi.homeDir }}/.claude/hooks/no-cd-write.py"
           }
         ]
       },
