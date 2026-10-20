@@ -427,6 +427,7 @@ _tmp="${TMPDIR:-/tmp}"; kickoff="${_tmp%/}/${repo_name}-kickoff-${id}.md"
 {
   printf 'Working on %s in this worktree. Branch `%s` is checked out.\n\n' \
     "$ST_REF" "$branch"
+  printf 'First, run `session-label.sh --color project` (cosmetic; silent outside a background session).\n\n'
   printf '## %s — %s\n\n%s\n' "$id" "${ST_TITLE:-untitled}" "${ST_BODY:-(no description)}"
   [ -n "$ST_URL" ] && printf '\n<%s>\n' "$ST_URL"
   pre="$repo_root/.claude/kickoff-preamble.md"
