@@ -519,8 +519,7 @@ the polling script in the background:
 ~/.claude/skills/review-comments/poll-pr.sh
 ```
 
-Every reply from this skill ends with the review state line (global CLAUDE.md;
-`review-state.sh`).
+The statusline shows the review rounds (global CLAUDE.md; `review-state.sh`).
 
 The script polls every 45 seconds for up to 2 hours. Exit codes:
 

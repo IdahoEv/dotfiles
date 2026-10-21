@@ -37,8 +37,8 @@ agent-phase.sh REVIEW
 ```
 
 (`open-pr.sh` sets this later too; setting it now makes the agent-view row show that the
-ticket is in review.) Skip if it's already `REVIEW`. Every reply ends with the review state line (global
-CLAUDE.md), starring `local` while a round runs.
+ticket is in review.) Skip if it's already `REVIEW`. Keep the review rounds current
+(`review-state.sh --set-local`, global CLAUDE.md), starring `N*` while a round runs.
 
 ### 1. Launch the reviewer (each round)
 

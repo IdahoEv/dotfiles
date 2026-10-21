@@ -30,8 +30,8 @@ Never push.
 - Baseline: run `FAST`. Red for reasons unrelated to
   this branch → note it and continue; compare later runs against it.
 - `agent-phase.sh REVIEW` (no-ops outside a bg session; don't report it).
-- From here every reply ends with the review state line (global CLAUDE.md), starring
-  `local` while a round runs.
+- From here keep the review rounds current (`review-state.sh --set-local`, global
+  CLAUDE.md), starring `N*` while a round runs.
 
 ### 2. Review cycle (at most 5 rounds)
 

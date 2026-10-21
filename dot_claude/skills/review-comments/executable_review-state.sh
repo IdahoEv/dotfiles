@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
-# review-state.sh [--pr N] [--local N[*]] — print the review-rounds status line:
+# review-state.sh [--pr N] [--local N[*]] [--bare] — print the review-rounds status line:
 #   Code Review Rounds: 2 local*, 1 Copilot, 0 Coderabbit
+# review-state.sh --set-local N[*] — record the session's local rounds for this worktree.
+#
+# The statusline shows this (--bare drops the "Code Review Rounds:" prefix). Local
+# rounds live in the session, so the review cycle records them with --set-local into
+# <git-dir>/local-review-rounds; without --local, that file is the local count.
 #
 # Rounds = reviews each bot has submitted on the PR, not counting "job was not
 # started" billing notices (keep UNAVAILABLE_RE in step with poll-pr.sh). The
@@ -13,14 +18,23 @@
 # A bot is omitted until it has a completed or running round (0 without a * is hidden).
 set -euo pipefail
 
-pr="" local_n="0"
+pr="" local_n="" bare=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --pr)    pr="${2:?--pr needs a value}"; shift 2 ;;
     --local) local_n="${2:?--local needs a value}"; shift 2 ;;
-    *) echo "usage: review-state.sh [--pr N] [--local N[*]]" >&2; exit 1 ;;
+    --bare)  bare=1; shift ;;
+    --set-local)
+      gd="$(git rev-parse --absolute-git-dir)"
+      printf '%s\n' "${2:?--set-local needs a value}" > "$gd/local-review-rounds"; exit 0 ;;
+    *) echo "usage: review-state.sh [--pr N] [--local N[*]] [--bare] | --set-local N[*]" >&2; exit 1 ;;
   esac
 done
+if [ -z "$local_n" ]; then
+  gd="$(git rev-parse --absolute-git-dir 2>/dev/null || true)"
+  local_n="$(cat "$gd/local-review-rounds" 2>/dev/null || true)"
+  : "${local_n:=0}"
+fi
 [ -n "$pr" ] || pr="$(gh pr view --json number --jq .number 2>/dev/null || true)"
 
 UNAVAILABLE_RE='job was not started because|spending limit needs to be increased'
@@ -62,4 +76,4 @@ case "$local_n" in *'*') star_l="*"; local_n="${local_n%'*'}" ;; esac
 parts="$local_n local$star_l"
 [ "$copilot" -gt 0 ] || [ -n "$star_c" ] && parts="$parts, $copilot Copilot$star_c"
 [ "$rabbit" -gt 0 ] || [ -n "$star_r" ] && parts="$parts, $rabbit Coderabbit$star_r"
-printf 'Code Review Rounds: %s\n' "$parts"
+[ "$bare" = 1 ] && printf '%s\n' "$parts" || printf 'Code Review Rounds: %s\n' "$parts"
