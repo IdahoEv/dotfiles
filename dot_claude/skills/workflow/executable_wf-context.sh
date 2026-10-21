@@ -37,7 +37,7 @@
 
 set -uo pipefail
 
-GIT_TOOLS_DEFAULT="$HOME/Documents/Development/git-tools/main"
+GIT_TOOLS_DEFAULT="$HOME/.local/share/chezmoi/tools"
 
 # Memo state for wf::chezmoi_healthy. Cleared here so an exported value in the
 # caller's environment can't preempt the probe — a sentinel that answers from

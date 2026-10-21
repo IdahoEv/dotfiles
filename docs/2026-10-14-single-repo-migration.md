@@ -1,99 +1,66 @@
 # Plan: fold git-tools into the dotfiles repo (single workflow source of truth)
 
-Status: **agreed, not started.** Decided 2026-10-14; implement on a quiet day.
+Status: **in progress.** Epic #5; steps map to sub-issues #6–#10.
 
 ## Why
 
-- Prompts (chezmoi) and the scripts they call (git-tools) version and sync
-  separately, so a prompt can land before the script it needs.
-- Two sync processes (direct-push to `main` vs. PR + 24h `--ff-only` external) have
-  different latencies; they drift when unattended.
-- Goal: one repo, one pull, prompt+script changes in one PR. Chezmoi stays the
-  sync tool. Review flow is kept via worktrees + PRs.
+- Prompts (chezmoi) and the scripts they call (git-tools) versioned and synced
+  separately, so a prompt could land before the script it needs.
+- One repo, one pull, prompt+script changes in one PR. Chezmoi stays the sync tool.
 
-Current state worth knowing: git-tools is *already* a chezmoi `git-repo` external
-(`.chezmoiexternal.toml`, `--ff-only`, 24h refresh). A dirty tree or unpushed commit
-in `~/Documents/Development/git-tools/main` makes that pull fail.
+## Target layout: two checkouts
 
-## Target layout
+| Checkout | Path | Role |
+|---|---|---|
+| Deploy | `~/.local/share/chezmoi` (plain clone, `main` only) | chezmoi source; `tools/` on `PATH`; only fast-forwards |
+| Dev | `$DEV/dotfiles` (bare, `wm` layout) | all edits, as ticket worktrees + PRs |
 
-```text
-~/Documents/Development/dotfiles/     bare repo (wm layout)
-  main/        chezmoi sourceDir; stays on main; = "what is deployed"
-    tools/     the git-tools scripts; chezmoi-ignored; PATH points here
-  <branch>/    work worktrees created with wm
-```
+Why two: no per-machine `sourceDir` override, plain `chezmoi init` bootstraps a
+fresh machine, and a broken branch can't break the tools on `PATH`.
 
-Change loop: worktree → edit → `chezmoi -S <worktree> diff|apply <target>` to try
-it → PR (local review) → merge → `git pull` in `main/` → `chezmoi apply`.
-Applying from a branch deploys unmerged state; the next apply from `main` reverts
-it. Scripts run in place from a checkout, so they need no apply.
+Change loop: dev worktree → edit → `chezmoi -S <worktree> diff|apply <target>` to
+try it → PR → merge → `git pull` in the deploy clone → `chezmoi apply`. Applying from a
+branch deploys unmerged state; the next apply from the deploy clone reverts it.
+`tools/` is chezmoi-ignored and runs in place, so it needs no apply.
 
-## Steps (per machine unless marked once)
+## Steps (do both machines in one sitting)
 
-Do both machines in one sitting so they are never skewed.
+| # | Step | Ticket |
+|---|---|---|
+| 1 | **(once)** Preconditions: both repos clean and pushed, no open git-tools PRs | #6 |
+| 2 | **(once)** `git subtree add --prefix=tools <git-tools main>` keeps history and exec bits | #6 |
+| 3 | **(once)** Add `tools` to `.chezmoiignore`; drop the git-tools external; repoint hard-coded paths to `~/.local/share/chezmoi/tools` | #6 |
+| 4 | Create the dev bare repo (`wm` layout); retire `Documents/Development/git-tools/` once `PATH` no longer uses it | #7 |
+| 5 | **(once)** `open-pr.sh` generic GitHub provider (no ticket tracker needed) | #8 |
+| 6 | **(once)** Update `/workflow` and `wf-context.sh`: edit in a dev worktree, `chezmoi -S`, PR, merge, pull deploy clone, apply; `srcpath` and dirty/ahead/behind facts honor `-S` | #9 |
+| 7 | Work laptop; then **(once)** archive `IdahoEv/git-tools` (read-only) after both machines are verified | #10 |
 
-**Preconditions (once):** dotfiles and git-tools both clean and pushed
-(`wf-context.sh` shows `chezmoi_source_dirty/ahead/behind` = 0); no open git-tools
-PRs; no active worktrees in `git-tools/`.
+Done for #6: `chezmoi status` empty and `which worktree-manager.sh` resolves into
+`~/.local/share/chezmoi/tools`. That needs the branch merged and pulled into the deploy clone.
 
-1. **(once) Merge history.** In the dotfiles clone: add git-tools as a remote and
-   merge its `main` into `tools/` (`git subtree add --prefix=tools <git-tools-url> main`
-   or an unrelated-histories merge). Check `tools/*.sh` keep their executable bit.
-2. **(once) Ignore `tools/`.** Add `tools` to `.chezmoiignore` so chezmoi does not
-   deploy it. Remove the git-tools entry from `.chezmoiexternal.toml`. Update the
-   hard-coded `Documents/Development/git-tools/main` path in:
-   `dot_shell_modules/worktree-manager` (PATH), `dot_shell_modules/git-tools-freshness`
-   (retarget at the dotfiles repo), `dot_claude/CLAUDE.md.tmpl`,
-   `dot_claude/skills/workflow/executable_wf-context.sh`,
-   `dot_productivity/git-tools-usage.md`. Re-grep afterwards; also grep `~/.claude`
-   commands and skills for `git-tools`.
-3. **Convert the clone.** `wm --init` in the dotfiles clone, producing `dotfiles/main/`.
-   Rehearse on a throwaway copy first.
-4. **Point chezmoi at it.** Set `sourceDir` in `~/.config/chezmoi/chezmoi.toml` to
-   `.../dotfiles/main`. This file is per machine and not synced. Verify with
-   `chezmoi source-path` and an empty `chezmoi status`.
-5. **Fix PATH and remove the old checkout.** New shell → `which worktree-manager.sh`
-   resolves into `dotfiles/main/tools`. Only then delete the old
-   `git-tools/` directory (keep it until the old PATH entry is gone).
-6. **Re-set per-clone git config** (not synced): `pull.rebase true`,
-   `rebase.autoStash true` in the new `main/`.
-7. **(once) Update `/workflow`.** §3 becomes: edit in a worktree, try with
-   `chezmoi -S <wt>`, PR, merge, pull `main`, apply. `wf-context.sh srcpath` and the
-   dirty/ahead/behind facts need to honor `-S`/the worktree. Remove the "never commit
-   the dotfiles repo" rule only if you want PRs opened for dotfiles changes by Claude.
-8. **(once) Archive** the `IdahoEv/git-tools` GitHub repo (read-only) after both
-   machines are verified.
+## Open checks
 
-## Open checks before starting
-
-- `open-pr.sh` provider lookup for a repo with no ticket tracker (the kardashev
-  provider is the only shipped one). Likely needs a trivial default; test in a
-  throwaway PR.
 - `start-ticket.sh` / `wm` assume ticket providers; dotfiles work should use plain
   `wm <branch>`. Confirm nothing in `wm` requires a ticket.
 - chezmoi symlink-directory support, if `~/.claude/{commands,skills,agents}` should
-  become symlinks into `main/` (removes the apply step for prompts). Test on a
-  throwaway target first. Not required for this plan; copying works.
-- Fresh-machine bootstrap: `chezmoi init` expects a plain clone. Document the
-  `git clone --bare` + `wm --init` + `sourceDir` sequence in the repo README.
-- Work machine: `is_work`, the fireworks-owned settings keys, and the SSH host alias
-  (`github.com` vs `github.com-personal`) differ per machine; confirm remotes
-  after conversion.
+  become symlinks into the deploy clone. Not required; copying works.
+- Fresh-machine bootstrap: `chezmoi init` plus a dev `git clone --bare` + `wm --init`.
+  Document in the repo README.
+- Work machine: `is_work`, fireworks-owned settings keys, and the SSH host alias
+  (`github.com` vs `github.com-personal`) differ per machine; confirm remotes.
 
 ## Rollback
 
-Until step 5, the old `git-tools/` checkout and the old `sourceDir` are untouched:
-revert `sourceDir` in `chezmoi.toml` and restore the external entry. After step 5,
-recovery is a fresh clone of the archived git-tools repo, so do not delete the old
-directory until both machines have run a normal day on the new layout.
+Until #7 retires the old checkout, `Documents/Development/git-tools/main` is intact:
+restore the external entry and the old `PATH` line. After that, recovery is a fresh
+clone of the git-tools repo, so keep it unarchived and the old directory until both
+machines have run a normal day on the new layout.
 
-## Follow-ups (after migration, separate PRs)
+## Follow-ups (separate PRs)
 
 - Plain `CLAUDE.md` + `@`-import of a per-machine `machine.md` instead of the
   `is_work` template (verify `@path` import support first).
 - Project commands extend global ones instead of shadowing: diff project
   `start.md`/`finalize.md` against global, move repo-specific parts to data files
   (as `kickoff-preamble.md` does), add a shadow check to `wf-context.sh`.
-- Split work-only permissions and `$HOME`-derive hook paths in the settings merge
-  script.
+- Split work-only permissions and `$HOME`-derive hook paths in the settings merge script.
