@@ -74,7 +74,7 @@ resolve_color() {  # <project> -> color or empty
   local c src=start-ticket.conf
   # Trimmed after lookup: conf_get keeps trailing blanks and CRs, and a blank
   # value must fall through to project-colors rather than fail the palette check.
-  c="$(gt::conf_get color 2>/dev/null | tr -d '[:space:]' | tr '[:upper:]' '[:lower:]' || true)"
+  c="$(gt::conf_get color 2>/dev/null | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | tr '[:upper:]' '[:lower:]' || true)"
   if [ -z "$c" ] && [ -n "$1" ]; then c="$(project_color "$1")"; src=project-colors; fi
   [ -z "$c" ] && return 0
   case " $PALETTE " in *" $c "*) ;; *) die "color '$c' in $src is not in the palette ($PALETTE)" ;; esac

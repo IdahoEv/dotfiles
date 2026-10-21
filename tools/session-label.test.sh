@@ -65,6 +65,9 @@ check "title survives bad color" "widgets Governor" "$(python3 -c 'import json,s
 
 printf 'color=green \r\n' > "$OV/start-ticket.conf"
 check "trailing space and CR trimmed" "green" "$(show)"
+printf 'color=red # main\n' > "$OV/start-ticket.conf"
+case "$(show)" in *"'red # main'"*) r=yes ;; *) r=no ;; esac
+check "error shows the value as written" "yes" "$r"
 printf 'color= \n' > "$OV/start-ticket.conf"
 check "blank conf value falls through to project-colors" "blue" "$(show)"
 
