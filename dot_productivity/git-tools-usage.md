@@ -1,6 +1,6 @@
 # git-tools / worktree-manager usage
 
-Source: `~/Documents/Development/git-tools/worktree-manager.sh`
+Source: `~/.local/share/chezmoi/tools/worktree-manager.sh`
 
 ## One-time per repo
 

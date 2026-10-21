@@ -2,8 +2,8 @@
 #
 # Adds worktree-manager.sh to PATH and provides convenient aliases
 
-# Add git-tools to PATH if not already present
-WORKTREE_MANAGER_DIR="$HOME/Documents/Development/git-tools/main"
+# Add the tools/ dir of the deploy clone to PATH if not already present
+WORKTREE_MANAGER_DIR="$HOME/.local/share/chezmoi/tools"
 if [[ -d "$WORKTREE_MANAGER_DIR" ]]; then
     if [[ ":$PATH:" != *":$WORKTREE_MANAGER_DIR:"* ]]; then
         export PATH="$WORKTREE_MANAGER_DIR:$PATH"

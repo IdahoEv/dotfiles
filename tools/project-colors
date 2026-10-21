@@ -1,0 +1,6 @@
+# <project dir name> <color>   — read by session-label.sh --color project
+# Colors: red blue green yellow purple orange pink cyan
+# green is taken by /workflow.
+Kardashev        purple
+KardashevAssets  blue
+event-tracker    yellow
