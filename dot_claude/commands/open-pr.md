@@ -20,8 +20,8 @@ title/body is this command's job.
 
 **Providers own every convention — you own none of them.** A provider encapsulates the
 branch→ticket parse, the PR title prefix, the tracker-linking footer, and the review
-wiring. `open-pr.sh` resolves it (explicit `--provider` → repo conf → user conf →
-`kardashev`) and reports which one it used. Never assume a convention; read the script's
+wiring. `open-pr.sh` resolves it (explicit `--provider` → `openpr_provider=` in repo/user conf →
+`provider=` if an open-pr provider of that name exists → `github`) and reports which one it used. Never assume a convention; read the script's
 output rather than guessing from the repo.
 
 ## Steps

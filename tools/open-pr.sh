@@ -1,8 +1,17 @@
 #!/usr/bin/env bash
 # open-pr.sh — push the current branch, open (or reuse) its PR, and trigger review bots.
 #
-#   open-pr.sh [--title "Is<NNN>: <short title>"] [--body-file <path>] [--issue <N>]
-#               [--review none|copilot|copilot+claude] [--provider kardashev]
+#   open-pr.sh [--title "<short title>"] [--body-file <path>] [--issue <N>]
+#               [--review none|copilot|copilot+claude] [--provider github|kardashev]
+#
+# Provider: --provider, else `openpr_provider=` in .start-ticket.conf, else the
+# start-ticket `provider=` if an open-pr provider of that name exists, else
+# github. github: `<NNN>-slug` branch → issue NNN, title as given, `Closes #NNN`
+# footer, no review triggers (--review is ignored). kardashev: `Is<NNN>:` titles
+# plus Copilot/claude.yml triggers.
+#
+# Ticketless: no issue in the branch and no --issue → the PR opens with the given
+# title and body, no `Closes` line.
 #
 # --review defaults to copilot, or to none while ~/.config/local-review-only
 # exists (this machine's Copilot quota is out; delete the file to restore it).
@@ -69,7 +78,7 @@ while [ $# -gt 0 ]; do
     --issue)          issue="${2:?--issue needs a value}"; shift 2 ;;
     --review)         review="${2:?--review needs a value}"; shift 2 ;;
     --provider|--env) provider="${2:?--provider needs a value}"; shift 2 ;;
-    -h|--help)        sed -n '2,20p' "$0"; exit 0 ;;
+    -h|--help)        sed -n '2,32p' "$0"; exit 0 ;;
     *)                die "unknown arg: $1" ;;
   esac
 done
@@ -112,26 +121,43 @@ fi
 # ---- provider ---------------------------------------------------------------
 # Reviewer/bot wiring and this environment's PR title/body/branch conventions
 # are per-repo-family, not per-script — a provider encapsulates them. Providers
-# mirror start-ticket-providers/. Resolution mirrors start-ticket.sh: --provider
-# flag → openpr_provider= in the repo's .start-ticket.conf → kardashev default.
-if [ -z "$provider" ]; then
-  # In a worktree, --show-toplevel is the worktree path, but .start-ticket.conf
-  # lives in the main repo root — resolve both (--git-common-dir's parent is
-  # the main worktree even from a linked worktree).
-  _repo_root="$(git rev-parse --show-toplevel 2>/dev/null || true)"
-  _main_root=""
-  _common="$(git rev-parse --git-common-dir 2>/dev/null || true)"
-  if [ -n "$_common" ]; then
-    _common="$(cd -P "$_common" && pwd)"
-    _main_root="$(dirname "$_common")"
+# mirror start-ticket-providers/.
+
+# <key> → first value of `key=` from the repo's .start-ticket.conf, else the
+# per-machine config. In a worktree --show-toplevel is the worktree path, but
+# .start-ticket.conf lives in the main repo root — check both (--git-common-dir's
+# parent is the main worktree even from a linked worktree). All config lookup
+# lives here so relocating the config only touches this function.
+conf_get() {
+  local key="$1" top main_root="" common f v
+  top="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+  common="$(git rev-parse --git-common-dir 2>/dev/null || true)"
+  if [ -n "$common" ]; then
+    common="$(cd -P "$common" && pwd)"
+    main_root="$(dirname "$common")"
   fi
-  for _f in "${_repo_root:-/nonexistent}/.start-ticket.conf" "${_main_root:-/nonexistent}/.start-ticket.conf" "$HOME/.config/start-ticket/config"; do
-    [ -f "$_f" ] || continue
-    _v="$(sed -n 's/^openpr_provider=//p' "$_f" | head -1)"
-    [ -n "$_v" ] && { provider="$_v"; break; }
+  for f in "${top:-/nonexistent}/.start-ticket.conf" "${main_root:-/nonexistent}/.start-ticket.conf" "$HOME/.config/start-ticket/config"; do
+    [ -f "$f" ] || continue
+    v="$(sed -n "s/^${key}=//p" "$f" | head -1)"
+    [ -n "$v" ] && { printf '%s' "$v"; return 0; }
   done
-fi
-provider="${provider:-kardashev}"
+  return 0
+}
+
+# --provider flag → openpr_provider= → the start-ticket provider= when an
+# open-pr provider of that name exists → github.
+resolve_provider() {
+  local v
+  v="$(conf_get openpr_provider)"
+  [ -n "$v" ] && { printf '%s' "$v"; return 0; }
+  v="$(conf_get provider)"
+  if [ -n "$v" ] && [ -n "$(find_provider_file "$v")" ]; then
+    printf '%s' "$v"; return 0
+  fi
+  printf 'github'
+}
+
+[ -n "$provider" ] || provider="$(resolve_provider)"
 pf="$(find_provider_file "$provider")"
 [ -n "$pf" ] || die "no provider script for '$provider' (searched: OPEN_PR_PROVIDER_DIR, <repo>/.git-tools/open-pr-providers, ~/.config/git-tools/open-pr-providers, git-tools/open-pr-providers)"
 # shellcheck source=/dev/null
@@ -192,8 +218,13 @@ else
       body_args=(--body-file "$body_file")
     fi
   else
-    [ -n "$issue" ] || die "can't infer issue number from branch '$branch' — pass --issue or --body-file"
-    body_args=(--body "$(provider::pr_body "$issue")")
+    # Ticketless (no issue from the branch or --issue): nothing to link, so the
+    # body is empty rather than an error.
+    if [ -n "$issue" ]; then
+      body_args=(--body "$(provider::pr_body "$issue")")
+    else
+      body_args=(--body "")
+    fi
   fi
 fi
 
