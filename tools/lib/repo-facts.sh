@@ -307,10 +307,10 @@ gt::repo_key() {  # <url> → "owner/repo", or nothing
     *:*)   path="${u#*:}" ;;                        # scp-style: host:owner/repo
     *)     return 0 ;;
   esac
-  # Two or more segments (GitLab subgroups nest); a leading-dot segment would let
+  # Two or more segments (GitLab subgroups nest); a "." or ".." segment would let
   # a hostile or typo'd remote ("../r") point the overlay outside the root.
   [[ "$path" =~ ^[^/]+(/[^/]+)+$ ]] || return 0
-  [[ "/$path" == */.* ]] && return 0
+  [[ "/$path/" == */./* || "/$path/" == */../* ]] && return 0
   printf '%s' "$path"
 }
 
