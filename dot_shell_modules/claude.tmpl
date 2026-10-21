@@ -3,6 +3,27 @@ if ! has_command claude; then
     echo "Warning: Claude Code not installed. Download from: https://claude.ai/download" >&2
 fi
 
+# Start a background Claude session in a given directory or worktree. Agent view and
+# /cd can't choose a cwd, and the session must start there to load that directory's
+# CLAUDE.md and .claude/. Extra args pass through to claude (prompt, --model, ...).
+# Usage: bgin <dir> [claude args...]
+bgin() {
+  [[ -d "$1" ]] || { echo "bgin: not a directory: $1" >&2; return 1; }
+  local dir=${1:A}; shift
+  (cd "$dir" && claude --bg -n "${dir:t}" "$@")
+}
+
+# Complete the first argument with this repo's worktree paths, else any directory.
+_bgin() {
+  if (( CURRENT == 2 )); then
+    local -a wts
+    wts=(${(f)"$(git worktree list --porcelain 2>/dev/null | sed -n 's/^worktree //p')"})
+    (( $#wts )) && { compadd -f -a wts; return; }
+    _files -/
+  fi
+}
+(( $+functions[compdef] )) && compdef _bgin bgin
+
 
 {{ if (index . "anthropic_api_key") }}
 export ANTHROPIC_API_KEY="{{- index . "anthropic_api_key" }}"
