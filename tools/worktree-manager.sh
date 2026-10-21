@@ -1,0 +1,1196 @@
+#!/bin/bash
+# worktree-manager.sh - Create and configure git worktrees with automatic setup
+#
+# Usage:
+#   worktree-manager.sh --init                             # Convert regular repo to worktree structure
+#   worktree-manager.sh [--claude]                         # Interactive mode: select branch with fzf
+#   worktree-manager.sh [--claude] <branch-name>           # Create worktree with arbitrary branch name
+#   worktree-manager.sh [--claude] --sc <ticket-id>        # Create worktree from Shortcut ticket
+#
+# Aliases (when shell module is loaded):
+#   wm          worktree-manager.sh
+#   wms         worktree-manager.sh --sc
+#   wmc         worktree-manager.sh --claude
+#   wmsc        worktree-manager.sh --claude --sc
+#
+# Options:
+#   --init      Convert a regular git repository into worktree structure
+#   --claude    Open Claude Code in the worktree after setup
+#   --sc        Use Shortcut ticket ID to fetch branch name and details
+#
+# Examples:
+#   wm --init                   # Initialize worktree structure (run in repo root)
+#   wm                          # Interactive: select from branches/worktrees
+#   wmc                         # Interactive + open Claude
+#   wm feature/add-login        # Create specific branch
+#   wms 65682                   # Create from Shortcut ticket
+#   wmsc 65682                  # Shortcut + open Claude
+
+set -e
+
+# Command substitutions run in a subshell that does NOT inherit errexit
+# unless this is enabled (bash >= 4.4; macOS system bash is 3.2 and lacks
+# this option, hence the guard). Without it, a failing command inside a
+# function called as `x=$(fn ...)` silently falls through to the rest of
+# that function instead of aborting - which is why the explicit `|| error`
+# checks below don't rely on this alone.
+shopt -s inherit_errexit 2>/dev/null || true
+
+# Resolve this script's real directory (it is typically reached through a
+# PATH symlink) so the shared lib can be sourced.
+_wm_src="${BASH_SOURCE[0]}"
+while [ -L "$_wm_src" ]; do
+    _wm_dir="$(cd -P "$(dirname "$_wm_src")" && pwd)"
+    _wm_src="$(readlink "$_wm_src")"
+    [ "${_wm_src#/}" = "$_wm_src" ] && _wm_src="$_wm_dir/$_wm_src"
+done
+SCRIPT_DIR="$(cd -P "$(dirname "$_wm_src")" && pwd)"
+# shellcheck source=lib/repo-facts.sh
+. "$SCRIPT_DIR/lib/repo-facts.sh"
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+CYAN='\033[0;36m'
+BOLD='\033[1m'
+NC='\033[0m' # No Color
+
+# Configuration
+TICKET_FILE=".ticket.local.md"
+
+# ============================================================================
+# Utility Functions
+# ============================================================================
+
+error() {
+    echo -e "${RED}Error: $1${NC}" >&2
+    exit 1
+}
+
+info() {
+    echo -e "${BLUE}$1${NC}" >&2
+}
+
+success() {
+    echo -e "${GREEN}✓${NC} $1" >&2
+}
+
+warning() {
+    echo -e "${YELLOW}⚠${NC} $1" >&2
+}
+
+# Check if a file/directory is tracked by git.
+# Callers pass absolute paths under the main worktree, but this script is
+# designed to be run from *any* worktree - so run git against the path's own
+# directory rather than the caller's cwd, which may be an unrelated worktree
+# (where the absolute path reads as "outside repository" and every check would
+# wrongly come back untracked).
+is_tracked() {
+    local path="$1"
+    git -C "$(dirname "$path")" ls-files --error-unmatch "$(basename "$path")" >/dev/null 2>&1
+}
+
+# ============================================================================
+# Git Repository Detection and Initialization
+# ============================================================================
+
+# Check if current directory is a worktree-enabled repository
+is_worktree_repo() {
+    local worktree_count
+    worktree_count=$(git worktree list 2>/dev/null | wc -l | tr -d ' ')
+
+    # If there's more than 1 worktree, it's been initialized
+    [ "$worktree_count" -gt 1 ]
+}
+
+# Initialize a regular git repository into worktree structure
+init_worktree_structure() {
+    # Must be in a git repository
+    if ! git rev-parse --git-dir >/dev/null 2>&1; then
+        error "Not in a git repository. Run this command from a git repository root."
+    fi
+
+    # Check if already a worktree setup
+    if is_worktree_repo; then
+        error "This repository is already using worktrees. No initialization needed."
+    fi
+
+    # Must be in the root of the repository (not a subdirectory)
+    # Both sides are resolved with -P so a symlink component in the cwd
+    # (e.g. macOS /tmp -> /private/tmp) doesn't cause a false mismatch.
+    local git_root
+    git_root=$(git rev-parse --show-toplevel)
+    local current_dir
+    current_dir=$(pwd -P)
+
+    if [ "$git_root" != "$current_dir" ]; then
+        error "Must run --init from the repository root: $git_root"
+    fi
+
+    # Get the current branch name
+    local current_branch
+    current_branch=$(git rev-parse --abbrev-ref HEAD)
+
+    # Detached HEAD reports the literal string "HEAD", and nothing downstream
+    # rejects it: you get a worktree directory named HEAD sitting beside .git,
+    # tracking config for a branch "HEAD" → refs/heads/HEAD, and that path
+    # recorded as worktreeManager.configRoot for every future call. By the time
+    # it's visible the original checkout has already been deleted.
+    if [ "$current_branch" = "HEAD" ]; then
+        error "Detached HEAD — check out a branch before running --init"
+    fi
+
+    # Ensure working directory is clean
+    if ! git diff-index --quiet HEAD -- 2>/dev/null; then
+        error "Working directory has uncommitted changes. Commit or stash them before running --init"
+    fi
+
+    info "Converting repository to worktree structure..."
+    info "Current branch: ${current_branch}"
+
+    # Sanitize branch name for directory (replace slashes with dashes)
+    local main_dir_name
+    main_dir_name=$(echo "$current_branch" | sed 's/\//-/g')
+    local repo_name
+    repo_name=$(basename "$current_dir")
+    local parent_dir
+    parent_dir=$(dirname "$current_dir")
+
+    echo ""
+    echo -e "${YELLOW}This will:${NC}"
+    echo -e "  1. Clone current repo as bare to: ${repo_name}/.git"
+    echo -e "  2. Create main worktree at: ${repo_name}/${main_dir_name}"
+    echo -e "  3. Enable sibling worktrees: ${repo_name}/<sanitized-branch-name>"
+    echo -e "  (Branch: ${current_branch} → Directory: ${main_dir_name})"
+
+    # `git clone --bare` carries refs/heads and refs/tags and nothing else, and
+    # the original directory is deleted at the end. The clean check above only
+    # looks at tracked modifications, so stashes, untracked and gitignored
+    # files (.env, the very thing this script symlinks later), local git config,
+    # hooks, and info/exclude all go with it. An informed "y" isn't possible
+    # unless the prompt says so — count what's at stake and name it.
+    local n_stash n_untracked
+    n_stash=$(git stash list 2>/dev/null | wc -l | tr -d ' ')
+    n_untracked=$(git ls-files --others --exclude-standard 2>/dev/null | wc -l | tr -d ' ')
+    local n_ignored
+    n_ignored=$(git ls-files --others --ignored --exclude-standard 2>/dev/null | wc -l | tr -d ' ')
+    echo ""
+    echo -e "${YELLOW}This will NOT carry over (the old directory is deleted):${NC}"
+    echo -e "  - ${n_untracked} untracked and ${n_ignored} ignored file(s) — includes .env*"
+    echo -e "  - ${n_stash} stash entr(ies)"
+    echo -e "  - local .git config, hooks, and info/exclude"
+    echo -e "  Back up anything you need before continuing."
+    echo ""
+
+    read -r -p "Proceed with initialization? [y/N] " confirm
+    if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
+        error "Initialization cancelled"
+    fi
+
+    # `git clone --bare` from a local path points the new repo's remotes at
+    # that local path, not at the original upstream URLs. Capture the real
+    # URLs now so they can be restored after the clone.
+    local remote_names
+    remote_names=$(git remote)
+    local remote_backup=()
+    local remote
+    for remote in $remote_names; do
+        local fetch_url push_url
+        fetch_url=$(git remote get-url "$remote")
+        push_url=$(git remote get-url --push "$remote" 2>/dev/null || echo "$fetch_url")
+        remote_backup+=("${remote}|${fetch_url}|${push_url}")
+    done
+
+    # Create a temporary directory for the bare repository
+    local temp_bare="${parent_dir}/.${repo_name}.bare.$$"
+
+    info "Creating bare repository..."
+
+    # Clone the current repo as bare to temp location
+    git clone --bare "$current_dir" "$temp_bare"
+
+    # Change to parent directory before moving current directory
+    # (avoids shell being in a deleted directory)
+    cd "$parent_dir"
+
+    # Move the old directory out of the way. PID-suffixed, like temp_bare: a
+    # plain `.old` is a real human habit, and `mv` into an existing directory
+    # MERGES rather than failing — the rm at the end would then take both.
+    local old_dir="${current_dir}.old.$$"
+    info "Reorganizing directories..."
+    mv "$current_dir" "$old_dir"
+
+    # Create new structure directory
+    mkdir -p "$current_dir"
+
+    # Move bare repo into final location
+    mv "$temp_bare" "${current_dir}/.git"
+
+    # Restore the real remote URLs (the bare clone pointed them at the
+    # now-obsolete local path instead)
+    #
+    # Also restore the fetch refspec. `git clone --bare` deliberately writes
+    # none, and without it `git fetch origin <branch>` updates FETCH_HEAD only
+    # — refs/remotes/origin/* stay frozen at conversion time, silently, for the
+    # life of the repo. Anything reasoning about origin/<base> (finalize-check's
+    # merged test, `git log origin/main..`, ahead/behind counts) then reads
+    # stale refs and is quietly wrong. A remote worth a URL is worth a refspec.
+    for entry in "${remote_backup[@]}"; do
+        IFS='|' read -r remote fetch_url push_url <<< "$entry"
+        git -C "${current_dir}/.git" remote set-url "$remote" "$fetch_url"
+        if [ "$push_url" != "$fetch_url" ]; then
+            git -C "${current_dir}/.git" remote set-url --push "$remote" "$push_url"
+        fi
+        if ! git -C "${current_dir}/.git" config --get "remote.${remote}.fetch" >/dev/null 2>&1; then
+            git -C "${current_dir}/.git" config \
+                "remote.${remote}.fetch" "+refs/heads/*:refs/remotes/${remote}/*"
+        fi
+    done
+
+    # Populate refs/remotes/* now that the refspec exists. The bare clone put
+    # the branches in refs/heads/, so without this the tracking refs don't
+    # exist at all until the user's first manual fetch.
+    # Check origin specifically rather than reading `fetch --all`'s status:
+    # --all exits non-zero if ANY remote fails, so one dead secondary remote
+    # would warn about a repo whose origin refs were just written correctly.
+    # Keep stderr visible — --quiet already silences the success case, and
+    # hiding it would mask an SSH host-key or credential prompt behind a
+    # motionless "Populating remote-tracking refs...".
+    info "Populating remote-tracking refs..."
+    git -C "${current_dir}/.git" fetch --all --quiet || true
+    #
+    # Three arms, because neither of the first two holds universally.
+    # refs/remotes/origin/HEAD is only auto-created by fetch on git >= 2.48,
+    # and refs/remotes/origin/<current_branch> is absent whenever --init runs
+    # from a brand-new local branch — which is a normal way to reach here. On
+    # older git both are missing after a perfectly good fetch, so fall back to
+    # "did we end up with ANY origin ref at all".
+    if ! git -C "${current_dir}/.git" rev-parse --verify --quiet \
+            refs/remotes/origin/HEAD >/dev/null 2>&1 \
+       && ! git -C "${current_dir}/.git" show-ref --quiet --verify \
+            "refs/remotes/origin/${current_branch}" \
+       && [ -z "$(git -C "${current_dir}/.git" for-each-ref --count=1 \
+            refs/remotes/origin/ 2>/dev/null)" ]; then
+        warning "Could not reach origin to populate tracking refs; run 'git fetch --all' when back online"
+    fi
+
+    # Now add the first worktree from the final location
+    info "Creating main worktree..."
+    git -C "${current_dir}/.git" worktree add "${current_dir}/${main_dir_name}" "$current_branch"
+
+    # A bare clone copies branches directly into refs/heads rather than as
+    # remote-tracking branches, so upstream tracking is never set up. Restore
+    # it for the main branch if origin is one of the restored remotes.
+    if git -C "${current_dir}/.git" remote get-url origin >/dev/null 2>&1; then
+        git -C "${current_dir}/${main_dir_name}" config "branch.${current_branch}.remote" origin
+        git -C "${current_dir}/${main_dir_name}" config "branch.${current_branch}.merge" "refs/heads/${current_branch}"
+    fi
+
+    # Record which worktree holds the per-project config. This is stored in the
+    # shared (bare) config, so every worktree sees it. find_main_worktree reads
+    # it first; without it the config root can only be guessed from which
+    # worktree is on the primary branch, which is wrong once this root is
+    # switched to a feature branch.
+    git -C "${current_dir}/${main_dir_name}" config worktreeManager.configRoot "${current_dir}/${main_dir_name}"
+
+    # Clean up old directory
+    rm -rf "$old_dir"
+
+    echo ""
+    success "Repository converted to worktree structure!"
+    echo ""
+    echo -e "${CYAN}Repository root:${NC} ${current_dir}"
+    echo -e "${CYAN}Main worktree:${NC} ${current_dir}/${main_dir_name}"
+    echo ""
+    echo -e "${YELLOW}IMPORTANT:${NC} Your shell is no longer in a valid directory."
+    echo -e "${YELLOW}Run this command:${NC}"
+    echo -e "  ${CYAN}cd ${current_dir}/${main_dir_name}${NC}"
+    echo ""
+}
+
+# Find the main worktree directory
+#
+# `git worktree list` always lists the bare repo itself first once a repo has
+# been converted via --init, so the naive "head -1" picks the bare container
+# (no checked-out files) instead of an actual worktree. Skip bare entries.
+# Also skip "prunable" entries - git flags these when a worktree's directory
+# was deleted directly (e.g. `rm -rf`) instead of via `git worktree remove`,
+# leaving orphaned metadata that would otherwise get picked as the "main"
+# worktree despite pointing at a directory that no longer exists.
+#
+# The config root recorded at --init time (worktreeManager.configRoot) wins:
+# that is the worktree that actually holds per-project config (.worktree-sync,
+# an untracked .claude/, docs/local/), regardless of what branch it is on now.
+#
+# Repos initialized before that marker existed fall back to the heuristic:
+# among the remaining real worktrees, prefer the one checked out on the repo's
+# primary branch (main/master/development), since that is usually the config
+# root and the right base for new branches. `git worktree list` orders entries
+# by creation time, not by branch, so the first real worktree is often a
+# feature branch. Fall back to that first entry only when none of the primary
+# branches is checked out anywhere.
+find_main_worktree() {
+    git rev-parse --git-dir >/dev/null 2>&1 || error "Not in a git repository"
+
+    local config_root
+    config_root=$(git config --get worktreeManager.configRoot 2>/dev/null || true)
+    if [ -n "$config_root" ] && [ -d "$config_root" ]; then
+        echo "$config_root"
+        return
+    fi
+
+    local stale_count
+    stale_count=$(git worktree list --porcelain | grep -c '^prunable' || true)
+    if [ "$stale_count" -gt 0 ]; then
+        warning "Found ${stale_count} stale worktree entr$([ "$stale_count" -eq 1 ] && echo y || echo ies) (directory removed without 'git worktree remove'). Run 'git worktree prune' to clean up."
+    fi
+
+    git worktree list --porcelain | awk '
+        function flush() {
+            if (path == "" || bare || prunable) return
+            if (first == "") first = path
+            if (primary == "" && (branch == "refs/heads/main" || branch == "refs/heads/master" || branch == "refs/heads/development")) primary = path
+        }
+        /^worktree / { flush(); path = substr($0, 10); bare = 0; prunable = 0; branch = "" }
+        /^bare$/ { bare = 1 }
+        /^prunable/ { prunable = 1 }
+        /^branch / { branch = substr($0, 8) }
+        END { flush(); print (primary != "" ? primary : first) }
+    '
+}
+
+# Validate that we're in a worktree-enabled repository
+validate_worktree_repo() {
+    if ! is_worktree_repo; then
+        echo ""
+        error "This repository is not using worktrees yet.
+
+Initialize it first with:
+    ${0} --init
+
+Or if you're in a worktree subdirectory, navigate to a worktree root."
+    fi
+}
+
+# Detect the primary branch name (main, master, or development)
+detect_primary_branch() {
+    local main_worktree="$1"
+
+    # Try to detect from current branch of main worktree
+    local current_branch
+    current_branch=$(git -C "$main_worktree" rev-parse --abbrev-ref HEAD 2>/dev/null) || true
+
+    # Check if it's one of the common primary branch names
+    if [[ "$current_branch" =~ ^(main|master|development)$ ]]; then
+        echo "$current_branch"
+        return
+    fi
+
+    # Otherwise, check which of these branches exist
+    for branch in main master development; do
+        if git -C "$main_worktree" rev-parse --verify "$branch" >/dev/null 2>&1; then
+            echo "$branch"
+            return
+        fi
+    done
+
+    # Fallback to current branch - but if HEAD lookup itself failed and no
+    # standard primary branch exists either, there's nothing usable to base
+    # a new worktree's branch on, so fail loudly instead of handing back "".
+    if [ -z "$current_branch" ]; then
+        error "Could not determine a base branch for worktree at '$main_worktree' (HEAD lookup failed and none of main/master/development exist)"
+    fi
+    echo "$current_branch"
+}
+
+# ============================================================================
+# Shortcut Integration
+# ============================================================================
+
+# Read a key from .start-ticket.conf — the same per-repo config start-ticket.sh
+# uses, so `label_noise=` is set once and both tools honor it. In a worktree
+# the file lives in the MAIN repo root, so check that as well as the cwd's
+# toplevel. Prints nothing (rc 0) when unset; callers treat empty as "default".
+wm_conf_get() {  # <key> → value, or empty
+    local key="$1" f v top common main_root=""
+    top="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+    common="$(git rev-parse --git-common-dir 2>/dev/null || true)"
+    if [ -n "$common" ]; then
+        common="$(cd -P "$common" 2>/dev/null && pwd)" && main_root="$(dirname "$common")" || main_root=""
+    fi
+    for f in "${top:-/nonexistent}/.start-ticket.conf" \
+             "${main_root:-/nonexistent}/.start-ticket.conf" \
+             "$HOME/.config/start-ticket/config"; do
+        [ -f "$f" ] || continue
+        v="$(sed -n "s/^${key}=//p" "$f" | head -1)"
+        [ -n "$v" ] && { printf '%s' "$v"; return 0; }
+    done
+    return 0
+}
+
+# Fetch ticket details from Shortcut and generate branch name
+fetch_shortcut_ticket() {
+    local ticket_id="$1"
+
+    # Check if short CLI is available
+    if ! command -v short >/dev/null 2>&1; then
+        error "'short' CLI not found. Install with: brew install short"
+    fi
+
+    info "Fetching Shortcut ticket #${ticket_id}..."
+
+    # Get the git branch name format from Shortcut. `--git-branch-short` works by
+    # literally checking the branch out in the current git repo — so run it inside
+    # a throwaway repo, not the user's. Otherwise it hijacks whatever branch the
+    # invoking worktree has checked out. The throwaway repo needs an `origin`
+    # remote pointing at the real repo and at least one commit, or `short`
+    # silently skips the checkout and never prints the branch name.
+    local branch_name
+    local scratch
+    scratch=$(mktemp -d)
+    git -C "$scratch" init -q -b main
+    git -C "$scratch" remote add origin "$(git remote get-url origin 2>/dev/null || echo https://example.invalid/x.git)"
+    git -C "$scratch" commit -q --allow-empty -m scratch
+    # The checkout result line goes to stderr (and is CLI-version-fragile), so
+    # don't parse CLI text at all — read the checked-out branch from the scratch
+    # repo's git state.
+    (cd "$scratch" && short story "$ticket_id" --git-branch-short --quiet >/dev/null 2>&1 || true)
+    branch_name=$(git -C "$scratch" branch --show-current 2>/dev/null || true)
+    [ "$branch_name" = "main" ] && branch_name=""    # checkout never happened
+    rm -rf "$scratch"
+
+    if [ -z "$branch_name" ]; then
+        # Fallback: try to construct it manually
+        branch_name="sc-${ticket_id}"
+        warning "Could not auto-generate branch name, using: $branch_name"
+    fi
+
+    # Shortcut generates branch names as {username}/{ticket}/{slug} (e.g.
+    # evandorn4181/sc-74085/fix-thing). Strip the username segment so branch
+    # and worktree dir names start at the ticket id. Only strip when the
+    # middle segment is exactly a numeric ticket id (sc-<digits>) AND the
+    # first segment isn't a conventional prefix, so feature/sc-...,
+    # fix/sc-..., and non-ticket slugs like sc-foo1 survive.
+    case "$branch_name" in
+        feature/*|fix/*|chore/*|bug/*|hotfix/*|refactor/*|docs/*|test/*|release/*)
+            ;;
+        *)
+            if [[ "$branch_name" =~ ^[^/]+/sc-[0-9]+/[^/]+$ ]]; then
+                local stripped="${branch_name#*/}"
+                info "Stripping username prefix from branch name: $branch_name -> $stripped"
+                branch_name="$stripped"
+            fi
+            ;;
+    esac
+
+    # Replace Shortcut's slug with one distilled from the ticket title.
+    #
+    # Shortcut builds its slug by lowercasing and hyphenating the WHOLE title,
+    # bracketed track tags included, then truncating to a fixed width — so
+    # "[A/L] Decide PERS data deletion & retention policy (...)" arrives as
+    # "-a-l--decide-pers-data-deletio": leading junk, and the one word that
+    # identifies the ticket cut in half. Everything downstream (worktree dir,
+    # agent-view row) inherits that. Distilling the title instead yields
+    # "data-deletion-retention-policy". See gt::slug_title in lib/repo-facts.sh.
+    #
+    # Only the slug segment changes; the sc-<id> segment is preserved exactly,
+    # which is what Shortcut matches branches to stories on.
+    # $GT_LABEL_OVERRIDE, when a caller set one, wins over both — see
+    # gt::label_from_title. It is sanitized there, not trusted, because it
+    # lands in a branch name.
+    local title slug
+    GT_LABEL_NOISE="${GT_LABEL_NOISE:-$(wm_conf_get label_noise)}"
+    title="$(short story "$ticket_id" --quiet 2>/dev/null \
+             | awk 'match($0,/^[Nn]ame:[[:space:]]*/){print substr($0,RLENGTH+1);exit}')" || title=""
+    if [ -n "$title" ] || [ -n "${GT_LABEL_OVERRIDE:-}" ]; then
+        slug="$(gt::slug_title "$title")"
+        if [ -n "$slug" ] && [[ "$branch_name" =~ ^(.*)(sc-[0-9]+)/.+$ ]]; then
+            local rebuilt="${BASH_REMATCH[1]}${BASH_REMATCH[2]}/${slug}"
+            if [ "$rebuilt" != "$branch_name" ]; then
+                info "Branch name from ticket title: $branch_name -> $rebuilt"
+                branch_name="$rebuilt"
+            fi
+        fi
+    fi
+
+    echo "$branch_name"
+}
+
+# Fetch and save ticket details to markdown file
+save_ticket_details() {
+    local ticket_id="$1"
+    local worktree_path="$2"
+    local ticket_file="${worktree_path}/${TICKET_FILE}"
+
+    info "Fetching ticket details..."
+
+    # Fetch full story details
+    local story_output
+    story_output=$(short story "$ticket_id" --quiet 2>/dev/null || echo "")
+
+    if [ -z "$story_output" ]; then
+        warning "Could not fetch ticket details for #${ticket_id}"
+        return
+    fi
+
+    # Save to file
+    {
+        echo "# Shortcut Story #${ticket_id}"
+        echo ""
+        echo "Fetched: $(date '+%Y-%m-%d %H:%M:%S')"
+        echo ""
+        echo "---"
+        echo ""
+        echo "$story_output"
+    } > "$ticket_file"
+
+    success "Saved ticket details to ${TICKET_FILE}"
+}
+
+# ============================================================================
+# Worktree and Branch Detection
+# ============================================================================
+
+# Interactive branch/worktree selector using fzf
+select_branch_interactive() {
+    # Check if fzf is available
+    if ! command -v fzf >/dev/null 2>&1; then
+        error "fzf not found. Install with: brew install fzf"
+    fi
+
+    info "Loading branches and worktrees..."
+
+    # Build a list of worktrees with their branches
+    local worktrees_list=""
+    worktrees_list=$(git worktree list --porcelain | awk '
+        /^worktree / { path = substr($0, 10) }
+        /^branch / {
+            branch = substr($0, 8)
+            gsub(/^refs\/heads\//, "", branch)
+            printf "[worktree] %s\n", branch
+        }
+    ')
+
+    # Get all local branches not in worktrees
+    local local_branches=""
+    local_branches=$(git branch --format='%(refname:short)' | while read -r branch; do
+        if ! echo "$worktrees_list" | grep -q "\\[worktree\\] $branch"; then
+            echo "[local] $branch"
+        fi
+    done)
+
+    # Get remote branches not in local or worktrees
+    local remote_branches=""
+    remote_branches=$(git branch -r --format='%(refname:short)' | grep '^origin/' | sed 's|^origin/||' | while read -r branch; do
+        # Skip HEAD and branches that exist locally or in worktrees
+        if [ "$branch" = "HEAD" ]; then
+            continue
+        fi
+        if ! echo "$worktrees_list" | grep -q "\\[worktree\\] $branch"; then
+            if ! git show-ref --verify --quiet "refs/heads/$branch"; then
+                echo "[remote] $branch"
+            fi
+        fi
+    done)
+
+    # Combine and present with fzf
+    {
+        echo "$worktrees_list"
+        echo "$local_branches"
+        echo "$remote_branches"
+    } | fzf \
+        --prompt="Select branch or worktree: " \
+        --height=50% \
+        --border \
+        --preview="echo {} | sed 's/^\[[^]]*\] //' | xargs -I@ sh -c 'git log --oneline --graph --color=always -10 @ 2>/dev/null || echo \"Branch: @\"'" \
+        --preview-window=right:50% | sed 's/^\[[^]]*\] //'
+}
+
+# Find a branch for this ticket under ANY slug, or empty.
+#
+# The slug is no longer stable across runs: it is derived from the ticket title
+# (gt::slug_title), so editing the title, changing `label_noise=`, or supplying
+# $GT_LABEL_OVERRIDE on one run but not the next all move it. Matching on the
+# full branch name would then read a retitled ticket as a brand-new branch and
+# build a SECOND worktree beside the first. Before this became title-derived the
+# slug came from Shortcut and never moved, so nothing needed to handle it.
+#
+# The sc-<id> segment is the part deliberately held stable (Shortcut matches
+# stories to branches on it), so that is what we key on. Prints the first match
+# from refs/heads; worktrees are then located by that branch name as usual.
+find_ticket_branch() {  # <ticket-id> → branch name, or empty
+    local id="$1"
+    [ -n "$id" ] || return 0
+    git for-each-ref --format='%(refname:short)' refs/heads 2>/dev/null \
+        | grep -E "(^|/)sc-${id}(/|\$)" \
+        | head -1 || true
+}
+
+# Check if a worktree already exists for the given branch
+find_existing_worktree() {
+    local branch_name="$1"
+
+    # Get all worktrees and their branches
+    git worktree list --porcelain | awk '
+        /^worktree / { path = substr($0, 10) }
+        /^branch / {
+            branch = substr($0, 8)
+            gsub(/^refs\/heads\//, "", branch)
+            if (branch == "'"$branch_name"'") {
+                print path
+                exit
+            }
+        }
+    '
+}
+
+# Check if branch exists and return its status
+check_branch_exists() {
+    local branch_name="$1"
+
+    # Check for existing worktree first
+    if git worktree list --porcelain | grep -q "branch refs/heads/$branch_name"; then
+        echo "worktree"
+        return 0
+    fi
+
+    # Check local branches
+    if git show-ref --verify --quiet "refs/heads/$branch_name"; then
+        echo "local"
+        return 0
+    fi
+
+    # Check remote branches
+    if git show-ref --verify --quiet "refs/remotes/origin/$branch_name"; then
+        echo "remote"
+        return 0
+    fi
+
+    echo "none"
+    return 1
+}
+
+# ============================================================================
+# Worktree Creation
+# ============================================================================
+
+create_or_use_worktree() {
+    local branch_name="$1"
+    local base_branch="$2"
+    local main_worktree="$3"
+    local is_new_worktree=true
+
+    # Determine project root (parent of main worktree)
+    local project_root
+    project_root=$(dirname "$main_worktree")
+
+    # Sanitize branch name for directory (replace slashes with dashes)
+    local dir_name
+    dir_name=$(echo "$branch_name" | sed 's/\//-/g')
+
+    local worktree_path="${project_root}/${dir_name}"
+
+    # Check branch/worktree existence. check_branch_exists legitimately
+    # returns 1 for the "none" status (branch doesn't exist yet) - under
+    # set -e, capturing that via a bare assignment would kill the script
+    # right here, which is exactly the common case of creating a new branch.
+    local branch_status
+    branch_status=$(check_branch_exists "$branch_name") || true
+
+    case "$branch_status" in
+        worktree)
+            # Worktree already exists for this branch
+            local existing_path
+            existing_path=$(find_existing_worktree "$branch_name")
+            info "Worktree already exists for branch '$branch_name'"
+            echo -e "${CYAN}Location:${NC} ${existing_path}" >&2
+            echo "$existing_path"
+            is_new_worktree=false
+            return 0
+            ;;
+        local)
+            # Branch exists locally, create worktree from it
+            info "Branch '$branch_name' exists locally, creating worktree..."
+            git worktree add "$worktree_path" "$branch_name" 1>&2 \
+                || error "git worktree add failed for branch '$branch_name'"
+            ;;
+        remote)
+            # Branch exists on remote, check it out
+            info "Branch '$branch_name' exists on remote, creating worktree..."
+            git worktree add "$worktree_path" -b "$branch_name" "origin/$branch_name" 1>&2 \
+                || error "git worktree add failed for branch '$branch_name' from 'origin/$branch_name'"
+            ;;
+        none)
+            # Create new branch
+            info "Creating new branch '$branch_name' from '$base_branch'..."
+            git worktree add "$worktree_path" -b "$branch_name" "$base_branch" 1>&2 \
+                || error "git worktree add failed for new branch '$branch_name' from '$base_branch'"
+            ;;
+    esac
+
+    # git worktree add can print a fatal error yet still be masked by callers
+    # capturing this function's output via command substitution (see the
+    # inherit_errexit note near the top) - so don't trust its exit status
+    # alone, confirm the directory actually exists before declaring success.
+    [ -d "$worktree_path" ] || error "Worktree directory was not created: $worktree_path"
+
+    success "Worktree ready"
+    echo "$worktree_path"
+}
+
+# ============================================================================
+# Configuration Sync (symlink / copy of gitignored paths)
+# ============================================================================
+
+# Paths seeded into every new worktree regardless of project. Each entry is a
+# directive in the same format as the per-project manifest (see below):
+#   <link|copy> <relative-path> [--exclude <subpath>]...
+WORKTREE_SYNC_DEFAULTS=(
+    "link docs/local/"
+)
+
+# Per-project manifest, read from the main worktree root if present. Lets a
+# repo declare extra gitignored paths to seed into new worktrees (build caches,
+# tool state) without hardcoding anything project-specific in this script.
+# Format, one directive per line, '#' starts a comment. Tokens follow shell
+# quoting, so a path containing spaces goes in quotes:
+#   link  <path>               symlink (single source of truth; secrets, shared config)
+#   copy  <path> [--exclude s]  rsync a private copy (per-branch caches; mono dirs, etc.)
+#   copy  "my build dir"        quote paths with spaces
+WORKTREE_SYNC_FILE=".worktree-sync"
+
+# Split one manifest directive into tokens, honoring shell quoting (so quoted
+# paths with spaces survive). `xargs` does POSIX word-splitting without glob
+# expansion or command substitution; on a quoting error it is skipped upstream.
+tokenize_directive() {  # <directive>  -> one token per line on stdout
+    printf '%s' "$1" | xargs -n1 printf '%s\n' 2>/dev/null
+}
+
+# Sync one gitignored path from the main worktree into the new worktree at the
+# same relative location. Reads $main_worktree / $worktree_path / $synced /
+# $failed from the caller's scope (bash dynamic scoping). Returns without acting
+# if the source is missing, is tracked by git, or the destination already
+# exists. A copy/link/mkdir failure is counted in $failed and skipped, never
+# fatal.
+#   sync_path <link|copy> <relpath> [--exclude <subpath>]...
+sync_path() {
+    # A malformed manifest line (e.g. a lone token) would otherwise make the
+    # `shift 2` below fail, and under `set -e` that aborts the whole run after
+    # the worktree already exists. Skip it with a warning instead.
+    if [ $# -lt 2 ]; then
+        warning "sync_path: ignoring malformed directive '$*' (expected '<link|copy> <path>')"
+        return 0
+    fi
+    local mode="$1" relpath="$2"
+    shift 2
+
+    # Normalize: drop any trailing slashes so dirname/ln/rsync behave.
+    while [ "${relpath%/}" != "$relpath" ]; do relpath="${relpath%/}"; done
+
+    local excludes=()
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --exclude) excludes+=("$2"); shift 2 ;;
+            *) warning "sync_path: ignoring unknown argument '$1'"; shift ;;
+        esac
+    done
+
+    # --exclude only means anything to rsync, i.e. copy mode. Warn rather than
+    # silently pretend a linked tree had a subpath held back.
+    if [ "$mode" != copy ] && [ ${#excludes[@]} -gt 0 ]; then
+        warning "sync_path: --exclude is ignored for '$mode' mode ('$relpath')"
+        excludes=()
+    fi
+
+    local src="$main_worktree/$relpath"
+    local dst="$worktree_path/$relpath"
+
+    [ -e "$src" ] || return 0
+
+    # Never shadow a version-controlled file with a symlink/copy.
+    if is_tracked "$src"; then
+        warning "Skipping '$relpath' (tracked by git)"
+        return 0
+    fi
+
+    # Respect anything git already placed in the new worktree.
+    if [ -e "$dst" ] || [ -L "$dst" ]; then
+        return 0
+    fi
+
+    # From here on, a failure is reported and counted but never aborts the run:
+    # the worktree already exists, and the remaining setup (other paths,
+    # dependency install, ticket file) should still get a chance to complete.
+    if ! mkdir -p "$(dirname "$dst")"; then
+        warning "Could not create parent directory for '$relpath' - skipping"
+        failed=$((failed + 1))
+        return 0
+    fi
+
+    case "$mode" in
+        link)
+            if ln -s "$src" "$dst"; then
+                success "Symlinked $relpath"
+            else
+                warning "Could not symlink '$relpath' - skipping"
+                failed=$((failed + 1))
+                return 0
+            fi
+            ;;
+        copy)
+            local ok=1
+            if [ -d "$src" ]; then
+                local rsync_args=(-a) ex
+                for ex in "${excludes[@]}"; do
+                    rsync_args+=(--exclude "$ex")
+                done
+                # Trailing slashes: copy the directory's contents into dst.
+                rsync "${rsync_args[@]}" "$src/" "$dst/" || ok=0
+            else
+                cp -p "$src" "$dst" || ok=0
+            fi
+            if [ "$ok" -eq 0 ]; then
+                warning "Could not copy '$relpath' - skipping"
+                failed=$((failed + 1))
+                return 0
+            fi
+            if [ ${#excludes[@]} -gt 0 ]; then
+                success "Copied $relpath (excluding ${excludes[*]})"
+            else
+                success "Copied $relpath"
+            fi
+            ;;
+        *)
+            warning "sync_path: unknown mode '$mode' for '$relpath'"
+            return 0
+            ;;
+    esac
+
+    synced=$((synced + 1))
+}
+
+# Emit the per-project sync manifest (if any) one directive per line, with
+# comments and blank lines stripped.
+read_sync_manifest() {
+    local manifest="$main_worktree/$WORKTREE_SYNC_FILE"
+    [ -f "$manifest" ] || return 0
+
+    local line
+    while IFS= read -r line || [ -n "$line" ]; do
+        line="${line%%#*}"
+        # Trim surrounding whitespace.
+        line="${line#"${line%%[![:space:]]*}"}"
+        line="${line%"${line##*[![:space:]]}"}"
+        [ -n "$line" ] || continue
+        echo "$line"
+    done < "$manifest"
+}
+
+sync_configuration() {
+    local main_worktree="$1"
+    local worktree_path="$2"
+
+    info "Setting up configuration..."
+
+    local synced=0
+    local failed=0
+
+    # .env* files, discovered via git's own ignored-file list so nested secrets
+    # (src/apps/frontend/.env.local) are caught too. Always symlinked so
+    # rotating a secret updates every worktree at once with no drift.
+    local envfiles
+    envfiles=$(git -C "$main_worktree" ls-files --others --ignored --exclude-standard -- '.env*' '**/.env*' 2>/dev/null || true)
+    if [ -n "$envfiles" ]; then
+        local relpath
+        while IFS= read -r relpath; do
+            [ -n "$relpath" ] || continue
+            sync_path link "$relpath"
+        done <<< "$envfiles"
+    fi
+
+    # .claude/: the whole directory if it's untracked, otherwise just an
+    # untracked settings.local.json inside a tracked directory.
+    if [ -d "$main_worktree/.claude" ]; then
+        if ! is_tracked "$main_worktree/.claude"; then
+            sync_path link ".claude"
+        elif [ -f "$main_worktree/.claude/settings.local.json" ]; then
+            sync_path link ".claude/settings.local.json"
+        fi
+    fi
+
+    # Built-in defaults, then any per-project .worktree-sync directives. Each
+    # line is tokenized (respecting quotes) into (mode, path, flags) for
+    # sync_path.
+    local directive
+    while IFS= read -r directive; do
+        [ -n "$directive" ] || continue
+        local parts=() tok
+        while IFS= read -r tok; do
+            parts+=("$tok")
+        done < <(tokenize_directive "$directive")
+        if [ ${#parts[@]} -eq 0 ]; then
+            warning "sync: could not parse manifest line: $directive"
+            failed=$((failed + 1))
+            continue
+        fi
+        sync_path "${parts[@]}"
+    done < <(
+        printf '%s\n' "${WORKTREE_SYNC_DEFAULTS[@]}"
+        read_sync_manifest
+    )
+
+    if [ "$synced" -eq 0 ] && [ "$failed" -eq 0 ]; then
+        warning "No configuration files found to sync"
+    fi
+    if [ "$failed" -gt 0 ]; then
+        warning "${failed} configuration path(s) could not be synced (see above) - worktree is otherwise ready"
+    fi
+}
+
+# ============================================================================
+# Dependency Installation
+# ============================================================================
+
+install_dependencies() {
+    local worktree_path="$1"
+
+    # Check for package.json
+    if [ ! -f "$worktree_path/package.json" ]; then
+        return
+    fi
+
+    # Check if node_modules already exists
+    if [ -d "$worktree_path/node_modules" ]; then
+        warning "node_modules already exists, skipping installation"
+        return
+    fi
+
+    info "Installing dependencies..."
+
+    # Detect package manager
+    local pm="npm"
+    if [ -f "$worktree_path/yarn.lock" ]; then
+        pm="yarn"
+    elif [ -f "$worktree_path/pnpm-lock.yaml" ]; then
+        pm="pnpm"
+    fi
+
+    # Run installation
+    (cd "$worktree_path" && $pm install)
+    success "Dependencies installed with $pm"
+}
+
+# ============================================================================
+# Help
+# ============================================================================
+
+show_help() {
+    cat <<EOF
+worktree-manager.sh - Create and configure git worktrees with automatic setup
+
+Usage:
+  worktree-manager.sh --init                             Convert regular repo to worktree structure
+  worktree-manager.sh [--claude]                         Interactive mode: select branch with fzf
+  worktree-manager.sh [--claude] <branch-name>           Create worktree with arbitrary branch name
+  worktree-manager.sh [--claude] --sc <ticket-id>        Create worktree from Shortcut ticket
+  worktree-manager.sh --help                             Show this help message
+
+Aliases (when shell module is loaded):
+  wm          worktree-manager.sh
+  wms         worktree-manager.sh --sc
+  wmc         worktree-manager.sh --claude
+  wmsc        worktree-manager.sh --claude --sc
+
+Options:
+  --init          Convert a regular git repository into worktree structure
+  --claude        Open Claude Code in the worktree after setup
+  --sc <id>       Use Shortcut ticket ID to fetch branch name and details
+  --help, -h      Show this help message
+
+Examples:
+  wm --init                   Initialize worktree structure (run in repo root)
+  wm                          Interactive: select from branches/worktrees
+  wmc                         Interactive + open Claude
+  wm feature/add-login        Create specific branch
+  wms 65682                   Create from Shortcut ticket
+  wmsc 65682                  Shortcut + open Claude
+
+New worktrees are seeded with gitignored config:
+  .env* and .claude/           symlinked (single source of truth)
+  docs/local/                  symlinked
+  .worktree-sync (repo root)   per-project manifest of extra paths, one directive per line
+                               (tokens follow shell quoting; quote paths with spaces):
+                                 link <path>               symlink it
+                                 copy <path> [--exclude s]  rsync a private per-branch copy
+
+Removing a worktree (not handled by this script):
+  git worktree remove <path>
+  git branch -d <branch-name>
+EOF
+}
+
+# ============================================================================
+# Main
+# ============================================================================
+
+main() {
+    local branch_name=""
+    local ticket_id=""
+    local use_shortcut=false
+    local open_claude=false
+    local interactive_mode=false
+
+    # Parse arguments
+    if [ $# -eq 0 ]; then
+        # No arguments - enter interactive mode
+        interactive_mode=true
+    else
+        # Check for --help/-h first so it works regardless of other flags
+        if [ "$1" = "--help" ] || [ "$1" = "-h" ]; then
+            show_help
+            exit 0
+        fi
+
+        # Check for --init flag first
+        if [ "$1" = "--init" ]; then
+            init_worktree_structure
+            exit 0
+        fi
+
+        # Check for --claude flag
+        if [ "$1" = "--claude" ]; then
+            open_claude=true
+            shift
+        fi
+
+        # Check if we still have arguments after consuming --claude
+        if [ $# -eq 0 ]; then
+            interactive_mode=true
+        elif [ "$1" = "--sc" ]; then
+            if [ -z "${2:-}" ]; then
+                error "Shortcut ticket ID required after --sc"
+            fi
+            use_shortcut=true
+            ticket_id="$2"
+        else
+            branch_name="$1"
+        fi
+    fi
+
+    # Validate that we're in a worktree-enabled repository
+    validate_worktree_repo
+
+    # Find main worktree
+    local main_worktree
+    main_worktree=$(find_main_worktree)
+    info "Main worktree: ${main_worktree}"
+
+    # Detect primary branch for base
+    local base_branch
+    base_branch=$(detect_primary_branch "$main_worktree")
+    info "Base branch: ${base_branch}"
+
+    # Interactive mode - let user select branch
+    if [ "$interactive_mode" = true ]; then
+        branch_name=$(select_branch_interactive)
+        if [ -z "$branch_name" ]; then
+            error "No branch selected"
+        fi
+        info "Selected: ${branch_name}"
+    # If using Shortcut, fetch the branch name
+    elif [ "$use_shortcut" = true ]; then
+        branch_name=$(fetch_shortcut_ticket "$ticket_id")
+        info "Branch name: ${branch_name}"
+    else
+        info "Branch name: ${branch_name}"
+    fi
+
+    # Reuse an existing branch for this ticket even if its slug differs from the
+    # one we just derived — see find_ticket_branch. Renaming the branch to match
+    # a retitled ticket would be worse than keeping the old name: the worktree
+    # directory, any open PR, and the user's shell history all refer to it.
+    # Not in interactive mode: there the user picked a branch by hand, and a
+    # deliberate selection must outrank a slug match on the same ticket id.
+    if [ "$use_shortcut" = true ] && [ "$interactive_mode" != true ] && [ -n "$ticket_id" ]; then
+        local existing_branch
+        existing_branch=$(find_ticket_branch "$ticket_id")
+        if [ -n "$existing_branch" ] && [ "$existing_branch" != "$branch_name" ]; then
+            info "Ticket sc-${ticket_id} already has branch '$existing_branch' — reusing it"
+            info "(the title now distills to '$branch_name'; not renaming)"
+            branch_name="$existing_branch"
+        fi
+    fi
+
+    # Check if worktree already exists (see the note on check_branch_exists's
+    # "none" return status in create_or_use_worktree for why `|| true` matters)
+    local branch_status
+    branch_status=$(check_branch_exists "$branch_name") || true
+
+    local worktree_path
+    local is_existing=false
+
+    if [ "$branch_status" = "worktree" ]; then
+        # Worktree already exists, just return its path
+        is_existing=true
+        worktree_path=$(find_existing_worktree "$branch_name")
+        info "Worktree already exists for branch '$branch_name'"
+
+        # Still save/update ticket details if using Shortcut
+        if [ "$use_shortcut" = true ]; then
+            save_ticket_details "$ticket_id" "$worktree_path"
+        fi
+    else
+        # Create or checkout worktree
+        worktree_path=$(create_or_use_worktree "$branch_name" "$base_branch" "$main_worktree")
+
+        # Only do setup for newly created worktrees
+        sync_configuration "$main_worktree" "$worktree_path"
+        install_dependencies "$worktree_path"
+
+        # Save ticket details if using Shortcut
+        if [ "$use_shortcut" = true ]; then
+            save_ticket_details "$ticket_id" "$worktree_path"
+        fi
+    fi
+
+    # Final output
+    echo ""
+    if [ "$is_existing" = true ]; then
+        echo -e "${CYAN}${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+        echo -e "${CYAN}${BOLD}  Existing worktree found${NC}"
+        echo -e "${CYAN}${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    else
+        echo -e "${GREEN}${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+        echo -e "${GREEN}${BOLD}  Worktree ready!${NC}"
+        echo -e "${GREEN}${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    fi
+    echo ""
+    echo -e "${CYAN}Location:${NC} ${worktree_path}"
+    echo -e "${CYAN}Branch:${NC}   ${branch_name}"
+    echo ""
+
+    # Open Claude if requested
+    if [ "$open_claude" = true ]; then
+        info "Opening Claude Code..."
+        (cd "$worktree_path" && claude >/dev/null 2>&1 &)
+        success "Claude Code launched"
+        if [ "$use_shortcut" = true ]; then
+            echo -e "${YELLOW}Note:${NC} Review ${TICKET_FILE} for ticket details in Claude"
+        fi
+    else
+        echo -e "${YELLOW}Next steps:${NC}"
+        echo -e "  cd ${worktree_path}"
+        echo -e "  claude"
+        if [ "$use_shortcut" = true ]; then
+            echo -e "  # Review ${TICKET_FILE} for ticket details"
+        fi
+    fi
+    echo ""
+
+    # Print path for scripting use
+    echo "$worktree_path"
+}
+
+main "$@"
