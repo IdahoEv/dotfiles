@@ -33,7 +33,7 @@ For repos you don't own, or whose config must not reach a public remote. A per-m
 
 ```
 $GIT_TOOLS_PROJECTS_DIR (default ~/.config/git-tools/projects)/<owner>/<repo>/
-  governor.md  kickoff-preamble.md  start-ticket.conf
+  governor.md  kickoff-preamble.md  start-ticket.conf   (init scaffolds governor.md and start-ticket.conf; create the preamble when you have one)
 ```
 
 | File | Lookup order (first hit wins) |

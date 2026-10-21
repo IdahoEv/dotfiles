@@ -35,6 +35,8 @@ cmd_init() {
   local root t name dest
   root="$(gt::projects_root)"
   mkdir -p "$OVERLAY"
+  # No kickoff-preamble template: an empty one is indistinguishable from real
+  # config once copied. Create the file when there is something to say.
   for t in "$SCRIPT_DIR"/project-config-templates/*; do
     name="$(basename "$t")"; dest="$OVERLAY/$name"
     if [ -e "$dest" ]; then echo "exists   $dest"; else cp "$t" "$dest"; echo "created  $dest"; fi

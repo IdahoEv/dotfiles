@@ -296,8 +296,9 @@ gt::projects_root() {
   printf '%s' "${GIT_TOOLS_PROJECTS_DIR:-$HOME/.config/git-tools/projects}"
 }
 
-# <owner>/<repo> from an origin URL: ssh (git@host:o/r.git), scp-less ssh://,
-# and https forms, with a trailing .git stripped. Nothing for an unparseable URL.
+# <owner>/<repo> (or <group>/<sub>/<repo>) from an origin URL: scp-style ssh,
+# ssh:// and https forms, trailing .git stripped. The host is not part of the key.
+# Nothing for an unparseable URL.
 gt::repo_key() {  # <url> → "owner/repo", or nothing
   local u="${1%/}" path
   u="${u%.git}"
@@ -306,8 +307,11 @@ gt::repo_key() {  # <url> → "owner/repo", or nothing
     *:*)   path="${u#*:}" ;;                        # scp-style: host:owner/repo
     *)     return 0 ;;
   esac
-  [[ "$path" =~ ^([^/]+)/([^/]+)$ ]] || return 0
-  printf '%s/%s' "${BASH_REMATCH[1]}" "${BASH_REMATCH[2]}"
+  # Two or more segments (GitLab subgroups nest); a leading-dot segment would let
+  # a hostile or typo'd remote ("../r") point the overlay outside the root.
+  [[ "$path" =~ ^[^/]+(/[^/]+)+$ ]] || return 0
+  [[ "/$path" == */.* ]] && return 0
+  printf '%s' "$path"
 }
 
 # Overlay directory for the repo containing <dir>; nothing without an origin.

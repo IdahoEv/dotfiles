@@ -37,6 +37,9 @@ check "key: https bare"    "o/r" "$(gt::repo_key https://github.com/o/r)"
 check "key: ssh://"        "o/r" "$(gt::repo_key ssh://git@host:22/o/r.git)"
 check "key: trailing /"    "o/r" "$(gt::repo_key https://github.com/o/r/)"
 check "key: local path"    ""    "$(gt::repo_key /srv/git/r.git)"
+check "key: subgroups"     "g/sub/r" "$(gt::repo_key https://gitlab.com/g/sub/r.git)"
+check "key: .. rejected"   ""    "$(gt::repo_key 'git@h:../r')"
+check "key: dot dir rejected" "" "$(gt::repo_key 'git@h:o/.hidden')"
 
 # ---- fixture: repo with origin, plus a linked worktree -------------------------
 git init -q "$ROOT/repo"

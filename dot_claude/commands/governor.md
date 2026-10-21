@@ -48,7 +48,8 @@ this command can't know: the people involved, the planning docs, the tracker, th
 repos, the adjacent systems, and any project-specific standing responsibilities.
 
 **If it exits non-zero**, say so and offer `project-config.sh init`, which scaffolds a
-`governor.md` template in the overlay (never in the repo). Governing without it means
+`governor.md` template in the overlay (never in the repo). A file that still holds the
+template's `<name> — <one line…>` placeholders is unfilled: say so and help fill it in. Governing without it means
 guessing at the tracker and the team.
 
 Also read the repo's `CLAUDE.md` for layout and conventions. Prefer `governor.md`
