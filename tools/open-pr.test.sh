@@ -1,0 +1,128 @@
+#!/usr/bin/env bash
+# open-pr.test.sh — behavioral checks for open-pr.sh provider resolution,
+# the github provider, and ticketless mode.
+#
+#   open-pr.test.sh
+#
+# Plain script, exits non-zero on failure (see lib/repo-facts.test.sh). `gh` is
+# a stub that records `pr create` args; git talks to a throwaway bare origin,
+# and HOME is a temp dir so ~/.config can't leak in.
+
+set -uo pipefail
+TOOLS="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+pass=0 fail=0
+
+check() {  # <description> <expected> <actual>
+  if [ "$2" = "$3" ]; then
+    pass=$((pass + 1))
+  else
+    fail=$((fail + 1))
+    printf 'FAIL %s\n  expected: [%s]\n  actual:   [%s]\n' "$1" "$2" "$3" >&2
+  fi
+}
+
+ROOT="$(mktemp -d "${TMPDIR:-/tmp}/open-pr-test.XXXXXX")"
+trap 'rm -rf "$ROOT"' EXIT
+export HOME="$ROOT/home"; mkdir -p "$HOME"
+mkdir -p "$ROOT/bin"
+export GH_LOG="$ROOT/gh.log"
+
+cat > "$ROOT/bin/gh" <<'STUB'
+#!/usr/bin/env bash
+case "$1 $2" in
+  "auth status") exit 0 ;;
+  "pr list")     exit 0 ;;
+  "pr create")
+    shift 2
+    while [ $# -gt 0 ]; do
+      case "$1" in
+        --title) printf '%s' "$2" > "$GH_LOG.title"; shift 2 ;;
+        --body)  printf '%s' "$2" > "$GH_LOG.body"; shift 2 ;;
+        --body-file) cp "$2" "$GH_LOG.body"; shift 2 ;;
+        *) shift ;;
+      esac
+    done
+    echo created >> "$GH_LOG" ;;
+  "pr view")
+    case "$*" in
+      *number*) echo 1 ;;
+      *url*)    echo https://example.test/pr/1 ;;
+      *title*)  cat "$GH_LOG.title" ;;
+    esac ;;
+  *) echo "gh $*" >> "$GH_LOG" ;;
+esac
+STUB
+chmod +x "$ROOT/bin/gh"
+export PATH="$ROOT/bin:$PATH"
+
+# Fresh repo + origin on <branch>; leaves cwd inside it.
+new_repo() {  # <branch> [conf-contents]
+  rm -rf "$ROOT/origin.git" "$ROOT/repo" "$GH_LOG"*
+  git init -q --bare "$ROOT/origin.git"
+  git init -q -b main "$ROOT/repo"
+  cd "$ROOT/repo" || exit 1
+  git config user.email t@t; git config user.name t
+  git remote add origin "$ROOT/origin.git"
+  git commit -q --allow-empty -m init
+  git push -q origin main
+  git checkout -q -b "$1"
+  git commit -q --allow-empty -m work
+  [ -n "${2:-}" ] && printf '%s\n' "$2" > .start-ticket.conf
+  return 0
+}
+
+run() { "$TOOLS/open-pr.sh" "$@" 2>&1; }
+title() { cat "$GH_LOG.title"; }
+body()  { cat "$GH_LOG.body" 2>/dev/null; }
+
+# ---- github provider --------------------------------------------------------
+new_repo 42-foo
+out="$(run --title "Add foo" --review none)"
+check "github: default provider"      "provider=github" "$(grep '^provider=' <<<"$out")"
+check "github: plain title"           "Add foo" "$(title)"
+check "github: default body"          "Closes #42" "$(body)"
+
+printf 'Summary\n' > "$ROOT/b.md"
+new_repo 42-foo
+run --title "Add foo" --body-file "$ROOT/b.md" --review none >/dev/null
+check "github: footer appended"       "Closes #42" "$(body | tail -1)"
+new_repo 42-foo
+printf 'Summary\n\nCloses #42\n' > "$ROOT/b.md"
+run --title "Add foo" --body-file "$ROOT/b.md" --review none >/dev/null
+check "github: footer not duplicated" "1" "$(body | grep -c 'Closes #42')"
+
+new_repo 42-foo
+run --title "Add foo" --review copilot >/dev/null
+check "github: no review triggers"    "created" "$(cat "$GH_LOG")"
+
+# ---- ticketless -------------------------------------------------------------
+new_repo scratch
+out="$(run --title "Quick fix" --review none)"; rc=$?
+check "ticketless: exits 0"           "0" "$rc"
+check "ticketless: title as given"    "Quick fix" "$(title)"
+check "ticketless: empty body"        "" "$(body)"
+new_repo scratch
+printf 'Just a summary\n' > "$ROOT/b.md"
+run --title "Quick fix" --body-file "$ROOT/b.md" --review none >/dev/null
+check "ticketless: body untouched"    "Just a summary" "$(body)"
+new_repo scratch
+run --title "Quick fix" --issue 7 --review none >/dev/null
+check "--issue on unnumbered branch"  "Closes #7" "$(body)"
+
+# ---- provider resolution ----------------------------------------------------
+resolved() {  # <branch> <conf> [args…] → provider= line
+  local b="$1" c="$2"; shift 2
+  new_repo "$b" "$c"
+  run --title "T" --review none "$@" | sed -n 's/^provider=//p'
+}
+check "conf openpr_provider=kardashev" "kardashev" "$(resolved 42-foo 'openpr_provider=kardashev')"
+new_repo 42-foo 'openpr_provider=kardashev'; run --title "T" --review none >/dev/null
+check "kardashev: Is<NNN> title"       "Is42: T" "$(title)"
+check "kardashev: Closes body"         "Closes #42" "$(body)"
+check "start-ticket provider=github"   "github" "$(resolved 42-foo 'provider=github')"
+check "start-ticket provider=shortcut" "github" "$(resolved 42-foo 'provider=shortcut')"
+check "openpr_provider beats provider" "kardashev" "$(resolved 42-foo $'provider=github\nopenpr_provider=kardashev')"
+check "--provider beats conf"          "github" "$(resolved 42-foo 'openpr_provider=kardashev' --provider github)"
+
+printf '%d passed, %d failed\n' "$pass" "$fail"
+[ "$fail" -eq 0 ]
