@@ -280,3 +280,95 @@ gt::label_from_title() {  # <title> [<max-words>] → "Short Label Words"
   fi
   gt::distill_title "$1" "${2:-}"
 }
+
+# ---- per-project config -----------------------------------------------------
+# Config that belongs to ONE project but can't live in its repo (the author isn't
+# its owner, or it names things that must not reach a public remote) sits in a
+# per-machine overlay keyed by the origin remote:
+#
+#   $GIT_TOOLS_PROJECTS_DIR (default ~/.config/git-tools/projects)/<owner>/<repo>/
+#
+# Keyed by remote rather than checkout path, so every worktree of a repo — and a
+# fresh clone — resolves the same directory with nothing copied into it. The
+# projects root may itself be a git repo (project-config.sh store-init) pointed
+# at a remote that is private enough for the config.
+gt::projects_root() {
+  printf '%s' "${GIT_TOOLS_PROJECTS_DIR:-$HOME/.config/git-tools/projects}"
+}
+
+# <owner>/<repo> from an origin URL: ssh (git@host:o/r.git), scp-less ssh://,
+# and https forms, with a trailing .git stripped. Nothing for an unparseable URL.
+gt::repo_key() {  # <url> → "owner/repo", or nothing
+  local u="${1%/}" path
+  u="${u%.git}"
+  case "$u" in
+    *://*) path="${u#*://}"; path="${path#*/}" ;;   # drop scheme and host
+    *:*)   path="${u#*:}" ;;                        # scp-style: host:owner/repo
+    *)     return 0 ;;
+  esac
+  [[ "$path" =~ ^([^/]+)/([^/]+)$ ]] || return 0
+  printf '%s/%s' "${BASH_REMATCH[1]}" "${BASH_REMATCH[2]}"
+}
+
+# Overlay directory for the repo containing <dir>; nothing without an origin.
+# The directory itself may not exist yet — callers test for the files they want.
+gt::overlay_dir() {  # [<dir>] → path, or nothing
+  local url key
+  url="$(git -C "${1:-.}" remote get-url origin 2>/dev/null || true)"
+  [ -n "$url" ] || return 0
+  key="$(gt::repo_key "$url")"
+  [ -n "$key" ] || return 0
+  printf '%s/%s' "$(gt::projects_root)" "$key"
+}
+
+# The main checkout's root, even from a linked worktree. Nothing outside a repo.
+gt::main_root() {  # [<dir>] → path
+  local common
+  common="$(git -C "${1:-.}" rev-parse --git-common-dir 2>/dev/null || true)"
+  [ -n "$common" ] || return 0
+  [ "${common#/}" = "$common" ] && common="${1:-.}/$common"
+  common="$(cd -P "$common" 2>/dev/null && pwd)" || return 0
+  dirname "$common"
+}
+
+# Config files for the repo containing <dir>, highest precedence first:
+#   <toplevel>/.start-ticket.conf, <main-root>/.start-ticket.conf,
+#   <overlay>/start-ticket.conf, ~/.config/start-ticket/config
+gt::conf_files() {  # [<dir>] → one path per line
+  local dir="${1:-.}" top main ov
+  top="$(git -C "$dir" rev-parse --show-toplevel 2>/dev/null || true)"
+  main="$(gt::main_root "$dir")"
+  ov="$(gt::overlay_dir "$dir")"
+  [ -n "$top" ]  && printf '%s\n' "$top/.start-ticket.conf"
+  [ -n "$main" ] && printf '%s\n' "$main/.start-ticket.conf"
+  [ -n "$ov" ]   && printf '%s\n' "$ov/start-ticket.conf"
+  printf '%s\n' "$HOME/.config/start-ticket/config"
+}
+
+# First non-empty `key=` across gt::conf_files: per key, a committed repo file
+# beats the overlay, which beats the machine-wide file. rc 1 when unset.
+gt::conf_get() {  # <key> [<dir>] → value
+  local key="$1" f v
+  while IFS= read -r f; do
+    [ -f "$f" ] || continue
+    v="$(sed -n "s/^${key}=//p" "$f" | head -1)"
+    [ -n "$v" ] && { printf '%s' "$v"; return 0; }
+  done < <(gt::conf_files "${2:-.}")
+  return 1
+}
+
+# Whole-file docs (governor.md, kickoff-preamble.md): the repo's .claude/<name>
+# if present, else the overlay's <name>. No merging — a committed file replaces
+# the overlay's outright. Prints "<path><TAB><repo|overlay>"; rc 1 if neither.
+gt::find_doc() {  # <name> [<dir>] → "path\tsource"
+  local name="$1" dir="${2:-.}" top ov
+  top="$(git -C "$dir" rev-parse --show-toplevel 2>/dev/null || true)"
+  if [ -n "$top" ] && [ -f "$top/.claude/$name" ]; then
+    printf '%s\trepo' "$top/.claude/$name"; return 0
+  fi
+  ov="$(gt::overlay_dir "$dir")"
+  if [ -n "$ov" ] && [ -f "$ov/$name" ]; then
+    printf '%s\toverlay' "$ov/$name"; return 0
+  fi
+  return 1
+}

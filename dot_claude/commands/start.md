@@ -23,7 +23,7 @@ Read the title, write the session label yourself — see **Naming** — and expo
 `--no-tab`, so one decided afterwards is too late.
 
 Creates the worktree, marks the ticket in progress, and writes a kickoff from the repo's
-`.claude/kickoff-preamble.md` (which carries the project's working agreement, so this
+`.claude/kickoff-preamble.md`, else the per-project overlay's (which carries the project's working agreement, so this
 command doesn't). Prints parseable `key=value` on stdout — capture all of it:
 
 ```
