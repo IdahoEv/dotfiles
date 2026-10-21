@@ -31,7 +31,7 @@ cat > "$ROOT/bin/gh" <<'STUB'
 #!/usr/bin/env bash
 case "$1 $2" in
   "auth status") exit 0 ;;
-  "pr list")     exit 0 ;;
+  "pr list")     [ -n "${GH_EXISTING_PR:-}" ] && echo "$GH_EXISTING_PR"; exit 0 ;;
   "pr create")
     shift 2
     while [ $# -gt 0 ]; do
@@ -47,7 +47,7 @@ case "$1 $2" in
     case "$*" in
       *number*) echo 1 ;;
       *url*)    echo https://example.test/pr/1 ;;
-      *title*)  cat "$GH_LOG.title" ;;
+      *title*)  cat "$GH_LOG.title" 2>/dev/null || echo "existing title" ;;
     esac ;;
   *) echo "gh $*" >> "$GH_LOG" ;;
 esac
@@ -94,6 +94,12 @@ check "github: footer not duplicated" "1" "$(body | grep -c 'Closes #42')"
 new_repo 42-foo
 run --title "Add foo" --review copilot >/dev/null
 check "github: no review triggers"    "created" "$(cat "$GH_LOG")"
+check "github: warns review ignored"  "1" "$(run --title "Add foo" --review copilot | grep -c 'review triggers')"
+
+new_repo 42-foo
+out="$(GH_EXISTING_PR=9 run --review none)"
+check "existing PR reused, no title"  "pr_action=reused" "$(grep '^pr_action=' <<<"$out")"
+check "existing PR: nothing created"  "" "$(cat "$GH_LOG" 2>/dev/null)"
 
 # ---- ticketless -------------------------------------------------------------
 new_repo scratch

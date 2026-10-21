@@ -34,5 +34,6 @@ provider::pr_body_footer() {  # <issue> → "Closes #NNN", appended to a drafted
 }
 
 provider::trigger_reviews() {  # <pr_number> <level>
-  :
+  # Say so rather than silently dropping a requested review.
+  echo "open-pr: github provider has no review triggers; --review $2 ignored" >&2
 }
