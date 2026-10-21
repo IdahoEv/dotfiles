@@ -123,9 +123,12 @@ GitHub) running; `[REVIEWED]` / `[REVIEWED][PR]` = review finished; `[PR]` alone
 never reviewed. Review flows run `agent-phase.sh REVIEW` when a round starts and
 `agent-phase.sh --no-review` (REVIEW → REVIEWED) when review ends.
 
-**Review state line.** Once automated review has begun in a session (local cycle or PR
-bots), end *every* reply with the output of
+**Review state line.** When the current branch has an open PR, or you have run a local
+review round this session, end *every* reply with the output of
 `~/.claude/skills/review-comments/review-state.sh --local <N>[*]`, e.g.
 `Code Review Rounds: 2 local*, 1 Copilot`: completed rounds per type, `*` after a type
-whose round is running; Copilot and Coderabbit are omitted while at 0 and idle. `<N>` is your completed local rounds, with `*` while
-one is in flight. Paste the script's output; don't recompute it.
+whose round is running. `<N>` is your completed local rounds, with `*` while one is in
+flight. The script reads bot rounds from the PR and omits any reviewer with no completed
+or running round, so just run it — don't pre-judge whether there's anything to report,
+and don't gate on whether review happened *in this session*: that's memory, and it
+doesn't survive a restart or a compaction. Paste the script's output; don't recompute it.
