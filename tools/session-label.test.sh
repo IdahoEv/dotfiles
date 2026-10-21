@@ -60,6 +60,13 @@ case "$out" in *"mauve"*"start-ticket.conf"*|*"start-ticket.conf"*"mauve"*) r=ye
 check "--show rejects bad conf color, naming it" "yes" "$r"
 (cd "$ROOT/wt" && "$SL" --color project >/dev/null 2>&1); check "--color project rejects bad conf color" "1" "$?"
 check "state untouched by rejected color" "cyan" "$(state)"
+(cd "$ROOT/wt" && "$SL" --title "{project} Governor" --color project >/dev/null 2>&1); check "bad color still exits 1 with title" "1" "$?"
+check "title survives bad color" "widgets Governor" "$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["name"])' "$SESSION_LABEL_STATE_FILE")"
+
+printf 'color=green \r\n' > "$OV/start-ticket.conf"
+check "trailing space and CR trimmed" "green" "$(show)"
+printf 'color= \n' > "$OV/start-ticket.conf"
+check "blank conf value falls through to project-colors" "blue" "$(show)"
 
 printf 'widgets teal\n' > "$ROOT/project-colors"; rm "$OV/start-ticket.conf"
 (cd "$ROOT/wt" && "$SL" --color project >/dev/null 2>&1); check "bad project-colors entry still rejected" "1" "$?"

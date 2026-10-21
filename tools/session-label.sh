@@ -72,7 +72,9 @@ project_color() {  # <project> -> color or empty
 # --color project reject a typo the same way, naming the file to fix.
 resolve_color() {  # <project> -> color or empty
   local c src=start-ticket.conf
-  c="$(gt::conf_get color 2>/dev/null | tr '[:upper:]' '[:lower:]' || true)"
+  # Trimmed after lookup: conf_get keeps trailing blanks and CRs, and a blank
+  # value must fall through to project-colors rather than fail the palette check.
+  c="$(gt::conf_get color 2>/dev/null | tr -d '[:space:]' | tr '[:upper:]' '[:lower:]' || true)"
   if [ -z "$c" ] && [ -n "$1" ]; then c="$(project_color "$1")"; src=project-colors; fi
   [ -z "$c" ] && return 0
   case " $PALETTE " in *" $c "*) ;; *) die "color '$c' in $src is not in the palette ($PALETTE)" ;; esac
@@ -89,7 +91,10 @@ fi
 [ -n "$title$color" ] || die "nothing to do: pass --title and/or --color"
 
 if [ "$color" = project ]; then
-  color="$(resolve_color "$proj")" || exit 1
+  # A bad color must not block the title (the statusline keys on the governor
+  # title): resolve_color has already printed the error, so drop the color and
+  # exit 1 once the title is written.
+  color="$(resolve_color "$proj")" || { color=""; trap 'exit 1' EXIT; }
 fi
 if [ -n "$color" ]; then
   case " $PALETTE " in *" $color "*) ;; *) die "unknown color '$color' (expected: $PALETTE)" ;; esac
