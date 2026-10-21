@@ -1,6 +1,7 @@
 # <project dir name> <color>   — read by session-label.sh --color project
 # Colors: red blue green yellow purple orange pink cyan
-# green is taken by /workflow.
+# /workflow sets green explicitly for its own session, so dotfiles overlaps with it.
+dotfiles         green
 Kardashev        purple
 KardashevAssets  blue
 event-tracker    yellow
