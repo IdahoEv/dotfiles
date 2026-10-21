@@ -100,21 +100,8 @@ find_provider_file() {  # <name> → path, or empty
   return 0
 }
 
-conf_get() {  # <key> → value from repo .start-ticket.conf, then ~/.config
-  # In a worktree the .start-ticket.conf lives in the MAIN repo root
-  # (--git-common-dir's parent), so check the cwd's toplevel and that.
-  local key="$1" f v main_root="" common top
-  top="$(git rev-parse --show-toplevel 2>/dev/null || true)"
-  common="$(git rev-parse --git-common-dir 2>/dev/null || true)"
-  if [ -n "$common" ]; then
-    common="$(cd -P "$common" 2>/dev/null && pwd)" && main_root="$(dirname "$common")" || main_root=""
-  fi
-  for f in "${top:-/nonexistent}/.start-ticket.conf" "${main_root:-/nonexistent}/.start-ticket.conf" "$HOME/.config/start-ticket/config"; do
-    [ -f "$f" ] || continue
-    v="$(sed -n "s/^${key}=//p" "$f" | head -1)"
-    [ -n "$v" ] && { printf '%s' "$v"; return 0; }
-  done
-  return 1
+conf_get() {  # <key> → value; precedence is gt::conf_get's (repo, overlay, machine)
+  gt::conf_get "$1"
 }
 
 # setting <conf-key> <ENV_VAR> <default>: env var → conf file → default.
@@ -429,8 +416,9 @@ _tmp="${TMPDIR:-/tmp}"; kickoff="${_tmp%/}/${repo_name}-kickoff-${id}.md"
     "$ST_REF" "$branch"
   printf '## %s — %s\n\n%s\n' "$id" "${ST_TITLE:-untitled}" "${ST_BODY:-(no description)}"
   [ -n "$ST_URL" ] && printf '\n<%s>\n' "$ST_URL"
-  pre="$repo_root/.claude/kickoff-preamble.md"
-  if [ -f "$pre" ]; then
+  # The repo's own preamble wins outright; else the per-project overlay's.
+  if _doc="$(gt::find_doc kickoff-preamble.md "$repo_root")"; then
+    pre="${_doc%%$'\t'*}"
     printf '\n'
     _pre="$(cat "$pre")"
     _pre="$(subst "$_pre" '{{ID}}' "$id")"

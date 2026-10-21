@@ -409,25 +409,11 @@ detect_primary_branch() {
 # Shortcut Integration
 # ============================================================================
 
-# Read a key from .start-ticket.conf — the same per-repo config start-ticket.sh
-# uses, so `label_noise=` is set once and both tools honor it. In a worktree
-# the file lives in the MAIN repo root, so check that as well as the cwd's
-# toplevel. Prints nothing (rc 0) when unset; callers treat empty as "default".
+# Read a key from the same layered config start-ticket.sh uses (gt::conf_get), so
+# `label_noise=` is set once and both tools honor it. Prints nothing (rc 0) when
+# unset; callers treat empty as "default".
 wm_conf_get() {  # <key> → value, or empty
-    local key="$1" f v top common main_root=""
-    top="$(git rev-parse --show-toplevel 2>/dev/null || true)"
-    common="$(git rev-parse --git-common-dir 2>/dev/null || true)"
-    if [ -n "$common" ]; then
-        common="$(cd -P "$common" 2>/dev/null && pwd)" && main_root="$(dirname "$common")" || main_root=""
-    fi
-    for f in "${top:-/nonexistent}/.start-ticket.conf" \
-             "${main_root:-/nonexistent}/.start-ticket.conf" \
-             "$HOME/.config/start-ticket/config"; do
-        [ -f "$f" ] || continue
-        v="$(sed -n "s/^${key}=//p" "$f" | head -1)"
-        [ -n "$v" ] && { printf '%s' "$v"; return 0; }
-    done
-    return 0
+    gt::conf_get "$1" || true
 }
 
 # Fetch ticket details from Shortcut and generate branch name

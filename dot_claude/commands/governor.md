@@ -40,37 +40,19 @@ carries a reference artifact, end on it.
 
 ## Load the project's context
 
-Read `.claude/governor.md` in this repo. It carries the facts this command can't know:
-the people involved, the planning docs, the tracker, the sibling repos, the adjacent
-systems, and any project-specific standing responsibilities.
+Run `project-config.sh find governor.md`. It prints `<path><TAB><repo|overlay>`: the
+repo's `.claude/governor.md` if committed, else the per-machine overlay copy (kept outside
+the checkout, for repos whose config can't be committed). Read that file and **say which
+one you loaded** ("Loaded governor.md from the overlay: <path>"). It carries the facts
+this command can't know: the people involved, the planning docs, the tracker, the sibling
+repos, the adjacent systems, and any project-specific standing responsibilities.
 
-**If it doesn't exist**, say so and offer to scaffold one before going further —
-governing without it means guessing at the tracker and the team. Template:
+**If it exits non-zero**, say so and offer `project-config.sh init`, which scaffolds a
+`governor.md` template in the overlay (never in the repo). A file that still holds the
+template's `<name> — <one line…>` placeholders is unfilled: say so and help fill it in. Governing without it means
+guessing at the tracker and the team.
 
-```markdown
-# Governor context
-
-**Project:** <name> — <one line on what it is>
-**People:** <who works on it>
-**Primary worktree:** <path — the one a governor session stays in>
-
-## Key documents
-- `docs/...` — <what it is>
-- <tracker URL>
-- <wiki/Notion/Confluence URL>
-
-## Repositories
-- **<this repo>** — <role>
-- **<sibling>** — <role>
-
-## Adjacent systems
-- **<system>** — <how it relates>
-
-## Standing responsibilities
-- <anything specific to this project's planning discipline>
-```
-
-Also read the repo's `CLAUDE.md` for layout and conventions. Prefer `.claude/governor.md`
+Also read the repo's `CLAUDE.md` for layout and conventions. Prefer `governor.md`
 where the two disagree — it's the file written for this purpose.
 
 **Ignore `standing_ticket` in `.claude/workflow-config.json`.** That marker pins

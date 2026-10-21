@@ -123,25 +123,11 @@ fi
 # are per-repo-family, not per-script — a provider encapsulates them. Providers
 # mirror start-ticket-providers/.
 
-# <key> → first value of `key=` from the repo's .start-ticket.conf, else the
-# per-machine config. In a worktree --show-toplevel is the worktree path, but
-# .start-ticket.conf lives in the main repo root — check both (--git-common-dir's
-# parent is the main worktree even from a linked worktree). All config lookup
-# lives here so relocating the config only touches this function.
+# <key> → first value of `key=` across the repo's .start-ticket.conf, the
+# per-project overlay and the per-machine config (see gt::conf_get). Empty (rc 0)
+# when unset.
 conf_get() {
-  local key="$1" top main_root="" common f v
-  top="$(git rev-parse --show-toplevel 2>/dev/null || true)"
-  common="$(git rev-parse --git-common-dir 2>/dev/null || true)"
-  if [ -n "$common" ]; then
-    common="$(cd -P "$common" && pwd)"
-    main_root="$(dirname "$common")"
-  fi
-  for f in "${top:-/nonexistent}/.start-ticket.conf" "${main_root:-/nonexistent}/.start-ticket.conf" "$HOME/.config/start-ticket/config"; do
-    [ -f "$f" ] || continue
-    v="$(sed -n "s/^${key}=//p" "$f" | head -1)"
-    [ -n "$v" ] && { printf '%s' "$v"; return 0; }
-  done
-  return 0
+  gt::conf_get "$1" || true
 }
 
 # --provider flag → openpr_provider= → the start-ticket provider= when an
