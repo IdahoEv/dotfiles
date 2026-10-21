@@ -519,8 +519,6 @@ the polling script in the background:
 ~/.claude/skills/review-comments/poll-pr.sh
 ```
 
-The statusline shows the review rounds (global CLAUDE.md; `review-state.sh`).
-
 The script polls every 45 seconds for up to 2 hours. Exit codes:
 
 - **0** — new review activity detected (possible complaints). **Immediately re-invoke the review-comments skill in Automatic Mode** without waiting for the user to say anything.

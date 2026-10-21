@@ -114,7 +114,9 @@ report, since it breaks the reproducible-from-ticket-id property.
 
 A `bg` session is named `[PLAN] <slug>` — the ticket's **workflow phase**, a third state
 axis in the agent view beside `status` (idle/busy) and `state` (working/blocked/done).
-`agent-phase.sh <PHASE>` sets it; it no-ops outside a bg session.
+`agent-phase.sh <PHASE>` sets it; it no-ops outside a bg session. The kickoff also asks
+the session to run `session-label.sh --color project`, which colors the row with the
+project's key color from `project-colors` in git-tools.
 
 | Phase | Means | Set by |
 |---|---|---|

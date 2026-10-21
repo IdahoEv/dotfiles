@@ -10,13 +10,15 @@ input=$(cat)
 US=$'\x1f'
 IFS=$US read -r cwd name model effort used_pct in_tok pr_num pr_state pr_url h5 d7 sid < <(
   printf '%s' "$input" | jq -r '[
-    .workspace.current_dir // "", .session_name // "", .model.display_name // "",
+    .workspace.current_dir // "", (.session_name // "" | gsub("[\n\r\u001f]"; " ")), .model.display_name // "",
     .effort.level // "", (.context_window.used_percentage // 0 | floor),
     .context_window.total_input_tokens // 0,
     .pr.number // "", .pr.review_state // "", .pr.url // "",
     (.rate_limits.five_hour.used_percentage // "" | if . == "" then "" else floor end),
     (.rate_limits.seven_day.used_percentage // "" | if . == "" then "" else floor end),
     .session_id // ""] | map(tostring) | join("\u001f")')
+
+used_pct=${used_pct:-0}; in_tok=${in_tok:-0}
 
 DIM=$'\e[38;2;140;140;140m'; RST=$'\e[0m'
 GREEN=$'\e[38;2;55;133;4m'; AMBER=$'\e[38;2;169;116;0m'; RED=$'\e[38;2;200;50;50m'
@@ -52,6 +54,7 @@ if [ -n "$branch" ]; then
   [ "$modified" -gt 0 ]  && branch_seg+=" ${AMBER}~${modified}${RST}"
   [ "$untracked" -gt 0 ] && branch_seg+=" ${DIM}?${untracked}${RST}"
 fi
+project_seg=""; [ -n "$project" ] && project_seg="${BLUE}${project}${RST}"
 short_path=$(printf '%s' "$cwd" | awk -F/ '{if (NF <= 4) {print $0} else {printf "~/…"; for (i=NF-1; i<=NF; i++) {if ($i != "") printf "/%s", $i}}}' | sed "s|^$HOME|~|")
 
 # ---- role and phase from the title ---------------------------------------------
@@ -80,14 +83,21 @@ fi
 # come from the file review-state.sh --set-local writes, so a change there also
 # triggers a refresh.
 rounds_seg=""
-rounds_file="$(git -C "$cwd" rev-parse --absolute-git-dir 2>/dev/null)/local-review-rounds"
+gitdir=$(git -C "$cwd" rev-parse --absolute-git-dir 2>/dev/null)
+rounds_file="$gitdir/local-review-rounds"
 if [ -n "$pr_num" ] || [ -f "$rounds_file" ]; then
-  cache="/tmp/statusline-rounds-${sid:-x}"
+  key="${sid:-$(printf '%s' "$gitdir" | cksum | cut -d' ' -f1)}"
+  cache="${TMPDIR:-/tmp}/statusline-rounds-$key"
   if [ ! -f "$cache" ] || [ -n "$(find "$cache" -mmin +1 2>/dev/null)" ] || [ "$rounds_file" -nt "$cache" ]; then
-    if [ -z "$(find "$cache.run" -mmin -0.4 2>/dev/null)" ]; then
-      touch "$cache.run"
-      ( cd "$cwd" && ~/.claude/skills/review-comments/review-state.sh --bare > "$cache.$$" 2>/dev/null \
-          && mv "$cache.$$" "$cache" ) </dev/null >/dev/null 2>&1 &
+    # mkdir is an atomic lock; one older than a minute belongs to a dead refresh.
+    [ -n "$(find "$cache.lock" -maxdepth 0 -mmin +1 2>/dev/null)" ] && rmdir "$cache.lock" 2>/dev/null
+    if mkdir "$cache.lock" 2>/dev/null; then
+      # On failure (offline, rate-limited) touch the cache so the retry waits out
+      # the staleness window instead of firing on every render.
+      ( trap 'rm -f "$cache.tmp"; rmdir "$cache.lock"' EXIT
+        cd "$cwd" && ~/.claude/skills/review-comments/review-state.sh --bare ${pr_num:+--pr "$pr_num"} \
+          > "$cache.tmp" 2>/dev/null && mv "$cache.tmp" "$cache" || touch "$cache"
+      ) </dev/null >/dev/null 2>&1 &
     fi
   fi
   rounds=$(cat "$cache" 2>/dev/null)
@@ -97,9 +107,9 @@ fi
 # ---- line 1 --------------------------------------------------------------------------
 phase_seg=""; [ -n "$phase" ] && phase_seg="${ORANGE}[${phase}]${RST}"
 case "$role" in
-  governor) line1=$(join "${BLUE}${project}${RST}" "Governor" "$branch_seg" "$pr_seg" "$rounds_seg") ;;
+  governor) line1=$(join "$project_seg" "Governor" "$branch_seg" "$pr_seg" "$rounds_seg") ;;
   ticket|workflow)
-            line1=$(join "${BLUE}${project}${RST}" "$branch_seg" "$phase_seg" "$pr_seg" "$rounds_seg") ;;
+            line1=$(join "$project_seg" "$branch_seg" "$phase_seg" "$pr_seg" "$rounds_seg") ;;
   *)        line1=$(join "${BLUE}${short_path}${RST}" "$branch_seg" "$title" "$pr_seg" "$rounds_seg") ;;
 esac
 

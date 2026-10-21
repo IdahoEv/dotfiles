@@ -25,8 +25,11 @@ while [ $# -gt 0 ]; do
     --local) local_n="${2:?--local needs a value}"; shift 2 ;;
     --bare)  bare=1; shift ;;
     --set-local)
+      v="${2:?--set-local needs a value}"
+      [[ "$v" =~ ^[0-9]+\*?$ ]] || { echo "review-state: --set-local wants N or N*, got '$v'" >&2; exit 1; }
       gd="$(git rev-parse --absolute-git-dir)"
-      printf '%s\n' "${2:?--set-local needs a value}" > "$gd/local-review-rounds"; exit 0 ;;
+      printf '%s\n' "$v" > "$gd/local-review-rounds.tmp" && mv "$gd/local-review-rounds.tmp" "$gd/local-review-rounds"
+      exit 0 ;;
     *) echo "usage: review-state.sh [--pr N] [--local N[*]] [--bare] | --set-local N[*]" >&2; exit 1 ;;
   esac
 done

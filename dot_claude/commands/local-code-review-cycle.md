@@ -30,8 +30,9 @@ Never push.
 - Baseline: run `FAST`. Red for reasons unrelated to
   this branch → note it and continue; compare later runs against it.
 - `agent-phase.sh REVIEW` (no-ops outside a bg session; don't report it).
-- From here keep the review rounds current (`review-state.sh --set-local`, global
-  CLAUDE.md), starring `N*` while a round runs.
+- Review rounds feed the statusline: at the start of round k run
+  `~/.claude/skills/review-comments/review-state.sh --set-local "<k-1>*"`, and when it ends (after the commit step, or at once if
+  nothing changed) `--set-local <k>`.
 
 ### 2. Review cycle (at most 5 rounds)
 

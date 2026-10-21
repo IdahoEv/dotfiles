@@ -123,7 +123,3 @@ GitHub) running; `[REVIEWED]` / `[REVIEWED][PR]` = review finished; `[PR]` alone
 never reviewed. Review flows run `agent-phase.sh REVIEW` when a round starts and
 `agent-phase.sh --no-review` (REVIEW → REVIEWED) when review ends.
 
-**Review rounds.** The statusline shows them (`review-state.sh`); don't end replies with a
-review line. Record your local count when it changes — a round starts (`N*`) or finishes
-(`N`): `~/.claude/skills/review-comments/review-state.sh --set-local <N>[*]`, `<N>` being
-completed local rounds. Copilot and Coderabbit counts come from GitHub.

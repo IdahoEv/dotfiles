@@ -11,8 +11,10 @@ implementation.
 
 Hold this role for the whole session, not just the first answer.
 
-**First action:** run `session-label.sh --title "{project} Governor" --color project`
-(sets the session title and the project's color; silent outside a background session).
+**First action:** run `session-label.sh --title "{project} Governor" --color project`,
+typing `{project}` literally (the script expands it). The title must end " Governor":
+the statusline picks the governor layout from it. Skip this if `session-label.sh` isn't
+found; it is silent outside a background session.
 
 ## Session conduct
 
