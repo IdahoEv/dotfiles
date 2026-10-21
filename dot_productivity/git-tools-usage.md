@@ -39,7 +39,7 @@ $GIT_TOOLS_PROJECTS_DIR (default ~/.config/git-tools/projects)/<owner>/<repo>/
 | File | Lookup order (first hit wins) |
 |---|---|
 | `governor.md`, `kickoff-preamble.md` | `<repo>/.claude/<name>` → overlay. Whole file; no merging, so a committed file fully replaces the overlay's |
-| `start-ticket.conf` keys (`provider`, `label_noise`, `launcher`, `openpr_provider`, …) | per key: `<worktree>/.start-ticket.conf` → `<main repo>/.start-ticket.conf` → overlay `start-ticket.conf` → `~/.config/start-ticket/config` |
+| `start-ticket.conf` keys (`provider`, `label_noise`, `launcher`, `openpr_provider`, `color`, …) | per key: `<worktree>/.start-ticket.conf` → `<main repo>/.start-ticket.conf` → overlay `start-ticket.conf` → `~/.config/start-ticket/config` |
 | `.claude/commands/*` project overrides | not supported in the overlay; Claude Code loads these only from the project |
 
 Used by `/governor` (says which file it loaded), `start-ticket.sh`, `open-pr.sh`, `worktree-manager.sh`.
@@ -50,5 +50,7 @@ project-config.sh find governor.md     # which file would load, and from where
 project-config.sh dir                  # overlay path
 project-config.sh store-init [<url>]   # git-init the projects root; you commit and push
 ```
+
+**Session color.** `session-label.sh --color project` (run by `/start` and `/governor`) resolves: `color=` in `start-ticket.conf` (lookup order above) → `tools/project-colors` (by directory name) → none. Palette: red blue green yellow purple orange pink cyan; any other value is an error naming the file. Put `color=` in the overlay for a repo you don't own so its name stays out of the dotfiles repo. `session-label.sh --show` prints the result. A repo can also commit `color=green` in its own `.start-ticket.conf`, which makes its `project-colors` line redundant.
 
 The projects root is a plain directory and can be its own git repo, so the config can be versioned somewhere other than the dotfiles repo (e.g. a work-hosted private repo). Its paths name your projects, so keep that remote as private as the config. `GIT_TOOLS_PROJECTS_DIR` points it at an existing clone.

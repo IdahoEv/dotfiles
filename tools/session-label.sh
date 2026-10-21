@@ -6,8 +6,8 @@
 #   session-label.sh --color project          # /start: keep the title, color only
 #
 #   --title TEXT   "{project}" expands to the current repo's name
-#   --color NAME   one of the /color palette, or "project" to look the repo up
-#                  in project-colors (next to this script)
+#   --color NAME   one of the /color palette, or "project" to resolve the repo's
+#                  color (below)
 #   --show         print the repo's project color and exit
 #
 # Same mechanism and caveats as agent-phase.sh: writes the job's state.json
@@ -17,8 +17,13 @@
 # view honors a color written this way is unverified; the key exists in
 # state.json for sessions colored by hand.
 #
-# Project = the directory holding the repo's .git, so every worktree of
-# Kardashev resolves to "Kardashev". An unmapped project gets no color.
+# Project color, first hit wins:
+#   1. `color=` in start-ticket.conf, via the usual per-key lookup (worktree
+#      .start-ticket.conf -> main repo -> config overlay -> ~/.config/start-ticket)
+#   2. project-colors (next to this script), keyed by the directory holding the
+#      repo's .git, so every worktree of Kardashev resolves to "Kardashev"
+#   3. none: the color is left alone
+# A value outside the palette is an error, not a silent skip.
 #
 # Exit codes: 0 on success and on every "not applicable" case; 1 on usage
 # errors (unknown color, bad flag).
@@ -28,7 +33,15 @@ set -euo pipefail
 die() { printf 'session-label: %s\n' "$*" >&2; exit 1; }
 
 PALETTE="red blue green yellow purple orange pink cyan"
-here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+_src="${BASH_SOURCE[0]}"
+while [ -h "$_src" ]; do
+  _dir="$(cd -P "$(dirname "$_src")" && pwd)"
+  _src="$(readlink "$_src")"
+  [ "${_src#/}" = "$_src" ] && _src="$_dir/$_src"
+done
+here="$(cd -P "$(dirname "$_src")" && pwd)"
+# shellcheck source=lib/repo-facts.sh
+. "$here/lib/repo-facts.sh"
 colors_file="${SESSION_LABEL_COLORS_FILE:-$here/project-colors}"
 
 title="" color="" show=0
@@ -55,17 +68,28 @@ project_color() {  # <project> -> color or empty
     tolower($1) == p { print tolower($2); exit }' "$colors_file"
 }
 
+# Conf value first, then project-colors; validated here so --show and
+# --color project reject a typo the same way, naming the file to fix.
+resolve_color() {  # <project> -> color or empty
+  local c src=start-ticket.conf
+  c="$(gt::conf_get color 2>/dev/null | tr '[:upper:]' '[:lower:]' || true)"
+  if [ -z "$c" ] && [ -n "$1" ]; then c="$(project_color "$1")"; src=project-colors; fi
+  [ -z "$c" ] && return 0
+  case " $PALETTE " in *" $c "*) ;; *) die "color '$c' in $src is not in the palette ($PALETTE)" ;; esac
+  printf '%s' "$c"
+}
+
 proj="$(project || true)"
 
 if [ "$show" = 1 ]; then
-  [ -n "$proj" ] && project_color "$proj"
+  resolve_color "$proj"
   exit 0
 fi
 
 [ -n "$title$color" ] || die "nothing to do: pass --title and/or --color"
 
 if [ "$color" = project ]; then
-  color="$([ -n "$proj" ] && project_color "$proj" || true)"
+  color="$(resolve_color "$proj")" || exit 1
 fi
 if [ -n "$color" ]; then
   case " $PALETTE " in *" $color "*) ;; *) die "unknown color '$color' (expected: $PALETTE)" ;; esac
