@@ -12,12 +12,15 @@ provider::available() { command -v short >/dev/null; }
 
 provider::fetch() {
   local id="$1" out
-  out="$(short story "$id" --quiet 2>/dev/null)" || { echo "short story $id failed" >&2; return 1; }
+  # FORCE_COLOR=0: `short` emits ANSI color codes even under --quiet, which
+  # defeats the ^-anchored field regexes below.
+  out="$(FORCE_COLOR=0 short story "$id" --quiet 2>/dev/null)" || { echo "short story $id failed" >&2; return 1; }
   # awk (not `sed ... | head -1`): a pipe that closes early can hand `sed` a
   # SIGPIPE, which `set -o pipefail` in start-ticket.sh turns into an abort of
   # this unguarded fetch. `match`+`substr`+`exit` stops at the first hit with
   # no pipe, and is portable across BSD/GNU awk.
-  ST_TITLE="$(awk  'match($0,/^[Nn]ame:[[:space:]]*/){print substr($0,RLENGTH+1);exit}'      <<<"$out")"
+  # Title has no "Name:" field; it's on line 1 as "#<id> <title>".
+  ST_TITLE="$(awk  'NR==1 && match($0,/^#[0-9]+[[:space:]]+/){print substr($0,RLENGTH+1);exit}' <<<"$out")"
   ST_URL="$(awk    'match($0,/^[Uu][Rr][Ll]:[[:space:]]*/){print substr($0,RLENGTH+1);exit}' <<<"$out")"
   ST_PARENT="$(awk 'match($0,/^[Ee]pic:[[:space:]]*/){print substr($0,RLENGTH+1);exit}'      <<<"$out")"
   ST_BODY="$out"
@@ -48,7 +51,7 @@ provider::mark_in_progress() {
 # the truth; the repair itself needs the Shortcut MCP tools and stays in /start.
 provider::read_state() {  # <id> → "<state>" on stdout; rc 0 only if started
   local id="$1" out state want
-  out="$(short story "$id" --quiet 2>/dev/null)" || { printf 'unknown'; return 1; }
+  out="$(FORCE_COLOR=0 short story "$id" --quiet 2>/dev/null)" || { printf 'unknown'; return 1; }
   state="$(awk 'match($0,/^[Ss]tate:[[:space:]]*/){print substr($0,RLENGTH+1);exit}' <<<"$out")"
   [ -n "$state" ] || { printf 'unknown'; return 1; }
   printf '%s' "$state"

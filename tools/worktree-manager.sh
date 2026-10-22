@@ -488,8 +488,8 @@ fetch_shortcut_ticket() {
     # lands in a branch name.
     local title slug
     GT_LABEL_NOISE="${GT_LABEL_NOISE:-$(wm_conf_get label_noise)}"
-    title="$(short story "$ticket_id" --quiet 2>/dev/null \
-             | awk 'match($0,/^[Nn]ame:[[:space:]]*/){print substr($0,RLENGTH+1);exit}')" || title=""
+    title="$(FORCE_COLOR=0 short story "$ticket_id" --quiet 2>/dev/null \
+             | awk 'NR==1 && match($0,/^#[0-9]+[[:space:]]+/){print substr($0,RLENGTH+1);exit}')" || title=""
     if [ -n "$title" ] || [ -n "${GT_LABEL_OVERRIDE:-}" ]; then
         slug="$(gt::slug_title "$title")"
         if [ -n "$slug" ] && [[ "$branch_name" =~ ^(.*)(sc-[0-9]+)/.+$ ]]; then
@@ -514,7 +514,7 @@ save_ticket_details() {
 
     # Fetch full story details
     local story_output
-    story_output=$(short story "$ticket_id" --quiet 2>/dev/null || echo "")
+    story_output=$(FORCE_COLOR=0 short story "$ticket_id" --quiet 2>/dev/null || echo "")
 
     if [ -z "$story_output" ]; then
         warning "Could not fetch ticket details for #${ticket_id}"
