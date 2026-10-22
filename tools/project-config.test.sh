@@ -85,6 +85,7 @@ check "dir"  "$OV2" "$(cd "$ROOT/repo2" && "$PC" dir)"
 (cd "$ROOT/repo2" && "$PC" init >/dev/null 2>&1)
 check "init writes governor.md" "yes" "$([ -f "$OV2/governor.md" ] && echo yes)"
 check "init writes conf"        "yes" "$([ -f "$OV2/start-ticket.conf" ] && echo yes)"
+check "init scaffolds color line" "yes" "$(grep -q '^# color=' "$OV2/start-ticket.conf" && echo yes)"
 echo mine > "$OV2/governor.md"
 (cd "$ROOT/repo2" && "$PC" init >/dev/null 2>&1)
 check "init never overwrites" "mine" "$(cat "$OV2/governor.md")"
