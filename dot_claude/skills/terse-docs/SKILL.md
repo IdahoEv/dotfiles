@@ -1,6 +1,6 @@
 ---
 name: terse-docs
-description: Write or cut documentation — Notion RFCs/ADRs, design docs, READMEs, PRDs, planning docs, PR bodies. Use when asked to write, draft, revise, shorten, or tighten a document, or when a doc has grown past the length a busy reader will finish. Enforces conclusion-first, high-density prose and deletes the show-your-work reflex.
+description: Write or cut documentation — Notion RFCs/ADRs, design docs, READMEs, PRDs, planning docs, PR bodies, code comments, docstrings. Use when asked to write, draft, revise, shorten, or tighten a document, or when a doc has grown past the length a busy reader will finish. Enforces conclusion-first, high-density prose and deletes the show-your-work reflex.
 ---
 
 # Terse Docs
@@ -8,7 +8,7 @@ description: Write or cut documentation — Notion RFCs/ADRs, design docs, READM
 A doc nobody finishes documents nothing. Optimize for **the reader who will
 spend 90 seconds on this**, not for proof the author was thorough.
 
-Applies to documents. Not to code comments, CLAUDE.md, or chat.
+Applies to documents, code comments and docstrings. Not to CLAUDE.md or chat.
 
 ## The budget
 
@@ -144,6 +144,22 @@ Never silently delete a section someone wrote.
 Start with the opening block and the first two sections. That is where the
 repair almost always is: a weak opener plus a meta section, several hundred
 words, no facts lost in removing them.
+
+## Code comments and docstrings
+
+Budgets are per comment, not per doc. Default is no comment.
+
+- **Write one only for what the code can't show:** a why, constraint, trap, unit,
+  or exact external name.
+- **Don't restate the code** or what a good name already says.
+- **No narration** of steps, no section banners.
+- **No justification clauses** — "this is important because…". Keep the fact.
+- **No history or ticket/PR refs** — see Code comments in CLAUDE.md.
+- **Ceiling 1–3 lines.** Longer means refactor, or the content belongs in a doc.
+- **Docstrings:** one-line summary. Params and returns only where names and types
+  leave ambiguity. Examples only when usage is non-obvious.
+
+"Keep, always" applies: never cut a constraint or known failure mode.
 
 ## Notion specifics
 
