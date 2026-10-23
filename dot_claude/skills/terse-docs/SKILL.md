@@ -147,7 +147,7 @@ words, no facts lost in removing them.
 
 ## Code comments and docstrings
 
-No word budget; the line ceiling below governs. Default is no comment.
+No word budget; the line target below governs. Default is no comment.
 
 - **Write one only for what the code can't show:** a why, constraint, trap, unit,
   or exact external name.
@@ -155,11 +155,11 @@ No word budget; the line ceiling below governs. Default is no comment.
 - **No narration** of steps, no section banners.
 - **No justification clauses** — "this is important because…". Keep the fact.
 - **No history, dates, or ticket/PR refs.**
-- **Ceiling 1–3 lines.** Longer means refactor, or the content belongs in a doc.
+- **Aim for 1–3 lines.** Longer usually means refactor, or the content belongs in a doc.
 - **Docstrings:** one-line summary. Params and returns only where names and types
   leave ambiguity. Examples only when usage is non-obvious.
 
-Never cut a constraint or known failure mode.
+Never cut a constraint or known failure mode, even past 3 lines.
 
 ## Notion specifics
 
