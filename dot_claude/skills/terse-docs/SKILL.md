@@ -147,19 +147,19 @@ words, no facts lost in removing them.
 
 ## Code comments and docstrings
 
-Budgets are per comment, not per doc. Default is no comment.
+No word budget; the line ceiling below governs. Default is no comment.
 
 - **Write one only for what the code can't show:** a why, constraint, trap, unit,
   or exact external name.
 - **Don't restate the code** or what a good name already says.
 - **No narration** of steps, no section banners.
 - **No justification clauses** — "this is important because…". Keep the fact.
-- **No history or ticket/PR refs** — see Code comments in CLAUDE.md.
+- **No history, dates, or ticket/PR refs.**
 - **Ceiling 1–3 lines.** Longer means refactor, or the content belongs in a doc.
 - **Docstrings:** one-line summary. Params and returns only where names and types
   leave ambiguity. Examples only when usage is non-obvious.
 
-"Keep, always" applies: never cut a constraint or known failure mode.
+Never cut a constraint or known failure mode.
 
 ## Notion specifics
 
@@ -173,4 +173,4 @@ Budgets are per comment, not per doc. Default is no comment.
 
 ## Report
 
-Word count against budget, and what you cut. One line.
+Documents only: word count against budget, and what you cut. One line.
