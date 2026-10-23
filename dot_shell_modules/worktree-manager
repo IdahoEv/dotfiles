@@ -1,7 +1,7 @@
 # Worktree Manager - Git worktree management tool
 #
 # Convenient aliases for worktree-manager.sh (symlinked into ~/.local/bin by
-# run_after_link-tools.sh.tmpl)
+# run_after_link-tools.sh)
 
 # Worktree Manager aliases
 alias wm='worktree-manager.sh'
