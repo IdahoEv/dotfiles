@@ -1,1 +1,3 @@
-.claude/
+# Local Claude state is untracked; the kickoff preamble is shared.
+.claude/*
+!.claude/kickoff-preamble.md
