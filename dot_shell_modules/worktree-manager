@@ -1,14 +1,7 @@
 # Worktree Manager - Git worktree management tool
 #
-# Adds worktree-manager.sh to PATH and provides convenient aliases
-
-# Add the tools/ dir of the deploy clone to PATH if not already present
-WORKTREE_MANAGER_DIR="$HOME/.local/share/chezmoi/tools"
-if [[ -d "$WORKTREE_MANAGER_DIR" ]]; then
-    if [[ ":$PATH:" != *":$WORKTREE_MANAGER_DIR:"* ]]; then
-        export PATH="$WORKTREE_MANAGER_DIR:$PATH"
-    fi
-fi
+# Convenient aliases for worktree-manager.sh (symlinked into ~/.local/bin by
+# run_after_link-tools.sh.tmpl)
 
 # Worktree Manager aliases
 alias wm='worktree-manager.sh'

@@ -1,0 +1,27 @@
+#!/bin/sh
+# Symlink tools/*.sh into ~/.local/bin so they resolve in any shell, not just
+# ones that source the zshrc. Symlinks keep the scripts running in place, so
+# their lib/ and provider lookups still work.
+set -eu
+
+src="{{ .chezmoi.sourceDir }}/tools"
+bin="$HOME/.local/bin"
+mkdir -p "$bin"
+
+for script in "$src"/*.sh; do
+  case "$script" in *.test.sh) continue ;; esac
+  target="$bin/$(basename "$script")"
+  if [ -e "$target" ] && [ ! -L "$target" ]; then
+    echo "link-tools: $target exists and is not a symlink; skipping" >&2
+    continue
+  fi
+  ln -sfn "$script" "$target"
+done
+
+# Drop links to scripts that were renamed or deleted.
+for link in "$bin"/*; do
+  [ -L "$link" ] || continue
+  case "$(readlink "$link")" in
+    "$src"/*) [ -e "$link" ] || rm "$link" ;;
+  esac
+done
