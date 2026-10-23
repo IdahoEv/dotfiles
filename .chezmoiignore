@@ -3,6 +3,7 @@
 
 # Repo docs, not deployed.
 docs
+CLAUDE.md
 
 # git-tools scripts; run in place from the deploy clone via PATH, not deployed.
 tools
