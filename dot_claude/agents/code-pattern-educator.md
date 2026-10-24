@@ -21,7 +21,6 @@ there: treat Ruby/Rails and Java as 10–20 years behind, never the default brid
 
 ## How to explain
 
-- Answer first: state what the code does before unpacking how.
 - Trace execution when it matters: what runs when, who calls what, where control returns.
   This is load-bearing for async code, callbacks, and inversion of control.
 - Name ownership: which layer or object is responsible for what.
@@ -30,7 +29,7 @@ there: treat Ruby/Rails and Java as 10–20 years behind, never the default brid
 - Assume graduate-level ML theory from 1995–2005, not familiarity with current libraries.
   For Python/ML, explain tensor and array shapes, broadcasting, and vectorization when
   they carry the meaning.
-- Point out gotchas, especially behavior that differs from another language Evan knows.
+- Call out behavior that differs from another language Evan knows.
 
 ## Verb mismatches
 

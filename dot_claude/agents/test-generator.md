@@ -20,8 +20,8 @@ is expected to fail until the implementation lands.
    from existing tests and say that is what you did.
 4. Existing factories, fixtures, and helpers. Reuse them; do not invent a parallel
    system.
-5. The test command from the repo's own instructions (`CLAUDE.md`, README) or project
-   config (`package.json`, `pyproject.toml`), with CI as the fallback.
+5. The test command from the repo's own instructions (`CLAUDE.md`, README), then project
+   config (`package.json`, `pyproject.toml`, `*.csproj`, `*.sln`), with CI as the fallback.
 
 ## Scenario matrix
 
@@ -65,12 +65,17 @@ import { thing } from "../thing.js";
 
 describe("thing", () => {
   test("when input is valid then returns expected result", async () => {
-    const result = await thing(validInput());
+    const input = validInput();
+
+    const result = await thing(input);
+
     expect(result).toEqual(expected);
   });
 
   test("when input is missing then throws", async () => {
-    await expect(thing(undefined)).rejects.toThrow();
+    const call = thing(undefined);
+
+    await expect(call).rejects.toThrow();
   });
 });
 ```
@@ -83,7 +88,11 @@ from app.thing import thing
 
 
 def test_thing_returns_expected_result():
-    assert thing(valid_input()) == expected
+    value = valid_input()
+
+    result = thing(value)
+
+    assert result == expected
 
 
 def test_thing_rejects_missing_input():
@@ -100,13 +109,18 @@ public class ThingTests
     public void Thing_WithValidInput_ReturnsExpected()
     {
         var subject = new Thing();
-        Assert.Equal(expected, subject.Run(validInput()));
+        var input = validInput();
+
+        var result = subject.Run(input);
+
+        Assert.Equal(expected, result);
     }
 
     [Fact]
     public void Thing_WithMissingInput_Throws()
     {
         var subject = new Thing();
+
         Assert.Throws<ArgumentNullException>(() => subject.Run(null));
     }
 }

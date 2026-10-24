@@ -52,7 +52,7 @@ First, think deeply about the most effective search patterns for the requested f
 - `*service*` - Business logic
 - `*repository*` / `*repo*` - Data access
 - `*handler*` / `*controller*` - Request handlers
-- `*.test.*`, `*.spec.*` - Test files
+- `*.test.*`, `*.spec.*`, `test_*.py`, `*_test.py`, `*Tests.cs` - Test files
 - `*schema*` - Database or API schemas
 - `*.config.*` - Configuration files
 - `*.types.*` / `*.d.ts` / `*.pyi` - Type definitions
