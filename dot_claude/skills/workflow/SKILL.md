@@ -92,19 +92,24 @@ that can drift. **State the rule once, in the narrowest scope that holds it.**
 
 ### Intake: a global change from another repo
 
+If any `gh` call fails — missing, unauthenticated, or unable to reach the
+repo — hand the draft over instead of improvising another path.
+
 1. Check for an existing issue:
    `gh issue list -R IdahoEv/dotfiles --state open --search "<keywords>"`.
-   If one covers it, add the new evidence as a comment instead of filing.
-2. Draft a title naming the friction and a short body: `## Friction`,
-   `## Evidence` (command and output, `file:line`, what you were attempting),
+   If one covers it, comment on it; otherwise create one.
+2. Draft the title and body for either path: `## Friction`, `## Evidence`
+   (command and output, `file:line`, what you were attempting),
    `## Proposed change`, and a one-line scope note.
 3. The repo is public: strip work-repo names, hosts, credentials, internal
-   URLs, customer names, and ticket ids. If the evidence can't be sanitized,
-   describe the shape of the problem and keep the evidence local.
+   URLs, customer names, and ticket ids from both a new issue and a comment.
+   If the evidence can't be sanitized, describe the shape of the problem and
+   keep the evidence local.
 4. Show the draft and wait for approval; create nothing before it.
-5. `gh issue create -R IdahoEv/dotfiles --title "<title>" --body-file -`
-   with the body on stdin. Report the URL and stop. If `gh` is missing or
-   unauthenticated, hand the draft over rather than trying another path.
+5. File it with the body on stdin:
+   `gh issue create -R IdahoEv/dotfiles --title "<title>" --body-file -`, or
+   `gh issue comment <n> -R IdahoEv/dotfiles --body-file -`. Report the URL
+   and stop.
 
 ## 4. Project-local config and the standing ticket
 
