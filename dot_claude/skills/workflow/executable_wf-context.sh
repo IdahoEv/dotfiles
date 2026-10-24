@@ -324,10 +324,19 @@ wf::default_branch_parts() {  # <dir> → sets _wf_default_branch, _wf_default_s
 # not "with its own remote branch". Counts are omitted (never zeroed) when no
 # comparison can be made.
 wf::repo_sync_facts() {  # <key-prefix> <git-dir|"">
-  local p="$1" root="$2" counts="" default ahead behind
+  local p="$1" root="$2" counts="" default ahead behind status n
   if [ -n "$root" ] && git -C "$root" rev-parse --git-dir >/dev/null 2>&1; then
-    printf '%s_dirty_files=%s\n' "$p" \
-      "$(git -C "$root" status --porcelain 2>/dev/null | wc -l | tr -d ' ')"
+    # A failed status (corrupt index, unreadable tree) is unknown, not clean —
+    # zero would read as "safe to pull into".
+    if status="$(git -C "$root" status --porcelain 2>/dev/null)"; then
+      case "$status" in
+        "") n=0 ;;
+        *)  n="$(printf '%s\n' "$status" | wc -l | tr -d ' ')" ;;
+      esac
+      printf '%s_dirty_files=%s\n' "$p" "$n"
+    else
+      printf '%s_dirty_files=\n' "$p"
+    fi
     local bound=""
     command -v timeout >/dev/null && bound="timeout 10"   # absent on stock macOS
     # shellcheck disable=SC2086  # $bound is intentionally word-split
@@ -375,6 +384,13 @@ wf::chezmoi_facts() {
     # Health is unknown, not bad: an absent binary says nothing about the clone.
     printf 'chezmoi_manages_claude=unknown\nchezmoi_deploy_root=\nchezmoi_deploy_branch=\nchezmoi_deploy_healthy=\n'
     wf::repo_sync_facts chezmoi_deploy ""
+    # The dev worktree is identified without chezmoi, and its sync counts are
+    # git-derived — losing them would hide a stale base at the one moment the
+    # session cannot check anything else.
+    if [ -n "${_wf_source_override:-}" ]; then
+      printf 'chezmoi_source_root=%s\n' "$_wf_source_override"
+      wf::repo_sync_facts chezmoi_source "$_wf_source_override"
+    fi
     return
   fi
 
@@ -622,7 +638,13 @@ main() {
     case "$rc" in
       0) printf '\n'; exit 0 ;;
       2) echo "chezmoi not installed" >&2; exit 2 ;;
-      3) echo "chezmoi is installed but cannot read the source state of ${_wf_source_override:-$(wf::deploy_root)}. Do NOT treat $target as unmanaged and do NOT edit it directly — fix chezmoi first: chezmoi doctor. The other source may be healthy." >&2; exit 3 ;;
+      3)
+        if [ -n "${_wf_source_override:-}" ]; then
+          echo "chezmoi cannot read the source state of $_wf_source_override: one of .chezmoiignore, .chezmoidata.*, .chezmoiexternal.* or .chezmoiversion there won't parse. Do NOT treat $target as unmanaged or edit it directly, and do not duplicate the file into the deploy clone. Note that chezmoi doctor only inspects the default source, not this worktree." >&2
+        else
+          echo "chezmoi is installed but cannot read the source state of $(wf::deploy_root). Do NOT treat $target as unmanaged and do NOT edit it directly — fix chezmoi first: chezmoi doctor." >&2
+        fi
+        exit 3 ;;
       *)
         if [ -n "${_wf_source_override:-}" ]; then
           deploy_src="$(wf::deploy_source_path "$target")"
@@ -632,7 +654,7 @@ main() {
             echo "not chezmoi-managed in this worktree ($_wf_source_override). New file: create the source directly, or derive its name with: chezmoi -S \"$_wf_source_override\" add $target. If chezmoi IGNORES this path, add warns and exits 0 without adding: read its output before reporting it added." >&2
           fi
         else
-          echo "not chezmoi-managed (new file — use: chezmoi add $target). If chezmoi IGNORES this path, add warns and exits 0 without adding: read its output before reporting it added." >&2
+          echo "not chezmoi-managed, and this is not a dev worktree: a global change is authored in the dotfiles repo, not here. Do not edit the deploy clone and do not run chezmoi add against it — see delivery.md." >&2
         fi
         exit 1 ;;
     esac

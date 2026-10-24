@@ -118,15 +118,17 @@ needs judgment: trade-offs, prose, scope calls.
 
 Where it goes:
 
-- **`tools/`** — useful outside Claude or shared by several commands. Shared
-  read-only facts belong in `tools/lib/repo-facts.sh`, which exists for this.
+- **A project's own `tools/`** — useful outside Claude or shared by several of
+  its commands; it ships in that project's PR.
+- **The dotfiles repo's `tools/`** — shared read-only facts belong in
+  `tools/lib/repo-facts.sh`, which exists for this.
 - **This skill's directory** — specific to this skill, like `wf-context.sh`.
 - Scripts print `key=value` on stdout, exit non-zero with a reason on stderr,
   and stay read-only unless the task is explicitly a mutation.
 
-`tools/` is part of the dotfiles repo and chezmoi-ignored (it runs in place from
-the deploy clone), so a script change rides the same ticket and PR as the prompt
-that calls it. Never split them across two reviews.
+The dotfiles repo's `tools/` is chezmoi-ignored (it runs in place from the
+deploy clone), so a script change there rides the same ticket and PR as the
+prompt that calls it. Never split them across two reviews.
 
 ## 6. Writing the prompt itself
 

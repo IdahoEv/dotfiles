@@ -206,12 +206,26 @@ rm -f "$GIT_FETCH_LOG"; run_facts_counted "$ROOT/ticket" >/dev/null
 check "dev mode scans both clones"  2 "$(grep -c fetch "$GIT_FETCH_LOG" 2>/dev/null)"
 unset GIT_FETCH_LOG
 
+# A status that can't run is unknown, not clean: zero would green-light a pull.
+BADDEX="$ROOT/badindex"
+git init -q -b main "$BADDEX"
+git -C "$BADDEX" commit -q --allow-empty -m x
+printf 'garbage' > "$BADDEX/.git/index"
+out="$(cd "$PLAIN" && CHEZMOI_DEPLOY="$BADDEX" PATH="$BIN:$PATH" "$WC" 2>/dev/null)"
+check "failed status: dirty unknown" "" "$(fact "$out" chezmoi_deploy_dirty_files)"
+
 # ---- srcpath ----------------------------------------------------------------
 check "srcpath rc 0"   0 "$(run_srcpath_rc "$ROOT/ticket" "$HOME/.claude/CLAUDE.md")"
 check "srcpath worktree path" "$ROOT/ticket/dot_claude/CLAUDE.md.tmpl" \
   "$(run_srcpath "$ROOT/ticket" "$HOME/.claude/CLAUDE.md")"
 check "srcpath settings" "$ROOT/ticket/dot_claude/modify_private_settings.json.tmpl" \
   "$(run_srcpath "$ROOT/ticket" "$HOME/.claude/settings.json")"
+
+# Outside dev mode, `chezmoi add` would write into the deploy clone.
+out="$(run_srcpath "$PLAIN" "$HOME/.claude/agents/nope.md")"
+case "$out" in *"use: chezmoi add"*) r=yes ;; *) r=no ;; esac
+check "rc 1 outside dev never advises chezmoi add" no "$r"
+has "rc 1 outside dev points at the dotfiles repo" "$out" "dotfiles repo"
 
 printf 'deploy only\n' > "$DEPLOY/dot_claude/deploy-only.md"
 check "srcpath rc 1 elsewhere" 1 "$(run_srcpath_rc "$ROOT/ticket" "$HOME/.claude/deploy-only.md")"
@@ -224,6 +238,8 @@ out="$(run_facts "$ROOT/ticket")"
 check "broken worktree: unhealthy"      no  "$(fact "$out" chezmoi_healthy)"
 check "broken worktree: deploy healthy" yes "$(fact "$out" chezmoi_deploy_healthy)"
 check "broken worktree: srcpath rc 3"   3 "$(run_srcpath_rc "$ROOT/ticket" "$HOME/.claude/CLAUDE.md")"
+out="$(run_srcpath "$ROOT/ticket" "$HOME/.claude/CLAUDE.md")"
+has "rc 3 warns doctor checks only the default" "$out" "only inspects the default source"
 unset CHEZMOI_BROKEN_SOURCE
 
 # The inverse: the deploy source is broken, this worktree is fine.
@@ -236,6 +252,8 @@ unset CHEZMOI_BROKEN_SOURCE
 out="$(run_nochezmoi "$ROOT/ticket")"
 check "no chezmoi: available"   no  "$(fact "$out" chezmoi_available)"
 check "no chezmoi: markers say dev" dev "$(fact "$out" dotfiles_source)"
+check "no chezmoi: dev source root" "$ROOT/ticket" "$(fact "$out" chezmoi_source_root)"
+check "no chezmoi: dev sync counts survive" 0 "$(fact "$out" chezmoi_source_behind_origin)"
 check "no chezmoi: srcpath rc 2" 2 "$(run_nochezmoi_rc "$ROOT/ticket" "$HOME/.claude/CLAUDE.md")"
 
 # The deploy clone also carries the dev markers, so without chezmoi only its

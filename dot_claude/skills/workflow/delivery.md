@@ -17,13 +17,14 @@ cleanly. `chezmoi_source_dirty_files` > 0 — work already in flight; say so
 before adding. `_ahead_origin` here is this branch's own commits awaiting the
 PR, not a sync problem.
 
-`chezmoi_healthy=no` (the source state won't load) makes the other source facts
-— `chezmoi_source_*`, `chezmoi_claude_md_*`, `chezmoi_settings_*` — false
-negatives: run `chezmoi doctor`, and do not hand-edit `~/.claude`; that is what
-`srcpath` rc 3 below means. `chezmoi_available=no` means chezmoi is not
-installed: ask before touching `~/.claude` by hand, and read
-`chezmoi_deploy_healthy` as empty (unknown), not `no`. The deploy clone is
-probed independently, so a broken worktree source does not make it unhealthy.
+`chezmoi_healthy=no` (the source state won't load) makes the chezmoi-derived
+facts — `chezmoi_source_root`, `chezmoi_manages_claude`, `chezmoi_claude_md_*`,
+`chezmoi_settings_*` — false negatives: do not hand-edit `~/.claude`; that is
+what `srcpath` rc 3 below means. The `chezmoi_source_*` sync counts come from
+git and stay valid. `chezmoi_available=no` means chezmoi is not installed: ask
+before touching `~/.claude` by hand, and read `chezmoi_deploy_healthy` as empty
+(unknown), not `no`. The deploy clone is probed independently, so a broken
+worktree source does not make it unhealthy.
 
 ## Source naming
 
@@ -45,14 +46,17 @@ path in this worktree. Edit it there.
 - **0** — managed; path on stdout.
 - **1** — chezmoi is healthy and the target is not managed in *this* source.
   The stderr names the deploy path when the branch simply does not carry the
-  file; otherwise it is the new-file case below. It also covers a path matched
-  by `.chezmoiignore`, which `srcpath` can't distinguish.
+  file: rebase onto `origin/<default>` if it is on main, otherwise report what
+  the deploy clone has — never edit that path or create a duplicate. Without
+  such a path it is the new-file case below. It also covers a path matched by
+  `.chezmoiignore`, which `srcpath` can't distinguish.
 - **2** — chezmoi is not installed. Ask before touching `~/.claude` by hand.
 - **3** — chezmoi cannot read the source state at all: a missing source dir, or
   `.chezmoiignore` / `.chezmoidata.*` / `.chezmoiexternal.*` / `.chezmoiversion`
   won't parse. **Not** the new-file case — do not edit the target, and do not
   treat the deploy clone as broken too (`chezmoi_deploy_healthy` is separate).
-  Run `chezmoi doctor`.
+  Fix the offending file in the named source root; in `dev` mode that is this
+  worktree, and `chezmoi doctor` inspects only the default source.
 
 rc 3 is narrow: a syntax error in a *content* template (`CLAUDE.md.tmpl`) still
 resolves source paths and still breaks `chezmoi apply`. That is why the diff
