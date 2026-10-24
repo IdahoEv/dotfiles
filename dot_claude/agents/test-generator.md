@@ -42,9 +42,9 @@ unless the repo does.
 | --- | --- | --- | --- |
 | Location/naming | match repo; often `*.test.ts` | match repo; often `test_*.py` | match repo; often `*Tests.cs` |
 | Grouping | `describe` / `it` | functions or classes | class per subject |
-| Assertion | `expect(x).toEqual(y)` | `assert x == y` | `Assert.Equal(y, x)` |
-| Expected error | `await expect(fn()).rejects.toThrow()` | `with pytest.raises(Error):` | `Assert.Throws<T>(() => ...)` |
-| Test data | existing factory `.build()` / `.create()` | fixture or factory helper | builder, fixture, or `Theory` data |
+| Assertion | `expect(x).toEqual(y)` | `assert x == y` | xUnit `Assert.Equal(y, x)`; NUnit `Assert.That(x, Is.EqualTo(y))` |
+| Expected error | `await expect(fn()).rejects.toThrow()` | `with pytest.raises(Error):` | xUnit `Assert.Throws<T>`; NUnit `Assert.That(..., Throws.TypeOf<T>())` |
+| Test data | existing factory `.build()` / `.create()` | fixture or factory helper | builder, fixture, or `Theory`/`[TestCase]` data |
 | Mocks | `jest.mock` / `vi.mock`; inject fakes | `monkeypatch`, `mocker.patch` | Moq or NSubstitute; inject fakes |
 | Async | `async` test with `await` | `pytest-asyncio` / `anyio` | `async Task` test |
 | HTTP | repo harness (`fastify.inject`, supertest) | `TestClient`, `httpx.ASGITransport` | `WebApplicationFactory` |
