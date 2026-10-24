@@ -238,7 +238,9 @@ check "srcpath settings" "$ROOT/ticket/dot_claude/modify_private_settings.json.t
 out="$(run_srcpath "$PLAIN" "$HOME/.claude/agents/nope.md")"
 case "$out" in *"use: chezmoi add"*) r=yes ;; *) r=no ;; esac
 check "rc 1 outside dev never advises chezmoi add" no "$r"
-has "rc 1 outside dev points at the dotfiles repo" "$out" "dotfiles repo"
+has "rc 1 outside dev points at intake" "$out" "intake"
+out="$(run_srcpath "$DEPLOY" "$HOME/.claude/agents/nope.md")"
+has "rc 1 in deploy points at a dev checkout" "$out" "dev checkout"
 
 printf 'deploy only\n' > "$DEPLOY/dot_claude/deploy-only.md"
 check "srcpath rc 1 elsewhere" 1 "$(run_srcpath_rc "$ROOT/ticket" "$HOME/.claude/deploy-only.md")"

@@ -9,8 +9,8 @@
 #
 # A governor session stays in the primary worktree and writes no code, so
 # /workflow's config edits happen in a separate session. The kickoff carries the
-# project's governor.md, a pointer to its CLAUDE.md, and the scope rule (project
-# changes here, all-project changes as a dotfiles issue). The session starts via
+# project's governor.md, a pointer to its CLAUDE.md, and a pointer to /workflow
+# for scope routing and intake. The session starts via
 # `start-ticket.sh --tab-only`, so the `launcher=` setting (iterm|bg|none) applies.
 #
 # The caller (the /workflow skill) is the real governor gate. This only refuses
@@ -100,11 +100,10 @@ fi
 kickoff="${TMPDIR:-/tmp}/${project}-kickoff-workflow.md"
 {
   printf 'Working on %s workflow config in this worktree. Branch `%s` is checked out.\n\n' "$project" "$BRANCH"
-  printf 'Load `/workflow` for authoring guidance (scope routing, prompt-writing rules). Delivery mechanics are in its `delivery.md` and apply only when this worktree is the dotfiles source repo.\n\n'
+  printf 'Load `/workflow` for authoring guidance: scope routing, intake for a global change, and prompt-writing rules. Delivery mechanics are in its `delivery.md` and apply only when this worktree is the dotfiles source repo.\n\n'
   printf '## Scope rule\n\n'
   printf -- '- Project-specific changes (the project conf, `CLAUDE.md`, kickoff preamble, `.claude/`) are made here, in this worktree.\n'
-  printf -- '- A change that should apply to every project belongs in the dotfiles repo. If this project is not dotfiles, file an issue there with the friction and evidence, or offer to:\n\n'
-  printf '      gh issue create -R IdahoEv/dotfiles\n\n'
+  printf -- '- A change that should apply to every project belongs in the dotfiles repo. If this project is not dotfiles, `/workflow` intake files it there with the friction and evidence, after the user approves.\n'
   printf -- '- If this project *is* dotfiles, make the change here — this worktree is the delivery checkout.\n\n'
   if doc="$(gt::find_doc governor.md "$top")"; then
     printf '## Project context (governor.md)\n\n'

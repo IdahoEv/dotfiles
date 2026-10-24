@@ -1,6 +1,6 @@
 ---
 name: workflow
-description: Improve how we work — Claude config (CLAUDE.md, skills, commands, hooks, settings, agents), prompts, dotfiles, git/ticket workflow, and the scripts behind them. Use when the user asks to improve, tune, speed up, or fix the workflow or prompts; when a recurring friction or repeated correction suggests a config change; or when they invoke /workflow. Routes each change to the right scope and shapes it as a ticket; delivery mechanics are in delivery.md for the dotfiles repo.
+description: Improve how we work — Claude config (CLAUDE.md, skills, commands, hooks, settings, agents), prompts, dotfiles, git/ticket workflow, and the scripts behind them. Use when the user asks to improve, tune, speed up, or fix the workflow or prompts; when a recurring friction or repeated correction suggests a config change; or when they invoke /workflow. Routes each change to the right scope and shapes it as a ticket; outside the dotfiles repo, a global change becomes an intake issue there. Delivery mechanics are in delivery.md for the dotfiles repo.
 ---
 
 # Workflow
@@ -48,7 +48,7 @@ Keys that change what you do:
 | --- | --- |
 | `dotfiles_source=dev` | This checkout is a dev/ticket worktree of the dotfiles source. Read `delivery.md` before editing. |
 | `dotfiles_source=deploy` | You are in the deploy clone. It is never a working copy — don't edit it; read `delivery.md` for the pull/apply step. |
-| `dotfiles_source=none` | Not the dotfiles repo. You author the change; global config is delivered in the dotfiles repo. |
+| `dotfiles_source=none` | Not the dotfiles repo. Project-local edits stay here; a global change goes through intake (§3). |
 | `project_claude_dir=symlink` | **Stop.** `.claude/` points at the main checkout; edits escape the branch into the user's working copy. Report and ask. |
 | `project_claude_settings_local=symlink` | Same trap, quieter: only `settings.local.json` is shared. Don't edit it here. |
 | `standing_ticket_source=none` | No ticket found by marker or branch — see §4. |
@@ -81,12 +81,39 @@ that can drift. **State the rule once, in the narrowest scope that holds it.**
 
 ## 3. Where the edit lands
 
-- `dotfiles_source=dev` — read `delivery.md`, then edit in this worktree.
+- `dotfiles_source=dev` — the delivery checkout. Author the change for the
+  current ticket (§4): read `delivery.md`, then edit in this worktree. Do not
+  file an intake issue here.
 - `dotfiles_source=deploy` — no edits here; it is not a working copy.
 - `dotfiles_source=none` — project-local changes (this repo's `.claude/`,
-  `CLAUDE.md`) are made here as usual (§4). Do not edit `~/.claude` or the
-  deploy clone: a change that belongs in global config is delivered in the
-  dotfiles repo — file it there.
+  `CLAUDE.md`) are made here as usual (§4). A change that §2 classifies global
+  goes through intake below: never edit `~/.claude`, the deploy clone, or a
+  chezmoi source, and never `chezmoi add` against them.
+
+### Intake: a global change from another repo
+
+1. Everything sent to GitHub — search keywords, title, body, comment — is on
+   a public service: strip work-repo names, hosts, credentials, internal
+   URLs, customer names, and ticket ids before step 2. If the evidence can't
+   be sanitized, describe the shape of the problem and keep the evidence local.
+2. Check for an existing issue with generic terms:
+   `gh issue list -R github.com/IdahoEv/dotfiles --state all --search "<generic terms>"`.
+   If one covers it, check its state with
+   `gh issue view <n> -R github.com/IdahoEv/dotfiles --json state`. Reopen a
+   closed one (`gh issue reopen <n> -R github.com/IdahoEv/dotfiles`) or link
+   it from a new issue; a comment on a closed issue is not intake. If the
+   search fails, skip it and draft anyway.
+3. Draft the title and body for either path: `## Friction`, `## Evidence`
+   (command and output, `file:line`, what you were attempting),
+   `## Proposed change`, and a one-line scope note.
+4. Show the draft and wait for approval; create nothing before it.
+5. File it with the body on stdin:
+   `gh issue create -R github.com/IdahoEv/dotfiles --title "<title>" --body-file -`,
+   or `gh issue comment <n> -R github.com/IdahoEv/dotfiles --body-file -`
+   after reopening a closed issue. If that call fails, hand the user the
+   failure and the draft — title and body to create, or issue number and body
+   to comment — rather than improvising another path. On success, report the
+   URL; intake is done. Continue with any local work and the §8 report.
 
 ## 4. Project-local config and the standing ticket
 
@@ -166,4 +193,5 @@ Cloud sessions see only committed files, so projects that use them carry `cloud-
 
 State what changed by scope (project / global source / tools), what is authored
 versus shipped (PR open or merged — delivery details are in `delivery.md`), and
-anything you deliberately skipped.
+anything you deliberately skipped. An intake issue is authored, not shipped:
+give its URL.

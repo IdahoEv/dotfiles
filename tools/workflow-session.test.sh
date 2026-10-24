@@ -80,7 +80,9 @@ has "kickoff carries governor.md" "$KF" "GOVERNOR-CONTEXT-MARKER"
 has "kickoff points at repo CLAUDE.md" "$KF" 'The repo `CLAUDE.md` loads automatically'
 if grep -qF 'session-label.sh' "$KF"; then r=yes; else r=no; fi
 check "kickoff leaves labelling to the skill" no "$r"
-has "kickoff names the issue command" "$KF" "gh issue create -R IdahoEv/dotfiles"
+has "kickoff points at intake" "$KF" "intake files it there"
+if grep -qF 'gh issue create' "$KF"; then r=yes; else r=no; fi
+check "kickoff leaves the command to the skill" no "$r"
 has "kickoff states the scope rule" "$KF" "every project"
 has "kickoff loads /workflow" "$KF" "/workflow"
 has "kickoff points at delivery.md" "$KF" "delivery.md"
