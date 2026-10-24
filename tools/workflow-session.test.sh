@@ -123,6 +123,20 @@ echo '{"name":"bareproj Governor"}' > "$SESSION_LABEL_STATE_FILE"
 has "bare layout: kickoff carries governor.md" "$TMPDIR/bareproj-kickoff-workflow.md" "BARE-GOVERNOR-MARKER"
 check "bare layout: workflow worktree is a sibling of main" "yes" "$([ -d "$B/workflow" ] && echo yes || echo no)"
 
+# wm can exit non-zero after creating the worktree (e.g. a failed dependency
+# install); the session must still open.
+F="$ROOT/proj2"; git init -q "$F/p"; git -C "$F/p" commit -q --allow-empty -m init
+cat > "$ROOT/wm-fail" <<'SH'
+#!/usr/bin/env bash
+git worktree add -q "$(dirname "$(git rev-parse --show-toplevel)")/$1" -b "$1"
+echo "npm install failed" >&2; exit 1
+SH
+chmod +x "$ROOT/wm-fail"
+rm -f "$ST_LOG"; echo '{"name":"p Governor"}' > "$SESSION_LABEL_STATE_FILE"
+out="$(cd "$F/p" && WORKFLOW_SESSION_WM="$ROOT/wm-fail" "$WS" 2>/dev/null)"; rc=$?
+check "wm failing after creating the worktree: runs" "0" "$rc"
+has "wm failing after creating the worktree: launches" "$ST_LOG" "--tab-only $F/workflow"
+
 check "project checkout stays clean" "" "$(git -C "$P" status --porcelain | grep -v '^?? ')"
 
 printf '%d passed, %d failed\n' "$pass" "$fail"

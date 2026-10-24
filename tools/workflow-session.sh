@@ -73,13 +73,20 @@ if [ "$force" = 0 ] && title="$(session_title)"; then
   esac
 fi
 
-wt="$(git -C "$main" worktree list --porcelain | awk -v b="refs/heads/$BRANCH" '
-  /^worktree /{p=substr($0,10)} $1=="branch" && $2==b {print p; exit}')"
+workflow_worktree() {
+  git -C "$main" worktree list --porcelain | awk -v b="refs/heads/$BRANCH" '
+    /^worktree /{p=substr($0,10)} $1=="branch" && $2==b {print p; exit}'
+}
+
+wt="$(workflow_worktree)"
 reused=yes
 if [ -z "$wt" ]; then
   reused=no
-  wt="$(cd "$top" && "$wm" "$BRANCH" | tail -n 1)"
-  [ -d "$wt" ] || die "worktree-manager did not produce a worktree path (got: $wt)"
+  # wm can fail after the worktree exists (e.g. dependency install), so ask git
+  # rather than trusting its exit code or output.
+  (cd "$top" && "$wm" "$BRANCH" >&2) || printf 'workflow-session: worktree-manager exited non-zero; checking for the worktree anyway\n' >&2
+  wt="$(workflow_worktree)"
+  [ -n "$wt" ] && [ -d "$wt" ] || die "worktree-manager did not create a '$BRANCH' worktree"
 fi
 
 kickoff="${TMPDIR:-/tmp}/${project}-kickoff-workflow.md"
