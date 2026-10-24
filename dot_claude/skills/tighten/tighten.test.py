@@ -270,6 +270,11 @@ class ProposalTests(unittest.TestCase):
         self.assertEqual(self.run_check([{"file": "a.py", "old": "# one two three", "new": "# one"}])
                          ["rejected"][0]["reason"], "mixed_line_endings")
 
+    def test_lone_cr_file_is_rejected(self):
+        self.file.write_bytes(b"# one two three\rx = 1\r# four five\r")
+        self.assertEqual(self.run_check([{"file": "a.py", "old": "# one two three", "new": "# one"}])
+                         ["rejected"][0]["reason"], "mixed_line_endings")
+
     def test_fenced_code_body_is_rejected(self):
         self.assertEqual(self.run_check([{"file": "README.md", "old": "code", "new": ""}])
                          ["rejected"][0]["reason"], "doc_structural")

@@ -99,7 +99,9 @@ def validate(root: str, proposals: list[dict]) -> tuple[list[dict], list[dict]]:
             except (OSError, UnicodeDecodeError):
                 rejected.append({**entry, "reason": "unreadable"})
                 continue
-            if "\r" in raw and raw.count("\r\n") != raw.count("\n"):
+            pairs = raw.count("\r\n")
+            lone = raw.count("\r") - pairs
+            if lone or ("\r" in raw and pairs != raw.count("\n")):
                 rejected.append({**entry, "reason": "mixed_line_endings"})
                 continue
             texts[rel] = normalize_newlines(raw)
