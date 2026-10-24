@@ -78,6 +78,8 @@ workflow_worktree() {
     /^worktree /{p=substr($0,10)} $1=="branch" && $2==b {print p; exit}'
 }
 
+# A worktree dir removed by hand stays listed (prunable) and would pass as reusable.
+git -C "$main" worktree prune
 wt="$(workflow_worktree)"
 reused=yes
 if [ -z "$wt" ]; then

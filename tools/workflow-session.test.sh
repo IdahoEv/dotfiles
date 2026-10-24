@@ -38,7 +38,7 @@ export SESSION_LABEL_STATE_FILE="$ROOT/state.json"
 cat > "$ROOT/wm" <<'SH'
 #!/usr/bin/env bash
 wt="$(dirname "$(git rev-parse --show-toplevel)")/$1"
-git worktree add -q "$wt" -b "$1"
+git worktree add -q "$wt" "$1" 2>/dev/null || git worktree add -q "$wt" -b "$1"
 echo "$wt"
 SH
 cat > "$ROOT/st" <<'SH'
@@ -122,6 +122,16 @@ echo '{"name":"bareproj Governor"}' > "$SESSION_LABEL_STATE_FILE"
 (cd "$B/main" && "$WS" >/dev/null); check "bare layout: runs" "0" "$?"
 has "bare layout: kickoff carries governor.md" "$TMPDIR/bareproj-kickoff-workflow.md" "BARE-GOVERNOR-MARKER"
 check "bare layout: workflow worktree is a sibling of main" "yes" "$([ -d "$B/workflow" ] && echo yes || echo no)"
+
+# A worktree dir deleted by hand leaves a prunable entry; it must not count as reuse.
+S="$ROOT/proj3"; git init -q "$S/p"; git -C "$S/p" commit -q --allow-empty -m init
+git -C "$S/p" worktree add -q "$S/workflow" -b workflow; rm -rf "$S/workflow"
+echo '{"name":"p Governor"}' > "$SESSION_LABEL_STATE_FILE"
+out="$(cd "$S/p" && "$WS" 2>/dev/null)"; rc=$?
+check "stale worktree entry: runs" "0" "$rc"
+case "$out" in *"reused=no"*) r=yes ;; *) r=no ;; esac
+check "stale worktree entry: recreated, not reused" yes "$r"
+check "stale worktree entry: dir exists" yes "$([ -d "$S/workflow" ] && echo yes || echo no)"
 
 # wm can exit non-zero after creating the worktree (e.g. a failed dependency
 # install); the session must still open.
