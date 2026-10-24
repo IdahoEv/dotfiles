@@ -6,6 +6,7 @@
 
 ## Key documents
 - GitHub issues on this repo — the tracker. **Repo is public: never put sensitive information in issues, PRs, or commits.**
+- Issues filed from other repos by `/workflow` intake are triaged here with the rest. They may describe another project, so the public-repo rule applies to their evidence too.
 
 ## Repositories
 - **dotfiles** (this repo) — source of truth

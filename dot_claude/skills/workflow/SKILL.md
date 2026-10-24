@@ -1,6 +1,6 @@
 ---
 name: workflow
-description: Improve how we work — Claude config (CLAUDE.md, skills, commands, hooks, settings, agents), prompts, dotfiles, git/ticket workflow, and the scripts behind them. Use when the user asks to improve, tune, speed up, or fix the workflow or prompts; when a recurring friction or repeated correction suggests a config change; or when they invoke /workflow. Routes each change to the right scope and shapes it as a ticket; delivery mechanics are in delivery.md for the dotfiles repo.
+description: Improve how we work — Claude config (CLAUDE.md, skills, commands, hooks, settings, agents), prompts, dotfiles, git/ticket workflow, and the scripts behind them. Use when the user asks to improve, tune, speed up, or fix the workflow or prompts; when a recurring friction or repeated correction suggests a config change; or when they invoke /workflow. Routes each change to the right scope and shapes it as a ticket; outside the dotfiles repo, a global change becomes an intake issue there. Delivery mechanics are in delivery.md for the dotfiles repo.
 ---
 
 # Workflow
@@ -48,7 +48,7 @@ Keys that change what you do:
 | --- | --- |
 | `dotfiles_source=dev` | This checkout is a dev/ticket worktree of the dotfiles source. Read `delivery.md` before editing. |
 | `dotfiles_source=deploy` | You are in the deploy clone. It is never a working copy — don't edit it; read `delivery.md` for the pull/apply step. |
-| `dotfiles_source=none` | Not the dotfiles repo. You author the change; global config is delivered in the dotfiles repo. |
+| `dotfiles_source=none` | Not the dotfiles repo. Project-local edits stay here; a global change goes through intake (§3). |
 | `project_claude_dir=symlink` | **Stop.** `.claude/` points at the main checkout; edits escape the branch into the user's working copy. Report and ask. |
 | `project_claude_settings_local=symlink` | Same trap, quieter: only `settings.local.json` is shared. Don't edit it here. |
 | `standing_ticket_source=none` | No ticket found by marker or branch — see §4. |
@@ -81,12 +81,30 @@ that can drift. **State the rule once, in the narrowest scope that holds it.**
 
 ## 3. Where the edit lands
 
-- `dotfiles_source=dev` — read `delivery.md`, then edit in this worktree.
+- `dotfiles_source=dev` — the delivery checkout. Author the change for the
+  current ticket (§4): read `delivery.md`, then edit in this worktree. Do not
+  file an intake issue here.
 - `dotfiles_source=deploy` — no edits here; it is not a working copy.
 - `dotfiles_source=none` — project-local changes (this repo's `.claude/`,
-  `CLAUDE.md`) are made here as usual (§4). Do not edit `~/.claude` or the
-  deploy clone: a change that belongs in global config is delivered in the
-  dotfiles repo — file it there.
+  `CLAUDE.md`) are made here as usual (§4). A change that §2 classifies global
+  goes through intake below: never edit `~/.claude`, the deploy clone, or a
+  chezmoi source, and never `chezmoi add` against them.
+
+### Intake: a global change from another repo
+
+1. Check for an existing issue:
+   `gh issue list -R IdahoEv/dotfiles --state open --search "<keywords>"`.
+   If one covers it, add the new evidence as a comment instead of filing.
+2. Draft a title naming the friction and a short body: `## Friction`,
+   `## Evidence` (command and output, `file:line`, what you were attempting),
+   `## Proposed change`, and a one-line scope note.
+3. The repo is public: strip work-repo names, hosts, credentials, internal
+   URLs, customer names, and ticket ids. If the evidence can't be sanitized,
+   describe the shape of the problem and keep the evidence local.
+4. Show the draft and wait for approval; create nothing before it.
+5. `gh issue create -R IdahoEv/dotfiles --title "<title>" --body-file -`
+   with the body on stdin. Report the URL and stop. If `gh` is missing or
+   unauthenticated, hand the draft over rather than trying another path.
 
 ## 4. Project-local config and the standing ticket
 
@@ -166,4 +184,5 @@ Cloud sessions see only committed files, so projects that use them carry `cloud-
 
 State what changed by scope (project / global source / tools), what is authored
 versus shipped (PR open or merged — delivery details are in `delivery.md`), and
-anything you deliberately skipped.
+anything you deliberately skipped. An intake issue is authored, not shipped:
+give its URL.
