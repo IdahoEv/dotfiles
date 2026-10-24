@@ -6,17 +6,17 @@
 # would otherwise re-derive with a dozen tool calls lives here instead, so the
 # model spends its tokens on the decision rather than on probing the filesystem.
 #
-# Same rationale as lib/repo-facts.sh in git-tools: state a convention once, in
-# shell, instead of restating it in prose and having the model re-run the probes.
+# Same rationale as tools/lib/repo-facts.sh: state a convention once, in shell,
+# instead of restating it in prose and having the model re-run the probes.
 #
-# Read-only, no writes, no side effects. Safe to run anywhere.
-#
-# Makes no network calls of its own — every git query is local-only, which is
-# why the default-branch lookup avoids gt::default_branch (see below). The one
-# caveat is chezmoi: if the dotfiles source dir ever declares an `archive`-type
-# external with an expired refreshPeriod, `chezmoi source-path` will fetch it.
-# The current config declares only a `git-repo` external, which is not fetched
-# on these read paths.
+# Leaves working trees untouched; safe to run anywhere. It does fetch
+# remote-tracking refs in the dotfiles checkouts it reports on (bounded by
+# `timeout 10`; offline, the counts just reflect the last fetch). The
+# default-branch lookup itself stays local-only, which is why it avoids
+# gt::default_branch (see below). One further caveat: if the source dir ever
+# declares an `archive`-type external with an expired refreshPeriod,
+# `chezmoi source-path` will fetch it; the current config declares no such
+# external.
 #
 # Usage:
 #   wf-context.sh                      # key=value facts about the current repo
@@ -27,6 +27,11 @@
 # genuinely unmanaged (the "new file" case) · 2 chezmoi not installed · 3
 # chezmoi can't read its source state — NOT a license to edit the target
 # directly.
+#
+# `dotfiles_source=dev|deploy|none` says which checkout the `chezmoi_source_*`
+# facts describe: a dev/ticket worktree (edit here), the deploy clone (pull and
+# apply only), or neither (the deploy clone is still the effective source). The
+# deploy clone's own state is always reported under `chezmoi_deploy_*`.
 #
 # The subcommand is `srcpath`, deliberately NOT `source`: a bare `source` in an
 # argument list trips command-sandbox guards that scan for shell sourcing, which
@@ -39,12 +44,29 @@ set -uo pipefail
 
 GIT_TOOLS_DEFAULT="$HOME/.local/share/chezmoi/tools"
 
-# Memo state for wf::chezmoi_healthy. Cleared here so an exported value in the
-# caller's environment can't preempt the probe — a sentinel that answers from
-# $ENV is worse than no sentinel.
+# Memo state. Cleared here so an exported value in the caller's environment
+# can't preempt a probe — a sentinel that answers from $ENV is worse than none.
 unset _wf_chezmoi_probed _wf_chezmoi_healthy
+unset _wf_deploy_probed _wf_deploy_healthy
+unset _wf_deploy_root_resolved
+_wf_deploy_root=""
+_wf_source_override=""
+_wf_dotfiles_source=""
 
-usage() { sed -n '2,24p' "$0" | sed 's/^# \{0,1\}//'; }
+usage() {
+  cat <<'EOF'
+wf-context.sh — deterministic facts for /workflow.
+
+Usage:
+  wf-context.sh                      # key=value facts about the current repo
+  wf-context.sh srcpath <target>     # chezmoi source path for a target file
+  wf-context.sh --help
+
+srcpath exit codes: 0 managed · 1 healthy chezmoi, target unmanaged in the
+effective source (the "new file" case) · 2 chezmoi not installed · 3 chezmoi
+cannot read its source state — do NOT edit the target directly.
+EOF
+}
 
 # ---- chezmoi ----------------------------------------------------------------
 # Resolve the chezmoi SOURCE file for a target path. This is the whole point of
@@ -73,7 +95,7 @@ usage() { sed -n '2,24p' "$0" | sed 's/^# \{0,1\}//'; }
 # here: `chezmoi ignored` lists only entries already in the source state, so
 # it can't see a would-be new file. The tell is at add time — `chezmoi add` on
 # an ignored path prints "warning: ignoring <path>" and exits 0 WITHOUT
-# adding. Read its output; see SKILL.md §3.
+# adding. Read its output; see delivery.md.
 #
 # rc 3 exists because `chezmoi source-path <target>` cannot be trusted to mean
 # "not managed": it prints the same "not managed" on stderr and exits 1 for a
@@ -83,6 +105,89 @@ usage() { sed -n '2,24p' "$0" | sed 's/^# \{0,1\}//'; }
 # directly is the exact thing this skill exists to prevent. It would also be
 # silently undone by the next `chezmoi apply` once chezmoi is working again.
 #
+# Canonical directory, following macOS's /private symlinks. Empty on failure.
+wf::canon_dir() { (cd -P "$1" 2>/dev/null && pwd -P); }
+
+# The deploy clone's source root, always via chezmoi's default source. Memoized:
+# `chezmoi source-path` is a process spawn several callers ask for. This is the
+# machine's pu/apply checkout, not necessarily the working copy being edited.
+wf::deploy_root() {
+  if [ "${_wf_deploy_root_resolved:-}" != yes ]; then
+    _wf_deploy_root=""
+    if command -v chezmoi >/dev/null; then
+      _wf_deploy_root="$(command chezmoi source-path 2>/dev/null || true)"
+    fi
+    _wf_deploy_root_resolved=yes
+  fi
+  printf '%s' "${_wf_deploy_root:-}"
+}
+
+# chezmoi against the effective source: the current worktree in `dev` mode,
+# the default source otherwise.
+wf::chezmoi() {
+  if [ -n "${_wf_source_override:-}" ]; then
+    command chezmoi -S "$_wf_source_override" "$@"
+  else
+    command chezmoi "$@"
+  fi
+}
+
+wf::git_common_dir() {  # <repo-dir> → canonical common dir, or empty
+  local d
+  d="$(git -C "$1" rev-parse --git-common-dir 2>/dev/null)" || return 1
+  [ -n "$d" ] || return 1
+  case "$d" in /*) ;; *) d="$1/$d" ;; esac
+  wf::canon_dir "$d"
+}
+
+# Which copy of the dotfiles source this session should consider authoritative:
+#
+#   dev     a dev/ticket worktree (or the bare layout's main) — edit here
+#   deploy  the chezmoi deploy clone itself — pull/apply only, never edit
+#   none    not the dotfiles repo — the deploy clone is still the source for
+#           reference, but edits do not happen from here
+#
+# The normal layout is two SEPARATE clones, so equal git common dirs cannot
+# identify a dev worktree; the `.chezmoiignore` + `dot_claude/` markers do.
+# Common-dir equality is checked first only because it also holds if a future
+# deploy clone is a linked worktree of the dev repo.
+wf::resolve_dotfiles_source() {
+  _wf_dotfiles_source=none
+  _wf_source_override=""
+  local top deploy deploy_c top_c
+  top="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+  [ -n "$top" ] || return 0
+  top="$(wf::canon_dir "$top")"
+  deploy="$(wf::deploy_root)"
+  if [ -n "$deploy" ]; then
+    deploy="$(wf::canon_dir "$deploy")"
+    if [ "$top" = "$deploy" ]; then
+      _wf_dotfiles_source=deploy
+      return 0
+    fi
+    deploy_c="$(wf::git_common_dir "$deploy")"
+    top_c="$(wf::git_common_dir "$top")"
+    if [ -n "$deploy_c" ] && [ "$deploy_c" = "$top_c" ]; then
+      _wf_dotfiles_source=dev
+      _wf_source_override="$top"
+      return 0
+    fi
+  fi
+  if [ -f "$top/.chezmoiignore" ] && [ -d "$top/dot_claude" ]; then
+    _wf_dotfiles_source=dev
+    _wf_source_override="$top"
+  fi
+}
+
+# Source path in the deploy clone, regardless of the effective source. Used
+# only to explain a dev-mode rc 1: the branch may simply not carry the file.
+wf::deploy_source_path() {  # <target> → <path>, or empty
+  local root
+  root="$(wf::deploy_root)"
+  [ -n "$root" ] || return 0
+  command chezmoi -S "$root" source-path -- "$1" 2>/dev/null || true
+}
+
 # See wf::chezmoi_healthy for the discriminator and why it takes two tests.
 wf::source_path() {  # <target> → <source path>
   local target="$1" src
@@ -90,7 +195,7 @@ wf::source_path() {  # <target> → <source path>
   # `--` so a target beginning with a dash can't be read as a chezmoi flag:
   # `source-path --source=/tmp` otherwise prints /tmp and exits 0, i.e. the
   # strongest claim this function makes, for something that isn't a file.
-  if src="$(chezmoi source-path -- "$target" 2>/dev/null)"; then
+  if src="$(wf::chezmoi source-path -- "$target" 2>/dev/null)"; then
     [ -n "$src" ] && printf '%s' "$src"
     return 0
   fi
@@ -120,12 +225,22 @@ wf::source_path() {  # <target> → <source path>
 # Reading `managed`'s status rather than its output is what makes this safe for
 # a freshly-`chezmoi init`ed source dir: empty but healthy, it lists nothing and
 # exits 0, so it is correctly healthy and rc 1 ("new file") is the right answer.
-wf::chezmoi_healthy() {
+wf::source_readable() {  # <source-dir|""> — "" means chezmoi's default source
+  local dir="${1:-}" root
+  command -v chezmoi >/dev/null || return 1
+  if [ -n "$dir" ]; then
+    [ -d "$dir" ] || return 1
+    command chezmoi -S "$dir" managed >/dev/null 2>&1
+  else
+    root="$(command chezmoi source-path 2>/dev/null)" || return 1
+    [ -n "$root" ] && [ -d "$root" ] || return 1
+    command chezmoi managed >/dev/null 2>&1
+  fi
+}
+
+wf::chezmoi_healthy() {  # effective source (the worktree in `dev` mode)
   if [ "${_wf_chezmoi_probed:-}" != yes ]; then
-    local root
-    root="$(chezmoi source-path 2>/dev/null)"
-    if [ -n "$root" ] && [ -d "$root" ] \
-       && chezmoi managed >/dev/null 2>&1; then
+    if wf::source_readable "${_wf_source_override:-}"; then
       _wf_chezmoi_healthy=yes
     else
       _wf_chezmoi_healthy=no
@@ -135,14 +250,100 @@ wf::chezmoi_healthy() {
   [ "$_wf_chezmoi_healthy" = yes ]
 }
 
+# The deploy clone has its own source state: in `dev` mode a broken worktree
+# must not be reported as a broken install, and vice versa.
+wf::chezmoi_deploy_healthy() {
+  if [ "${_wf_deploy_probed:-}" != yes ]; then
+    if wf::source_readable "$(wf::deploy_root)"; then
+      _wf_deploy_healthy=yes
+    else
+      _wf_deploy_healthy=no
+    fi
+    _wf_deploy_probed=yes
+  fi
+  [ "$_wf_deploy_healthy" = yes ]
+}
+
+# Local-only default branch: origin/HEAD when it resolves, else
+# gt::default_branch_ref's fixed-order probe. Prints "<branch>\t<source>" so the
+# caller gets the provenance too (the probe is a guess; see §1).
+wf::default_branch() {  # <dir> → "<branch>\t<source>"
+  local dir="$1" default src="origin_head"
+  default="$(git -C "$dir" symbolic-ref refs/remotes/origin/HEAD 2>/dev/null)"
+  default="${default#refs/remotes/origin/}"
+  # A symref can outlive its target; verify the full ref path (a tag named
+  # origin/<x> would also satisfy a bare test).
+  if [ -n "$default" ] \
+     && ! git -C "$dir" rev-parse --verify -q \
+          "refs/remotes/origin/$default" >/dev/null; then
+    default=""
+  fi
+  if [ -z "$default" ] && declare -f gt::default_branch_ref >/dev/null 2>&1; then
+    default="$(gt::default_branch_ref "$dir" 2>/dev/null || true)"
+    default="${default#origin/}"
+    [ -n "$default" ] && src="probe"
+  fi
+  [ -n "$default" ] || src=none
+  printf '%s\t%s\n' "$default" "$src"
+}
+
+# Dirty / ahead / behind / pull.rebase for one checkout. Compares against
+# origin/<default>, NOT @{upstream}: a fresh ticket worktree has no upstream, and
+# the question these facts answer is "is this checkout in step with the remote",
+# not "with its own remote branch". Counts are omitted (never zeroed) when no
+# comparison can be made.
+wf::repo_sync_facts() {  # <key-prefix> <git-dir|"">
+  local p="$1" root="$2" counts="" default ahead behind
+  if [ -n "$root" ] && git -C "$root" rev-parse --git-dir >/dev/null 2>&1; then
+    printf '%s_dirty_files=%s\n' "$p" \
+      "$(git -C "$root" status --porcelain 2>/dev/null | wc -l | tr -d ' ')"
+    local bound=""
+    command -v timeout >/dev/null && bound="timeout 10"   # absent on stock macOS
+    # shellcheck disable=SC2086  # $bound is intentionally word-split
+    GIT_TERMINAL_PROMPT=0 $bound git -C "$root" fetch --quiet >/dev/null 2>&1 || true
+    read -r default _ <<<"$(wf::default_branch "$root")"
+    # Both a symbolic ref and a surviving tag can name origin/<default>; only a
+    # real remote-tracking ref is a valid comparison base.
+    if [ -n "$default" ] \
+       && git -C "$root" rev-parse --verify -q "refs/remotes/origin/$default" >/dev/null; then
+      printf '%s_compare_ref=origin/%s\n' "$p" "$default"
+      # origin/<default>...HEAD: left counts what the remote has that we lack.
+      if read -r behind ahead <<<"$(git -C "$root" rev-list --left-right --count \
+        "refs/remotes/origin/$default...HEAD" 2>/dev/null)"; then
+        [ -n "${behind:-}" ] && [ -n "${ahead:-}" ] \
+          && printf '%s_ahead_origin=%s\n%s_behind_origin=%s\n' "$p" "$ahead" "$p" "$behind"
+      fi
+    else
+      printf '%s_compare_ref=\n' "$p"
+      if read -r ahead behind <<<"$(git -C "$root" rev-list --left-right --count \
+        'HEAD...@{upstream}' 2>/dev/null)"; then
+        [ -n "${ahead:-}" ] && [ -n "${behind:-}" ] \
+          && printf '%s_ahead_origin=%s\n%s_behind_origin=%s\n' "$p" "$ahead" "$p" "$behind"
+      fi
+    fi
+    printf '%s_pull_rebase=%s\n' "$p" \
+      "$(git -C "$root" config --type=bool --get pull.rebase 2>/dev/null || echo unset)"
+  else
+    printf '%s_dirty_files=\n%s_compare_ref=\n%s_pull_rebase=\n' "$p" "$p" "$p"
+  fi
+}
+
 wf::chezmoi_facts() {
-  local root managed="no" claude_md_src="" tmpl="no" dirty=""
+  local src_root deploy_root deploy_branch="" managed="no" claude_md_src="" tmpl="no"
+  local settings_src settings_kind="plain"
+
+  if command -v chezmoi >/dev/null; then
+    printf 'chezmoi_available=yes\n'
+  else
+    printf 'chezmoi_available=no\n'
+  fi
+  printf 'dotfiles_source=%s\n' "$_wf_dotfiles_source"
 
   if ! command -v chezmoi >/dev/null; then
-    printf 'chezmoi_available=no\nchezmoi_manages_claude=unknown\n'
+    printf 'chezmoi_manages_claude=unknown\nchezmoi_deploy_root=\nchezmoi_deploy_branch=\nchezmoi_deploy_healthy=no\n'
+    wf::repo_sync_facts chezmoi_deploy ""
     return
   fi
-  printf 'chezmoi_available=yes\n'
 
   # Installed is not the same as working. Everything below reads source state;
   # if chezmoi can't see its source dir, every answer is a false negative, so
@@ -153,11 +354,12 @@ wf::chezmoi_facts() {
     printf 'chezmoi_healthy=no\n'
   fi
 
-  root="$(chezmoi source-path 2>/dev/null)"
-  printf 'chezmoi_source_root=%s\n' "$root"
+  deploy_root="$(wf::deploy_root)"
+  src_root="${_wf_source_override:-$deploy_root}"
+  printf 'chezmoi_source_root=%s\n' "$src_root"
 
   # Is ~/.claude under chezmoi's control at all?
-  if chezmoi managed 2>/dev/null | grep -qxF '.claude'; then managed="yes"; fi
+  if wf::chezmoi managed 2>/dev/null | grep -qxF '.claude'; then managed="yes"; fi
   printf 'chezmoi_manages_claude=%s\n' "$managed"
 
   claude_md_src="$(wf::source_path "$HOME/.claude/CLAUDE.md" || true)"
@@ -168,7 +370,6 @@ wf::chezmoi_facts() {
   # settings.json may be a `modify_` source: a SCRIPT that rewrites the target,
   # not the target's contents. Editing it as if it were JSON corrupts it. Report
   # the kind so the prompt doesn't have to carry the rule.
-  local settings_src settings_kind="plain"
   settings_src="$(wf::source_path "$HOME/.claude/settings.json" || true)"
   printf 'chezmoi_settings_source=%s\n' "$settings_src"
   case "$(basename "${settings_src:-}")" in
@@ -177,40 +378,26 @@ wf::chezmoi_facts() {
   esac
   printf 'chezmoi_settings_source_kind=%s\n' "$settings_kind"
 
-  # Uncommitted changes already sitting in the dotfiles repo. If this is "yes",
-  # anything we add lands on top of someone else's in-flight work — say so
-  # before editing rather than after.
-  # rev-parse, not `[ -d "$root/.git" ]`: in a linked worktree .git is a FILE
-  # (as this script notes for the project case), and the -d test would report
-  # an empty count — which SKILL.md reads as "no dotfiles work in flight".
-  if [ -n "$root" ] && git -C "$root" rev-parse --git-dir >/dev/null 2>&1; then
-    dirty="$(git -C "$root" status --porcelain 2>/dev/null | wc -l | tr -d ' ')"
-  fi
-  printf 'chezmoi_source_dirty_files=%s\n' "${dirty:-}"
+  wf::repo_sync_facts chezmoi_source "$src_root"
 
-  # Is the dotfiles repo in step with origin? Both machines push to main, so
-  # editing on a stale checkout is how the merge conflicts start. Fetch first
-  # (bounded; offline just means the counts reflect the last fetch). The keys
-  # are omitted, not zeroed, when there's no upstream to compare against.
-  if [ -n "$root" ] && git -C "$root" rev-parse --git-dir >/dev/null 2>&1; then
-    local counts
-    local bound=""
-    command -v timeout >/dev/null && bound="timeout 10"   # absent on stock macOS
-    # shellcheck disable=SC2086  # $bound is intentionally word-split
-    GIT_TERMINAL_PROMPT=0 $bound git -C "$root" fetch --quiet >/dev/null 2>&1 || true
-    if counts="$(git -C "$root" rev-list --left-right --count 'HEAD...@{upstream}' 2>/dev/null)"; then
-      printf 'chezmoi_source_ahead_origin=%s\n' "${counts%%[[:space:]]*}"
-      printf 'chezmoi_source_behind_origin=%s\n' "${counts##*[[:space:]]}"
-    fi
-    # Anything but "true" means plain `git pull` makes merge commits.
-    printf 'chezmoi_source_pull_rebase=%s\n' \
-      "$(git -C "$root" config --type=bool --get pull.rebase 2>/dev/null || echo unset)"
+  # The deploy clone, reported separately: after a merge it is what needs the
+  # pull + apply, whatever branch this session's worktree is on.
+  printf 'chezmoi_deploy_root=%s\n' "$deploy_root"
+  if [ -n "$deploy_root" ]; then
+    deploy_branch="$(git -C "$deploy_root" rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
   fi
+  printf 'chezmoi_deploy_branch=%s\n' "$deploy_branch"
+  if wf::chezmoi_deploy_healthy; then
+    printf 'chezmoi_deploy_healthy=yes\n'
+  else
+    printf 'chezmoi_deploy_healthy=no\n'
+  fi
+  wf::repo_sync_facts chezmoi_deploy "$deploy_root"
 }
 
 # ---- project ----------------------------------------------------------------
 wf::project_facts() {
-  local top branch default ahead behind dirty cfg
+  local top branch default default_source ahead behind dirty cfg
 
   top="$(git rev-parse --show-toplevel 2>/dev/null)"
   if [ -z "$top" ]; then
@@ -253,27 +440,7 @@ wf::project_facts() {
     . "$GIT_TOOLS_DEFAULT/lib/repo-facts.sh"
   fi
 
-  local default_source="origin_head"
-  # Full ref, not --short: `--short` abbreviates only as far as stays
-  # unambiguous, so one stray local `origin/master` branch or tag makes it
-  # return `remotes/origin/master`, which `${default#origin/}` doesn't strip.
-  # The answer was authoritative and would silently decay into a probe guess.
-  default="$(git -C "$top" symbolic-ref refs/remotes/origin/HEAD 2>/dev/null)"
-  default="${default#refs/remotes/origin/}"
-  # A symref can outlive its target (upstream branch renamed/deleted). Verify
-  # against the full ref path — bare `origin/<x>` also resolves a TAG named
-  # `origin/<x>`, which would confirm a default branch that doesn't exist.
-  if [ -n "$default" ] \
-     && ! git -C "$top" rev-parse --verify -q \
-          "refs/remotes/origin/$default" >/dev/null; then
-    default=""
-  fi
-  if [ -z "$default" ] && declare -f gt::default_branch_ref >/dev/null 2>&1; then
-    default="$(gt::default_branch_ref "$top" 2>/dev/null || true)"
-    default="${default#origin/}"
-    [ -n "$default" ] && default_source="probe"
-  fi
-  [ -n "${default:-}" ] || default_source="none"
+  read -r default default_source <<<"$(wf::default_branch "$top")"
   printf 'default_branch=%s\ndefault_branch_source=%s\n' \
     "${default:-}" "$default_source"
 
@@ -396,19 +563,34 @@ wf::tool_facts() {
 main() {
   case "${1:-}" in
     -h|--help|help) usage; exit 0 ;;
-    srcpath)
-      [ $# -ge 2 ] || { echo "wf-context.sh srcpath <target>" >&2; exit 2; }
-      local rc=0
-      wf::source_path "$2" || rc=$?
-      case "$rc" in
-        0) printf '\n'; exit 0 ;;
-        2) echo "chezmoi not installed" >&2; exit 2 ;;
-        3) echo "chezmoi is installed but cannot read its source state. Do NOT treat $2 as unmanaged and do NOT edit it directly — fix chezmoi first: chezmoi doctor" >&2; exit 3 ;;
-        *) echo "not chezmoi-managed (new file — use: chezmoi add $2). If chezmoi IGNORES this path, add warns and exits 0 without adding: read its output before reporting it added." >&2; exit 1 ;;
-      esac ;;
+    srcpath) [ $# -ge 2 ] || { echo "wf-context.sh srcpath <target>" >&2; exit 2; } ;;
     "") ;;
     *) echo "unknown argument: $1" >&2; usage >&2; exit 2 ;;
   esac
+
+  wf::resolve_dotfiles_source
+
+  if [ "${1:-}" = srcpath ]; then
+    local target="$2" rc=0 deploy_src
+    wf::source_path "$target" || rc=$?
+    case "$rc" in
+      0) printf '\n'; exit 0 ;;
+      2) echo "chezmoi not installed" >&2; exit 2 ;;
+      3) echo "chezmoi is installed but cannot read the source state of ${_wf_source_override:-$(wf::deploy_root)}. Do NOT treat $target as unmanaged and do NOT edit it directly — fix chezmoi first: chezmoi doctor. The other source may be healthy." >&2; exit 3 ;;
+      *)
+        if [ -n "${_wf_source_override:-}" ]; then
+          deploy_src="$(wf::deploy_source_path "$target")"
+          if [ -n "$deploy_src" ]; then
+            echo "not managed in this worktree ($_wf_source_override); the deploy source has it at $deploy_src — the branch may simply not carry this file." >&2
+          else
+            echo "not chezmoi-managed in this worktree ($_wf_source_override). New file: create the source directly, or derive its name with: chezmoi -S \"$_wf_source_override\" add $target. If chezmoi IGNORES this path, add warns and exits 0 without adding: read its output before reporting it added." >&2
+          fi
+        else
+          echo "not chezmoi-managed (new file — use: chezmoi add $target). If chezmoi IGNORES this path, add warns and exits 0 without adding: read its output before reporting it added." >&2
+        fi
+        exit 1 ;;
+    esac
+  fi
 
   wf::project_facts
   wf::worktree_facts

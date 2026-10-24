@@ -32,7 +32,7 @@ branch deploys unmerged state; the next apply from the deploy clone reverts it.
 | 3 | **(once)** Add `tools` to `.chezmoiignore`; drop the git-tools external; repoint hard-coded paths to `~/.local/share/chezmoi/tools` | #6 |
 | 4 | Create the dev bare repo (`wm` layout); retire `Documents/Development/git-tools/` once `PATH` no longer uses it | #7 |
 | 5 | **(once)** `open-pr.sh` generic GitHub provider (no ticket tracker needed) | #8 |
-| 6 | **(once)** Update `/workflow` and `wf-context.sh`: edit in a dev worktree, `chezmoi -S`, PR, merge, pull deploy clone, apply; `srcpath` and dirty/ahead/behind facts honor `-S` | #9 |
+| 6 | **(once)** Update `/workflow` and `wf-context.sh`: edit in a dev worktree, `chezmoi -S`, PR, merge, pull deploy clone, apply; `srcpath` and dirty/ahead/behind facts honor `-S` | #9 — done |
 | 7 | Work laptop; then **(once)** archive `IdahoEv/git-tools` (read-only) after both machines are verified | #10 |
 
 Done for #6: `chezmoi status` empty and `which worktree-manager.sh` resolves into

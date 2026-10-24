@@ -83,6 +83,7 @@ check "kickoff leaves labelling to the skill" no "$r"
 has "kickoff names the issue command" "$KF" "gh issue create -R IdahoEv/dotfiles"
 has "kickoff states the scope rule" "$KF" "every project"
 has "kickoff loads /workflow" "$KF" "/workflow"
+has "kickoff points at delivery.md" "$KF" "delivery.md"
 
 has "launches via start-ticket --tab-only" "$ST_LOG" "--tab-only $ROOT/proj/workflow $KF"
 has "label identifies the project" "$ST_LOG" "label=widgets workflow"
