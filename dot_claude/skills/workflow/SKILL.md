@@ -92,25 +92,28 @@ that can drift. **State the rule once, in the narrowest scope that holds it.**
 
 ### Intake: a global change from another repo
 
-1. Check for an existing issue:
-   `gh issue list -R github.com/IdahoEv/dotfiles --state all --search "<keywords>"`.
-   If one covers it, comment there; note if it was closed. If the search
-   fails, skip it and draft anyway.
-2. Draft the title and body for either path: `## Friction`, `## Evidence`
+1. Everything sent to GitHub — search keywords, title, body, comment — is on
+   a public service: strip work-repo names, hosts, credentials, internal
+   URLs, customer names, and ticket ids before step 2. If the evidence can't
+   be sanitized, describe the shape of the problem and keep the evidence local.
+2. Check for an existing issue with generic terms:
+   `gh issue list -R github.com/IdahoEv/dotfiles --state all --search "<generic terms>"`.
+   If one covers it, check its state with
+   `gh issue view <n> -R github.com/IdahoEv/dotfiles --json state`. Reopen a
+   closed one (`gh issue reopen <n> -R github.com/IdahoEv/dotfiles`) or link
+   it from a new issue; a comment on a closed issue is not intake. If the
+   search fails, skip it and draft anyway.
+3. Draft the title and body for either path: `## Friction`, `## Evidence`
    (command and output, `file:line`, what you were attempting),
    `## Proposed change`, and a one-line scope note.
-3. The repo is public: strip work-repo names, hosts, credentials, internal
-   URLs, customer names, and ticket ids from both a new issue and a comment.
-   If the evidence can't be sanitized, describe the shape of the problem and
-   keep the evidence local.
 4. Show the draft and wait for approval; create nothing before it.
 5. File it with the body on stdin:
    `gh issue create -R github.com/IdahoEv/dotfiles --title "<title>" --body-file -`,
-   or `gh issue comment <n> -R github.com/IdahoEv/dotfiles --body-file -`.
-   If that call fails, hand the user the failure and the draft — title and
-   body to create, or issue number and body to comment — rather than
-   improvising another path. On success, report the URL; intake is done.
-   Continue with any local work and the §8 report.
+   or `gh issue comment <n> -R github.com/IdahoEv/dotfiles --body-file -`
+   after reopening a closed issue. If that call fails, hand the user the
+   failure and the draft — title and body to create, or issue number and body
+   to comment — rather than improvising another path. On success, report the
+   URL; intake is done. Continue with any local work and the §8 report.
 
 ## 4. Project-local config and the standing ticket
 
