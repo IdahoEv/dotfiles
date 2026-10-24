@@ -10,10 +10,11 @@
 # instead of restating it in prose and having the model re-run the probes.
 #
 # Leaves working trees untouched; safe to run anywhere. It does fetch
-# remote-tracking refs in the dotfiles checkouts it reports on (bounded by
-# `timeout 10`; offline, the counts just reflect the last fetch). The
-# default-branch lookup itself stays local-only, which is why it avoids
-# gt::default_branch (see below). One further caveat: if the source dir ever
+# remote-tracking refs in the checkouts it reports on, bounded by `timeout 10`
+# where that binary exists — stock macOS lacks it, so there the fetch can block
+# until git's own network timeout. Offline, the counts just reflect the last
+# fetch. The default-branch lookup itself stays local-only, which is why it
+# avoids gt::default_branch (see below). One further caveat: if the source dir ever
 # declares an `archive`-type external with an expired refreshPeriod,
 # `chezmoi source-path` will fetch it; the current config declares no such
 # external.
@@ -108,17 +109,22 @@ EOF
 # Canonical directory, following macOS's /private symlinks. Empty on failure.
 wf::canon_dir() { (cd -P "$1" 2>/dev/null && pwd -P); }
 
-# The deploy clone's source root, always via chezmoi's default source. Memoized:
-# `chezmoi source-path` is a process spawn several callers ask for. This is the
-# machine's pu/apply checkout, not necessarily the working copy being edited.
-wf::deploy_root() {
-  if [ "${_wf_deploy_root_resolved:-}" != yes ]; then
-    _wf_deploy_root=""
-    if command -v chezmoi >/dev/null; then
-      _wf_deploy_root="$(command chezmoi source-path 2>/dev/null || true)"
-    fi
-    _wf_deploy_root_resolved=yes
+# The deploy clone's source root, always via chezmoi's default source. This is
+# the machine's pull/apply checkout, not necessarily the working copy being
+# edited.
+#
+# Resolved once in main. Callers read it through command substitution, so a
+# probe here would run in a subshell and its memo would be discarded — a
+# process spawn per call, not one.
+wf::init_deploy_root() {
+  _wf_deploy_root=""
+  if command -v chezmoi >/dev/null; then
+    _wf_deploy_root="$(command chezmoi source-path 2>/dev/null || true)"
   fi
+  _wf_deploy_root_resolved=yes
+}
+
+wf::deploy_root() {
   printf '%s' "${_wf_deploy_root:-}"
 }
 
@@ -299,6 +305,19 @@ wf::default_branch() {  # <dir> → "<branch>\t<source>"
   printf '%s\t%s\n' "$default" "$src"
 }
 
+# Split wf::default_branch's output. `read` cannot do this: with no branch the
+# line starts with a tab, and read collapses leading IFS whitespace — turning
+# "\tnone" into default="none". Expansion preserves the empty field.
+wf::default_branch_parts() {  # <dir> → sets _wf_default_branch, _wf_default_source
+  local out
+  out="$(wf::default_branch "$1")"
+  _wf_default_branch="${out%%$'\t'*}"
+  case "$out" in
+    *$'\t'*) _wf_default_source="${out#*$'\t'}" ;;
+    *)       _wf_default_source="" ;;
+  esac
+}
+
 # Dirty / ahead / behind / pull.rebase for one checkout. Compares against
 # origin/<default>, NOT @{upstream}: a fresh ticket worktree has no upstream, and
 # the question these facts answer is "is this checkout in step with the remote",
@@ -313,7 +332,8 @@ wf::repo_sync_facts() {  # <key-prefix> <git-dir|"">
     command -v timeout >/dev/null && bound="timeout 10"   # absent on stock macOS
     # shellcheck disable=SC2086  # $bound is intentionally word-split
     GIT_TERMINAL_PROMPT=0 $bound git -C "$root" fetch --quiet >/dev/null 2>&1 || true
-    read -r default _ <<<"$(wf::default_branch "$root")"
+    wf::default_branch_parts "$root"
+    default="$_wf_default_branch"
     # Both a symbolic ref and a surviving tag can name origin/<default>; only a
     # real remote-tracking ref is a valid comparison base.
     if [ -n "$default" ] \
@@ -461,7 +481,11 @@ wf::project_facts() {
     . "$GIT_TOOLS_DEFAULT/lib/repo-facts.sh"
   fi
 
-  read -r default default_source <<<"$(wf::default_branch "$top")"
+  # Expansion, not `read`: with no default branch the line begins with a tab,
+  # which read would eat (see wf::default_branch_parts).
+  wf::default_branch_parts "$top"
+  default="$_wf_default_branch"
+  default_source="$_wf_default_source"
   printf 'default_branch=%s\ndefault_branch_source=%s\n' \
     "${default:-}" "$default_source"
 
@@ -589,6 +613,7 @@ main() {
     *) echo "unknown argument: $1" >&2; usage >&2; exit 2 ;;
   esac
 
+  wf::init_deploy_root
   wf::resolve_dotfiles_source
 
   if [ "${1:-}" = srcpath ]; then

@@ -159,6 +159,11 @@ check "dev: claude md source"     "$ROOT/ticket/dot_claude/CLAUDE.md.tmpl" \
   "$(fact "$out" chezmoi_claude_md_source)"
 check "dev: settings source kind" modify          "$(fact "$out" chezmoi_settings_source_kind)"
 
+# One probe for the deploy root, however many callers ask.
+: > "$CHEZMOI_LOG"
+run_facts "$ROOT/ticket" >/dev/null
+check "deploy root probed once" 1 "$(grep -c 'args=source-path$' "$CHEZMOI_LOG")"
+
 mkdir -p "$ROOT/ticket/sub"
 out="$(run_facts "$ROOT/ticket/sub")"
 check "subdir: still dev"   dev            "$(fact "$out" dotfiles_source)"
@@ -221,6 +226,13 @@ check "broken worktree: deploy healthy" yes "$(fact "$out" chezmoi_deploy_health
 check "broken worktree: srcpath rc 3"   3 "$(run_srcpath_rc "$ROOT/ticket" "$HOME/.claude/CLAUDE.md")"
 unset CHEZMOI_BROKEN_SOURCE
 
+# The inverse: the deploy source is broken, this worktree is fine.
+export CHEZMOI_BROKEN_SOURCE="$DEPLOY"
+out="$(run_facts "$ROOT/ticket")"
+check "broken deploy: worktree healthy" yes "$(fact "$out" chezmoi_healthy)"
+check "broken deploy: deploy unhealthy" no  "$(fact "$out" chezmoi_deploy_healthy)"
+unset CHEZMOI_BROKEN_SOURCE
+
 out="$(run_nochezmoi "$ROOT/ticket")"
 check "no chezmoi: available"   no  "$(fact "$out" chezmoi_available)"
 check "no chezmoi: markers say dev" dev "$(fact "$out" dotfiles_source)"
@@ -244,6 +256,8 @@ git -C "$NOORIG" add -A
 git -C "$NOORIG" commit -q -m x
 out="$(run_facts "$NOORIG")"
 check "no origin: source kind" dev "$(fact "$out" dotfiles_source)"
+check "no origin: default branch empty" "" "$(fact "$out" default_branch)"
+check "no origin: default branch source" none "$(fact "$out" default_branch_source)"
 case "$out" in *"chezmoi_source_ahead_origin="*) r=yes ;; *) r=no ;; esac
 check "no origin: counts absent, not zero" no "$r"
 check "no origin: pull.rebase still reported" unset "$(fact "$out" chezmoi_source_pull_rebase)"

@@ -8,18 +8,22 @@ never edit or commit there.
 
 ## Before editing
 
-`chezmoi_source_behind_origin` > 0 — the remote moved; `git pull --rebase` in
-this worktree first, or the push becomes a merge. `chezmoi_source_dirty_files`
-> 0 — work already in flight here; say so before adding. `_ahead_origin` > 0 —
-unpushed commits the other machine cannot see; mention it. `_pull_rebase` not
-`true` — plain `pull` makes merge commits; offer
-`git -C <worktree> config pull.rebase true`.
+A ticket worktree has no upstream, so the counts are measured against
+`chezmoi_source_compare_ref` (`origin/<default>`), not the branch's own remote.
 
-`chezmoi_healthy=no` makes every other `chezmoi_*` fact a false negative (the
-source state won't load): run `chezmoi doctor`, and do not hand-edit
-`~/.claude` — that is what `srcpath` rc 3 below means. `chezmoi_available=no`
-means chezmoi is not installed: ask before touching `~/.claude` by hand. Either
-way `chezmoi_deploy_healthy` is empty (unknown), not `no`.
+`chezmoi_source_behind_origin` > 0 — the base moved; `git fetch origin &&
+git rebase origin/<default>` here before editing, or the PR will not merge
+cleanly. `chezmoi_source_dirty_files` > 0 — work already in flight; say so
+before adding. `_ahead_origin` here is this branch's own commits awaiting the
+PR, not a sync problem.
+
+`chezmoi_healthy=no` (the source state won't load) makes the other source facts
+— `chezmoi_source_*`, `chezmoi_claude_md_*`, `chezmoi_settings_*` — false
+negatives: run `chezmoi doctor`, and do not hand-edit `~/.claude`; that is what
+`srcpath` rc 3 below means. `chezmoi_available=no` means chezmoi is not
+installed: ask before touching `~/.claude` by hand, and read
+`chezmoi_deploy_healthy` as empty (unknown), not `no`. The deploy clone is
+probed independently, so a broken worktree source does not make it unhealthy.
 
 ## Source naming
 
@@ -96,7 +100,9 @@ The deploy clone is the thing that must not be committed to; committing in the
 worktree is the normal flow. Check `chezmoi_deploy_behind_origin` — after a
 merge it is usually the count that needs pulling. If `chezmoi_deploy_dirty_files`
 is non-zero or `chezmoi_deploy_branch` is not `main`, stop and report: someone
-left local state there.
+left local state there. If `chezmoi_deploy_pull_rebase` is not `true`, plain
+`pull` will make merge commits — offer `git -C <deploy> config pull.rebase true`
+(per clone, so each machine needs it).
 
 `tools/` is chezmoi-ignored and runs in place from the deploy clone, so a pull
 updates it and no apply is needed.
