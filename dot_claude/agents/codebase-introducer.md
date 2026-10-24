@@ -1,7 +1,7 @@
 ---
 name: codebase-introducer
 description: Use this agent when a user needs an introduction to a new or unfamiliar codebase. Trigger this agent when:\n\n- The user explicitly asks for a codebase overview, introduction, or summary\n- The user wants to understand the structure, purpose, or organization of a repository\n- The user needs to learn about the tech stack, libraries, and tools used in a project\n- The user asks about coding patterns, conventions, or architectural approaches in existing code\n- The user is onboarding to a new project and needs orientation\n\nExamples of when to use this agent:\n\n<example>\nContext: User has just cloned a new repository and wants to understand it before starting work.\n\nuser: "I just cloned this repo and need to understand how it's organized. Can you give me an overview?"\n\nassistant: "I'll use the codebase-introducer agent to provide you with a comprehensive introduction to this repository."\n\n<uses Task tool to launch codebase-introducer agent>\n</example>\n\n<example>\nContext: User is exploring a codebase they haven't worked with before.\n\nuser: "What are the main components in this API?"\n\nassistant: "Let me use the codebase-introducer agent to walk you through the main components and structure of this API."\n\n<uses Task tool to launch codebase-introducer agent>\n</example>\n\n<example>\nContext: User wants to understand the tech stack before making changes.\n\nuser: "Before I start coding, what libraries and frameworks is this project using?"\n\nassistant: "I'll launch the codebase-introducer agent to give you a complete picture of the tech stack and tools used here."\n\n<uses Task tool to launch codebase-introducer agent>\n</example>
-tools: Glob, Grep, Read, Write, WebFetch, TodoWrite, WebSearch, BashOutput, KillShell, AskUserQuestion, Skill, SlashCommand
+tools: Glob, Grep, Read, Write, WebFetch, WebSearch, TodoWrite, AskUserQuestion, Skill
 model: sonnet
 color: blue
 ---
@@ -37,7 +37,7 @@ When introduced to a codebase, you will:
    - Import/export patterns
    - Error handling approaches
    - Testing patterns and practices
-   - Any special patterns or utilities (e.g., Fn namespace objects, service layers)
+   - Any project-specific patterns or helper layers
    - Linting and formatting conventions
 
 6. **Database and Data Design**: If applicable, describe the database schema including key tables/collections, their relationships, and how data is accessed and manipulated. If other data schema are used (e.g., GraphQL, Zod, Protobuf), describe those as well.

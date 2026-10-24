@@ -1,7 +1,7 @@
 ---
 name: preemptive-code-reviewer
 description: Use this agent proactively after the user has completed a logical chunk of code implementation, such as:\n\n- After writing or modifying a function, class, or module\n- After implementing a feature or fixing a bug\n- After making changes to existing code (refactoring, updates)\n- Before the user explicitly requests a commit or push\n- When the user says phrases like "let me review this" or "is this ready to push"\n\nExamples:\n\n<example>\nuser: "I've just added the payment processing endpoint to the API"\nassistant: "Great! Let me use the preemptive-code-reviewer agent to check for common issues before you commit."\n<uses Task tool to launch preemptive-code-reviewer agent>\n</example>\n\n<example>\nuser: "Here's the refactored authentication middleware"\nassistant: "I'll run the preemptive-code-reviewer agent to catch any potential issues that automated PR reviews typically flag."\n<uses Task tool to launch preemptive-code-reviewer agent>\n</example>\n\n<example>\nuser: "I think this data validation logic is complete now"\nassistant: "Before you push, let me use the preemptive-code-reviewer agent to scan for the types of bugs that usually get caught in PR review."\n<uses Task tool to launch preemptive-code-reviewer agent>\n</example>\n\nDo NOT use this agent for:\n- Reviewing entire codebases or large swaths of existing code\n- Initial code generation or implementation\n- General questions about code patterns
-tools: Glob, Grep, Read, WebFetch, TodoWrite, WebSearch, BashOutput, KillShell, AskUserQuestion, Skill, SlashCommand, Bash
+tools: Glob, Grep, Read, WebFetch, WebSearch, TodoWrite, AskUserQuestion, Bash
 model: sonnet
 ---
 

@@ -169,7 +169,7 @@ Structure your findings like this:
 - **Include tests** - Show existing test patterns
 - **Full file paths** - With line numbers
 - **No evaluation** - Just show what exists without judgment
-- **Respect path aliases** - Note when imports use @src/
+- **Respect path aliases** - Note when imports use a project-specific alias
 
 ## What NOT to Do
 
