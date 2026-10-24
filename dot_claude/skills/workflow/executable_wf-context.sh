@@ -24,10 +24,11 @@
 #   wf-context.sh srcpath <target>     # chezmoi source path for a target file
 #   wf-context.sh --help
 #
-# `srcpath` exit codes: 0 managed (path on stdout) · 1 healthy chezmoi, file
-# genuinely unmanaged (the "new file" case) · 2 chezmoi not installed · 3
-# chezmoi can't read its source state — NOT a license to edit the target
-# directly.
+# `srcpath` exit codes: 0 managed (path on stdout; outside a dev worktree that
+# path is in the deploy clone, read-only) · 1 in dev mode, a genuinely unmanaged
+# file (the "new file" case); elsewhere, "not editable from here — author it in
+# the dotfiles repo" · 2 chezmoi not installed · 3 chezmoi can't read its source
+# state — NOT a license to edit the target directly.
 #
 # `dotfiles_source=dev|deploy|none` says which checkout the `chezmoi_source_*`
 # facts describe: a dev/ticket worktree (edit here), the deploy clone (pull and
@@ -63,8 +64,8 @@ Usage:
   wf-context.sh srcpath <target>     # chezmoi source path for a target file
   wf-context.sh --help
 
-srcpath exit codes: 0 managed · 1 healthy chezmoi, target unmanaged in the
-effective source (the "new file" case) · 2 chezmoi not installed · 3 chezmoi
+srcpath exit codes: 0 managed · 1 unmanaged (in dev mode: the new-file case;
+elsewhere: author it in the dotfiles repo) · 2 chezmoi not installed · 3 chezmoi
 cannot read its source state — do NOT edit the target directly.
 EOF
 }
@@ -453,7 +454,7 @@ wf::chezmoi_facts() {
 
 # ---- project ----------------------------------------------------------------
 wf::project_facts() {
-  local top branch default default_source ahead behind dirty cfg
+  local top branch default default_source ahead behind dirty status n cfg
 
   top="$(git rev-parse --show-toplevel 2>/dev/null)"
   if [ -z "$top" ]; then
@@ -519,8 +520,16 @@ wf::project_facts() {
     fi
   fi
 
-  dirty="$(git -C "$top" status --porcelain 2>/dev/null | wc -l | tr -d ' ')"
-  printf 'working_tree_dirty_files=%s\n' "$dirty"
+  # Unknown, not clean, when status can't run (same hazard as repo_sync_facts).
+  if status="$(git -C "$top" status --porcelain 2>/dev/null)"; then
+    case "$status" in
+      "") n=0 ;;
+      *)  n="$(printf '%s\n' "$status" | wc -l | tr -d ' ')" ;;
+    esac
+    printf 'working_tree_dirty_files=%s\n' "$n"
+  else
+    printf 'working_tree_dirty_files=\n'
+  fi
 
   # Project-level Claude config. A symlinked .claude/ is the trap: edits made
   # "in the worktree" actually land in the main checkout and escape the branch.
@@ -636,7 +645,13 @@ main() {
     local target="$2" rc=0 deploy_src
     wf::source_path "$target" || rc=$?
     case "$rc" in
-      0) printf '\n'; exit 0 ;;
+      0)
+        # Stdout stays a bare path for callers; the warning goes to stderr so
+        # a non-dev session does not mistake a deploy-clone path for edit access.
+        if [ -z "${_wf_source_override:-}" ]; then
+          echo "this path is in the deploy clone: pull/apply only — author edits in the dotfiles repo (see delivery.md)." >&2
+        fi
+        printf '\n'; exit 0 ;;
       2) echo "chezmoi not installed" >&2; exit 2 ;;
       3)
         if [ -n "${_wf_source_override:-}" ]; then

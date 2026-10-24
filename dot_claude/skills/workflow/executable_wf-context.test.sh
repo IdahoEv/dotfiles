@@ -214,8 +214,21 @@ printf 'garbage' > "$BADDEX/.git/index"
 out="$(cd "$PLAIN" && CHEZMOI_DEPLOY="$BADDEX" PATH="$BIN:$PATH" "$WC" 2>/dev/null)"
 check "failed status: dirty unknown" "" "$(fact "$out" chezmoi_deploy_dirty_files)"
 
+# Same for the project's own working tree.
+BADPROJ="$ROOT/badproj"
+git init -q -b main "$BADPROJ"
+git -C "$BADPROJ" commit -q --allow-empty -m x
+printf 'garbage' > "$BADPROJ/.git/index"
+out="$(run_facts "$BADPROJ")"
+check "failed project status: dirty unknown" "" "$(fact "$out" working_tree_dirty_files)"
+
 # ---- srcpath ----------------------------------------------------------------
 check "srcpath rc 0"   0 "$(run_srcpath_rc "$ROOT/ticket" "$HOME/.claude/CLAUDE.md")"
+
+# Outside dev mode rc 0 names a deploy-clone path; say so rather than implying
+# it is editable.
+out="$(run_srcpath "$PLAIN" "$HOME/.claude/CLAUDE.md")"
+has "rc 0 outside dev flags the deploy clone" "$out" "deploy clone"
 check "srcpath worktree path" "$ROOT/ticket/dot_claude/CLAUDE.md.tmpl" \
   "$(run_srcpath "$ROOT/ticket" "$HOME/.claude/CLAUDE.md")"
 check "srcpath settings" "$ROOT/ticket/dot_claude/modify_private_settings.json.tmpl" \

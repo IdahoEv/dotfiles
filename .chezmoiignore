@@ -8,3 +8,7 @@ CLAUDE.md
 # git-tools scripts; run in place from the deploy clone, symlinked into
 # ~/.local/bin by run_after_link-tools.sh rather than deployed.
 tools
+
+# Test harness, not a runtime file. It resolves the source-tree names
+# (executable_*), which do not exist at the deployed path.
+dot_claude/skills/workflow/executable_wf-context.test.sh

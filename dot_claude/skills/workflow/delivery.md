@@ -1,10 +1,12 @@
 # Delivery (dotfiles repo)
 
-Read this when `wf-context.sh` reports `dotfiles_source=dev`: this checkout is a
-dev/ticket worktree of the dotfiles source. Edits are committed here and reach
-the machine through the ticket flow. The deploy clone
-(`chezmoi_deploy_root`, normally `~/.local/share/chezmoi`) is `main` only —
-never edit or commit there.
+Read this when `wf-context.sh` reports `dotfiles_source=dev` or `deploy`.
+
+`dev` — this checkout is a dev/ticket worktree of the dotfiles source. Edits are
+committed here and reach the machine through the ticket flow. `deploy` — you are
+in the deploy clone (`main` only): no edits here; "Ship it" below is the
+pull/apply step. Either way the deploy clone (`chezmoi_deploy_root`, normally
+`~/.local/share/chezmoi`) is never edited or committed to.
 
 ## Before editing
 
@@ -18,10 +20,10 @@ before adding. `_ahead_origin` here is this branch's own commits awaiting the
 PR, not a sync problem.
 
 `chezmoi_healthy=no` (the source state won't load) makes the chezmoi-derived
-facts — `chezmoi_source_root`, `chezmoi_manages_claude`, `chezmoi_claude_md_*`,
+facts — `chezmoi_manages_claude`, `chezmoi_claude_md_*`,
 `chezmoi_settings_*` — false negatives: do not hand-edit `~/.claude`; that is
-what `srcpath` rc 3 below means. The `chezmoi_source_*` sync counts come from
-git and stay valid. `chezmoi_available=no` means chezmoi is not installed: ask
+what `srcpath` rc 3 below means. `chezmoi_source_root` and the
+`chezmoi_source_*` sync counts do not depend on that state and stay valid. `chezmoi_available=no` means chezmoi is not installed: ask
 before touching `~/.claude` by hand, and read `chezmoi_deploy_healthy` as empty
 (unknown), not `no`. The deploy clone is probed independently, so a broken
 worktree source does not make it unhealthy.

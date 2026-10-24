@@ -47,7 +47,7 @@ Keys that change what you do:
 | Key | Meaning |
 | --- | --- |
 | `dotfiles_source=dev` | This checkout is a dev/ticket worktree of the dotfiles source. Read `delivery.md` before editing. |
-| `dotfiles_source=deploy` | You are in the deploy clone. It is never a working copy — don't edit it. |
+| `dotfiles_source=deploy` | You are in the deploy clone. It is never a working copy — don't edit it; read `delivery.md` for the pull/apply step. |
 | `dotfiles_source=none` | Not the dotfiles repo. You author the change; global config is delivered in the dotfiles repo. |
 | `project_claude_dir=symlink` | **Stop.** `.claude/` points at the main checkout; edits escape the branch into the user's working copy. Report and ask. |
 | `project_claude_settings_local=symlink` | Same trap, quieter: only `settings.local.json` is shared. Don't edit it here. |
@@ -59,7 +59,7 @@ Keys that change what you do:
 | `commits_*_default` absent | Not zero — unknown. The keys are omitted whenever the comparison couldn't be made. Never report "0 behind" from a missing key. |
 
 Source-path and deploy facts are delivery concerns — see `delivery.md` when
-`dotfiles_source=dev`.
+`dotfiles_source` is `dev` or `deploy`.
 
 ## 2. Classify — local or global?
 
