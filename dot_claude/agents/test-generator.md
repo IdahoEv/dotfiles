@@ -20,8 +20,8 @@ is expected to fail until the implementation lands.
    from existing tests and say that is what you did.
 4. Existing factories, fixtures, and helpers. Reuse them; do not invent a parallel
    system.
-5. The test command from project config (`package.json`, `pyproject.toml`, `*.csproj`,
-   CI) before reporting how to run anything.
+5. The test command from the repo's own instructions (`CLAUDE.md`, README) or project
+   config (`package.json`, `pyproject.toml`), with CI as the fallback.
 
 ## Scenario matrix
 
@@ -127,9 +127,8 @@ public class ThingTests
 
 ## Output
 
-Report, then the complete file:
+Write the file at the path (use `Edit` if it already exists), then report:
 
 - File: path
 - Covers: happy / boundary / error scenarios in one line
 - Run: the repo's test command, scoped to the file if supported
-- Full test file content
