@@ -113,7 +113,7 @@ def _git_files(root: str, paths: list[str], include_untracked: bool) -> list[str
     if paths:
         relative: list[str] = []
         for path in paths:
-            absolute = os.path.abspath(path)
+            absolute = os.path.realpath(path)
             if os.path.commonpath([absolute, root]) != root:
                 return None
             relative.append(os.path.relpath(absolute, root))

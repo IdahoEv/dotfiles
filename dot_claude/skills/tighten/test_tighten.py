@@ -152,6 +152,45 @@ class CodeTests(unittest.TestCase):
         self.assertIn("real comment", joined)
         self.assertNotIn("data, not a comment", joined)
 
+    def test_terraform_heredoc_body_is_not_a_comment(self):
+        text = 'user_data = <<EOF\n#cloud-config\nEOF\n# real comment\n'
+        blocks, _lines = lib.scan_generic(text, lib.CODE_SPECS[".tf"])
+        joined = "\n".join(piece for block in blocks for _line, piece in block)
+        self.assertIn("real comment", joined)
+        self.assertNotIn("cloud-config", joined)
+
+    def test_nix_indented_string_body_is_not_a_comment(self):
+        text = "s = ''\n  # not a nix comment\n''\n# real comment\n"
+        blocks, _lines = lib.scan_generic(text, lib.CODE_SPECS[".nix"])
+        joined = "\n".join(piece for block in blocks for _line, piece in block)
+        self.assertIn("real comment", joined)
+        self.assertNotIn("not a nix comment", joined)
+
+    def test_sql_dollar_quoted_body_is_not_a_comment(self):
+        text = "CREATE FUNCTION f() AS $$ -- internal note\nSELECT 1;\n$$;\n-- real comment\n"
+        blocks, _lines = lib.scan_generic(text, lib.CODE_SPECS[".sql"])
+        joined = "\n".join(piece for block in blocks for _line, piece in block)
+        self.assertIn("real comment", joined)
+        self.assertNotIn("internal note", joined)
+
+    def test_two_heredocs_on_one_line_track_both_bodies(self):
+        text = "cat <<A <<B\n# body A\nA\n# body B\nB\n# real comment\n"
+        blocks, _lines = lib.scan_generic(text, lib.CODE_SPECS[".sh"])
+        joined = "\n".join(piece for block in blocks for _line, piece in block)
+        self.assertIn("real comment", joined)
+        self.assertNotIn("body B", joined)
+
+    def test_trailing_space_does_not_end_a_heredoc(self):
+        text = "cat <<EOF\nbody\nEOF \n# still heredoc\nEOF\n# real comment\n"
+        blocks, _lines = lib.scan_generic(text, lib.CODE_SPECS[".sh"])
+        joined = "\n".join(piece for block in blocks for _line, piece in block)
+        self.assertIn("real comment", joined)
+        self.assertNotIn("still heredoc", joined)
+
+    def test_tab_indented_code_is_not_prose(self):
+        prose, _total, _headings = lib.markdown_prose("# Guide\n\nInstall:\n\n\tmake install\n")
+        self.assertEqual(prose, 2)
+
     def test_ruby_squiggly_heredoc_body_is_not_a_comment(self):
         text = "sql = <<~SQL\n  # data line\nSQL\n# real comment\n"
         blocks, _lines = lib.scan_generic(text, lib.CODE_SPECS[".rb"])
@@ -442,6 +481,25 @@ class ProposalTests(unittest.TestCase):
         self.assertEqual(self.run_check([{
             "file": "a.js", "old": "/* Old long explanatory comment. */",
             "new": "/* Old comment"}])["rejected"][0]["reason"], "code_in_replacement")
+
+    def test_partial_indent_line_is_rejected(self):
+        self.assertEqual(self.run_check([{
+            "file": "a.py", "old": "# Fetches the user record from the store.\n    ",
+            "new": "# Fetches.\n  "}])["rejected"][0]["reason"], "partial_line")
+
+    def test_tab_indented_code_block_is_rejected(self):
+        (self.repo / "tab.md").write_text("# G\n\nInstall:\n\n\tmake install\n", encoding="utf-8")
+        self.assertEqual(self.run_check([{"file": "tab.md", "old": "\tmake install\n", "new": ""}])
+                         ["rejected"][0]["reason"], "doc_structural")
+
+    def test_html_tag_and_inline_code_are_protected(self):
+        (self.repo / "html.md").write_text(
+            "# T\n\n<img src=\"logo.png\">\n\nRun `npm run build:prod` first.\n", encoding="utf-8")
+        self.assertEqual(self.run_check([{"file": "html.md", "old": "<img src=\"logo.png\">",
+                                          "new": ""}])["rejected"][0]["reason"], "doc_structural")
+        self.assertEqual(self.run_check([{"file": "html.md", "old": "npm run build:prod",
+                                          "new": "npm run build"}])
+                         ["rejected"][0]["reason"], "doc_structural")
 
     def test_trailing_newline_mismatch_is_rejected(self):
         self.assertEqual(self.run_check([{

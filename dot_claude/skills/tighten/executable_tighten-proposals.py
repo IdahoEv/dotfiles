@@ -50,6 +50,11 @@ def _line_at(text: str, offset: int) -> int:
     return text.count("\n", 0, offset) + 1
 
 
+def _ends_mid_indent(text: str) -> bool:
+    tail = text.rsplit("\n", 1)[-1]
+    return bool(tail) and not tail.strip()
+
+
 def _touches(ranges: list[tuple[int, int]], start: int, end: int) -> bool:
     return any(start < other_end and other_start < end for other_start, other_end in ranges)
 
@@ -132,6 +137,9 @@ def validate(root: str, proposals: list[dict]) -> tuple[list[dict], list[dict]]:
         if new.strip() and old.endswith("\n") != new.endswith("\n"):
             rejected.append({**entry, "reason": "trailing_newline_mismatch"})
             continue
+        if _ends_mid_indent(old) or _ends_mid_indent(new):
+            rejected.append({**entry, "reason": "partial_line"})
+            continue
 
         offsets = [match.start() for match in re.finditer(re.escape(old), text)]
         if not offsets:
@@ -186,6 +194,10 @@ def validate(root: str, proposals: list[dict]) -> tuple[list[dict], list[dict]]:
                 r"^\s*(```|~~~|---\s*$|#{1,6}\s|\[[^\]]+\]:\s)", re.MULTILINE)
             if structural.search(old) or structural.search(new) \
                     or any(marker in old or marker in new for marker in ("<!--", "-->")):
+                rejected.append({**entry, "reason": "doc_structural"})
+                continue
+            if set(re.findall(r"<[A-Za-z][^>]*>", old)) - set(re.findall(r"<[A-Za-z][^>]*>", new)) \
+                    or set(re.findall(r"`[^`\n]+`", old)) - set(re.findall(r"`[^`\n]+`", new)):
                 rejected.append({**entry, "reason": "doc_structural"})
                 continue
             old_structural = set(re.findall(r"^\s*(?:#{1,6}\s|```|~~~|\|).*$", old, re.MULTILINE))

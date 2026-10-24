@@ -77,9 +77,11 @@ python3 ~/.claude/skills/tighten/tighten-scan.py --root <worktree> [paths] --jso
   [--comments-only|--docs-only]
 ```
 
-Write the JSON to `<scan-root>/.scratch/tighten-<YYYY-MM-DD-HHMM>/scan.json`.
-Chat gets the totals line, the per-directory table, and the top 5 comment and
-doc offenders. Stop here when `--report-only`.
+Write the JSON to `${TMPDIR:-/tmp}/tighten-<YYYY-MM-DD-HHMM>/scan.json`, never
+inside the scanned tree: a report-only run must leave the checkout clean, and a
+worktree with a stray `.scratch/` is refused on the next run. Chat gets the
+totals line, the per-directory table, and the top 5 comment and doc offenders.
+Stop here when `--report-only`.
 
 Bloat is a ranking signal, not a verdict: a long block that carries a
 constraint stays. Files with `parse_error: true` are reported, never edited.

@@ -79,6 +79,8 @@ class CommentSpec:
     quotes: str = "\"'`"
     heredoc: bool = False
     block_scalar: bool = False
+    nix_string: bool = False
+    dollar_quote: bool = False
 
 
 CODE_SPECS = {
@@ -111,9 +113,9 @@ CODE_SPECS = {
     ".php": CommentSpec(("//", "#"), (("/*", "*/"),)),
     ".zig": CommentSpec(("//",), ()),
     ".proto": CommentSpec(("//",), (("/*", "*/"),)),
-    ".tf": CommentSpec(("//", "#"), (("/*", "*/"),)),
-    ".hcl": CommentSpec(("//", "#"), (("/*", "*/"),)),
-    ".nix": CommentSpec(("#",), (("/*", "*/"),)),
+    ".tf": CommentSpec(("//", "#"), (("/*", "*/"),), heredoc=True),
+    ".hcl": CommentSpec(("//", "#"), (("/*", "*/"),), heredoc=True),
+    ".nix": CommentSpec(("#",), (("/*", "*/"),), nix_string=True),
     ".rb": CommentSpec(("#",), (), heredoc=True),
     ".rake": CommentSpec(("#",), ()),
     ".gemspec": CommentSpec(("#",), ()),
@@ -129,7 +131,7 @@ CODE_SPECS = {
     ".cfg": CommentSpec(("#",), ()),
     ".conf": CommentSpec(("#",), ()),
     ".properties": CommentSpec(("#",), ()),
-    ".sql": CommentSpec(("--",), (("/*", "*/"),), quotes="'"),
+    ".sql": CommentSpec(("--",), (("/*", "*/"),), quotes="'", dollar_quote=True),
     ".lua": CommentSpec(("--",), (("--[[", "]]"),)),
     ".ex": CommentSpec(("#",), ()),
     ".exs": CommentSpec(("#",), ()),
@@ -295,35 +297,53 @@ def _scan_line(
     return " ".join(p for p in pieces if p.strip()), open_block, has_code, touched
 
 
-HEREDOC_RE = re.compile(r"<<[-~]?\s*['\"]?([A-Za-z_][A-Za-z0-9_]*)['\"]?")
-BLOCK_SCALAR_RE = re.compile(r"^\s*[^\s#][^:]*:\s*[|>][-+]?\s*(?:#.*)?$")
+HEREDOC_RE = re.compile(r"<<([-~]?)\s*['\"]?([A-Za-z_][A-Za-z0-9_]*)['\"]?")
+BLOCK_SCALAR_RE = re.compile(r"^\s*(?:[^\s#][^:]*:|-)\s*[|>][-+]?\d*\s*(?:#.*)?$")
+DOLLAR_QUOTE_RE = re.compile(r"\$[A-Za-z_][A-Za-z0-9_]*\$|\$\$")
 
 
 def _iter_lines(text: str, spec: CommentSpec):
     """Yield (line number, text) for lines that can hold code or comments.
 
-    Heredoc bodies and YAML block scalars are data: a `#` inside them is not a
-    comment, and tightening one would change a program's input.
+    Heredoc bodies, block scalars, indented strings, and dollar-quoted bodies
+    are data: a comment marker inside one is not a comment, and tightening it
+    would change a program's input.
     """
-    heredoc: str | None = None
+    heredocs: list[tuple[str, bool]] = []
     scalar_indent: int | None = None
+    nix_open = False
+    dollar_open: str | None = None
     for number, raw in enumerate(text.split("\n"), 1):
         if number == 1 and raw.startswith("#!"):
             continue
-        if heredoc is not None:
-            if raw.strip() == heredoc:
-                heredoc = None
+        if heredocs:
+            word, loose = heredocs[0]
+            if raw == word or (loose and raw.lstrip() == word):
+                heredocs.pop(0)
             continue
         if scalar_indent is not None:
             if raw.strip() and len(raw) - len(raw.lstrip()) <= scalar_indent:
                 scalar_indent = None
             else:
                 continue
+        if nix_open:
+            if raw.count("''") % 2 == 1:
+                nix_open = False
+            continue
+        if dollar_open is not None:
+            if dollar_open in raw:
+                dollar_open = None
+            continue
+        opens_nix = spec.nix_string and raw.count("''") % 2 == 1
+        tokens = DOLLAR_QUOTE_RE.findall(raw) if spec.dollar_quote else []
+        if opens_nix or len(tokens) % 2 == 1:
+            nix_open = opens_nix
+            dollar_open = tokens[-1] if len(tokens) % 2 == 1 else None
+            continue
         yield number, raw
         if spec.heredoc and not raw.lstrip().startswith("#"):
-            match = HEREDOC_RE.search(raw)
-            if match:
-                heredoc = match.group(1)
+            heredocs.extend((match.group(2), bool(match.group(1)))
+                            for match in HEREDOC_RE.finditer(raw))
         if spec.block_scalar and BLOCK_SCALAR_RE.match(raw):
             scalar_indent = len(raw) - len(raw.lstrip())
 
@@ -601,7 +621,7 @@ def doc_protected_ranges(text: str) -> list[tuple[int, int]]:
                     and not STRUCTURAL_LINE_RE.match(lines[index - 1]):
                 ranges.append((offsets[index - 1], offsets[index - 1] + len(lines[index - 1])))
             continue
-        if raw.startswith("    ") and not in_list and previous_blank:
+        if raw.startswith(("    ", "\t")) and not in_list and previous_blank:
             ranges.append((offsets[index], offsets[index] + len(raw)))
             continue
         in_list = bool(re.match(r"^\s*(?:[-*+]|\d+\.)\s", raw))
@@ -611,6 +631,8 @@ def doc_protected_ranges(text: str) -> list[tuple[int, int]]:
         ranges.append((offsets[fence_start], len(text)))
     if in_comment:
         ranges.append((offsets[comment_start], len(text)))
+    for match in re.finditer(r"`[^`\n]+`|<[A-Za-z][^>]*>", text):
+        ranges.append((match.start(), match.end()))
     return ranges
 
 
@@ -705,7 +727,7 @@ def markdown_prose(text: str) -> tuple[int, int, int]:
         if stripped.startswith("|") or re.match(r"^\s*\|?[\s:|-]+\|[\s:|-]*$", raw):
             previous_blank = False
             continue
-        if raw.startswith("    ") and not in_list and previous_blank:
+        if raw.startswith(("    ", "\t")) and not in_list and previous_blank:
             previous_blank = False
             continue
 
