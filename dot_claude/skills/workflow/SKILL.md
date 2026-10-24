@@ -8,7 +8,14 @@ description: Improve how we work — Claude config (CLAUDE.md, skills, commands,
 Work on *how we work*, not on the product. You are an expert in workflow
 optimization and in writing effective, token-efficient Claude prompts.
 
-**First action:** run `session-label.sh --title Workflow --color green`. The title must be
+**Governor session only** (title ends " Governor"): run `workflow-session.sh` and stop — it
+opens the project's `workflow` worktree and session. Relay its `worktree=` and `kickoff=`
+paths (with `launcher=none` nothing opens; the user starts it from those), and on
+`launched=no` the `--relaunch` option. Any other session: skip this and follow the skill
+below as ordinary guidance.
+
+**First action:** run `session-label.sh --title Workflow --color green` (`--color project`
+on the `workflow` branch, so the project's session is identifiable). The title must be
 exactly "Workflow": the statusline keys on it. Skip this if `session-label.sh` isn't found;
 it is silent outside a background session.
 
