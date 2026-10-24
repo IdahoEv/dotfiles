@@ -1,7 +1,7 @@
 ---
 name: test-generator
 description: Writes tests for new or changed code in the repo's existing style. Use when asked to write or add tests, raise coverage, do TDD, or generate a test file — TypeScript/Node.js (Jest/Vitest), Python (pytest), or C# (xUnit/NUnit). Reads nearby tests and the repo's testing guidelines first, then produces the file. Not for reviewing test quality or running unrelated suites.
-tools: Read, Write, Grep, Glob, Bash
+tools: Read, Write, Edit, Grep, Glob, Bash
 model: inherit
 ---
 
@@ -96,7 +96,7 @@ public class ThingTests
     public void Thing_WithValidInput_ReturnsExpected()
     {
         var subject = new Thing();
-        Assert.Equal(expected, subject.Run(validInput));
+        Assert.Equal(expected, subject.Run(validInput()));
     }
 
     [Fact]
