@@ -207,8 +207,8 @@ def validate(root: str, proposals: list[dict]) -> tuple[list[dict], list[dict]]:
                     or any(marker in old or marker in new for marker in ("<!--", "-->")):
                 rejected.append({**entry, "reason": "doc_structural"})
                 continue
-            if set(re.findall(r"<[A-Za-z][^>]*>", old)) - set(re.findall(r"<[A-Za-z][^>]*>", new)) \
-                    or set(re.findall(r"`[^`\n]+`", old)) - set(re.findall(r"`[^`\n]+`", new)):
+            data = r"<[A-Za-z][^>]*>|`[^`\n]+`|\]\([^)\n]*\)|https?://\S+"
+            if set(re.findall(data, old)) - set(re.findall(data, new)):
                 rejected.append({**entry, "reason": "doc_structural"})
                 continue
             old_structural = set(re.findall(r"^\s*(?:#{1,6}\s|```|~~~|\|).*$", old, re.MULTILINE))

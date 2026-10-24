@@ -82,6 +82,7 @@ class CommentSpec:
     block_scalar: bool = False
     nix_string: bool = False
     dollar_quote: bool = False
+    long_bracket: bool = False
 
 
 CODE_SPECS = {
@@ -133,7 +134,7 @@ CODE_SPECS = {
     ".conf": CommentSpec(("#",), ()),
     ".properties": CommentSpec(("#",), ()),
     ".sql": CommentSpec(("--",), (("/*", "*/"),), quotes="'", dollar_quote=True),
-    ".lua": CommentSpec(("--",), (("--[[", "]]"),)),
+    ".lua": CommentSpec(("--",), (("--[[", "]]"),), long_bracket=True),
     ".ex": CommentSpec(("#",), ()),
     ".exs": CommentSpec(("#",), ()),
     ".clj": CommentSpec((";",), ()),
@@ -283,6 +284,8 @@ def _scan_line(
                 continue
             if marker == "#" and i > 0 and not raw[i - 1].isspace():
                 continue
+            if marker == "//" and i > 0 and raw[i - 1] == ":":
+                continue
             touched = True
             pieces.append(raw[i + len(marker):])
             mark(i, n)
@@ -299,8 +302,23 @@ def _scan_line(
 
 
 HEREDOC_RE = re.compile(r"<<([-~]?)\s*['\"]?([A-Za-z_][A-Za-z0-9_]*)['\"]?")
-BLOCK_SCALAR_RE = re.compile(r"^\s*(?:[^\s#][^:]*:|-)\s*[|>][-+]?\d*\s*(?:#.*)?$")
+BLOCK_SCALAR_RE = re.compile(
+    r"^\s*(?:(?:\"[^\"]*\"|'[^']*'|[^\s#][^:]*)\s*:(?:\s+[&!]\S+)*\s*|-\s*(?:[&!]\S+\s+)*)"
+    r"[|>][-+]?\d*\s*(?:#.*)?$")
+LUA_LONG_RE = re.compile(r"\[(=*)\[")
 DOLLAR_QUOTE_RE = re.compile(r"\$[A-Za-z_][A-Za-z0-9_]*\$|\$\$")
+
+
+def _lua_open_closer(raw: str) -> str | None:
+    """The closer of a Lua long bracket that stays open past this line."""
+    match = LUA_LONG_RE.search(raw)
+    while match:
+        closer = "]" + match.group(1) + "]"
+        found = raw.find(closer, match.end())
+        if found == -1:
+            return closer
+        match = LUA_LONG_RE.search(raw, found + len(closer))
+    return None
 
 
 def _iter_lines(text: str, spec: CommentSpec):
@@ -314,6 +332,7 @@ def _iter_lines(text: str, spec: CommentSpec):
     scalar_indent: int | None = None
     nix_open = False
     dollar_open: str | None = None
+    lua_open: str | None = None
     for number, raw in enumerate(text.split("\n"), 1):
         if number == 1 and raw.startswith("#!"):
             continue
@@ -335,11 +354,17 @@ def _iter_lines(text: str, spec: CommentSpec):
             if dollar_open in raw:
                 dollar_open = None
             continue
+        if lua_open is not None:
+            if lua_open in raw:
+                lua_open = None
+            continue
         opens_nix = spec.nix_string and raw.count("''") % 2 == 1
         tokens = DOLLAR_QUOTE_RE.findall(raw) if spec.dollar_quote else []
-        if opens_nix or len(tokens) % 2 == 1:
+        lua_closer = _lua_open_closer(raw) if spec.long_bracket else None
+        if opens_nix or len(tokens) % 2 == 1 or lua_closer:
             nix_open = opens_nix
             dollar_open = tokens[-1] if len(tokens) % 2 == 1 else None
+            lua_open = lua_closer
             continue
         yield number, raw
         if spec.heredoc and not raw.lstrip().startswith("#"):
@@ -595,7 +620,7 @@ def doc_protected_ranges(text: str) -> list[tuple[int, int]]:
     for index in range(start_line, len(lines)):
         raw = lines[index]
         stripped = raw.strip()
-        match = re.match(r"^\s*(`{3,}|~{3,})", raw)
+        match = re.match(r"^(?:[ \t]*>[ \t]?)*[ \t]*(`{3,}|~{3,})", raw)
 
         if in_comment:
             if "-->" in stripped:
@@ -698,7 +723,7 @@ def markdown_prose(text: str) -> tuple[int, int, int]:
         stripped = raw.strip()
         total += count_words(raw)
 
-        fence_match = re.match(r"^\s*(`{3,}|~{3,})", raw)
+        fence_match = re.match(r"^(?:[ \t]*>[ \t]?)*[ \t]*(`{3,}|~{3,})", raw)
         if fence_match:
             marker = fence_match.group(1)
             if fence_char is None:

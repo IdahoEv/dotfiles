@@ -166,6 +166,25 @@ class CodeTests(unittest.TestCase):
         self.assertIn("real comment", joined)
         self.assertNotIn("not a nix comment", joined)
 
+    def test_css_url_is_not_a_comment(self):
+        blocks, _lines = lib.scan_generic(
+            "a { background: url(http://cdn.example.com/a.png); }\n", lib.CODE_SPECS[".scss"])
+        self.assertEqual(blocks, [])
+
+    def test_lua_long_string_body_is_not_a_comment(self):
+        text = "local s = [[\n-- not a comment\n]]\n-- real comment\n"
+        blocks, _lines = lib.scan_generic(text, lib.CODE_SPECS[".lua"])
+        joined = "\n".join(piece for block in blocks for _line, piece in block)
+        self.assertIn("real comment", joined)
+        self.assertNotIn("not a comment", joined)
+
+    def test_yaml_block_scalar_with_anchor_is_data(self):
+        text = "defaults: &d |\n  # data line\n  echo hi\n# real comment\n"
+        blocks, _lines = lib.scan_generic(text, lib.CODE_SPECS[".yml"])
+        joined = "\n".join(piece for block in blocks for _line, piece in block)
+        self.assertIn("real comment", joined)
+        self.assertNotIn("data line", joined)
+
     def test_sql_dollar_quoted_body_is_not_a_comment(self):
         text = "CREATE FUNCTION f() AS $$ -- internal note\nSELECT 1;\n$$;\n-- real comment\n"
         blocks, _lines = lib.scan_generic(text, lib.CODE_SPECS[".sql"])
@@ -534,6 +553,21 @@ class ProposalTests(unittest.TestCase):
         self.assertEqual(self.run_check([{"file": "html.md", "old": "npm run build:prod",
                                           "new": "npm run build"}])
                          ["rejected"][0]["reason"], "doc_structural")
+
+    def test_blockquote_fenced_body_is_rejected(self):
+        (self.repo / "quote.md").write_text(
+            "# T\n\n> ```\n> docker run --rm image\n> ```\n\nText.\n", encoding="utf-8")
+        self.assertEqual(self.run_check([{"file": "quote.md", "old": "> docker run --rm image",
+                                          "new": ""}])["rejected"][0]["reason"], "doc_structural")
+
+    def test_link_destination_and_bare_url_are_protected(self):
+        (self.repo / "links.md").write_text(
+            "# T\n\nSee [the guide](https://example.com/guide) or https://example.com/raw.\n",
+            encoding="utf-8")
+        self.assertEqual(self.run_check([{"file": "links.md", "old": "https://example.com/guide",
+                                          "new": ""}])["rejected"][0]["reason"], "doc_structural")
+        self.assertEqual(self.run_check([{"file": "links.md", "old": "https://example.com/raw.",
+                                          "new": ""}])["rejected"][0]["reason"], "doc_structural")
 
     def test_trailing_newline_mismatch_is_rejected(self):
         self.assertEqual(self.run_check([{
