@@ -100,11 +100,12 @@ fi
 kickoff="${TMPDIR:-/tmp}/${project}-kickoff-workflow.md"
 {
   printf 'Working on %s workflow config in this worktree. Branch `%s` is checked out.\n\n' "$project" "$BRANCH"
-  printf 'Load `/workflow` for authoring guidance (scope routing, prompt-writing rules). Its chezmoi apply/delivery steps do not apply in this session.\n\n'
+  printf 'Load `/workflow` for authoring guidance (scope routing, prompt-writing rules). Delivery mechanics are in its `delivery.md` and apply only when this worktree is the dotfiles source repo.\n\n'
   printf '## Scope rule\n\n'
   printf -- '- Project-specific changes (the project conf, `CLAUDE.md`, kickoff preamble, `.claude/`) are made here, in this worktree.\n'
-  printf -- '- A change that should apply to every project is not made here. File a dotfiles issue with the friction and evidence, or offer to:\n\n'
+  printf -- '- A change that should apply to every project belongs in the dotfiles repo. If this project is not dotfiles, file an issue there with the friction and evidence, or offer to:\n\n'
   printf '      gh issue create -R IdahoEv/dotfiles\n\n'
+  printf -- '- If this project *is* dotfiles, make the change here — this worktree is the delivery checkout.\n\n'
   if doc="$(gt::find_doc governor.md "$top")"; then
     printf '## Project context (governor.md)\n\n'
     cat "${doc%%$'\t'*}"
