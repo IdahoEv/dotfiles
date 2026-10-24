@@ -75,7 +75,7 @@ DOC_STRUCTURAL_RE = re.compile(
 class CommentSpec:
     line: tuple[str, ...] = ()
     block: tuple[tuple[str, str], ...] = ()
-    quotes: str = "\"'"
+    quotes: str = "\"'`"
 
 
 CODE_SPECS = {
@@ -258,13 +258,16 @@ def _scan_line(
         if matched:
             continue
         for marker in spec.line:
-            if raw.startswith(marker, i) and not any(a <= i < b for a, b in protected):
-                touched = True
-                pieces.append(raw[i + len(marker):])
-                mark(i, n)
-                i = n
-                matched = True
-                break
+            if not raw.startswith(marker, i) or any(a <= i < b for a, b in protected):
+                continue
+            if marker == "#" and i > 0 and not raw[i - 1].isspace():
+                continue
+            touched = True
+            pieces.append(raw[i + len(marker):])
+            mark(i, n)
+            i = n
+            matched = True
+            break
         if matched:
             continue
         if not ch.isspace():
@@ -390,11 +393,14 @@ def block_kind(text: str) -> str:
 
 
 def scan_code(
-    text: str, language: str
+    text: str, language: str, spec: CommentSpec | None = None
 ) -> tuple[list[list[tuple[int, str]]], int, bool, bool]:
     if language in ("python", "py", "pyi"):
         return scan_python(text)
-    spec = CODE_SPECS[language if language.startswith(".") else "." + language]
+    if spec is None:
+        spec = CODE_SPECS.get(language if language.startswith(".") else "." + language)
+    if spec is None:
+        return [], 0, False, True
     blocks, code_lines = scan_generic(text, spec)
     blocks, license_header = _drop_license_header(blocks)
     return blocks, code_lines, license_header, True

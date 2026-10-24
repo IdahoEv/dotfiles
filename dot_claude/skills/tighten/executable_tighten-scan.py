@@ -32,7 +32,7 @@ from tighten_lib import (  # noqa: E402
 )
 
 MAX_BYTES = 1_048_576
-PROMPT_BASENAMES = {"claude.md", "agents.md", ".cursorrules"}
+PROMPT_BASENAMES = {"claude.md", "agents.md", "skill.md", ".cursorrules"}
 
 
 @dataclass
@@ -100,13 +100,13 @@ def _matches(name: str, patterns: tuple[str, ...]) -> bool:
 
 def _is_prompt_file(rel: str) -> bool:
     parts = rel.split("/")
-    if any(part == ".claude" for part in parts[:-1]):
+    if any(part in (".claude", "dot_claude") for part in parts[:-1]):
         return True
     return os.path.basename(rel).lower() in PROMPT_BASENAMES
 
 
 def _git_files(root: str, paths: list[str], include_untracked: bool) -> list[str] | None:
-    args = ["git", "-C", root, "ls-files", "-z", "--cached", "--full-name"]
+    args = ["git", "-C", root, "ls-files", "-z", "--cached"]
     if include_untracked:
         args.extend(["--others", "--exclude-standard"])
     args.append("--")
@@ -237,8 +237,8 @@ def scan_file(rel: str, absolute: str, skips: SkipCounts) -> FileStats | None:
     if spec is None:
         skips.unsupported += 1
         return None
-    language = "python" if ext in (".py", ".pyi") else ext.lstrip(".")
-    blocks, code_lines, license_header, parsed = scan_code(text, language)
+    language = "python" if ext in (".py", ".pyi") else (ext.lstrip(".") or rel.lower())
+    blocks, code_lines, license_header, parsed = scan_code(text, language, spec)
     block_data = _block_dicts(blocks)
     joined = "\n".join(piece for block in blocks for _line, piece in block)
     history, tickets = ref_counts(joined)
@@ -459,6 +459,14 @@ def main(argv: list[str]) -> int:
         return 0
 
     paths = [path if os.path.isabs(path) else os.path.join(root, path) for path in args.paths]
+    for path in paths:
+        try:
+            inside = os.path.commonpath([os.path.abspath(path), root]) == root
+        except ValueError:
+            inside = False
+        if not inside:
+            print(f"path outside root: {path} (root {root})", file=sys.stderr)
+            return 1
     git_files = _git_files(root, paths, args.include_untracked)
     mode = "git" if git_files is not None else "walk"
     skips = SkipCounts()

@@ -93,8 +93,10 @@ command → record `unverified` and continue only if the user accepts it.
 
 Take files with `signal: true`, highest word counts first. Fewer than 30 files →
 read them yourself. Otherwise fan out to `general-purpose` subagents, one per
-top-level directory, at most 6 agents and 15 files each; `--no-fanout` disables
-this. Lean prompts: file list and the rubric path, no pre-reading by the caller.
+directory group, at most 6 concurrent and 15 files each; run further rounds until
+every signal file has been offered, and carry the count into the report.
+`--no-fanout` disables this. Lean prompts: file list and the rubric path, no
+pre-reading by the caller.
 
 Contract for each proposer:
 
@@ -158,15 +160,16 @@ git -C <worktree> commit -m "Tighten comments and doc prose in <dir>" \
 ## 8. Final report
 
 Per-batch word delta, total before/after, commits, tests run (or `unverified`),
-worktree path and branch, and rejected counts. Say how to review or discard the
-worktree. Never push.
+worktree path and branch, rejected counts, and how many signal files were
+offered (N of M) so a capped run never reads as a complete sweep. Say how to
+review or discard the worktree. Never push.
 
 ## Guardrails
 
 - The rubric is `terse-docs`; this skill adds no comment rules of its own.
-- `.claude/**`, `CLAUDE.md`, `AGENTS.md`, and `.cursorrules` are agent prompt
-  files, governed by a different rubric. The scanner skips them unless a path is
-  passed explicitly.
+- `.claude/**`, chezmoi `dot_claude/**`, `SKILL.md`, `CLAUDE.md`, `AGENTS.md`,
+  and `.cursorrules` are agent prompt files, governed by a different rubric. The
+  scanner skips them unless a path is passed explicitly.
 - `CHANGELOG`, `HISTORY`, `NEWS`, `LICENSE`, `COPYING` are history or legal
   text and are not targets.
 - Vendored and generated files are skipped by path, name, and content markers.

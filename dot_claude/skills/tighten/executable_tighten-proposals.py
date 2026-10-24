@@ -65,7 +65,9 @@ def _editable_prose(text: str, rel: str) -> tuple[list[tuple[int, int]], bool]:
     """Protected doc regions and whether the language is parsed at all."""
     if rel.lower().endswith(".rst"):
         return rst_protected_ranges(text), True
-    if rel.lower().endswith((".md", ".markdown", ".mdx")):
+    if rel.lower().endswith(".mdx"):
+        return [], False
+    if rel.lower().endswith((".md", ".markdown")):
         return doc_protected_ranges(text), True
     return [], True
 
@@ -233,12 +235,14 @@ def _filter_dirs(proposals: list[dict], directories: list[str]) -> list[dict]:
         rel = str(proposal.get("file", ""))
         if rel.startswith("./"):
             rel = rel[2:]
+        parent = os.path.dirname(rel) or "."
         for directory in directories:
             directory = directory.strip("/")
-            if directory in (".", "") and "/" not in rel:
-                selected.append(proposal)
-                break
-            if rel.startswith(directory + "/"):
+            if directory.startswith("./"):
+                directory = directory[2:]
+            if directory in ("", "."):
+                directory = "."
+            if directory == parent:
                 selected.append(proposal)
                 break
     return selected
@@ -250,7 +254,7 @@ def main(argv: list[str]) -> int:
     parser.add_argument("proposals")
     parser.add_argument("--root", default=".")
     parser.add_argument("--dir", action="append", default=[],
-                        help="only proposals whose file lives under this directory (repeatable)")
+                        help="only proposals whose file sits directly in this directory (repeatable)")
     parser.add_argument("--write-accepted", metavar="PATH",
                         help="write the accepted proposals for a later apply")
     parser.add_argument("--dry-run", action="store_true")
