@@ -92,12 +92,10 @@ that can drift. **State the rule once, in the narrowest scope that holds it.**
 
 ### Intake: a global change from another repo
 
-If any `gh` call fails — missing, unauthenticated, or unable to reach the
-repo — hand the draft over instead of improvising another path.
-
 1. Check for an existing issue:
-   `gh issue list -R IdahoEv/dotfiles --state open --search "<keywords>"`.
-   If one covers it, comment on it; otherwise create one.
+   `gh issue list -R github.com/IdahoEv/dotfiles --state all --search "<keywords>"`.
+   If one covers it, comment there; note if it was closed. If the search
+   fails, skip it and draft anyway.
 2. Draft the title and body for either path: `## Friction`, `## Evidence`
    (command and output, `file:line`, what you were attempting),
    `## Proposed change`, and a one-line scope note.
@@ -107,9 +105,10 @@ repo — hand the draft over instead of improvising another path.
    keep the evidence local.
 4. Show the draft and wait for approval; create nothing before it.
 5. File it with the body on stdin:
-   `gh issue create -R IdahoEv/dotfiles --title "<title>" --body-file -`, or
-   `gh issue comment <n> -R IdahoEv/dotfiles --body-file -`. Report the URL
-   and stop.
+   `gh issue create -R github.com/IdahoEv/dotfiles --title "<title>" --body-file -`,
+   or `gh issue comment <n> -R github.com/IdahoEv/dotfiles --body-file -`.
+   Report the URL and stop. If that call fails, give the user the title and
+   body (and the failure) to file themselves — don't improvise another path.
 
 ## 4. Project-local config and the standing ticket
 

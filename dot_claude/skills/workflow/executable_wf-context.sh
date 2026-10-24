@@ -686,7 +686,7 @@ main() {
             echo "not managed in this worktree ($_wf_source_override), and the deploy source cannot be read — whether the file already exists on main is unknown. Fix the deploy source (delivery.md, rc 3) before creating a new file here." >&2
           fi
         else
-          echo "not chezmoi-managed, and this is not a dev worktree: a global change is authored in the dotfiles repo, not here. Do not edit the deploy clone and do not run chezmoi add against it — see delivery.md." >&2
+          echo "not chezmoi-managed, and this is not a dev worktree: a global change is an intake issue in the dotfiles repo, not an edit here. Do not edit the deploy clone and do not run chezmoi add against it — /workflow §3 covers intake." >&2
         fi
         exit 1 ;;
     esac
