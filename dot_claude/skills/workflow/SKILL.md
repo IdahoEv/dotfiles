@@ -107,8 +107,10 @@ that can drift. **State the rule once, in the narrowest scope that holds it.**
 5. File it with the body on stdin:
    `gh issue create -R github.com/IdahoEv/dotfiles --title "<title>" --body-file -`,
    or `gh issue comment <n> -R github.com/IdahoEv/dotfiles --body-file -`.
-   Report the URL and stop. If that call fails, give the user the title and
-   body (and the failure) to file themselves — don't improvise another path.
+   If that call fails, hand the user the failure and the draft — title and
+   body to create, or issue number and body to comment — rather than
+   improvising another path. On success, report the URL; intake is done.
+   Continue with any local work and the §8 report.
 
 ## 4. Project-local config and the standing ticket
 

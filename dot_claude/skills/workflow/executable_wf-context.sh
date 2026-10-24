@@ -26,9 +26,9 @@
 #
 # `srcpath` exit codes: 0 managed (path on stdout; outside a dev worktree that
 # path is in the deploy clone, read-only) · 1 in dev mode, a genuinely unmanaged
-# file (the "new file" case); elsewhere, "not editable from here — author it in
-# the dotfiles repo" · 2 chezmoi not installed · 3 chezmoi can't read its source
-# state — NOT a license to edit the target directly.
+# file (the "new file" case); elsewhere, "not editable from here" — use a dev
+# checkout, or file intake (/workflow §3) · 2 chezmoi not installed · 3 chezmoi
+# can't read its source state — NOT a license to edit the target directly.
 #
 # `dotfiles_source=dev|deploy|none` says which checkout the `chezmoi_source_*`
 # facts describe: a dev/ticket worktree (edit here), the deploy clone (pull and
@@ -65,8 +65,9 @@ Usage:
   wf-context.sh --help
 
 srcpath exit codes: 0 managed · 1 unmanaged (in dev mode: the new-file case;
-elsewhere: author it in the dotfiles repo) · 2 chezmoi not installed · 3 chezmoi
-cannot read its source state — do NOT edit the target directly.
+elsewhere: use a dev checkout, or file intake — /workflow §3) · 2 chezmoi not
+installed · 3 chezmoi cannot read its source state — do NOT edit the target
+directly.
 EOF
 }
 
@@ -662,7 +663,7 @@ main() {
         # Stdout stays a bare path for callers; the warning goes to stderr so
         # a non-dev session does not mistake a deploy-clone path for edit access.
         if [ -z "${_wf_source_override:-}" ]; then
-          echo "this path is in the deploy clone: pull/apply only — author edits in the dotfiles repo (see delivery.md)." >&2
+          echo "this path is in the deploy clone: pull/apply only — author edits in a dotfiles dev checkout, or file intake for a global change (delivery.md, /workflow §3)." >&2
         fi
         printf '\n'; exit 0 ;;
       2) echo "chezmoi not installed" >&2; exit 2 ;;
@@ -685,8 +686,10 @@ main() {
           else
             echo "not managed in this worktree ($_wf_source_override), and the deploy source cannot be read — whether the file already exists on main is unknown. Fix the deploy source (delivery.md, rc 3) before creating a new file here." >&2
           fi
+        elif [ "$_wf_dotfiles_source" = deploy ]; then
+          echo "not chezmoi-managed, and this is the deploy clone: author it in a dev checkout (delivery.md), not here — do not run chezmoi add against it." >&2
         else
-          echo "not chezmoi-managed, and this is not a dev worktree: a global change is an intake issue in the dotfiles repo, not an edit here. Do not edit the deploy clone and do not run chezmoi add against it — /workflow §3 covers intake." >&2
+          echo "not chezmoi-managed, and this is not the dotfiles repo: a global change is an intake issue in the dotfiles repo, not an edit here — /workflow §3 covers intake." >&2
         fi
         exit 1 ;;
     esac
