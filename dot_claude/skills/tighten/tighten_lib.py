@@ -7,6 +7,7 @@ import io
 import os
 import re
 import subprocess
+import textwrap
 import tokenize
 from dataclasses import dataclass
 
@@ -199,6 +200,7 @@ def _scan_line(
     open_block: str | None,
     base: int = 0,
     ranges: list[tuple[int, int]] | None = None,
+    state: dict | None = None,
 ) -> tuple[str, str | None, bool, bool]:
     pieces: list[str] = []
     has_code = False
@@ -220,7 +222,19 @@ def _scan_line(
             if raw[j] == quote:
                 return j + 1
             j += 1
+        if state is not None:
+            state["open_quote"] = quote
         return n
+
+    open_quote = state.get("open_quote") if state is not None else None
+    if open_quote:
+        if state is not None:
+            state["open_quote"] = None
+        end = skip_string(-1, open_quote)
+        protected.append((0, end))
+        if state is not None and state.get("open_quote") == open_quote:
+            return "", open_block, False, touched
+        i = end
 
     if open_block is not None:
         touched = True
@@ -240,6 +254,8 @@ def _scan_line(
         if ch in spec.quotes:
             end = skip_string(i, ch)
             protected.append((i, end))
+            if state is not None and state.get("open_quote"):
+                return " ".join(pieces), open_block, has_code, touched
             i = end
             continue
         matched = False
@@ -279,7 +295,7 @@ def _scan_line(
     return " ".join(p for p in pieces if p.strip()), open_block, has_code, touched
 
 
-HEREDOC_RE = re.compile(r"<<-?\s*['\"]?([A-Za-z_][A-Za-z0-9_]*)['\"]?")
+HEREDOC_RE = re.compile(r"<<[-~]?\s*['\"]?([A-Za-z_][A-Za-z0-9_]*)['\"]?")
 BLOCK_SCALAR_RE = re.compile(r"^\s*[^\s#][^:]*:\s*[|>][-+]?\s*(?:#.*)?$")
 
 
@@ -291,7 +307,7 @@ def _iter_lines(text: str, spec: CommentSpec):
     """
     heredoc: str | None = None
     scalar_indent: int | None = None
-    for number, raw in enumerate(text.splitlines(), 1):
+    for number, raw in enumerate(text.split("\n"), 1):
         if number == 1 and raw.startswith("#!"):
             continue
         if heredoc is not None:
@@ -324,8 +340,10 @@ def scan_generic(text: str, spec: CommentSpec) -> tuple[list[list[tuple[int, str
             blocks.append(current)
             current = []
 
+    state: dict = {}
     for number, raw in _iter_lines(text, spec):
-        comment, open_block, has_code, touched = _scan_line(raw, spec, open_block)
+        comment, open_block, has_code, touched = _scan_line(
+            raw, spec, open_block, state=state)
         if has_code:
             code_lines += 1
         if touched:
@@ -363,7 +381,7 @@ def _docstring_spans(tree: ast.AST) -> list[tuple[int, int, str]]:
 
 
 def scan_python(text: str) -> tuple[list[list[tuple[int, str]]], int, bool, bool]:
-    lines = text.splitlines()
+    lines = text.split("\n")
     blocks: list[list[tuple[int, str]]] = []
     comment_lines: set[int] = set()
     try:
@@ -443,7 +461,7 @@ def _python_text_only(text: str) -> bool:
     if not lines or all(line.lstrip().startswith("#") for line in lines):
         return True
     try:
-        tree = ast.parse(text)
+        tree = ast.parse(textwrap.dedent(text))
     except SyntaxError:
         return False
     return (len(tree.body) == 1 and isinstance(tree.body[0], ast.Expr)
@@ -452,18 +470,24 @@ def _python_text_only(text: str) -> bool:
 
 
 def is_commentary(text: str, path: str) -> bool:
-    """True when a replacement fragment carries only comments or a docstring."""
+    """True when a replacement fragment carries only comments or a docstring.
+
+    The fragment must also leave nothing open: an unclosed block comment or
+    string would swallow the code that follows it.
+    """
     if path.lower().endswith((".py", ".pyi")):
         return _python_text_only(text)
     spec = spec_for(path)
     if spec is None:
         return False
     open_block = None
+    state: dict = {}
     for line in text.splitlines():
-        _comment, open_block, has_code, _touched = _scan_line(line, spec, open_block)
-        if has_code:
+        _comment, open_block, has_code, _touched = _scan_line(
+            line, spec, open_block, state=state)
+        if has_code or state.get("open_quote"):
             return False
-    return True
+    return open_block is None
 
 
 def line_offsets(text: str) -> list[int]:
@@ -510,16 +534,21 @@ def comment_ranges(text: str, path: str) -> tuple[list[tuple[int, int]], bool]:
     offsets = line_offsets(text)
     ranges: list[tuple[int, int]] = []
     open_block = None
+    state: dict = {}
     for number, raw in _iter_lines(text, spec):
         _comment, open_block, _code, _touched = _scan_line(
-            raw, spec, open_block, base=offsets[number - 1], ranges=ranges)
+            raw, spec, open_block, base=offsets[number - 1], ranges=ranges, state=state)
     return ranges, True
+
+
+STRUCTURAL_LINE_RE = re.compile(
+    r"^\s*(?:[=\-~^\"'+#*_]{3,}|[^|\n]*\s\|\s[^|\n]*)\s*$")
 
 
 def doc_protected_ranges(text: str) -> list[tuple[int, int]]:
     """Markdown regions that are code, data, or structure — never prose to cut."""
     offsets = line_offsets(text)
-    lines = text.splitlines()
+    lines = text.split("\n")
     ranges: list[tuple[int, int]] = []
 
     def span(first: int, last: int) -> tuple[int, int]:
@@ -566,11 +595,11 @@ def doc_protected_ranges(text: str) -> list[tuple[int, int]]:
             previous_blank = True
             in_list = False
             continue
-        if stripped.startswith("|") or re.match(r"^\s*\|?[\s:|-]+\|[\s:|-]*$", raw):
+        if STRUCTURAL_LINE_RE.match(raw):
             ranges.append((offsets[index], offsets[index] + len(raw)))
-            continue
-        if re.match(r"^\s*(?:=+|-+)\s*$", raw):
-            ranges.append((offsets[index], offsets[index] + len(raw)))
+            if index > start_line and lines[index - 1].strip() \
+                    and not STRUCTURAL_LINE_RE.match(lines[index - 1]):
+                ranges.append((offsets[index - 1], offsets[index - 1] + len(lines[index - 1])))
             continue
         if raw.startswith("    ") and not in_list and previous_blank:
             ranges.append((offsets[index], offsets[index] + len(raw)))
@@ -588,12 +617,19 @@ def doc_protected_ranges(text: str) -> list[tuple[int, int]]:
 def rst_protected_ranges(text: str) -> list[tuple[int, int]]:
     """Directives and literal blocks, whose indented bodies are code or markup."""
     offsets = line_offsets(text)
-    lines = text.splitlines()
+    lines = text.split("\n")
     ranges: list[tuple[int, int]] = []
     index = 0
     while index < len(lines):
         raw = lines[index]
         stripped = raw.strip()
+        if STRUCTURAL_LINE_RE.match(raw):
+            ranges.append((offsets[index], offsets[index] + len(raw)))
+            if index and lines[index - 1].strip() \
+                    and not STRUCTURAL_LINE_RE.match(lines[index - 1]):
+                ranges.append((offsets[index - 1], offsets[index - 1] + len(lines[index - 1])))
+            index += 1
+            continue
         opens = bool(re.match(r"^\.\.(\s|$)", stripped)) or (
             stripped.endswith("::") and not stripped.startswith(".."))
         if not opens:
@@ -617,7 +653,7 @@ def rst_protected_ranges(text: str) -> list[tuple[int, int]]:
 
 
 def markdown_prose(text: str) -> tuple[int, int, int]:
-    lines = text.splitlines()
+    lines = text.split("\n")
     start = 0
     if lines and lines[0].lstrip("﻿").strip() == "---":
         for index in range(1, len(lines)):

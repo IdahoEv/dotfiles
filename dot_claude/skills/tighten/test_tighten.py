@@ -152,6 +152,19 @@ class CodeTests(unittest.TestCase):
         self.assertIn("real comment", joined)
         self.assertNotIn("data, not a comment", joined)
 
+    def test_ruby_squiggly_heredoc_body_is_not_a_comment(self):
+        text = "sql = <<~SQL\n  # data line\nSQL\n# real comment\n"
+        blocks, _lines = lib.scan_generic(text, lib.CODE_SPECS[".rb"])
+        joined = "\n".join(piece for block in blocks for _line, piece in block)
+        self.assertIn("real comment", joined)
+        self.assertNotIn("data line", joined)
+
+    def test_comment_ranges_align_when_a_form_feed_splits_lines(self):
+        text = "const a = 1;\n\x0cconst b = 2;\n// real comment\n"
+        ranges, parsed = lib.comment_ranges(text, "x.js")
+        self.assertTrue(parsed)
+        self.assertEqual([text[a:b] for a, b in ranges], ["// real comment"])
+
     def test_yaml_block_scalar_body_is_not_a_comment(self):
         text = "script: |\n  # data\n# real comment\n"
         blocks, _lines = lib.scan_generic(text, lib.CODE_SPECS[".yml"])
@@ -422,6 +435,68 @@ class ProposalTests(unittest.TestCase):
         self.assertEqual(self.run_check([{
             "file": "a.py", "old": "# Fetches the user record from the store.\n",
             "new": "# Fetches.\nretries = 3\n"}])["rejected"][0]["reason"], "code_in_replacement")
+
+    def test_unclosed_block_comment_in_replacement_is_rejected(self):
+        (self.repo / "a.js").write_text(
+            "/* Old long explanatory comment. */\nconst x = 1;\n", encoding="utf-8")
+        self.assertEqual(self.run_check([{
+            "file": "a.js", "old": "/* Old long explanatory comment. */",
+            "new": "/* Old comment"}])["rejected"][0]["reason"], "code_in_replacement")
+
+    def test_trailing_newline_mismatch_is_rejected(self):
+        self.assertEqual(self.run_check([{
+            "file": "a.py", "old": "# Fetches the user record from the store.\n",
+            "new": "# Fetches."}])["rejected"][0]["reason"], "trailing_newline_mismatch")
+
+    def test_multiline_template_literal_lines_are_not_comments(self):
+        (self.repo / "t.js").write_text(
+            "const q = `\n  // keep this data\n  SELECT 1;\n`;\n", encoding="utf-8")
+        self.assertEqual(self.run_check([{"file": "t.js", "old": "  // keep this data",
+                                          "new": "  // keep"}])["rejected"][0]["reason"],
+                         "not_in_comment")
+
+    def test_docstring_indent_must_be_preserved(self):
+        self.file.write_text('def f():\n    """Old summary of the method."""\n    return 1\n')
+        kept = self.run_check([{
+            "file": "a.py", "old": '    """Old summary of the method."""',
+            "new": '    """New summary."""'}])
+        self.assertEqual(len(kept["accepted"]), 1)
+        dedented = self.run_check([{
+            "file": "a.py", "old": '    """Old summary of the method."""',
+            "new": '"""New summary."""'}])
+        self.assertEqual(dedented["rejected"][0]["reason"], "indent_mismatch")
+
+    def test_html_comment_terminator_cannot_be_removed(self):
+        (self.repo / "h.md").write_text(
+            "# T\n\n<!-- hidden note -->\n\nBody.\n", encoding="utf-8")
+        self.assertEqual(self.run_check([{
+            "file": "h.md", "old": " hidden note -->", "new": " note"}])
+            ["rejected"][0]["reason"] in ("doc_structural", "indent_mismatch"), True)
+
+    def test_license_header_is_protected(self):
+        self.file.write_text(
+            "# This file is part of Project Foo.\n"
+            "# See the LICENSE file in the repository root for terms.\n"
+            "x = 1\n")
+        self.assertEqual(self.run_check([{
+            "file": "a.py",
+            "old": "# This file is part of Project Foo.\n"
+                   "# See the LICENSE file in the repository root for terms.\n",
+            "new": ""}])["rejected"][0]["reason"], "license_text")
+
+    def test_setext_heading_and_rst_adornment_are_protected(self):
+        (self.repo / "s.md").write_text("Title\n=====\n\nBody.\n", encoding="utf-8")
+        self.assertEqual(self.run_check([{"file": "s.md", "old": "Title\n", "new": ""}])
+                         ["rejected"][0]["reason"], "doc_structural")
+        (self.repo / "r.rst").write_text("Install\n=======\n\nRun it.\n", encoding="utf-8")
+        self.assertEqual(self.run_check([{"file": "r.rst", "old": "Install\n=======\n", "new": ""}])
+                         ["rejected"][0]["reason"], "doc_structural")
+
+    def test_pipeless_table_row_is_protected(self):
+        (self.repo / "t.md").write_text(
+            "# T\n\nname | value\n--- | ---\nalpha | one\n", encoding="utf-8")
+        self.assertEqual(self.run_check([{"file": "t.md", "old": "alpha | one\n", "new": ""}])
+                         ["rejected"][0]["reason"], "doc_structural")
 
     def test_docstring_replacement_is_allowed(self):
         self.file.write_text('"""Old summary here."""\n\ndef f():\n    return 1\n')

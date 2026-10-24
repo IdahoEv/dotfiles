@@ -38,7 +38,8 @@ Read it before proposing anything; do not restate it here.
 
 Scripts live in this skill's directory (`~/.claude/skills/tighten/`):
 `tighten-scan.py` (read-only), `tighten-proposals.py` (validate/apply),
-`tighten-worktree.sh` (create/reuse).
+`tighten-worktree.sh` (create/reuse). `test_tighten.py` is the suite:
+`python3 ~/.claude/skills/tighten/test_tighten.py`.
 
 ## 1. Preflight
 
@@ -72,7 +73,7 @@ Never put the worktree inside the repo.
 Scan the worktree (same commit as `scan_sha`), not the original checkout:
 
 ```bash
-python3 ~/.claude/skills/tighten/tighten-scan.py --root <worktree> [paths] --json \
+python3 ~/.claude/skills/tighten/tighten-scan.py --root <worktree> [paths] --json --top 5 \
   [--comments-only|--docs-only]
 ```
 

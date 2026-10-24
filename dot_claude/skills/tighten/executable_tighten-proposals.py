@@ -20,6 +20,7 @@ from tighten_lib import (  # noqa: E402
     doc_protected_ranges,
     is_commentary,
     is_doc,
+    is_license,
     line_ending,
     normalize_newlines,
     rst_protected_ranges,
@@ -117,8 +118,19 @@ def validate(root: str, proposals: list[dict]) -> tuple[list[dict], list[dict]]:
                for line in old.splitlines()):
             rejected.append({**entry, "reason": "protected_directive"})
             continue
+        if is_license(old):
+            rejected.append({**entry, "reason": "license_text"})
+            continue
         if count_words(new) > count_words(old):
             rejected.append({**entry, "reason": "word_growth"})
+            continue
+        old_indent = re.match(r"[ \t]*", old.splitlines()[0]).group(0)
+        new_first = next((line for line in new.splitlines() if line.strip()), "")
+        if new_first and re.match(r"[ \t]*", new_first).group(0) != old_indent:
+            rejected.append({**entry, "reason": "indent_mismatch"})
+            continue
+        if new.strip() and old.endswith("\n") != new.endswith("\n"):
+            rejected.append({**entry, "reason": "trailing_newline_mismatch"})
             continue
 
         offsets = [match.start() for match in re.finditer(re.escape(old), text)]
@@ -170,8 +182,10 @@ def validate(root: str, proposals: list[dict]) -> tuple[list[dict], list[dict]]:
             if not parsed or _touches(ranges, start, end):
                 rejected.append({**entry, "reason": "doc_structural"})
                 continue
-            structural = re.compile(r"^\s*(```|~~~|---\s*$|\[[^\]]+\]:\s|<!--)", re.MULTILINE)
-            if structural.search(old) or structural.search(new):
+            structural = re.compile(
+                r"^\s*(```|~~~|---\s*$|#{1,6}\s|\[[^\]]+\]:\s)", re.MULTILINE)
+            if structural.search(old) or structural.search(new) \
+                    or any(marker in old or marker in new for marker in ("<!--", "-->")):
                 rejected.append({**entry, "reason": "doc_structural"})
                 continue
             old_structural = set(re.findall(r"^\s*(?:#{1,6}\s|```|~~~|\|).*$", old, re.MULTILINE))
