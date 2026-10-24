@@ -260,6 +260,14 @@ export CHEZMOI_BROKEN_SOURCE="$DEPLOY"
 out="$(run_facts "$ROOT/ticket")"
 check "broken deploy: worktree healthy" yes "$(fact "$out" chezmoi_healthy)"
 check "broken deploy: deploy unhealthy" no  "$(fact "$out" chezmoi_deploy_healthy)"
+# An unreadable deploy source cannot answer "is this file on main?" — do not
+# let that read as the new-file case.
+printf 'x\n' > "$DEPLOY/dot_claude/deploy-only2.md"
+out="$(run_srcpath "$ROOT/ticket" "$HOME/.claude/deploy-only2.md")"
+has "rc 1 with unreadable deploy says unknown" "$out" "unknown"
+case "$out" in *"New file: create"*) r=yes ;; *) r=no ;; esac
+check "rc 1 with unreadable deploy gives no new-file advice" no "$r"
+rm "$DEPLOY/dot_claude/deploy-only2.md"
 unset CHEZMOI_BROKEN_SOURCE
 
 out="$(run_nochezmoi "$ROOT/ticket")"
@@ -273,6 +281,10 @@ check "no chezmoi: srcpath rc 2" 2 "$(run_nochezmoi_rc "$ROOT/ticket" "$HOME/.cl
 # conventional path keeps it from being labelled editable.
 out="$(run_nochezmoi "$DEPLOY")"
 check "no chezmoi: deploy clone stays deploy" deploy "$(fact "$out" dotfiles_source)"
+check "no chezmoi: deploy root known"  "$DEPLOY" "$(fact "$out" chezmoi_deploy_root)"
+check "no chezmoi: deploy branch known" main     "$(fact "$out" chezmoi_deploy_branch)"
+check "no chezmoi: deploy behind reported" 1     "$(fact "$out" chezmoi_deploy_behind_origin)"
+check "no chezmoi: source mirrors deploy"  1     "$(fact "$out" chezmoi_source_behind_origin)"
 if printf '%s\n' "$out" | grep -qx 'chezmoi_deploy_healthy='; then r=yes; else r=no; fi
 check "no chezmoi: deploy health unknown, not no" yes "$r"
 
@@ -292,6 +304,15 @@ check "no origin: default branch source" none "$(fact "$out" default_branch_sour
 case "$out" in *"chezmoi_source_ahead_origin="*) r=yes ;; *) r=no ;; esac
 check "no origin: counts absent, not zero" no "$r"
 check "no origin: pull.rebase still reported" unset "$(fact "$out" chezmoi_source_pull_rebase)"
+
+# ---- default-branch probe ---------------------------------------------------
+# With origin/HEAD gone, the fixed-order probe must find main and strip the
+# `origin/` prefix, or every count silently disappears.
+git -C "$ROOT/ticket" symbolic-ref -d refs/remotes/origin/HEAD
+out="$(run_facts "$ROOT/ticket")"
+check "probe: branch"       main        "$(fact "$out" default_branch)"
+check "probe: source"       probe       "$(fact "$out" default_branch_source)"
+check "probe: compare ref"  origin/main "$(fact "$out" chezmoi_source_compare_ref)"
 
 # ---- help and read-only -----------------------------------------------------
 has "help documents srcpath" "$("$WC" --help)" "srcpath"

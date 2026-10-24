@@ -4,9 +4,11 @@ Read this when `wf-context.sh` reports `dotfiles_source=dev` or `deploy`.
 
 `dev` — this checkout is a dev/ticket worktree of the dotfiles source. Edits are
 committed here and reach the machine through the ticket flow. `deploy` — you are
-in the deploy clone (`main` only): no edits here; "Ship it" below is the
-pull/apply step. Either way the deploy clone (`chezmoi_deploy_root`, normally
-`~/.local/share/chezmoi`) is never edited or committed to.
+in the deploy clone (`main` only): no edits here; skip to "Ship it" below, which
+is the pull/apply step. Either way the deploy clone (`chezmoi_deploy_root`,
+normally `~/.local/share/chezmoi`) is never edited or committed to.
+
+The sections before "Ship it" describe `dev` only.
 
 ## Before editing
 
@@ -16,8 +18,9 @@ A ticket worktree has no upstream, so the counts are measured against
 `chezmoi_source_behind_origin` > 0 — the base moved; `git fetch origin &&
 git rebase origin/<default>` here before editing, or the PR will not merge
 cleanly. `chezmoi_source_dirty_files` > 0 — work already in flight; say so
-before adding. `_ahead_origin` here is this branch's own commits awaiting the
-PR, not a sync problem.
+before adding. In `dev`, `_ahead_origin` is this branch's own commits awaiting
+the PR, not a sync problem; in `deploy` it means local commits in the main-only
+clone — stop and report.
 
 `chezmoi_healthy=no` (the source state won't load) makes the chezmoi-derived
 facts — `chezmoi_manages_claude`, `chezmoi_claude_md_*`,
@@ -49,9 +52,11 @@ path in this worktree. Edit it there.
 - **1** — chezmoi is healthy and the target is not managed in *this* source.
   The stderr names the deploy path when the branch simply does not carry the
   file: rebase onto `origin/<default>` if it is on main, otherwise report what
-  the deploy clone has — never edit that path or create a duplicate. Without
-  such a path it is the new-file case below. It also covers a path matched by
-  `.chezmoiignore`, which `srcpath` can't distinguish.
+  the deploy clone has — never edit that path or create a duplicate. If the
+  deploy source itself cannot be read, that answer is unknown: fix it before
+  assuming a new file. Without such a path it is the new-file case below. It
+  also covers a path matched by `.chezmoiignore`, which `srcpath` can't
+  distinguish.
 - **2** — chezmoi is not installed. Ask before touching `~/.claude` by hand.
 - **3** — chezmoi cannot read the source state at all: a missing source dir, or
   `.chezmoiignore` / `.chezmoidata.*` / `.chezmoiexternal.*` / `.chezmoiversion`

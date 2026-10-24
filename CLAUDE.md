@@ -9,7 +9,7 @@ Chezmoi source for Evan's machines. The repo is also the source of `~/.claude`, 
 | `dot_claude/` | `~/.claude` (commands, skills, agents, hooks, settings, global CLAUDE.md) |
 | `dot_*`, `*.tmpl` | `$HOME` dotfiles (templates branch on `is_work`) |
 | `tools/` | Not deployed; `*.sh` are symlinked into `~/.local/bin` by `run_after_link-tools.sh` and run in place from the deploy clone |
-| `.claude/` | Project config, not deployed. Only `kickoff-preamble.md` is tracked; the rest (e.g. `governor.md`) is local and gitignored |
+| `.claude/` | Project config, not deployed. `kickoff-preamble.md` and `governor.md` are tracked; the rest is local and gitignored |
 | `docs/`, `CLAUDE.md` | Not deployed |
 
 ## Two checkouts

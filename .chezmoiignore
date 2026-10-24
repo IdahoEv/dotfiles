@@ -10,5 +10,6 @@ CLAUDE.md
 tools
 
 # Test harness, not a runtime file. It resolves the source-tree names
-# (executable_*), which do not exist at the deployed path.
-dot_claude/skills/workflow/executable_wf-context.test.sh
+# (executable_*), which do not exist at the deployed path. Patterns match
+# TARGET paths — source prefixes (dot_claude/, executable_) stripped.
+.claude/skills/workflow/wf-context.test.sh

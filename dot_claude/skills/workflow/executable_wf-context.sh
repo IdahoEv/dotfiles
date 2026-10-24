@@ -50,7 +50,7 @@ GIT_TOOLS_DEFAULT="$HOME/.local/share/chezmoi/tools"
 # can't preempt a probe — a sentinel that answers from $ENV is worse than none.
 unset _wf_chezmoi_probed _wf_chezmoi_healthy
 unset _wf_deploy_probed _wf_deploy_healthy
-unset _wf_deploy_root_resolved
+unset _wf_resolved_top
 _wf_deploy_root=""
 _wf_source_override=""
 _wf_dotfiles_source=""
@@ -122,7 +122,6 @@ wf::init_deploy_root() {
   if command -v chezmoi >/dev/null; then
     _wf_deploy_root="$(command chezmoi source-path 2>/dev/null || true)"
   fi
-  _wf_deploy_root_resolved=yes
 }
 
 wf::deploy_root() {
@@ -165,6 +164,7 @@ wf::resolve_dotfiles_source() {
   top="$(git rev-parse --show-toplevel 2>/dev/null || true)"
   [ -n "$top" ] || return 0
   top="$(wf::canon_dir "$top")"
+  _wf_resolved_top="$top"
   deploy="$(wf::deploy_root)"
   if [ -n "$deploy" ]; then
     deploy="$(wf::canon_dir "$deploy")"
@@ -259,7 +259,9 @@ wf::source_readable() {  # <source-dir|""> — "" means chezmoi's default source
 
 wf::chezmoi_healthy() {  # effective source (the worktree in `dev` mode)
   if [ "${_wf_chezmoi_probed:-}" != yes ]; then
-    if wf::source_readable "${_wf_source_override:-}"; then
+    # Pass the resolved root: `""` would make source_readable spawn
+    # `chezmoi source-path` again, in every non-dev run.
+    if wf::source_readable "${_wf_source_override:-$(wf::deploy_root)}"; then
       _wf_chezmoi_healthy=yes
     else
       _wf_chezmoi_healthy=no
@@ -383,14 +385,25 @@ wf::chezmoi_facts() {
 
   if ! command -v chezmoi >/dev/null; then
     # Health is unknown, not bad: an absent binary says nothing about the clone.
-    printf 'chezmoi_manages_claude=unknown\nchezmoi_deploy_root=\nchezmoi_deploy_branch=\nchezmoi_deploy_healthy=\n'
-    wf::repo_sync_facts chezmoi_deploy ""
-    # The dev worktree is identified without chezmoi, and its sync counts are
-    # git-derived — losing them would hide a stale base at the one moment the
-    # session cannot check anything else.
+    # The checkout itself is still known when resolve identified it, and the
+    # branch/dirty/behind facts are git-derived.
+    deploy_root=""
+    if [ "$_wf_dotfiles_source" = deploy ]; then deploy_root="${_wf_resolved_top:-}"; fi
+    printf 'chezmoi_manages_claude=unknown\nchezmoi_deploy_root=%s\n' "$deploy_root"
+    if [ -n "$deploy_root" ]; then
+      deploy_branch="$(git -C "$deploy_root" rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
+    fi
+    printf 'chezmoi_deploy_branch=%s\nchezmoi_deploy_healthy=\n' "$deploy_branch"
+    deploy_facts="$(wf::repo_sync_facts chezmoi_deploy "$deploy_root")"
+    printf '%s\n' "$deploy_facts"
+    # Losing the git-derived counts would hide a stale base at the one moment
+    # the session cannot check anything else.
     if [ -n "${_wf_source_override:-}" ]; then
       printf 'chezmoi_source_root=%s\n' "$_wf_source_override"
       wf::repo_sync_facts chezmoi_source "$_wf_source_override"
+    elif [ -n "$deploy_root" ]; then
+      printf 'chezmoi_source_root=%s\n' "$deploy_root"
+      printf '%s\n' "$deploy_facts" | sed 's/^chezmoi_deploy_/chezmoi_source_/'
     fi
     return
   fi
@@ -662,11 +675,15 @@ main() {
         exit 3 ;;
       *)
         if [ -n "${_wf_source_override:-}" ]; then
-          deploy_src="$(wf::deploy_source_path "$target")"
-          if [ -n "$deploy_src" ]; then
-            echo "not managed in this worktree ($_wf_source_override); the deploy source has it at $deploy_src — the branch may simply not carry this file." >&2
+          if wf::chezmoi_deploy_healthy; then
+            deploy_src="$(wf::deploy_source_path "$target")"
+            if [ -n "$deploy_src" ]; then
+              echo "not managed in this worktree ($_wf_source_override); the deploy source has it at $deploy_src — the branch may simply not carry this file." >&2
+            else
+              echo "not chezmoi-managed in this worktree ($_wf_source_override). New file: create the source directly, or derive its name with: chezmoi -S \"$_wf_source_override\" add $target. If chezmoi IGNORES this path, add warns and exits 0 without adding: read its output before reporting it added." >&2
+            fi
           else
-            echo "not chezmoi-managed in this worktree ($_wf_source_override). New file: create the source directly, or derive its name with: chezmoi -S \"$_wf_source_override\" add $target. If chezmoi IGNORES this path, add warns and exits 0 without adding: read its output before reporting it added." >&2
+            echo "not managed in this worktree ($_wf_source_override), and the deploy source cannot be read — whether the file already exists on main is unknown. Fix the deploy source (delivery.md, rc 3) before creating a new file here." >&2
           fi
         else
           echo "not chezmoi-managed, and this is not a dev worktree: a global change is authored in the dotfiles repo, not here. Do not edit the deploy clone and do not run chezmoi add against it — see delivery.md." >&2
