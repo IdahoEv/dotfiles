@@ -18,13 +18,15 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from tighten_lib import (  # noqa: E402
     DOC_EXTENSIONS,
     GENERATED_MARKERS,
-    GENERATED_NAMES,
-    NON_PROSE_DOC_NAMES,
     VENDORED_SEGMENTS,
     block_kind,
     count_words,
     git_root,
     is_doc,
+    is_generated_name,
+    is_non_prose_doc,
+    is_prompt_path,
+    is_vendored_path,
     markdown_prose,
     ref_counts,
     scan_code,
@@ -32,7 +34,6 @@ from tighten_lib import (  # noqa: E402
 )
 
 MAX_BYTES = 1_048_576
-PROMPT_BASENAMES = {"claude.md", "agents.md", "skill.md", ".cursorrules"}
 
 
 @dataclass
@@ -87,22 +88,6 @@ class FileStats:
             "headings": self.headings, "license_header": self.license_header,
             "parse_error": self.parse_error, "signal": self.signal, "blocks": self.blocks,
         }
-
-
-def _is_vendored(rel: str) -> bool:
-    return any(part.lower() in VENDORED_SEGMENTS for part in rel.split("/")[:-1])
-
-
-def _matches(name: str, patterns: tuple[str, ...]) -> bool:
-    lowered = name.lower()
-    return any(fnmatch.fnmatch(lowered, pattern) for pattern in patterns)
-
-
-def _is_prompt_file(rel: str) -> bool:
-    parts = rel.split("/")
-    if any(part in (".claude", "dot_claude") for part in parts[:-1]):
-        return True
-    return os.path.basename(rel).lower() in PROMPT_BASENAMES
 
 
 def _git_files(root: str, paths: list[str], include_untracked: bool) -> list[str] | None:
@@ -161,17 +146,16 @@ def discover(root: str, paths: list[str], explicit_files: set[str], include_untr
         if os.path.islink(absolute):
             skips.symlink += 1
             continue
-        if _is_vendored(rel):
+        if is_vendored_path(rel):
             skips.vendored += 1
             continue
-        name = os.path.basename(rel)
-        if _matches(name, GENERATED_NAMES):
+        if is_generated_name(rel):
             skips.generated += 1
             continue
-        if _matches(name, NON_PROSE_DOC_NAMES) and is_doc(rel):
+        if is_non_prose_doc(rel):
             skips.excluded += 1
             continue
-        if _is_prompt_file(rel) and os.path.realpath(absolute) not in explicit_files:
+        if is_prompt_path(rel) and os.path.realpath(absolute) not in explicit_files:
             skips.prompt += 1
             continue
         if include and not any(fnmatch.fnmatch(rel, pattern) for pattern in include):
@@ -464,7 +448,13 @@ def main(argv: list[str]) -> int:
                 print(f"{key}={commands[key]}")
         return 0
 
-    paths = [os.path.abspath(path) for path in args.paths]
+    paths = []
+    for path in args.paths:
+        if os.path.isabs(path):
+            paths.append(os.path.abspath(path))
+            continue
+        under_root = os.path.join(root, path)
+        paths.append(under_root if os.path.exists(under_root) else os.path.abspath(path))
     real_root = os.path.realpath(root)
     for path in paths:
         try:

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ast
+import fnmatch
 import io
 import os
 import re
@@ -572,7 +573,8 @@ def doc_protected_ranges(text: str) -> list[tuple[int, int]]:
     ranges: list[tuple[int, int]] = []
 
     def span(first: int, last: int) -> tuple[int, int]:
-        return offsets[first], offsets[min(last + 1, len(offsets) - 1)]
+        end = offsets[last + 1] if last + 1 < len(offsets) else len(text)
+        return offsets[first], end
 
     start_line = 0
     if lines and lines[0].lstrip("﻿").strip() == "---":
@@ -615,7 +617,7 @@ def doc_protected_ranges(text: str) -> list[tuple[int, int]]:
             previous_blank = True
             in_list = False
             continue
-        if STRUCTURAL_LINE_RE.match(raw):
+        if stripped.startswith("|") or STRUCTURAL_LINE_RE.match(raw):
             ranges.append((offsets[index], offsets[index] + len(raw)))
             if index > start_line and lines[index - 1].strip() \
                     and not STRUCTURAL_LINE_RE.match(lines[index - 1]):
@@ -747,6 +749,30 @@ def markdown_prose(text: str) -> tuple[int, int, int]:
 
 def is_doc(path: str) -> bool:
     return os.path.splitext(path)[1].lower() in DOC_EXTENSIONS
+
+
+PROMPT_BASENAMES = {"claude.md", "agents.md", "skill.md", ".cursorrules"}
+
+
+def is_prompt_path(rel: str) -> bool:
+    parts = rel.split("/")
+    if any(part in (".claude", "dot_claude") for part in parts[:-1]):
+        return True
+    return os.path.basename(rel).lower() in PROMPT_BASENAMES
+
+
+def is_generated_name(rel: str) -> bool:
+    name = os.path.basename(rel).lower()
+    return any(fnmatch.fnmatch(name, pattern) for pattern in GENERATED_NAMES)
+
+
+def is_vendored_path(rel: str) -> bool:
+    return any(part.lower() in VENDORED_SEGMENTS for part in rel.split("/")[:-1])
+
+
+def is_non_prose_doc(rel: str) -> bool:
+    name = os.path.basename(rel).lower()
+    return is_doc(rel) and any(fnmatch.fnmatch(name, pattern) for pattern in NON_PROSE_DOC_NAMES)
 
 
 def git_root(path: str) -> str | None:

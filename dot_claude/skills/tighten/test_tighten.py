@@ -313,6 +313,13 @@ class ScannerTests(unittest.TestCase):
         report = json.loads(result.stdout)
         self.assertEqual([entry["path"] for entry in report["files"]], ["CLAUDE.md"])
 
+    def test_relative_path_resolves_under_root_when_it_exists(self):
+        result = run(SCANNER, "src", "--root", str(self.repo), "--json", cwd=self.tmp.name)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        report = json.loads(result.stdout)
+        paths = {entry["path"] for entry in report["files"]}
+        self.assertIn("src/verbose.py", paths)
+
     def test_relative_path_resolves_against_cwd(self):
         (self.repo / "src" / "target.py").write_text("# one two three four\n", encoding="utf-8")
         git(self.repo, "add", "-A")
@@ -481,6 +488,33 @@ class ProposalTests(unittest.TestCase):
         self.assertEqual(self.run_check([{
             "file": "a.js", "old": "/* Old long explanatory comment. */",
             "new": "/* Old comment"}])["rejected"][0]["reason"], "code_in_replacement")
+
+    def test_leading_blank_line_is_rejected(self):
+        self.assertEqual(self.run_check([{
+            "file": "a.py", "old": "\n# Fetches the user record from the store.\n",
+            "new": ""}])["rejected"][0]["reason"], "leading_blank_line")
+
+    def test_prompt_and_vendored_paths_are_rejected(self):
+        (self.repo / "CLAUDE.md").write_text("# Prompt\n\nAlways explain in detail.\n")
+        self.assertEqual(self.run_check([{"file": "CLAUDE.md",
+                                          "old": "Always explain in detail.", "new": "Explain."}])
+                         ["rejected"][0]["reason"], "skipped_path")
+        (self.repo / "node_modules" / "pkg").mkdir(parents=True)
+        (self.repo / "node_modules" / "pkg" / "x.js").write_text("// note here\n")
+        self.assertEqual(self.run_check([{"file": "node_modules/pkg/x.js", "old": "// note here",
+                                          "new": ""}])["rejected"][0]["reason"], "skipped_path")
+
+    def test_pipe_table_row_is_rejected(self):
+        (self.repo / "tbl.md").write_text(
+            "# T\n\n| name | value |\n| --- | --- |\n| beta | two |\n", encoding="utf-8")
+        self.assertEqual(self.run_check([{"file": "tbl.md", "old": "| beta | two |", "new": ""}])
+                         ["rejected"][0]["reason"], "doc_structural")
+
+    def test_final_line_without_newline_is_protected(self):
+        (self.repo / "nonl.md").write_text(
+            "Title\n=====\n\nRun::\n\n    print('hi')", encoding="utf-8")
+        self.assertEqual(self.run_check([{"file": "nonl.md", "old": "    print('hi')", "new": ""}])
+                         ["rejected"][0]["reason"], "doc_structural")
 
     def test_partial_indent_line_is_rejected(self):
         self.assertEqual(self.run_check([{

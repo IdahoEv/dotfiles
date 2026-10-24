@@ -20,7 +20,11 @@ from tighten_lib import (  # noqa: E402
     doc_protected_ranges,
     is_commentary,
     is_doc,
+    is_generated_name,
     is_license,
+    is_non_prose_doc,
+    is_prompt_path,
+    is_vendored_path,
     line_ending,
     normalize_newlines,
     rst_protected_ranges,
@@ -101,6 +105,10 @@ def validate(root: str, proposals: list[dict]) -> tuple[list[dict], list[dict]]:
             rejected.append({**entry, "reason": "not_a_file_in_root"})
             continue
         rel = os.path.relpath(absolute, root).replace(os.sep, "/")
+        if is_prompt_path(rel) or is_vendored_path(rel) or is_generated_name(rel) \
+                or is_non_prose_doc(rel):
+            rejected.append({**entry, "reason": "skipped_path"})
+            continue
         if rel not in texts:
             try:
                 with open(absolute, encoding="utf-8", newline="") as handle:
@@ -128,6 +136,9 @@ def validate(root: str, proposals: list[dict]) -> tuple[list[dict], list[dict]]:
             continue
         if count_words(new) > count_words(old):
             rejected.append({**entry, "reason": "word_growth"})
+            continue
+        if "\n" in old and not old.split("\n", 1)[0].strip():
+            rejected.append({**entry, "reason": "leading_blank_line"})
             continue
         old_indent = re.match(r"[ \t]*", old.splitlines()[0]).group(0)
         new_first = next((line for line in new.splitlines() if line.strip()), "")
