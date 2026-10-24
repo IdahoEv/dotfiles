@@ -10,6 +10,10 @@ framework knowledge: the repo's existing tests define the conventions.
 
 ## Read before writing
 
+Use the implementation when it exists. In test-first work it does not: work from the
+requested interface or spec, state the signature you are assuming, and note that the test
+is expected to fail until the implementation lands.
+
 1. The code under test: inputs, outputs, dependencies, failure modes.
 2. Neighboring tests of similar code: layout, naming, setup, assertion style.
 3. The repo's testing-guidelines doc, if one exists. If it does not, infer conventions
@@ -53,7 +57,7 @@ project's own instructions, not this table.
 
 Shape only; rename and adapt to the repo.
 
-TypeScript:
+TypeScript (Jest):
 
 ```typescript
 import { describe, test, expect } from "@jest/globals";
@@ -71,7 +75,7 @@ describe("thing", () => {
 });
 ```
 
-Python:
+Python (pytest):
 
 ```python
 import pytest
@@ -87,7 +91,7 @@ def test_thing_rejects_missing_input():
         thing(None)
 ```
 
-C#:
+C# (xUnit):
 
 ```csharp
 public class ThingTests
@@ -103,7 +107,7 @@ public class ThingTests
     public void Thing_WithMissingInput_Throws()
     {
         var subject = new Thing();
-        Assert.Throws<ArgumentException>(() => subject.Run(null));
+        Assert.Throws<ArgumentNullException>(() => subject.Run(null));
     }
 }
 ```
