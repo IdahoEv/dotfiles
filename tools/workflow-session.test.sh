@@ -33,11 +33,11 @@ export GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t GIT_COMMITTER_NAME=t GIT_COMMITTER
 export TMPDIR="$ROOT/tmp"; mkdir -p "$TMPDIR"
 export SESSION_LABEL_STATE_FILE="$ROOT/state.json"
 
-# Stubs: wm creates a sibling worktree and prints its path last, as the real one does.
+# Stubs: wm creates a worktree beside the current checkout and prints its path
+# last, as the real one does from the primary worktree.
 cat > "$ROOT/wm" <<'SH'
 #!/usr/bin/env bash
-main="$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")"
-wt="$(dirname "$main")/$1"
+wt="$(dirname "$(git rev-parse --show-toplevel)")/$1"
 git worktree add -q "$wt" -b "$1"
 echo "$wt"
 SH
@@ -77,25 +77,51 @@ check "reports reused=no on first run" yes "$r"
 
 KF="$(kickoff)"
 has "kickoff carries governor.md" "$KF" "GOVERNOR-CONTEXT-MARKER"
-has "kickoff points at repo CLAUDE.md" "$KF" "CLAUDE.md"
+has "kickoff points at repo CLAUDE.md" "$KF" 'The repo `CLAUDE.md` loads automatically'
+if grep -qF 'session-label.sh' "$KF"; then r=yes; else r=no; fi
+check "kickoff leaves labelling to the skill" no "$r"
 has "kickoff names the issue command" "$KF" "gh issue create -R IdahoEv/dotfiles"
 has "kickoff states the scope rule" "$KF" "every project"
-has "kickoff sets title and color" "$KF" "session-label.sh --title Workflow --color project"
 has "kickoff loads /workflow" "$KF" "/workflow"
 
 has "launches via start-ticket --tab-only" "$ST_LOG" "--tab-only $ROOT/proj/workflow $KF"
 has "label identifies the project" "$ST_LOG" "label=widgets workflow"
 
+rm -f "$ST_LOG"
 out="$(run)"; rc=$?
 check "second run succeeds" "0" "$rc"
 check "second run reuses the worktree" "1" "$(wt_count)"
 case "$out" in *"reused=yes"*) r=yes ;; *) r=no ;; esac
 check "reports reused=yes on re-run" yes "$r"
+check "reuse does not launch a second session" "no" "$([ -e "$ST_LOG" ] && echo yes || echo no)"
+case "$out" in *"launched=no"*) r=yes ;; *) r=no ;; esac
+check "reports launched=no on reuse" yes "$r"
+out="$(run --relaunch)"
+has "--relaunch launches on reuse" "$ST_LOG" "--tab-only $ROOT/proj/workflow"
+
+rm -f "$SESSION_LABEL_STATE_FILE"
+out="$(run)"; rc=$?
+check "no state file (iTerm/none launcher): runs" "0" "$rc"
+echo '{"name":"widgets Governor"}' > "$SESSION_LABEL_STATE_FILE"
 
 rm -f "$ST_LOG"
 (cd "$P" && "$WS" --force >/dev/null 2>&1)
 echo '{"name":"anything"}' > "$SESSION_LABEL_STATE_FILE"
 (cd "$P" && "$WS" --force >/dev/null 2>&1); check "--force bypasses the governor check" "0" "$?"
+
+# wm --init layout: a bare container whose worktrees are subdirectories, so
+# gt::main_root is the container, not a checkout.
+B="$ROOT/bareproj"
+git clone -q --bare "$P" "$B/.bare"
+git -C "$B/.bare" branch -q -D workflow
+printf 'gitdir: ./.bare\n' > "$B/.git"
+git -C "$B" config remote.origin.fetch '+refs/heads/*:refs/remotes/origin/*'
+git -C "$B" worktree add -q "$B/main" "$(git -C "$P" branch --show-current)"
+mkdir -p "$B/main/.claude"; printf 'BARE-GOVERNOR-MARKER\n' > "$B/main/.claude/governor.md"
+echo '{"name":"bareproj Governor"}' > "$SESSION_LABEL_STATE_FILE"
+(cd "$B/main" && "$WS" >/dev/null); check "bare layout: runs" "0" "$?"
+has "bare layout: kickoff carries governor.md" "$TMPDIR/bareproj-kickoff-workflow.md" "BARE-GOVERNOR-MARKER"
+check "bare layout: workflow worktree is a sibling of main" "yes" "$([ -d "$B/workflow" ] && echo yes || echo no)"
 
 check "project checkout stays clean" "" "$(git -C "$P" status --porcelain | grep -v '^?? ')"
 
