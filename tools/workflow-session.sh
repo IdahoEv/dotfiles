@@ -14,8 +14,8 @@
 # `start-ticket.sh --tab-only`, so the `launcher=` setting (iterm|bg|none) applies.
 #
 # The caller (the /workflow skill) is the real governor gate. This only refuses
-# when a bg session's state.json names a non-governor title; iTerm and none
-# launchers have no state file, so there it trusts the caller.
+# when a bg session's state.json names a non-governor title; with no state file
+# (iTerm, none), no title, or an unreadable one, it trusts the caller.
 #
 # A reused worktree gets no new session by default: one may still be live in it,
 # and two sessions editing one checkout collide.
@@ -51,12 +51,14 @@ while [ $# -gt 0 ]; do
   esac
 done
 
-session_title() {  # rc 1 when there is no readable state file to judge by
+session_title() {  # rc 1 when there is no readable state file or title to judge by
   local f="${SESSION_LABEL_STATE_FILE:-${CLAUDE_JOB_DIR:+$CLAUDE_JOB_DIR/state.json}}"
   [ -n "$f" ] && [ -r "$f" ] && command -v python3 >/dev/null || return 1
   python3 -c 'import json,sys
-try: print(json.load(open(sys.argv[1])).get("name",""))
-except Exception: sys.exit(1)' "$f"
+try: n=json.load(open(sys.argv[1])).get("name","")
+except Exception: sys.exit(1)
+if not n: sys.exit(1)
+print(n)' "$f"
 }
 
 main="$(gt::main_root)"
@@ -78,9 +80,13 @@ workflow_worktree() {
     /^worktree /{p=substr($0,10)} $1=="branch" && $2==b {print p; exit}'
 }
 
-# A worktree dir removed by hand stays listed (prunable) and would pass as reusable.
-git -C "$main" worktree prune
 wt="$(workflow_worktree)"
+# A dir removed by hand stays listed and would pass as reusable. Drop only this
+# entry: a repo-wide prune would also drop other branches' temporarily missing ones.
+if [ -n "$wt" ] && [ ! -d "$wt" ]; then
+  git -C "$main" worktree remove --force "$wt" >&2
+  wt=""
+fi
 reused=yes
 if [ -z "$wt" ]; then
   reused=no
@@ -107,12 +113,17 @@ kickoff="${TMPDIR:-/tmp}/${project}-kickoff-workflow.md"
   printf 'The repo `CLAUDE.md` loads automatically in this worktree.\n'
 } > "$kickoff"
 
-launched=no
+launched=no rc=0
 if [ "$reused" = no ] || [ "$relaunch" = 1 ]; then
-  GT_LABEL_OVERRIDE="$project workflow" "$start" --tab-only "$wt" "$kickoff"
-  launched=yes
+  if GT_LABEL_OVERRIDE="$project workflow" "$start" --tab-only "$wt" "$kickoff"; then
+    launched=yes
+  else
+    rc=1
+    printf 'workflow-session: start-ticket.sh failed; session not launched\n' >&2
+  fi
 else
   printf 'workflow-session: %s already existed; not starting a second session (a live one may be using it). Pass --relaunch to start one anyway.\n' "$wt" >&2
 fi
 
 printf 'worktree=%s\nkickoff=%s\nbranch=%s\nreused=%s\nlaunched=%s\n' "$wt" "$kickoff" "$BRANCH" "$reused" "$launched"
+exit "$rc"

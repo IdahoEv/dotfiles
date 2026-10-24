@@ -126,12 +126,23 @@ check "bare layout: workflow worktree is a sibling of main" "yes" "$([ -d "$B/wo
 # A worktree dir deleted by hand leaves a prunable entry; it must not count as reuse.
 S="$ROOT/proj3"; git init -q "$S/p"; git -C "$S/p" commit -q --allow-empty -m init
 git -C "$S/p" worktree add -q "$S/workflow" -b workflow; rm -rf "$S/workflow"
+git -C "$S/p" worktree add -q "$S/other" -b other; rm -rf "$S/other"
 echo '{"name":"p Governor"}' > "$SESSION_LABEL_STATE_FILE"
 out="$(cd "$S/p" && "$WS" 2>/dev/null)"; rc=$?
 check "stale worktree entry: runs" "0" "$rc"
 case "$out" in *"reused=no"*) r=yes ;; *) r=no ;; esac
 check "stale worktree entry: recreated, not reused" yes "$r"
 check "stale worktree entry: dir exists" yes "$([ -d "$S/workflow" ] && echo yes || echo no)"
+check "other branches' stale entries are left alone" "1" "$(git -C "$S/p" worktree list --porcelain | grep -c 'refs/heads/other$')"
+
+echo '{"color":"blue"}' > "$SESSION_LABEL_STATE_FILE"
+(cd "$S/p" && "$WS" --relaunch >/dev/null 2>&1); check "state file without a title: trusts the caller" "0" "$?"
+
+printf '#!/usr/bin/env bash\nexit 1\n' > "$ROOT/st-fail"; chmod +x "$ROOT/st-fail"
+out="$(cd "$S/p" && WORKFLOW_SESSION_START="$ROOT/st-fail" "$WS" --relaunch 2>/dev/null)"; rc=$?
+check "failed launch exits non-zero" "1" "$rc"
+case "$out" in *"kickoff="*"launched=no"*) r=yes ;; *) r=no ;; esac
+check "failed launch still reports paths and launched=no" yes "$r"
 
 # wm can exit non-zero after creating the worktree (e.g. a failed dependency
 # install); the session must still open.
