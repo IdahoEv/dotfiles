@@ -287,6 +287,9 @@ If issues arise during implementation:
    - If stuck, present options to user
    - Never guess or make assumptions about requirements
 
+7. **Machine default**: on personal machines, the ticket-implementation default in global
+   CLAUDE.md overrides this command's approval pauses and commit suggestions.
+
 ## Recovery and Error Handling
 
 ### If implementation fails mid-phase:

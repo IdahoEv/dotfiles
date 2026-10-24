@@ -88,7 +88,15 @@ fix descriptions, the full commit message) in the question text or option `previ
 3. Only then commit
 
 **Exception:** If I explicitly say "commit this" or similar, proceed directly.
-
+{{ if not .is_work }}
+**Implementing a ticket:** no approval pause before committing. When the acceptance criteria
+are met and the project's relevant tests pass, commit, then run `/local-code-review-cycle`
+before asking me to review. This is a standing exception to the commit rule above, for ticket
+implementation only. If you cannot meet an AC or get the tests green, or about three focused
+attempts at the same failure make no progress, stop and ask for help — don't keep grinding,
+and never weaken, skip, or delete a test to get green. I'd rather spend review time on code
+that already passed automated review.
+{{ end }}
 **Git tools are on PATH — don't hunt for them.** `worktree-manager.sh`,
 `start-ticket.sh`, `open-pr.sh`, and `setup-ticket-profile.sh` all live in
 `~/.local/share/chezmoi/tools` (the `tools/` dir of the dotfiles deploy clone), symlinked into `~/.local/bin` on every `chezmoi apply`. Call them
