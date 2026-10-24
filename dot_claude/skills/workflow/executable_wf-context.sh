@@ -154,7 +154,7 @@ wf::git_common_dir() {  # <repo-dir> → canonical common dir, or empty
 wf::resolve_dotfiles_source() {
   _wf_dotfiles_source=none
   _wf_source_override=""
-  local top deploy deploy_c top_c
+  local top deploy deploy_c top_c conventional
   top="$(git rev-parse --show-toplevel 2>/dev/null || true)"
   [ -n "$top" ] || return 0
   top="$(wf::canon_dir "$top")"
@@ -170,6 +170,18 @@ wf::resolve_dotfiles_source() {
     if [ -n "$deploy_c" ] && [ "$deploy_c" = "$top_c" ]; then
       _wf_dotfiles_source=dev
       _wf_source_override="$top"
+      return 0
+    fi
+  fi
+  # Without a working chezmoi, the markers below cannot tell the deploy clone
+  # from a dev worktree — and mislabelling the deploy clone `dev` invites edits
+  # to the one checkout that must stay untouched. Its conventional path still
+  # distinguishes it.
+  if [ -z "$deploy" ]; then
+    conventional="${CHEZMOI_SOURCE_DIR:-$HOME/.local/share/chezmoi}"
+    if [ -d "$conventional" ] \
+       && [ "$top" = "$(wf::canon_dir "$conventional")" ]; then
+      _wf_dotfiles_source=deploy
       return 0
     fi
   fi
@@ -330,7 +342,7 @@ wf::repo_sync_facts() {  # <key-prefix> <git-dir|"">
 
 wf::chezmoi_facts() {
   local src_root deploy_root deploy_branch="" managed="no" claude_md_src="" tmpl="no"
-  local settings_src settings_kind="plain"
+  local settings_src settings_kind="plain" deploy_facts
 
   if command -v chezmoi >/dev/null; then
     printf 'chezmoi_available=yes\n'
@@ -340,7 +352,8 @@ wf::chezmoi_facts() {
   printf 'dotfiles_source=%s\n' "$_wf_dotfiles_source"
 
   if ! command -v chezmoi >/dev/null; then
-    printf 'chezmoi_manages_claude=unknown\nchezmoi_deploy_root=\nchezmoi_deploy_branch=\nchezmoi_deploy_healthy=no\n'
+    # Health is unknown, not bad: an absent binary says nothing about the clone.
+    printf 'chezmoi_manages_claude=unknown\nchezmoi_deploy_root=\nchezmoi_deploy_branch=\nchezmoi_deploy_healthy=\n'
     wf::repo_sync_facts chezmoi_deploy ""
     return
   fi
@@ -378,8 +391,6 @@ wf::chezmoi_facts() {
   esac
   printf 'chezmoi_settings_source_kind=%s\n' "$settings_kind"
 
-  wf::repo_sync_facts chezmoi_source "$src_root"
-
   # The deploy clone, reported separately: after a merge it is what needs the
   # pull + apply, whatever branch this session's worktree is on.
   printf 'chezmoi_deploy_root=%s\n' "$deploy_root"
@@ -392,7 +403,16 @@ wf::chezmoi_facts() {
   else
     printf 'chezmoi_deploy_healthy=no\n'
   fi
-  wf::repo_sync_facts chezmoi_deploy "$deploy_root"
+  deploy_facts="$(wf::repo_sync_facts chezmoi_deploy "$deploy_root")"
+  printf '%s\n' "$deploy_facts"
+  # Outside `dev` mode the effective source IS the deploy clone. Scan it once
+  # and re-prefix the lines: a second call would repeat the fetch and the full
+  # status scan on every orient in an ordinary project.
+  if [ "$src_root" = "$deploy_root" ]; then
+    printf '%s\n' "$deploy_facts" | sed 's/^chezmoi_deploy_/chezmoi_source_/'
+  else
+    wf::repo_sync_facts chezmoi_source "$src_root"
+  fi
 }
 
 # ---- project ----------------------------------------------------------------
@@ -423,7 +443,8 @@ wf::project_facts() {
   # Deliberately NOT gt::default_branch: it falls through to
   # `git remote show origin` and `gh repo view` when refs/remotes/origin/HEAD is
   # unset — untimed network calls that would make this script hang for 30s to
-  # two minutes offline, breaking the "No network" guarantee in the header.
+  # two minutes offline. The bounded `git fetch` in wf::repo_sync_facts is a
+  # separate, intended call; nothing here may add another.
   #
   # refs/remotes/origin/HEAD is the only LOCAL source that actually knows which
   # branch origin considers default, so ask it directly and report whether it

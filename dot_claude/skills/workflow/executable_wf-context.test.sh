@@ -123,7 +123,22 @@ SH
 chmod +x "$BIN/chezmoi"
 export CHEZMOI_DEPLOY="$DEPLOY" CHEZMOI_LOG="$ROOT/chezmoi.log"
 
+# Counts `git fetch` calls, for the "scan each checkout once" checks.
+REAL_GIT="$(command -v git)"
+GW="$ROOT/gitwrap"; mkdir -p "$GW"
+cat > "$GW/git" <<SH
+#!/usr/bin/env bash
+if [ -n "\${GIT_FETCH_LOG:-}" ]; then
+  for a in "\$@"; do
+    [ "\$a" = fetch ] && { echo fetch >> "\$GIT_FETCH_LOG"; break; }
+  done
+fi
+exec "$REAL_GIT" "\$@"
+SH
+chmod +x "$GW/git"
+
 run_facts()       { (cd "$1" && PATH="$BIN:$PATH" "$WC" 2>/dev/null); }
+run_facts_counted() { (cd "$1" && PATH="$BIN:$GW:$PATH" "$WC" 2>/dev/null); }
 run_srcpath()     { (cd "$1" && PATH="$BIN:$PATH" "$WC" srcpath "$2" 2>&1); }
 run_srcpath_rc()  { (cd "$1" && PATH="$BIN:$PATH" "$WC" srcpath "$2" >/dev/null 2>&1); echo $?; }
 PURE_PATH="/usr/bin:/bin:/usr/sbin:/sbin"
@@ -175,6 +190,17 @@ check "bare main: root"        "$B/main" "$(fact "$out" chezmoi_source_root)"
 out="$(run_facts "$B")"
 check "bare container: none"   none     "$(fact "$out" dotfiles_source)"
 
+# Outside dev mode the source and deploy roots are the same checkout; it must
+# be scanned (and fetched) once, not twice.
+export GIT_FETCH_LOG="$ROOT/fetch.log"
+rm -f "$GIT_FETCH_LOG"; run_facts_counted "$PLAIN" >/dev/null
+check "none mode scans deploy once" 1 "$(grep -c fetch "$GIT_FETCH_LOG" 2>/dev/null)"
+rm -f "$GIT_FETCH_LOG"; run_facts_counted "$DEPLOY" >/dev/null
+check "deploy mode scans once"      1 "$(grep -c fetch "$GIT_FETCH_LOG" 2>/dev/null)"
+rm -f "$GIT_FETCH_LOG"; run_facts_counted "$ROOT/ticket" >/dev/null
+check "dev mode scans both clones"  2 "$(grep -c fetch "$GIT_FETCH_LOG" 2>/dev/null)"
+unset GIT_FETCH_LOG
+
 # ---- srcpath ----------------------------------------------------------------
 check "srcpath rc 0"   0 "$(run_srcpath_rc "$ROOT/ticket" "$HOME/.claude/CLAUDE.md")"
 check "srcpath worktree path" "$ROOT/ticket/dot_claude/CLAUDE.md.tmpl" \
@@ -199,6 +225,13 @@ out="$(run_nochezmoi "$ROOT/ticket")"
 check "no chezmoi: available"   no  "$(fact "$out" chezmoi_available)"
 check "no chezmoi: markers say dev" dev "$(fact "$out" dotfiles_source)"
 check "no chezmoi: srcpath rc 2" 2 "$(run_nochezmoi_rc "$ROOT/ticket" "$HOME/.claude/CLAUDE.md")"
+
+# The deploy clone also carries the dev markers, so without chezmoi only its
+# conventional path keeps it from being labelled editable.
+out="$(run_nochezmoi "$DEPLOY")"
+check "no chezmoi: deploy clone stays deploy" deploy "$(fact "$out" dotfiles_source)"
+if printf '%s\n' "$out" | grep -qx 'chezmoi_deploy_healthy='; then r=yes; else r=no; fi
+check "no chezmoi: deploy health unknown, not no" yes "$r"
 
 # Dev-mode checkout with no origin: the source itself has nothing to compare to
 # (in `none` mode the source is the deploy clone, which does have one).

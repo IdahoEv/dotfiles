@@ -6,6 +6,21 @@ the machine through the ticket flow. The deploy clone
 (`chezmoi_deploy_root`, normally `~/.local/share/chezmoi`) is `main` only —
 never edit or commit there.
 
+## Before editing
+
+`chezmoi_source_behind_origin` > 0 — the remote moved; `git pull --rebase` in
+this worktree first, or the push becomes a merge. `chezmoi_source_dirty_files`
+> 0 — work already in flight here; say so before adding. `_ahead_origin` > 0 —
+unpushed commits the other machine cannot see; mention it. `_pull_rebase` not
+`true` — plain `pull` makes merge commits; offer
+`git -C <worktree> config pull.rebase true`.
+
+`chezmoi_healthy=no` makes every other `chezmoi_*` fact a false negative (the
+source state won't load): run `chezmoi doctor`, and do not hand-edit
+`~/.claude` — that is what `srcpath` rc 3 below means. `chezmoi_available=no`
+means chezmoi is not installed: ask before touching `~/.claude` by hand. Either
+way `chezmoi_deploy_healthy` is empty (unknown), not `no`.
+
 ## Source naming
 
 `dot_claude/` → `~/.claude/`, `executable_` → mode +x, `private_` → mode 600,
