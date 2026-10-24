@@ -145,6 +145,16 @@ class CodeTests(unittest.TestCase):
         blocks, _lines = lib.scan_generic("echo $#\n", lib.CODE_SPECS[".sh"])
         self.assertEqual(blocks, [])
 
+    def test_line_marker_needs_a_word_boundary(self):
+        for spec, text in ((".js", "x = 1;// attached\n"),
+                           (".sql", "SELECT 1--2;\n"),
+                           (".scss", "a { background: url(http://cdn/x.png); }\n")):
+            blocks, _lines = lib.scan_generic(text, lib.CODE_SPECS[spec])
+            self.assertEqual(blocks, [], spec)
+        blocks, _lines = lib.scan_generic("x = 1; // detached\n", lib.CODE_SPECS[".js"])
+        joined = "\n".join(piece for block in blocks for _line, piece in block)
+        self.assertIn("detached", joined)
+
     def test_heredoc_body_is_not_a_comment(self):
         text = "cat <<EOF\n# data, not a comment\nEOF\n# real comment\n"
         blocks, _lines = lib.scan_generic(text, lib.CODE_SPECS[".sh"])

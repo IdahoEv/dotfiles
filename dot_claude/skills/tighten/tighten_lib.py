@@ -282,9 +282,9 @@ def _scan_line(
         for marker in spec.line:
             if not raw.startswith(marker, i) or any(a <= i < b for a, b in protected):
                 continue
-            if marker == "#" and i > 0 and not raw[i - 1].isspace():
-                continue
-            if marker == "//" and i > 0 and raw[i - 1] == ":":
+            # A marker glued to a word is data, not commentary: URLs carry
+            # `//`, and identifiers can carry the marker character.
+            if i > 0 and not raw[i - 1].isspace():
                 continue
             touched = True
             pieces.append(raw[i + len(marker):])
