@@ -152,9 +152,9 @@ git -C <worktree> commit -m "Tighten comments and doc prose in <dir>" \
 - Tests red → `git -C <worktree> reset --hard HEAD` (the worktree is disposable;
   `checkout -- .` restores from the index, which `--stage` already filled), stop,
   report the batch and the failing output. Never commit red.
-- Word growth, code edits, protected directives, structural doc edits, and
-  missing matches are rejected by the validator; do not work around a rejection
-  by hand-editing.
+- Word growth, code (in `old` or `new`), protected directives, structural doc
+  edits, and missing matches are rejected by the validator; do not work around a
+  rejection by hand-editing.
 - Several directories in one batch → repeat `--dir`.
 
 ## 8. Final report
@@ -166,7 +166,6 @@ review or discard the worktree. Never push.
 
 ## Guardrails
 
-- The rubric is `terse-docs`; this skill adds no comment rules of its own.
 - `.claude/**`, chezmoi `dot_claude/**`, `SKILL.md`, `CLAUDE.md`, `AGENTS.md`,
   and `.cursorrules` are agent prompt files, governed by a different rubric. The
   scanner skips them unless a path is passed explicitly.

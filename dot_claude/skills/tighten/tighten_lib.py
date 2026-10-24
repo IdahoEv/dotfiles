@@ -63,7 +63,7 @@ DATE_RE = re.compile(
     r"oct|nov|dec)[a-z]*\.?\s+(?:19|20)\d{2}\b",
     re.IGNORECASE,
 )
-TICKET_RE = re.compile(r"(?:^|\s)#\d+\b|\b[A-Z][A-Z0-9]{1,9}-\d+\b", re.IGNORECASE)
+TICKET_RE = re.compile(r"(?:^|\s)#\d+\b|\b[A-Z][A-Z0-9]{1,9}-\d+\b")
 TICKET_DENYLIST_RE = re.compile(r"\b(?:UTF|SHA|ISO|RFC|AES|SHA|TLS|HTTP|COVID)-\d+\b", re.IGNORECASE)
 
 DOC_STRUCTURAL_RE = re.compile(
@@ -76,6 +76,8 @@ class CommentSpec:
     line: tuple[str, ...] = ()
     block: tuple[tuple[str, str], ...] = ()
     quotes: str = "\"'`"
+    heredoc: bool = False
+    block_scalar: bool = False
 
 
 CODE_SPECS = {
@@ -103,7 +105,7 @@ CODE_SPECS = {
     ".cs": CommentSpec(("//",), (("/*", "*/"),)),
     ".swift": CommentSpec(("//",), (("/*", "*/"),)),
     ".go": CommentSpec(("//",), (("/*", "*/"),)),
-    ".rs": CommentSpec(("//",), (("/*", "*/"),)),
+    ".rs": CommentSpec(("//",), (("/*", "*/"),), quotes="\"`"),
     ".dart": CommentSpec(("//",), (("/*", "*/"),)),
     ".php": CommentSpec(("//", "#"), (("/*", "*/"),)),
     ".zig": CommentSpec(("//",), ()),
@@ -111,16 +113,16 @@ CODE_SPECS = {
     ".tf": CommentSpec(("//", "#"), (("/*", "*/"),)),
     ".hcl": CommentSpec(("//", "#"), (("/*", "*/"),)),
     ".nix": CommentSpec(("#",), (("/*", "*/"),)),
-    ".rb": CommentSpec(("#",), ()),
+    ".rb": CommentSpec(("#",), (), heredoc=True),
     ".rake": CommentSpec(("#",), ()),
     ".gemspec": CommentSpec(("#",), ()),
-    ".sh": CommentSpec(("#",), ()),
-    ".bash": CommentSpec(("#",), ()),
-    ".zsh": CommentSpec(("#",), ()),
-    ".ksh": CommentSpec(("#",), ()),
-    ".fish": CommentSpec(("#",), ()),
-    ".yml": CommentSpec(("#",), ()),
-    ".yaml": CommentSpec(("#",), ()),
+    ".sh": CommentSpec(("#",), (), heredoc=True),
+    ".bash": CommentSpec(("#",), (), heredoc=True),
+    ".zsh": CommentSpec(("#",), (), heredoc=True),
+    ".ksh": CommentSpec(("#",), (), heredoc=True),
+    ".fish": CommentSpec(("#",), (), heredoc=True),
+    ".yml": CommentSpec(("#",), (), block_scalar=True),
+    ".yaml": CommentSpec(("#",), (), block_scalar=True),
     ".toml": CommentSpec(("#",), ()),
     ".ini": CommentSpec(("#",), ()),
     ".cfg": CommentSpec(("#",), ()),
@@ -277,8 +279,40 @@ def _scan_line(
     return " ".join(p for p in pieces if p.strip()), open_block, has_code, touched
 
 
+HEREDOC_RE = re.compile(r"<<-?\s*['\"]?([A-Za-z_][A-Za-z0-9_]*)['\"]?")
+BLOCK_SCALAR_RE = re.compile(r"^\s*[^\s#][^:]*:\s*[|>][-+]?\s*(?:#.*)?$")
+
+
+def _iter_lines(text: str, spec: CommentSpec):
+    """Yield (line number, text) for lines that can hold code or comments.
+
+    Heredoc bodies and YAML block scalars are data: a `#` inside them is not a
+    comment, and tightening one would change a program's input.
+    """
+    heredoc: str | None = None
+    scalar_indent: int | None = None
+    for number, raw in enumerate(text.splitlines(), 1):
+        if number == 1 and raw.startswith("#!"):
+            continue
+        if heredoc is not None:
+            if raw.strip() == heredoc:
+                heredoc = None
+            continue
+        if scalar_indent is not None:
+            if raw.strip() and len(raw) - len(raw.lstrip()) <= scalar_indent:
+                scalar_indent = None
+            else:
+                continue
+        yield number, raw
+        if spec.heredoc and not raw.lstrip().startswith("#"):
+            match = HEREDOC_RE.search(raw)
+            if match:
+                heredoc = match.group(1)
+        if spec.block_scalar and BLOCK_SCALAR_RE.match(raw):
+            scalar_indent = len(raw) - len(raw.lstrip())
+
+
 def scan_generic(text: str, spec: CommentSpec) -> tuple[list[list[tuple[int, str]]], int]:
-    lines = text.splitlines()
     blocks: list[list[tuple[int, str]]] = []
     current: list[tuple[int, str]] = []
     open_block: str | None = None
@@ -290,9 +324,7 @@ def scan_generic(text: str, spec: CommentSpec) -> tuple[list[list[tuple[int, str
             blocks.append(current)
             current = []
 
-    for number, raw in enumerate(lines, 1):
-        if number == 1 and raw.startswith("#!"):
-            continue
+    for number, raw in _iter_lines(text, spec):
         comment, open_block, has_code, touched = _scan_line(raw, spec, open_block)
         if has_code:
             code_lines += 1
@@ -406,6 +438,34 @@ def scan_code(
     return blocks, code_lines, license_header, True
 
 
+def _python_text_only(text: str) -> bool:
+    lines = [line for line in text.splitlines() if line.strip()]
+    if not lines or all(line.lstrip().startswith("#") for line in lines):
+        return True
+    try:
+        tree = ast.parse(text)
+    except SyntaxError:
+        return False
+    return (len(tree.body) == 1 and isinstance(tree.body[0], ast.Expr)
+            and isinstance(tree.body[0].value, ast.Constant)
+            and isinstance(tree.body[0].value.value, str))
+
+
+def is_commentary(text: str, path: str) -> bool:
+    """True when a replacement fragment carries only comments or a docstring."""
+    if path.lower().endswith((".py", ".pyi")):
+        return _python_text_only(text)
+    spec = spec_for(path)
+    if spec is None:
+        return False
+    open_block = None
+    for line in text.splitlines():
+        _comment, open_block, has_code, _touched = _scan_line(line, spec, open_block)
+        if has_code:
+            return False
+    return True
+
+
 def line_offsets(text: str) -> list[int]:
     offsets = [0]
     for match in re.finditer("\n", text):
@@ -450,40 +510,78 @@ def comment_ranges(text: str, path: str) -> tuple[list[tuple[int, int]], bool]:
     offsets = line_offsets(text)
     ranges: list[tuple[int, int]] = []
     open_block = None
-    for number, raw in enumerate(text.splitlines(), 1):
-        if number == 1 and raw.startswith("#!"):
-            continue
+    for number, raw in _iter_lines(text, spec):
         _comment, open_block, _code, _touched = _scan_line(
             raw, spec, open_block, base=offsets[number - 1], ranges=ranges)
     return ranges, True
 
 
 def doc_protected_ranges(text: str) -> list[tuple[int, int]]:
-    """Frontmatter and fenced-code regions of a Markdown document."""
+    """Markdown regions that are code, data, or structure — never prose to cut."""
     offsets = line_offsets(text)
     lines = text.splitlines()
     ranges: list[tuple[int, int]] = []
+
+    def span(first: int, last: int) -> tuple[int, int]:
+        return offsets[first], offsets[min(last + 1, len(offsets) - 1)]
+
     start_line = 0
     if lines and lines[0].lstrip("﻿").strip() == "---":
         for index in range(1, len(lines)):
             if lines[index].strip() == "---":
-                ranges.append((0, offsets[min(index + 1, len(offsets) - 1)]))
+                ranges.append(span(0, index))
                 start_line = index + 1
                 break
 
     fence_char = None
     fence_len = 0
     fence_start = 0
+    in_comment = False
+    comment_start = 0
+    previous_blank = True
+    in_list = False
+
     for index in range(start_line, len(lines)):
-        match = re.match(r"^\s*(`{3,}|~{3,})", lines[index])
-        if fence_char is None:
-            if match:
-                fence_char, fence_len, fence_start = match.group(1)[0], len(match.group(1)), index
-        elif match and match.group(1)[0] == fence_char and len(match.group(1)) >= fence_len:
-            ranges.append((offsets[fence_start], offsets[min(index + 1, len(offsets) - 1)]))
-            fence_char = None
+        raw = lines[index]
+        stripped = raw.strip()
+        match = re.match(r"^\s*(`{3,}|~{3,})", raw)
+
+        if in_comment:
+            if "-->" in stripped:
+                in_comment = False
+                ranges.append(span(comment_start, index))
+            continue
+        if fence_char is not None:
+            if match and match.group(1)[0] == fence_char and len(match.group(1)) >= fence_len:
+                ranges.append(span(fence_start, index))
+                fence_char = None
+            continue
+        if match:
+            fence_char, fence_len, fence_start = match.group(1)[0], len(match.group(1)), index
+            continue
+        if "<!--" in stripped and "-->" not in stripped:
+            in_comment, comment_start = True, index
+            continue
+        if not stripped:
+            previous_blank = True
+            in_list = False
+            continue
+        if stripped.startswith("|") or re.match(r"^\s*\|?[\s:|-]+\|[\s:|-]*$", raw):
+            ranges.append((offsets[index], offsets[index] + len(raw)))
+            continue
+        if re.match(r"^\s*(?:=+|-+)\s*$", raw):
+            ranges.append((offsets[index], offsets[index] + len(raw)))
+            continue
+        if raw.startswith("    ") and not in_list and previous_blank:
+            ranges.append((offsets[index], offsets[index] + len(raw)))
+            continue
+        in_list = bool(re.match(r"^\s*(?:[-*+]|\d+\.)\s", raw))
+        previous_blank = False
+
     if fence_char is not None:
         ranges.append((offsets[fence_start], len(text)))
+    if in_comment:
+        ranges.append((offsets[comment_start], len(text)))
     return ranges
 
 

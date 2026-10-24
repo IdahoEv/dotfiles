@@ -18,7 +18,7 @@ from tighten_lib import (  # noqa: E402
     comment_ranges,
     count_words,
     doc_protected_ranges,
-    git_root,
+    is_commentary,
     is_doc,
     line_ending,
     normalize_newlines,
@@ -37,7 +37,8 @@ def _load(path: str) -> list[dict]:
 def _resolve(root: str, file: str) -> str | None:
     absolute = os.path.abspath(file if os.path.isabs(file) else os.path.join(root, file))
     try:
-        if os.path.commonpath([absolute, root]) != root:
+        if os.path.commonpath([os.path.realpath(absolute), os.path.realpath(root)]) != \
+                os.path.realpath(root):
             return None
     except ValueError:
         return None
@@ -158,6 +159,9 @@ def validate(root: str, proposals: list[dict]) -> tuple[list[dict], list[dict]]:
             if _code_outside(text, ranges, start, end):
                 rejected.append({**entry, "reason": "code_touch"})
                 continue
+            if not is_commentary(new, rel):
+                rejected.append({**entry, "reason": "code_in_replacement"})
+                continue
 
         if is_doc(rel):
             if rel not in doc_cache:
@@ -166,7 +170,8 @@ def validate(root: str, proposals: list[dict]) -> tuple[list[dict], list[dict]]:
             if not parsed or _touches(ranges, start, end):
                 rejected.append({**entry, "reason": "doc_structural"})
                 continue
-            if re.search(r"^\s*(```|~~~|---\s*$|\[[^\]]+\]:\s|<!--)", old, re.MULTILINE):
+            structural = re.compile(r"^\s*(```|~~~|---\s*$|\[[^\]]+\]:\s|<!--)", re.MULTILINE)
+            if structural.search(old) or structural.search(new):
                 rejected.append({**entry, "reason": "doc_structural"})
                 continue
             old_structural = set(re.findall(r"^\s*(?:#{1,6}\s|```|~~~|\|).*$", old, re.MULTILINE))
@@ -264,7 +269,6 @@ def main(argv: list[str]) -> int:
     args = parser.parse_args(argv)
 
     root = os.path.abspath(args.root)
-    root = git_root(root) or root
     proposals = _load(args.proposals)
     if args.dir:
         proposals = _filter_dirs(proposals, args.dir)

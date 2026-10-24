@@ -1,10 +1,7 @@
 #!/usr/bin/env bash
-# Create or reuse an isolated worktree for /tighten.
-#
-#   tighten-worktree.sh ROOT BRANCH [--base REF]
-#
-# Prints key=value: worktree, branch, mode (wm|plain|reused), reused, head.
-# Non-zero with a reason on stderr when it cannot produce a clean worktree.
+# Create or reuse an isolated worktree for /tighten; prints key=value
+# (worktree, branch, mode, reused, head) or exits non-zero with a reason.
+# usage: tighten-worktree.sh ROOT BRANCH [--base REF]
 
 set -uo pipefail
 

@@ -149,7 +149,7 @@ def _tracked_under(root: str, path: str) -> bool:
     return bool(out.strip())
 
 
-def discover(root: str, paths: list[str], explicit: bool, include_untracked: bool,
+def discover(root: str, paths: list[str], explicit_files: set[str], include_untracked: bool,
              include: list[str], exclude: list[str], skips: SkipCounts) -> list[tuple[str, str]]:
     git_files = _git_files(root, paths, include_untracked)
     files = git_files if git_files is not None else _walk_files(root, paths)
@@ -171,7 +171,7 @@ def discover(root: str, paths: list[str], explicit: bool, include_untracked: boo
         if _matches(name, NON_PROSE_DOC_NAMES) and is_doc(rel):
             skips.excluded += 1
             continue
-        if not explicit and _is_prompt_file(rel):
+        if _is_prompt_file(rel) and os.path.realpath(absolute) not in explicit_files:
             skips.prompt += 1
             continue
         if include and not any(fnmatch.fnmatch(rel, pattern) for pattern in include):
@@ -218,20 +218,25 @@ def scan_file(rel: str, absolute: str, skips: SkipCounts) -> FileStats | None:
     if text is None:
         setattr(skips, reason, getattr(skips, reason) + 1)
         return None
+    ext = os.path.splitext(rel)[1].lower()
+    if ext in DOC_EXTENSIONS:
+        first = text.splitlines()[0].lower() if text.splitlines() else ""
+        if any(marker in first for marker in GENERATED_MARKERS):
+            skips.generated += 1
+            return None
+        prose, total, headings = markdown_prose(text)
+        history, tickets = ref_counts(text)
+        mdx = ext == ".mdx"
+        stats = FileStats(rel, "doc", "rst" if ext == ".rst" else "markdown",
+                          doc_prose_words=prose, doc_total_words=total, headings=headings,
+                          history_refs=history, ticket_refs=tickets, parse_error=mdx)
+        stats.signal = prose >= 100 and not mdx
+        return stats
+
     head = text[:2048].lower()
     if any(marker in head for marker in GENERATED_MARKERS):
         skips.generated += 1
         return None
-
-    ext = os.path.splitext(rel)[1].lower()
-    if ext in DOC_EXTENSIONS:
-        prose, total, headings = markdown_prose(text)
-        history, tickets = ref_counts(text)
-        stats = FileStats(rel, "doc", "rst" if ext == ".rst" else "markdown",
-                          doc_prose_words=prose, doc_total_words=total, headings=headings,
-                          history_refs=history, ticket_refs=tickets)
-        stats.signal = prose >= 100
-        return stats
 
     spec = spec_for(rel)
     if spec is None:
@@ -449,6 +454,7 @@ def main(argv: list[str]) -> int:
         root = git_root(base) or base
     else:
         root = git_root(os.getcwd()) or os.getcwd()
+    root = os.path.realpath(root)
 
     commands = detect_commands(root)
     if args.commands:
@@ -458,10 +464,11 @@ def main(argv: list[str]) -> int:
                 print(f"{key}={commands[key]}")
         return 0
 
-    paths = [path if os.path.isabs(path) else os.path.join(root, path) for path in args.paths]
+    paths = [os.path.abspath(path) for path in args.paths]
+    real_root = os.path.realpath(root)
     for path in paths:
         try:
-            inside = os.path.commonpath([os.path.abspath(path), root]) == root
+            inside = os.path.commonpath([os.path.realpath(path), real_root]) == real_root
         except ValueError:
             inside = False
         if not inside:
@@ -470,7 +477,8 @@ def main(argv: list[str]) -> int:
     git_files = _git_files(root, paths, args.include_untracked)
     mode = "git" if git_files is not None else "walk"
     skips = SkipCounts()
-    candidates = discover(root, paths, bool(args.paths), args.include_untracked,
+    explicit_files = {os.path.realpath(path) for path in paths if os.path.isfile(path)}
+    candidates = discover(root, paths, explicit_files, args.include_untracked,
                           args.include, args.exclude, skips)
     files: list[FileStats] = []
     for rel, absolute in candidates:
