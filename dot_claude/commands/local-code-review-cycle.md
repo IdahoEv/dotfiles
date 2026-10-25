@@ -1,106 +1,55 @@
 # Local Code Review Cycle
 
-Run an unattended review-and-fix cycle on the current worktree's branch, before the PR
-exists. Local counterpart of `/cloud-code-review-cycle`: same loop and stop rules, but it
-runs in a worktree, uses a fresh reviewer subagent each round, and ends at "ready for
-`/open-pr`" instead of pushing or opening a PR. Needs no input unless the cycle stops
-for human evaluation (Step 3).
+Review and fix the current branch before `/open-pr`. The implementer does not review its own work: launch fresh reviewer agents each round. This command may commit round fixes locally, but must never push.
 
-Usage: `/local-code-review-cycle [base]`. `base` defaults to `origin/<default branch>`; pass another ref
-when the PR targets a long-running branch.
+Usage: `/local-code-review-cycle [base]`. Base defaults to `origin/<default branch>`; pass another ref for a long-lived target branch.
 
-Test commands: use the project's own (CLAUDE.md / README). `FAST` = its quick suite
-(quiet output, slow tests excluded if supported); `FULL` = the complete suite. If
-neither is documented, ask once up front, not mid-cycle.
+Use the project's documented test commands. `FAST` is the quick suite; `FULL` is the complete suite. If neither is documented, ask once before starting.
 
-Invoking this command is explicit authorization to commit each round's fixes locally.
-Never push.
+## 1. Preflight
 
-## Steps
+- Set `BASE` from the argument or `origin/<default branch>`. Fetch origin and use remote refs directly.
+- Stop if the current branch is the base/default branch or the working tree is dirty. Do not rewrite history or force-update branches. If behind BASE, merge BASE into the branch and resolve conflicts before review.
+- Record the changed-file set from `git diff --name-only BASE...HEAD`. Stop if empty. Include untracked files in scope only if they are intentionally added before review.
+- Run `FAST` once as a baseline. Record pre-existing failures and compare later runs against them.
+- Run `agent-phase.sh REVIEW` when available. At each round, update the local review statusline using `review-state.sh --set-local` as documented by the existing workflow.
 
-### 1. Preflight
+## 2. Select reviewers
 
-- `BASE` = the argument, else `origin/<default branch>`. Confirm the branch is not `main`/`BASE`'s
-  branch and the working tree is clean (commit or ask about strays first).
-- `git fetch origin` then use `origin/...` refs directly. Do **not** `git branch -f
-  main`: main is checked out in another worktree, so that fails. If the branch is
-  behind `BASE`, merge it in (no rebase) and resolve conflicts now.
-- Record the review set once: `git diff --name-only BASE...HEAD` (the "changed files").
-  Empty set → stop and say so.
-- Baseline: run `FAST`. Red for reasons unrelated to
-  this branch → note it and continue; compare later runs against it.
-- `agent-phase.sh REVIEW` (no-ops outside a bg session; don't report it).
-- Review rounds feed the statusline: at the start of round k run
-  `~/.claude/skills/review-comments/review-state.sh --set-local "<k-1>*"`, and when it ends (after the commit step, or at once if
-  nothing changed) `--set-local <k>`.
+Inspect the ticket, diff summary, changed paths, and affected callers. Use judgment, not a rigid line-count threshold: risk and coupling matter more than raw size.
 
-### 2. Review cycle (at most 5 rounds)
+- **Always:** `correctness-reviewer` for any behavior or test change. For tiny documentation-only or mechanical changes with no behavior impact, skip specialist agents and run relevant deterministic checks.
+- **Architecture:** add `architecture-reviewer` when the diff changes module boundaries, abstractions, public APIs, data flow, state ownership, multiple modules, or makes a non-obvious design choice. For a large or cross-cutting diff, include it even if the trigger is uncertain.
+- **Robustness:** add `robustness-reviewer` for async/concurrent code, persistence, external services, retries/timeouts, cancellation, resource cleanup, lifecycle/state transitions, or recovery paths.
+- Run selected reviewers in parallel only when they can independently inspect the same committed diff. Each gets the same `BASE...HEAD` scope and is read-only.
+- Don't add a separate syntax reviewer. Use the project's formatter, compiler/type checker, linter, and tests for deterministic issues.
+- Each reviewer should use its focused agent instructions and return only actionable, evidenced findings. Do not ask every reviewer to repeat the same general review.
+
+## 3. Review and triage (at most 5 rounds)
 
 Each round:
 
-1. **Review.** Launch a fresh `Agent` (`subagent_type: branch-reviewer`) every round;
-   the implementer never reviews its own work. Lean prompt, do not pre-read code for it.
-   **Round 1 only**, add the design question below to the prompt; later rounds omit it:
+1. Launch a fresh instance of each selected reviewer. The prompt must name `BASE`, the exact diff scope, and already-triaged findings. Do not pre-read the implementation on the reviewer's behalf.
+2. Deduplicate findings across reviewers. Keep only findings in changed files with a plausible failure path or concrete, material design cost. Require evidence from code, callers, tests, or a reproducible check. Drop preferences, speculation, and findings already triaged unless there is new evidence.
+3. Fix only actionable findings. For behavior bugs, write a failing test first when practical. Keep changes minimal; don't expand scope. Record dismissed or deferred findings with a short reason for later rounds.
+4. Run `FAST`. Fix new failures; never disable, skip, or quarantine tests to get green. Commit fixes locally using the project's commit convention and attribution trailer. Skip the commit if nothing changed. Never push.
+5. Stop when there are no actionable findings, or another round would likely yield only repeats or nits. On later rounds, rerun correctness plus only the specialist reviewers relevant to the files and risks changed by the fixes; do not repeat a full review without a reason.
 
-   > FIRST answer the higher-level question: is this the right software architecture or
-   > design pattern for the problem/feature this branch implements, or is there a
-   > fundamentally better way? Start your report with one line, `DESIGN: sound` or
-   > `DESIGN: unsound | <why> | <better approach>`. Mark unsound only if you can name
-   > a concrete better alternative and the cost of keeping the current one. Then do the
-   > detailed review below.
+If round 1's architecture review returns `DESIGN: unsound`, stop before changing code and ask the user whether to keep the design or rework it. Include the concrete alternative, trade-offs, and the review findings. The reviewer must justify a materially better alternative; a stylistic preference is not a design gate.
 
-   Base prompt:
+If significant findings remain after round 5, stop and ask the user. Summarize what recurred, what remains, and the suspected structural cause. Do not silently extend the cycle.
 
-   > Review the branch in the current directory for realistic correctness bugs, missed
-   > edge cases, test gaps, and violations of architecture rules stated in the project's
-   > CLAUDE.md. Scope strictly: `git diff BASE...HEAD` (BASE=<ref>). Use the
-   > `code-review` skill at medium effort with that explicit target if available.
-   > Read-only: do NOT edit, commit, or push. Report at most 10 findings, most severe
-   > first, one block each: `file:line | problem | concrete failing input/caller |
-   > minimal fix`. Say "no findings" if none. No praise, no summaries.
-   >
-   > Already triaged (don't re-raise without new evidence): <one line each, or "none">
+## 4. Finish
 
-2. **Design gate** (round 1 only). `DESIGN: unsound` → halt the cycle: make no fixes
-   and no commits, then `AskUserQuestion`, self-contained: the reviewer's reasoning, the
-   proposed alternative, the cost of keeping vs. changing, your recommendation, and the
-   detail findings (one line each). Options: continue the cycle as-is / rework the
-   design (Other: instructions). Only `sound` proceeds.
-3. **Triage** (no asking). Discard findings outside the changed files. **Fix** only
-   findings with a plausible real caller/input that reaches the failure. **Skip**
-   far-fetched, purely stylistic, or costlier-than-the-problem findings. Record each
-   skip as one line for the next round's "already triaged" list.
-4. **Fix.** TDD per CLAUDE.md: a failing test first for each behavior bug. Keep fixes
-   minimal; no scope growth.
-5. **Validate.** Re-run `FAST`. Red → fix before
-   committing. Never skip, disable, or quarantine a test to get green.
-6. **Commit** the round locally: `Review round <k>: <what changed>` (follow the project's
-   commit/ticket prefix convention, if any), with the attribution trailer. No push.
-   If the round changed nothing, skip the commit.
-7. **Continue?** Stop when the round had no actionable findings or only diminishing
-   returns (nits, repeats of skipped items). Otherwise next round with the updated
-   triaged list.
+- Run `agent-phase.sh --no-review` when available.
+- Run `FULL` once after the final review fixes. Re-run only failing checks as needed. Compare results with the baseline.
+- Report tersely: reviewers selected and why; rounds; findings fixed/dismissed/deferred; test status including baseline failures; and commits added.
+- List real but out-of-scope findings only; do not implement them or open tickets unless explicitly asked.
+- End with the next step: `/open-pr`. Include the review-cycle summary in the PR body's "Review cycle" note.
 
-### 3. If round 5 still finds significant problems
+## Guardrails
 
-No sixth round. Review the approach of the whole branch instead: root cause of the
-recurring findings (wrong abstraction, boundary violation, missing invariant, scope
-creep). Then `AskUserQuestion`, self-contained: per-round found/fixed/skipped, what is
-still open, suspected structural cause, 1–2 options with a recommendation.
-
-### 4. On completion
-
-1. `agent-phase.sh --no-review` (REVIEW → REVIEWED; `open-pr.sh` restores `REVIEW` if a
-   bot will review).
-2. Run `FULL` once; re-run only failures.
-3. Report: rounds run; fixed / skipped (with reasons) / real-but-out-of-scope findings
-   (listed only: don't open issues or implement them); suite status; commits added.
-4. Next step: `/open-pr` (it defaults to `--review none` while `~/.config/local-review-only`
-   exists), where that command exists. Put the review-cycle summary in the PR body's "Review cycle" note.
-
-## Rules
-
-- No mid-cycle questions except the round-1 design gate and Step 3.
-- No history rewriting; add commits.
-- Chat output terse: one line per round (`R<k>: N fixed / M skipped`).
-- Scratch files: use the project's convention (CLAUDE.md), not shared `/tmp`.
+- No push, history rewriting, or edits outside the current worktree.
+- Ask only for the initial missing test commands, an unsound-design decision, or when the cycle reaches its stop limit / requires human judgment.
+- Keep output terse: one line per round (`R<k>: N fixed / M dismissed or deferred`).
+- For prompt files (`CLAUDE.md`, `.claude/**`, chezmoi's `dot_claude/**`), use the `prompt-review` skill in diff mode against the same BASE; don't treat prose as ordinary runtime code.
