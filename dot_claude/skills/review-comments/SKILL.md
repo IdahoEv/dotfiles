@@ -445,7 +445,17 @@ Verdict column rules:
 
 ### Default: "Automatic Mode"
 
-If invoked with no arguments or with "automatically", perform this skill in "Automatic Mode":
+If invoked with no arguments or with "automatically", perform this skill in "Automatic Mode".
+
+For a top-level invocation, delegate the review/response/repair work to
+`review-repair-agent` as described in **Context isolation**. Inside the agent,
+execute the workflow directly and do not delegate again.
+
+Automatic Mode is deliberately non-interactive per comment: do not display each
+comment and wait for a menu, do not call `AskUserQuestion` for per-comment
+choices, and do not pause for approval before each repair. Sections 4a–4d define
+the available actions and their mechanics; choose among them using the confidence
+rule below. Ambiguous decisions are deferred to the parent session for the user.
 
 1. Go through every comment up front to perform your analysis.
 2. Automatically perform your recommended action for each comment based on your analysis and confidence level:
