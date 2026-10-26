@@ -57,7 +57,7 @@ If significant, well-supported findings remain after round 5, stop and ask the u
 
 ## 4. Finish
 
-- Run `agent-phase.sh --no-review` when available, then `wf-event.sh review.result round=<rounds> fixed=<n> dismissed=<n> deferred=<n> reviewers=<agent,agent>` with totals for the cycle (counts and agent names only).
+- Run `agent-phase.sh --no-review` when available, then, when available, `wf-event.sh review.result round=<last round number> fixed=<n> dismissed=<n> deferred=<n> reviewers=<agent,agent>` with cycle totals (counts and agent names only).
 - Run `FULL` once after final review fixes. Re-run only failing checks as needed and compare against the baseline.
 - Report reviewers selected and why, rounds, findings fixed/dismissed/deferred, test status (including baseline failures), and commits added. Keep output terse: one line per round (`R<k>: N fixed / M dismissed or deferred`).
 - List deferred findings with the issue filed for each; do not implement them.

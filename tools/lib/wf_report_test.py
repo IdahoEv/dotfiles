@@ -143,7 +143,9 @@ class Report(Base):
         self.assertEqual(r["wall_seconds"], 81 * 60)
         self.assertEqual(r["sessions"], 1, "launcher session of ticket.start is excluded")
         self.assertEqual(r["reviews"]["rounds"], 2)
-        self.assertEqual((r["reviews"]["fixed"], r["reviews"]["dismissed"], r["reviews"]["deferred"]), (3, 1, 1))
+        self.assertEqual((r["reviews"]["fixed"], r["reviews"]["dismissed"], r["reviews"]["deferred"]), (5, 2, 1))
+        self.assertEqual(r["reviews"]["bot_batches"], 1)
+        self.assertIn("copilot", r["reviews"]["reviewers"])
         self.assertEqual(r["tests"], {"runs": 2, "failed": 1, "reruns": 1, "seconds": 20.0})
         self.assertEqual(r["failures"]["pr_open_failed"], 1)
         self.assertEqual(r["tokens_by_model"]["claude-opus-5-5"]["output"], 3000)
@@ -208,7 +210,27 @@ class Report(Base):
         self.assertIn("unparseable", out)
 
 
+class MalformedLog(unittest.TestCase):
+    def test_wrongly_typed_fields_are_skipped_not_fatal(self):
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d)
+        path = os.path.join(d, "e.jsonl")
+        with open(path, "w") as fh:
+            fh.write('{"ts":123,"run_id":"a","event":"x"}\n')
+            fh.write('{"ts":"2026-10-20T00:00:00Z","run_id":["a"],"event":"x"}\n')
+            fh.write('[1,2]\n')
+            fh.write('{"ts":"2026-10-20T00:00:00Z","run_id":"ok#1","event":"x"}\n')
+        events, bad = wf_report.load_events(path)
+        self.assertEqual(bad, 3)
+        self.assertEqual([e["run_id"] for e in events], ["ok#1"])
+
+
 class Prune(unittest.TestCase):
+    def test_missing_log_prunes_nothing(self):
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d)
+        self.assertEqual(wf_report.prune(os.path.join(d, "none", "e.jsonl"), 1, datetime.now(timezone.utc)), 0)
+
     def test_prune_keeps_recent_and_drops_junk(self):
         d = tempfile.mkdtemp()
         self.addCleanup(shutil.rmtree, d)

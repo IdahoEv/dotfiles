@@ -110,6 +110,11 @@ hook "{\"hook_event_name\":\"StopFailure\",\"session_id\":\"s-9\",\"cwd\":\"$ROO
 check "free-text detail redacted" "other" "$(last .error)"
 hook "{\"hook_event_name\":\"SubagentStop\",\"session_id\":\"s-9\",\"cwd\":\"$ROOT/repo\",\"agent_type\":\"correctness-reviewer\"}"
 check "SubagentStop agent type" "correctness-reviewer" "$(last .agent_type)"
+hook "{\"hook_event_name\":\"SessionStart\",\"session_id\":\"\",\"cwd\":\"$ROOT/repo\",\"source\":\"resume\"}"
+check "empty middle field doesn't shift the rest" "session.start resume acme/widgets#42" \
+  "$(last '"\(.event) \(.source) \(.run_id)"')"
+hook "{\"hook_event_name\":\"SessionStart\",\"session_id\":\"s-10\",\"cwd\":\"$ROOT/repo\",\"source\":\"start\\u001fx\"}"
+check "separator in a value doesn't split it" "other s-10" "$(last '"\(.source) \(.session_id)"')"
 n="$(wc -l < "$LOG")"; hook '{"hook_event_name":"PreToolUse"}'; hook 'not json'
 check "other events and junk ignored" "$n" "$(wc -l < "$LOG")"
 

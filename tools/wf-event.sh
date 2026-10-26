@@ -25,11 +25,14 @@ hook() {
   command -v jq >/dev/null || return 0
   local fields name sid cwd detail event key
   # detail is an enum-like token or "other", so a free-text error can't leak in.
-  fields="$(jq -r '[.hook_event_name // "", .session_id // "", .cwd // "",
-                    (.source // .reason // .agent_type // .error // "" | tostring
-                     | if . == "" or test("^[A-Za-z0-9_.:-]{1,60}$") then . else "other" end)]
-                   | @tsv' 2>/dev/null)" || return 0
-  IFS=$'\t' read -r name sid cwd detail <<<"$fields"
+  # \x1f, not tab: read collapses runs of whitespace IFS, shifting empty fields.
+  fields="$(jq -r '[.hook_event_name, .session_id, .cwd,
+                    (.source // .reason // .agent_type // .error)]
+                   | map(. // "" | tostring | gsub("[\u001f\n]"; " ")) as [$n, $s, $c, $d]
+                   | [$n, $s, $c,
+                      (if $d == "" or ($d | test("^[A-Za-z0-9_.:-]{1,60}$")) then $d else "other" end)]
+                   | join("\u001f")' 2>/dev/null)" || return 0
+  IFS=$'\037' read -r name sid cwd detail <<<"$fields"
   case "$name" in
     SessionStart) event=session.start key=source ;;
     SessionEnd)   event=session.end   key=reason ;;

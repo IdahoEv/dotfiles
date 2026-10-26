@@ -394,7 +394,7 @@ Total unresolved comments: N
 Remaining unresolved: N - W (comments marked resolved are no longer unresolved)
 ```
 
-Then record the batch: `wf-event.sh review.result source=bot fixed=X dismissed=Y deferred=V reviewers=<copilot,coderabbit>` (counts only).
+Then, when available, record the batch once per summary: `wf-event.sh review.result source=bot fixed=<Fixed> dismissed=<Disagreed> deferred=<Skipped> reviewers=<copilot,coderabbit>`. Replied and Resolved aren't recorded; there is no `round` (bot batches aren't numbered).
 
 #### Structured findings table format
 

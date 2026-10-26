@@ -35,12 +35,16 @@ def load_events(path):
             for line in fh:
                 try:
                     e = json.loads(line)
-                    e["_ts"] = wf_usage.parse_ts(e["ts"])
-                    if e["_ts"] is None or not e.get("run_id") or not e.get("event"):
-                        raise ValueError
-                    events.append(e)
-                except (ValueError, KeyError, TypeError):
+                except ValueError:
+                    e = None
+                if not (isinstance(e, dict) and all(isinstance(e.get(k), str) and e[k] for k in ("ts", "run_id", "event"))):
                     bad += 1
+                    continue
+                e["_ts"] = wf_usage.parse_ts(e["ts"])
+                if e["_ts"] is None:
+                    bad += 1
+                    continue
+                events.append(e)
     except FileNotFoundError:
         pass
     events.sort(key=lambda e: e["_ts"])
@@ -314,6 +318,8 @@ def print_aggregate(runs, out, min_n=3):
 
 def prune(path, days, now):
     """Drop events older than <days>. Lines appended while pruning are carried over."""
+    if not os.path.exists(path):
+        return 0
     lock = path + ".lock"
     try:
         os.mkdir(lock)

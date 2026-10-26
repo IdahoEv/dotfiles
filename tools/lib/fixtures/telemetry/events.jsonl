@@ -14,6 +14,7 @@ this line is not json
 {"v":1,"ts":"2026-10-20T09:46:30.000Z","event":"phase","run_id":"acme/w#1","session_id":"s-main","phase":"REVIEWED"}
 {"v":1,"ts":"2026-10-20T09:50:00.000Z","event":"pr.open","run_id":"acme/w#1","session_id":"s-main","outcome":"fail","exit_code":1}
 {"v":1,"ts":"2026-10-20T09:51:00.000Z","event":"pr.open","run_id":"acme/w#1","session_id":"s-main","outcome":"ok","pr_number":5}
+{"v":1,"ts":"2026-10-20T10:10:00.000Z","event":"review.result","run_id":"acme/w#1","session_id":"s-main","source":"bot","fixed":2,"dismissed":1,"deferred":0,"reviewers":"copilot"}
 {"v":1,"ts":"2026-10-20T10:20:00.000Z","event":"finalize.check","run_id":"acme/w#1","session_id":"s-main","verdict":"ready"}
 {"v":1,"ts":"2026-10-20T10:20:05.000Z","event":"phase","run_id":"acme/w#1","session_id":"s-main","phase":"MERGED"}
 {"v":1,"ts":"2026-10-20T10:21:00.000Z","event":"phase","run_id":"acme/w#1","session_id":"s-main","phase":"DONE"}

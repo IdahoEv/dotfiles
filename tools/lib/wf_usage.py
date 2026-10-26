@@ -31,7 +31,7 @@ def projects_root():
 
 
 def parse_ts(s):
-    if not s:
+    if not isinstance(s, str) or not s:
         return None
     try:
         return datetime.fromisoformat(s.replace("Z", "+00:00"))

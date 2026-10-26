@@ -68,7 +68,8 @@ Logs hold only identifiers, counts, and Claude Code enum values: no prompts, dif
 - Usage is counted only for sessions that emitted an event inside the run, between the run's first and last event. Launcher sessions (`/start`, the governor) are excluded.
 - Models missing from the price table (e.g. routed `glm-*`) leave the total cost `unknown`. Their tokens are still counted.
 - Cost is at list price. It ignores plan billing and Bedrock/Vertex rates.
-- If the model skips the `review.result` line, findings show as unknown. Round counts still come from `review-state.sh`.
+- `review.result` is the one model-emitted event and a deliberate exception to "deterministic emits only": the fixed/dismissed/deferred triage exists nowhere but the model's context. If the model skips it, findings show as unknown. Round counts still come from `review-state.sh`.
+- `--prune` can lose an event appended in the instant between its final copy and the file swap. Prune when no sessions are active. A `kill -9` mid-prune leaves `events.jsonl.lock` behind; remove it by hand.
 - The test pattern is a heuristic. A command that merely mentions a runner inside quotes can match.
 - Runs from before the hooks were installed have no events.
 
