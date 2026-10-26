@@ -29,7 +29,7 @@ No PR → "No pull request found for the current branch." and stop.
 
 ## 2. Launch the agent
 
-Launch `review-repair-agent` in the foreground. The kickoff carries only these lines:
+Launch `review-repair-agent`. The kickoff carries only these lines:
 
 ```text
 Run review-comments-procedure in Automatic Mode for one round.
@@ -38,6 +38,10 @@ PR: #<n> <url>
 Branch: <branch>
 Working directory: <absolute cwd>
 ```
+
+Add nothing else: no prior verdicts, no framing of specific comments, no priorities. This session may already hold opinions about the PR, and the agent's value is not inheriting them. The agent reads CLAUDE.md, so standing user preferences reach it anyway.
+
+If the agent runs in the background, wait for its completion notice. Don't act on partial output.
 
 ## 3. Report
 
