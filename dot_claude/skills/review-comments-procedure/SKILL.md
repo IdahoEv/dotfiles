@@ -6,7 +6,7 @@ user-invocable: false
 
 # Review PR Comments Procedure
 
-Work through unresolved code review comments on the current branch's pull request. The `/review-comments` command chooses the mode and owns commit, push and polling.
+Work through unresolved code review comments on the current branch's pull request. The `/review-comments` command chooses the mode; in Automatic Mode it also owns commit, push, posting and polling.
 
 ### Mode
 
@@ -167,7 +167,7 @@ Always also fetch reviews (`gh api repos/{owner}/{repo}/pulls/{pr}/reviews --pag
 
 ### 4. Process Each Unresolved Comment
 
-For each unresolved comment thread, do the following. Steps 4a–4c and the menus, `AskUserQuestion` prompts, commit steps and "return to the menu" steps in 4d apply to Quick and Slow modes only. Automatic Mode uses 4d for its mechanics and records each GitHub write as a planned action instead of running it (see **Automatic Mode**).
+For each unresolved comment thread, do the following. In Automatic Mode, skip 4a–4c and every step in 4d that talks to the user (discuss, ask, menus, commit, return to the menu); run only 4d's code-edit and validation steps, and record each `gh api` write in 4d as a planned action instead of running it (see **Automatic Mode**). The `gh api` snippets in 4d are also the mechanics the command uses to post those actions.
 
 #### a. Display the Comment
 
@@ -420,7 +420,7 @@ Verdict column rules:
 
 ### Default: "Automatic Mode"
 
-Automatic Mode is non-interactive and edits files only. It makes **no GitHub writes**: no reactions, replies, thread resolutions, review-body edits or PR comments. It never calls `AskUserQuestion`, never commits and never returns to a menu. Whoever runs it posts the GitHub actions only after the user approves the commit and the push succeeds, so a declined commit leaves the PR untouched.
+Automatic Mode is non-interactive and edits files only. It makes **no GitHub writes**: no reactions, replies, thread resolutions, review-body edits or PR comments. It never calls `AskUserQuestion`, never commits and never returns to a menu. The command posts the planned actions only after the commit is pushed (or, when no files changed, after showing the report), so a declined commit leaves the PR untouched.
 
 1. Go through every comment up front to perform your analysis.
 2. Act on your recommendation for each comment, based on your confidence:
@@ -432,9 +432,9 @@ Return this report:
 
 1. The findings summary in the **structured findings table format** above: one row per file:line touched, verdict glyph plus terse reason. Put fuller rationale for non-obvious verdicts in a sentence or two outside the table. Put validation status (lint/typecheck/tests) on a line beneath the table, separating pre-existing failures from regressions.
 2. One line per fix: `file:line` — what changed.
-3. **Planned GitHub actions**, one numbered row each: kind (`react +1` / `react -1` / `reply` / `resolve-thread` / `review-body-resolve` / `pr-comment`), target (comment `databaseId`, thread node `id`, or review `id` plus file path and comment number), and for replies and comments the exact body, with the disclosure line already appended. Bodies for coderabbit replies tag `@coderabbitai`. Include the Copilot review-body summary comment from §3b when it applies.
-4. `Files changed: yes|no`.
-5. If files changed, a proposed commit message: a subject line, a short body, and the `Co-Authored-By` trailer.
+3. **Planned GitHub actions**, one numbered row each: kind (`react +1` / `react -1` / `reply` / `resolve-thread` / `review-body-resolve` / `pr-comment`), everything needed to post it without re-reading the PR — comment `databaseId` (react, threaded reply), thread node `id` (resolve-thread), review `id` plus file path and comment number (review-body-resolve) — and for replies and comments the exact body, with the disclosure line already appended. Bodies for coderabbit replies tag `@coderabbitai`. `pr-comment` is a PR-level comment posted with `gh pr comment`; use it for the Copilot review-body summary from §3b and for replying to a comment that has no thread.
+4. `Files changed: yes|no`, followed by every path you modified, including formatter edits. The command stages exactly these paths.
+5. If files changed, a proposed commit message: a subject line and a short body, with no trailer — the command appends it.
 
 ### "Quick Mode"
 
@@ -451,14 +451,11 @@ If invoked with "slowly", perform this skill in "Slow Mode": work through the co
 - **No PR found**: "No pull request found for the current branch."
 - **No unresolved comments**: "No unresolved review comments found on this PR."
 - **GitHub API errors**: Show the error message and suggest the user check their GitHub authentication (`gh auth status`)
-- **IDE command not found**: "Could not open file in IDE. Please open manually: {file_path}:{line}"
 
 ## Tips
 
 - The skill processes comments in the order they appear on the PR (typically by file, then by line)
 - When fixing code, always read the full context around the commented line
-- Validation and formatting run automatically after each fix (see **Validation & Formatting**) — you shouldn't need to run them manually
-- If you've made multiple fixes, consider committing them with `/commit` before continuing
 
 ## Repository Detection
 
@@ -494,7 +491,7 @@ Check in this order and use the first match:
    - Tests: `pytest`
 4. **Rust** — `Cargo.toml` present: `cargo fmt`, `cargo clippy`, `cargo test`
 5. **Go** — `go.mod` present: `gofmt -l -w` / `goimports -w`, `go vet ./...`, `go test ./...`
-6. **Nothing detected** — ask the user once per session (not once per comment) which commands to run, then reuse the answer for the rest of the run.
+6. **Nothing detected** — ask the user once per session (not once per comment) which commands to run, then reuse the answer for the rest of the run. In Automatic Mode, don't ask: skip validation and say so in the validation line.
 
 ### Running
 

@@ -41,7 +41,7 @@ Working directory: <absolute cwd>
 
 ## 3. Report
 
-Print the agent's report **verbatim**. If it says `Files changed: no` and lists no planned actions, stop there.
+Print the agent's report **verbatim**. If it says `Files changed: no` and lists no planned actions, run `agent-phase.sh --no-review`, say the round found nothing to do and polling has stopped, and stop.
 
 ## 4. Approve the commit
 
@@ -52,14 +52,14 @@ If files changed, ask one `AskUserQuestion`. Write it as if the printed report w
 - Option 2, "Commit with a different message": the user supplies it via "Other".
 - Option 3, "Don't commit yet": leave the changes in the working tree.
 
-Never ask this question without the table and the commit message in it. A typed `execute` commits with the proposed message; `execute <text>` uses `<text>` as the full message instead. Append `Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>` unless the message already has one.
+A typed `execute` commits with the proposed message; `execute <text>` uses `<text>` as the full message instead. Append this session's commit attribution trailer unless the message already has one.
 
-**On "Don't commit yet"**, post nothing: list the planned actions as not posted, and stop.
+**On "Don't commit yet"**, post nothing: list the planned actions as not posted, run `agent-phase.sh --no-review`, say polling has stopped, and stop.
 
 ## 5. Commit, push, post
 
-1. `git add` the files the agent changed, commit, and `git push`.
-2. **After the push succeeds**, run the planned actions in order. The mechanics are in the `review-comments-procedure` skill under §4d (reactions, Reply, Mark Resolved, including the review-body `[RESOLVED]` edit), and §3b covers the Copilot summary comment. Post each body exactly as planned. Confirm each resolution through the API. Report every action that fails, and keep going.
+1. `git add` exactly the paths the agent listed, commit, and `git push`. If either fails, post nothing, report the error, and stop.
+2. **After the push succeeds**, run the planned actions in order using the `gh api` snippets in the `review-comments-procedure` skill's §4d (reactions, Reply, Mark Resolved, including the review-body `[RESOLVED]` edit); `pr-comment` rows go through `gh pr comment`. Skip 4d's conversational steps — the bodies are already final. Post each body exactly as planned. Confirm each resolution through the API. Report every action that fails, and keep going.
 
 If no files changed but there are planned actions (for example, rejections only), post them directly. There's no commit to gate them on.
 
