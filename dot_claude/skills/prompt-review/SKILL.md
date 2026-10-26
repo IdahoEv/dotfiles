@@ -1,6 +1,6 @@
 ---
 name: prompt-review
-description: Canonical rubric for reviewing Claude prompt files — CLAUDE.md, skills, commands, agents, hooks, settings — for staleness, bloat, scope leakage, and duplication. Use for small interactive prompt reviews; substantive diff and corpus reviews are executed by the prompt-reviewer agent. Not for product code.
+description: Canonical rubric for reviewing Claude prompt files — CLAUDE.md, skills, commands, agents, hooks, settings — for staleness, bloat, scope leakage, and duplication. Use for small interactive reviews; dedicated prompt reviews and corpus audits use the prompt-reviewer agent. Not for product code.
 ---
 
 # Prompt Review
