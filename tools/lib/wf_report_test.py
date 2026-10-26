@@ -102,6 +102,20 @@ class UsageAdapter(Base):
         self.assertEqual((tests[0]["seconds"], tests[0]["ok"]), (30.0, False))
         self.assertNotIn("secret_name", json.dumps(tests, default=str))
 
+    def test_interpreted_and_wrapped_test_commands_match(self):
+        for cmd in ["bash ./x.test.sh", "sh /abs/x.test.sh", "python3 -I wf_report_test.py",
+                    "yarn --cwd /x test", "uv run pytest", "timeout 60 pytest",
+                    "python3 -m unittest wf_report_test"]:
+            with self.subTest(cmd):
+                self.transcript("w", [bash_call("2026-10-20T09:00:00Z", "t1", cmd),
+                                     bash_result("2026-10-20T09:00:10Z", "t1")])
+                self.assertEqual(len(list(wf_usage.read_tests(wf_usage.transcripts_for_session("w")[0][0]))), 1)
+
+    def test_plain_test_word_is_not_a_test_run(self):
+        self.transcript("w", [bash_call("2026-10-20T09:00:00Z", "t1", "test -f x && echo ok"),
+                              bash_result("2026-10-20T09:00:01Z", "t1")])
+        self.assertEqual(list(wf_usage.read_tests(wf_usage.transcripts_for_session("w")[0][0])), [])
+
 
 class PricingTest(unittest.TestCase):
     def setUp(self):
@@ -121,6 +135,10 @@ class PricingTest(unittest.TestCase):
 
     def test_fast_mode(self):
         self.assertAlmostEqual(self.p.cost(self.rec(output=1_000_000, speed="fast")), 40.0)
+
+    def test_long_context_cache_read_uses_table(self):
+        usd = self.p.cost(self.rec(model="claude-haiku-5-5", input=150_000, cache_read=1_000_000))
+        self.assertAlmostEqual(usd, (150_000 * 0.5 + 1_000_000 * 0.05) / 1e6)
 
     def test_unknown_model_is_none_not_zero(self):
         self.assertIsNone(self.p.cost(self.rec(model="glm-5p3", output=10)))
@@ -180,6 +198,7 @@ class Report(Base):
         self.assertIsNone(r["cost_usd"])
         self.assertIsNone(r["cost_by_model_usd"]["glm-5p3"])
         self.assertIsNotNone(r["cost_by_model_usd"]["claude-opus-5-5"])
+        self.assertIsNone(r["cost_by_stage_usd"]["PLAN"], "stage mixing priced and unpriced models is unknown")
 
     def test_parallel_sessions(self):
         self.transcript("s-par-a", [])
@@ -188,6 +207,13 @@ class Report(Base):
         self.assertEqual(r["peak_parallel_sessions"], 2)
         self.assertEqual(r["session_seconds"], 45 * 60)
         self.assertEqual(r["wall_seconds"], 30 * 60)
+
+    def test_resumed_session_copy_counted_once(self):
+        self.transcript("s-par-a", [assistant("2026-10-20T11:10:00Z", "shared")])
+        self.transcript("s-par-b", [assistant("2026-10-20T11:10:00Z", "shared")])
+        r = self.report()["acme/w#4"]
+        self.assertEqual(r["tokens_by_model"]["claude-opus-5-5"]["messages"], 1,
+                         "a resumed session copies earlier messages with the same message id")
 
     def test_usage_outside_run_window_excluded(self):
         self.transcript("s-main", [assistant("2026-10-19T09:00:00Z", "old"), assistant("2026-10-20T09:05:00Z", "a")])

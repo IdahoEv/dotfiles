@@ -44,7 +44,7 @@ Medians per merged ticket are shown only once there are ≥3 merged runs.
 | `session.start` / `session.end` / `session.fail` / `subagent.stop` | `wf-event.sh --hook` on SessionStart / SessionEnd / StopFailure / SubagentStop | `source` / `reason` / `error` / `agent_type` |
 | `phase` | `agent-phase.sh` (set and `--no-review`) | `phase` |
 | `review.round` | `review-state.sh --set-local` | `round`, `state=start\|end` |
-| `review.result` | Review prompts, one line at cycle end | `round`, `fixed`, `dismissed`, `deferred`, `reviewers`, `source=bot` for PR-bot batches |
+| `review.result` | Review prompts, one line at cycle end (bot batches: final report only) | `round`, `fixed`, `dismissed`, `deferred`, `reviewers`, `source=bot` for PR-bot batches. Bot-batch `deferred` means Skipped (nothing filed), unlike the local cycle's deferred-with-issue |
 | `pr.open` | `open-pr.sh`, including failures | `outcome`, `exit_code`, `duration_ms`, `pr_number`, `pr_action`, `review` |
 | `finalize.check` | `finalize-check.sh` | `verdict`, `pr_number`, `pr_state` |
 

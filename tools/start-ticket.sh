@@ -406,13 +406,14 @@ esac
 
 # ticket.start (worktree + tracker) and session.launch (--tab-only), failures
 # included. The id and scheme are passed explicitly because the ticket branch
-# may not exist yet when this fires.
+# may not exist yet when this fires — but only once the provider is known:
+# before that, guessing github would file the failure under a wrong run id.
 wf_t0="" wf_event="" wf_dir="."
 on_exit() {
   local rc=$? scheme=github
   [ -n "$wf_t0" ] || return 0
   [ "${provider:-}" = shortcut ] && scheme=shortcut
-  wf::emit --dir "$wf_dir" "$wf_event" ${id:+"ticket=$id" "scheme=$scheme"} \
+  wf::emit --dir "$wf_dir" "$wf_event" ${id:+${provider:+"ticket=$id" "scheme=$scheme"}} \
     "outcome=$([ "$rc" -eq 0 ] && echo ok || echo fail)" "exit_code=$rc" \
     "duration_ms=$(( $(wf::mono_ms) - wf_t0 ))" "mode=$mode" "launcher=$launcher" \
     "provider=${provider:-}" "ticket_in_progress=${ticket_in_progress:-}"

@@ -394,7 +394,7 @@ Total unresolved comments: N
 Remaining unresolved: N - W (comments marked resolved are no longer unresolved)
 ```
 
-Then, when available, record the batch once per summary: `wf-event.sh review.result source=bot fixed=<Fixed> dismissed=<Disagreed> deferred=<Skipped> reviewers=<copilot,coderabbit>`. Replied and Resolved aren't recorded; there is no `round` (bot batches aren't numbered).
+Then, when available, record the batch once — in the final report, not in per-round or Quick Mode up-front summaries (those either double-count or have no counts yet): `wf-event.sh review.result source=bot fixed=<Fixed> dismissed=<Disagreed> deferred=<Skipped> reviewers=<bots that commented, comma-separated>`. This is a local log append, not a GitHub write, so it is allowed in Automatic Mode. `deferred` here means Skipped (user chose Skip; nothing filed), unlike the local review cycle's deferred-with-issue. Replied and Resolved are not recorded; there is no `round`.
 
 #### Structured findings table format
 

@@ -146,9 +146,11 @@ class Run:
         self.cost = defaultdict(float)                     # stage -> usd
         self.cost_model = defaultdict(float)               # model -> usd
         self.unpriced = defaultdict(int)                   # model -> output tokens
+        self.stage_unpriced = set()                        # stages with any unpriced usage
         self.by_agent = defaultdict(int)                   # agent_type -> output tokens
         self.tests = []
         self.usage_ts = defaultdict(list)                  # session -> [ts]
+        seen = set()  # message ids across the run: a resumed session copies earlier messages
         lo, hi = self.start, self.end + timedelta(minutes=1)
         for sid in self.sessions:
             files = wf_usage.transcripts_for_session(sid)
@@ -157,8 +159,9 @@ class Run:
                 continue
             for path, agent in files:
                 for rec in wf_usage.read_usage(path, agent):
-                    if rec["ts"] is None or not (lo <= rec["ts"] <= hi):
+                    if rec["ts"] is None or not (lo <= rec["ts"] <= hi) or rec["id"] in seen:
                         continue
+                    seen.add(rec["id"])
                     self.usage_ts[sid].append(rec["ts"])
                     stage = self.stage_at(rec["ts"])
                     bucket = self.tokens[(rec["model"], stage)]
@@ -168,6 +171,7 @@ class Run:
                     usd = pricing.cost(rec) if pricing else None
                     if usd is None:
                         self.unpriced[rec["model"]] += rec["output"]
+                        self.stage_unpriced.add(stage)
                     else:
                         self.cost[stage] += usd
                         self.cost_model[rec["model"]] += usd
@@ -242,7 +246,8 @@ class Run:
             "peak_parallel_sessions": self.peak_parallel(),
             "session_seconds": sum((b - a).total_seconds() for a, b in self.sessions_spans.values()),
             "tokens_by_model": {m: dict(v) for m, v in tok.items()},
-            "cost_by_stage_usd": dict(self.cost),
+            "cost_by_stage_usd": {s: (None if s in self.stage_unpriced else self.cost.get(s, 0.0))
+                                 for s in set(self.cost) | self.stage_unpriced},
             "cost_by_model_usd": {m: (None if m in self.unpriced else self.cost_model[m]) for m in tok},
             "cost_usd": self.total_cost(),
             "cost_is_estimate": True,
@@ -271,8 +276,9 @@ def print_run(r, out):
         stage_secs[s["stage"]] += s["seconds"]
     w("\nstage      elapsed   est. cost\n")
     for s in STAGES:
-        if s in stage_secs or s in r.cost:
-            w(f"{s:<10} {fmt_dur(stage_secs.get(s)):>8}   {fmt_usd(r.cost.get(s)) if r.tokens else 'unknown':>9}\n")
+        if s in stage_secs or s in r.cost or s in r.stage_unpriced:
+            cost = "unknown" if (not r.tokens or s in r.stage_unpriced) else fmt_usd(r.cost.get(s))
+            w(f"{s:<10} {fmt_dur(stage_secs.get(s)):>8}   {cost:>9}\n")
     if d["tokens_by_model"]:
         w("\nmodel                input   output  cache-rd  cache-wr  est. cost\n")
         for model, t in sorted(d["tokens_by_model"].items()):

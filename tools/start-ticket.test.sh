@@ -101,5 +101,11 @@ n="$(wc -l < "$WF_TELEMETRY_LOG")"
 (cd "$ROOT/widgets" && START_TICKET_PROVIDER_DIR="$STP" "$ST" 7 --provider fake --print-title >/dev/null 2>&1)
 check "--print-title records nothing" "$n" "$(wc -l < "$WF_TELEMETRY_LOG")"
 
+n="$(wc -l < "$WF_TELEMETRY_LOG")"
+# provider never resolved (no gh, no short, no conf) → the failure must not be
+# filed under a guessed scheme; the event is dropped instead.
+(cd "$ROOT/widgets" && PATH=/usr/bin:/bin START_TICKET_PROVIDER_DIR="$STP" "$ST" 8 --no-tab >/dev/null 2>&1)
+check "unresolved provider records nothing" "$n" "$(wc -l < "$WF_TELEMETRY_LOG")"
+
 printf '%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

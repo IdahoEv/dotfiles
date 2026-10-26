@@ -16,7 +16,7 @@
     "claude-sonnet-5":   {"input": 2.0,  "output": 10.0, "cache_read": 0.2},
     "claude-sonnet-4-6": {"input": 3.0,  "output": 15.0, "cache_read": 0.3},
     "claude-haiku-5-5":  {"input": 0.1,  "output": 0.5,  "cache_read": 0.01,
-                          "long_context": {"above": 100000, "input": 0.5, "output": 2.5}},
+                          "long_context": {"above": 100000, "input": 0.5, "output": 2.5, "cache_read": 0.05}},
     "claude-haiku-4-5":  {"input": 1.0,  "output": 5.0,  "cache_read": 0.1}
   }
 }

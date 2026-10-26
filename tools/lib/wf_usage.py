@@ -18,11 +18,16 @@ import re
 from datetime import datetime
 
 # Matches a test runner in command position (start, or after ; && || | or a
-# newline, past any VAR=value prefixes), so `grep foo x.test.sh` doesn't count.
+# newline, past any VAR=value prefixes and interpreter/wrapper prefixes), so
+# `grep foo x.test.sh` doesn't count. A bare `test` is not a runner: it is the
+# shell builtin, and bot batches don't use it.
 DEFAULT_TEST_RE = (
-    r"(?:^|[;&|\n])\s*(?:\w+=\S*\s+)*(?:\S*/)?"
-    r"(?:pytest|jest|vitest|bats|dotnet test|go test|cargo test|rspec|[\w.-]+\.test\.sh"
-    r"|(?:npm|yarn|pnpm|bun) (?:run )?test|npx (?:jest|vitest)|python3? -m (?:unittest|pytest))\b"
+    r"(?:^|[;&|\n])\s*(?:\w+=\S*\s+)*"
+    r"(?:(?:bash|sh|zsh|ksh|python3?(?:\s+-\S+)*|uv\s+run|timeout\s+\d+\w*)\s+)*"
+    r"(?:\S*/)?"
+    r"(?:pytest|jest|vitest|bats|dotnet test|go test|cargo test|rspec|[\w.$/-]+(?:\.test\.sh|_test\.py)"
+    r"|(?:npm|yarn|pnpm|bun)(?:\s+--cwd\s+\S+)*\s+(?:run\s+)?test"
+    r"|npx\s+(?:jest|vitest)|python3?\s+-m\s+(?:unittest|pytest))\b"
 )
 
 
@@ -153,7 +158,7 @@ class Pricing:
         long_ctx = p.get("long_context")
         if long_ctx and prompt > long_ctx["above"]:
             inp, out = long_ctx["input"], long_ctx["output"]
-            read = inp * 0.1
+            read = long_ctx["cache_read"]
         else:
             inp, out, read = p["input"], p["output"], p["cache_read"]
         mult = p.get("fast_multiplier", 1) if rec.get("speed") == "fast" else 1
