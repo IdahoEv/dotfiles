@@ -83,6 +83,23 @@ case "${1:-}" in
     ;;
 esac
 
+# ---- telemetry --------------------------------------------------------------
+# Recorded for every session, not just background ones: the phase change is
+# real even when there is no agent-view row to label.
+_src="${BASH_SOURCE[0]}"
+while [ -h "$_src" ]; do
+  _dir="$(cd -P "$(dirname "$_src")" && pwd)"
+  _src="$(readlink "$_src")"
+  [ "${_src#/}" = "$_src" ] && _src="$_dir/$_src"
+done
+SCRIPT_DIR="$(cd -P "$(dirname "$_src")" && pwd)"
+case "$action" in
+  set|no-review)
+    # shellcheck source=lib/telemetry.sh
+    { . "$SCRIPT_DIR/lib/telemetry.sh" \
+      && wf::emit phase "phase=${phase:-REVIEWED}"; } || true ;;
+esac
+
 # ---- locate the session's state file ----------------------------------------
 # CLAUDE_JOB_DIR is exported into every tool call of a background session and
 # names that session's own job dir. Its absence means we're in an interactive

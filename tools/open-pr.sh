@@ -46,6 +46,21 @@ done
 SCRIPT_DIR="$(cd -P "$(dirname "$_src")" && pwd)"
 # shellcheck source=lib/repo-facts.sh
 . "$SCRIPT_DIR/lib/repo-facts.sh"
+# shellcheck source=lib/telemetry.sh
+. "$SCRIPT_DIR/lib/telemetry.sh"
+
+# One pr.open event per invocation, failures included; -h/usage errors exit
+# before the clock starts and aren't recorded.
+wf_t0="" body_tmp=""
+on_exit() {
+  local rc=$?
+  [ -n "$body_tmp" ] && rm -f "$body_tmp"
+  [ -n "$wf_t0" ] && wf::emit pr.open "outcome=$([ "$rc" -eq 0 ] && echo ok || echo fail)" \
+    "exit_code=$rc" "duration_ms=$(( $(wf::mono_ms) - wf_t0 ))" "provider=${provider:-}" \
+    "pr_number=${pr_number:-}" "pr_action=${pr_action:-}" "review=${review:-}"
+  return 0
+}
+trap on_exit EXIT
 # Provider lookup (first dir containing <name>.sh wins):
 #   1. $OPEN_PR_PROVIDER_DIR (explicit override)
 #   2. <main-repo-root>/.git-tools/open-pr-providers  (per-repo)
@@ -103,6 +118,7 @@ if [ -n "$issue" ]; then
 fi
 
 git rev-parse --is-inside-work-tree >/dev/null 2>&1 || die "not inside a git repo"
+wf_t0="$(wf::mono_ms)"
 command -v gh >/dev/null || die "gh CLI not found"
 
 branch="$(git branch --show-current)"
@@ -198,7 +214,6 @@ else
     if [ -n "$footer" ] && ! grep -qixF -- "$footer" "$body_file"; then
       # Don't mutate the caller's file; gh reads the body from a copy.
       body_tmp="$(mktemp "${TMPDIR:-/tmp}/open-pr-body.XXXXXX")"
-      trap 'rm -f "$body_tmp"' EXIT
       { cat -- "$body_file"; printf '\n%s\n' "$footer"; } > "$body_tmp"
       body_args=(--body-file "$body_tmp")
     else

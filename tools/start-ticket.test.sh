@@ -80,5 +80,32 @@ git -C "$ROOT/gadgets/.git" worktree add -q "$ROOT/gadgets/topic" -b topic
 out="$(session "$ROOT/gadgets/topic" "Bare Check")"
 check "bare repo → the default branch's worktree" "$ROOT/gadgets/main" "$(get dir <<<"$out")"
 
+# ---- telemetry --------------------------------------------------------------
+export WF_TELEMETRY_LOG="$ROOT/events.jsonl"
+STP="$ROOT/providers"; mkdir -p "$STP"
+cat > "$STP/fake.sh" <<'P'
+provider::available() { return 0; }
+provider::fetch() { ST_TITLE="Fake ticket"; ST_BODY="body"; ST_URL=""; ST_PARENT=""; }
+provider::create_worktree() { [ -n "$FAKE_WT" ] || return 1; echo "$FAKE_WT"; }
+provider::mark_in_progress() { return 0; }
+P
+git -C "$ROOT/widgets" remote add origin git@github.com:acme/widgets.git
+start() { (cd "$ROOT/widgets" && START_TICKET_PROVIDER_DIR="$STP" "$ST" 7 --provider fake --no-tab "$@" >/dev/null 2>&1); }
+FAKE_WT="$ROOT/wt" start
+ev() { tail -1 "$WF_TELEMETRY_LOG" | jq -r "$1"; }
+check "ticket.start keyed by the ticket, not the branch" "ticket.start acme/widgets#7 ok no-tab" \
+  "$(ev '"\(.event) \(.run_id) \(.outcome) \(.mode)"')"
+FAKE_WT="" start
+check "failed start recorded" "fail 1" "$(ev '"\(.outcome) \(.exit_code)"')"
+n="$(wc -l < "$WF_TELEMETRY_LOG")"
+(cd "$ROOT/widgets" && START_TICKET_PROVIDER_DIR="$STP" "$ST" 7 --provider fake --print-title >/dev/null 2>&1)
+check "--print-title records nothing" "$n" "$(wc -l < "$WF_TELEMETRY_LOG")"
+
+n="$(wc -l < "$WF_TELEMETRY_LOG")"
+# provider never resolved (no gh, no short, no conf) → the failure must not be
+# filed under a guessed scheme; the event is dropped instead.
+(cd "$ROOT/widgets" && PATH=/usr/bin:/bin START_TICKET_PROVIDER_DIR="$STP" "$ST" 8 --no-tab >/dev/null 2>&1)
+check "unresolved provider records nothing" "$n" "$(wc -l < "$WF_TELEMETRY_LOG")"
+
 printf '%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

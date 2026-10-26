@@ -458,3 +458,9 @@ esac
 
 printf 'base_worktree=%s\nworktree=%s\nverdict=%s\nagent_phase=%s\n' \
   "$base_worktree" "$worktree" "$verdict" "$agent_phase"
+
+# The one write this script makes; telemetry never changes its exit status.
+# shellcheck source=lib/telemetry.sh
+{ . "$SCRIPT_DIR/lib/telemetry.sh" \
+  && wf::emit --dir "$dir" finalize.check "ticket=$ticket_id" "scheme=$ticket_scheme" \
+       "verdict=$verdict" "pr_number=$pr_number" "pr_state=$pr_state"; } || true

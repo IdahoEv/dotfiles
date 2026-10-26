@@ -394,6 +394,8 @@ Total unresolved comments: N
 Remaining unresolved: N - W (comments marked resolved are no longer unresolved)
 ```
 
+Then, when available, record the batch once — in the final report, not in per-round or Quick Mode up-front summaries (those either double-count or have no counts yet): `wf-event.sh review.result source=bot fixed=<Fixed> dismissed=<Disagreed> deferred=<Skipped> reviewers=<bots that commented, comma-separated>`. This is a local log append, not a GitHub write, so it is allowed in Automatic Mode. `deferred` here means Skipped (user chose Skip; nothing filed), unlike the local review cycle's deferred-with-issue. Replied and Resolved are not recorded; there is no `round`.
+
 #### Structured findings table format
 
 Every findings summary — the per-round Automatic Mode summary, the Quick Mode up-front summary, and the final report at the end of a run — uses this format:

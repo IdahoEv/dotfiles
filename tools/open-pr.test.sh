@@ -130,5 +130,35 @@ check "start-ticket provider=shortcut" "github" "$(resolved 42-foo 'provider=sho
 check "openpr_provider beats provider" "kardashev" "$(resolved 42-foo $'provider=github\nopenpr_provider=kardashev')"
 check "--provider beats conf"          "github" "$(resolved 42-foo 'openpr_provider=kardashev' --provider github)"
 
+# ---- telemetry --------------------------------------------------------------
+export WF_TELEMETRY_LOG="$ROOT/events.jsonl"
+# Events need an owner/repo origin. The URL is display-only: pushes are routed
+# to the local bare repo by repo-local config, so nothing reaches the network.
+new_repo() {  # <branch>
+  rm -rf "$ROOT/origin.git" "$ROOT/repo" "$GH_LOG"*
+  git init -q --bare "$ROOT/origin.git"
+  git init -q -b main "$ROOT/repo"
+  cd "$ROOT/repo" || exit 1
+  git config user.email t@t; git config user.name t
+  git remote add origin git@github.com:acme/widgets.git
+  git config remote.origin.pushurl "$ROOT/origin.git"
+  git commit -q --allow-empty -m init
+  git push -q origin main
+  git checkout -q -b "$1"
+  git commit -q --allow-empty -m work
+}
+new_repo 42-foo; rm -f "$WF_TELEMETRY_LOG"
+run --title "Add foo" --review none >/dev/null
+check "pr.open ok event" "pr.open ok 1 created" \
+  "$(tail -1 "$WF_TELEMETRY_LOG" | jq -r '"\(.event) \(.outcome) \(.pr_number) \(.pr_action)"')"
+check "pr.open has duration" "number" "$(tail -1 "$WF_TELEMETRY_LOG" | jq -r '.duration_ms | type')"
+new_repo 42-foo; rm -f "$WF_TELEMETRY_LOG"
+run --review none >/dev/null
+check "pr.open failure recorded" "fail 1" \
+  "$(tail -1 "$WF_TELEMETRY_LOG" | jq -r '"\(.outcome) \(.exit_code)"')"
+rm -f "$WF_TELEMETRY_LOG"; run --review bogus >/dev/null
+check "usage error not recorded" "absent" "$([ -e "$WF_TELEMETRY_LOG" ] && echo present || echo absent)"
+unset WF_TELEMETRY_LOG
+
 printf '%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

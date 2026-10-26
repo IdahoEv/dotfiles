@@ -401,6 +401,30 @@ case "$launcher" in
   *) die "unknown launcher '$launcher' (expected iterm, bg, or none)" ;;
 esac
 
+# shellcheck source=lib/telemetry.sh
+. "$SCRIPT_DIR/lib/telemetry.sh"
+
+# ticket.start (worktree + tracker) and session.launch (--tab-only), failures
+# included. The id and scheme are passed explicitly because the ticket branch
+# may not exist yet when this fires — but only once the provider is known:
+# before that, guessing github would file the failure under a wrong run id.
+wf_t0="" wf_event="" wf_dir="."
+on_exit() {
+  local rc=$? scheme=github
+  [ -n "$wf_t0" ] || return 0
+  [ "${provider:-}" = shortcut ] && scheme=shortcut
+  wf::emit --dir "$wf_dir" "$wf_event" ${id:+${provider:+"ticket=$id" "scheme=$scheme"}} \
+    "outcome=$([ "$rc" -eq 0 ] && echo ok || echo fail)" "exit_code=$rc" \
+    "duration_ms=$(( $(wf::mono_ms) - wf_t0 ))" "mode=$mode" "launcher=$launcher" \
+    "provider=${provider:-}" "ticket_in_progress=${ticket_in_progress:-}"
+  return 0
+}
+trap on_exit EXIT
+case "$mode" in
+  full|no-tab) wf_t0="$(wf::mono_ms)" wf_event=ticket.start ;;
+  tab-only)    wf_t0="$(wf::mono_ms)" wf_event=session.launch ;;
+esac
+
 if [ "$mode" = "tab-only" ]; then
   launch_session "$tab_wt" "$tab_kf"
   exit 0
@@ -461,6 +485,7 @@ fi
 wt="$(provider::create_worktree "$id" | tail -1)"
 [ -d "$wt" ] || die "worktree not created (got '$wt')"
 branch="$(git -C "$wt" branch --show-current)"
+wf_dir="$wt"
 
 declare -f provider::post_worktree >/dev/null && provider::post_worktree "$id" "$wt"
 provider::mark_in_progress "$id" || echo "start-ticket: WARN mark_in_progress failed" >&2
