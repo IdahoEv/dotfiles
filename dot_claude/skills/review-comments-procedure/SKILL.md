@@ -394,6 +394,8 @@ Total unresolved comments: N
 Remaining unresolved: N - W (comments marked resolved are no longer unresolved)
 ```
 
+Then record the batch: `wf-event.sh review.result source=bot fixed=X dismissed=Y deferred=V reviewers=<copilot,coderabbit>` (counts only).
+
 #### Structured findings table format
 
 Every findings summary — the per-round Automatic Mode summary, the Quick Mode up-front summary, and the final report at the end of a run — uses this format:

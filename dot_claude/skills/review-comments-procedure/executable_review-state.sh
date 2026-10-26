@@ -29,6 +29,12 @@ while [ $# -gt 0 ]; do
       [[ "$v" =~ ^[0-9]+\*?$ ]] || { echo "review-state: --set-local wants N or N*, got '$v'" >&2; exit 1; }
       gd="$(git rev-parse --absolute-git-dir)"
       printf '%s\n' "$v" > "$gd/local-review-rounds.tmp" && mv "$gd/local-review-rounds.tmp" "$gd/local-review-rounds"
+      # "<k-1>*" opens round k; a bare "<k>" closes it.
+      case "$v" in
+        *'*') wf_args=(review.round "round=$(( ${v%'*'} + 1 ))" state=start) ;;
+        *)    wf_args=(review.round "round=$v" state=end) ;;
+      esac
+      if command -v wf-event.sh >/dev/null; then wf-event.sh "${wf_args[@]}" || true; fi
       exit 0 ;;
     *) echo "usage: review-state.sh [--pr N] [--local N[*]] [--bare] | --set-local N[*]" >&2; exit 1 ;;
   esac

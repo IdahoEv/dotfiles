@@ -157,6 +157,14 @@ MANAGED = json.loads(r"""
         "hooks": [
           {
             "type": "command",
+            "command": "[ -x {{ .chezmoi.homeDir }}/.local/bin/wf-event.sh ] && {{ .chezmoi.homeDir }}/.local/bin/wf-event.sh --hook; true"
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
             "command": "[ \"$TERM_PROGRAM\" = iTerm.app ] && printf '\\033]6;1;bg;*;default\\a' 2>/dev/null >/dev/tty; true"
           }
         ]
@@ -171,6 +179,14 @@ MANAGED = json.loads(r"""
       }
     ],
     "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "[ -x {{ .chezmoi.homeDir }}/.local/bin/wf-event.sh ] && {{ .chezmoi.homeDir }}/.local/bin/wf-event.sh --hook; true"
+          }
+        ]
+      },
       {
         "hooks": [
           {
@@ -211,12 +227,28 @@ MANAGED = json.loads(r"""
         "hooks": [
           {
             "type": "command",
+            "command": "[ -x {{ .chezmoi.homeDir }}/.local/bin/wf-event.sh ] && {{ .chezmoi.homeDir }}/.local/bin/wf-event.sh --hook; true"
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
             "command": "/Users/evan/.config/iterm2/cc-status"
           }
         ]
       }
     ],
     "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "[ -x {{ .chezmoi.homeDir }}/.local/bin/wf-event.sh ] && {{ .chezmoi.homeDir }}/.local/bin/wf-event.sh --hook; true"
+          }
+        ]
+      },
       {
         "hooks": [
           {
