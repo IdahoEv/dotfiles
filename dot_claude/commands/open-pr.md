@@ -13,7 +13,6 @@ title/body is this command's job.
 /open-pr
 /open-pr --review none|copilot|copilot+claude    # default: copilot; none while ~/.config/local-review-only exists
 /open-pr --provider <name>         # --env is an alias; normally resolved from config
-/open-pr --no-compact              # skip the post-ship context compaction
 /open-pr --no-multi                # ship only this repo; skip the sibling fan-out
 /open-pr --repos <dir>[,<dir>...]  # ship these sibling repos instead of auto-detecting
 ```
@@ -182,7 +181,15 @@ not guess. Take `<ticket-ref>` from the `pr_title` the script reported rather th
 inventing a format. Under `trigger_mode=auto`, say reviews fire automatically; don't claim
 to have requested them.
 
-### 7. Compact
+### 7. Context isolation
 
-The implementation context isn't needed for the review-poll cycle that follows. Run
-`/compact` after reporting, unless `--no-compact` was passed.
+Do not attempt to invoke `/compact` or `/clear` from this command; the executing
+agent cannot run those interactive commands on itself, and the old instruction
+did not reliably isolate the review context.
+
+Instead, Automatic Mode in `/review-comments` delegates comment analysis,
+responses, repairs, and validation to a fresh `review-repair-agent` context.
+Keep this session as the lightweight controller for polling, commit approval,
+and the next review round. Do not carry implementation rationale into the
+repair-agent kickoff; provide only the repo/branch/PR identity and required
+workflow constraints.
