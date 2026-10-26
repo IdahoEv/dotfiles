@@ -2,6 +2,7 @@
 
 Prepares a worktree + kickoff for a tracker ticket and opens a Claude session for it.
 Takes a ticket id (`/start 22`). No id → list the repo's open tickets and ask which one.
+For a session with no ticket (discussion, investigation), use `/discuss`.
 
 Ticket tracking is provider-based (**GitHub issues** or **Shortcut stories**), resolved
 per-repo by `start-ticket.sh`. Don't assume which; all ticket-state operations go through

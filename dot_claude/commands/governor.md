@@ -83,6 +83,12 @@ A governor session has no standing ticket — it decides which ones exist.
 - **Don't invent scope.** A ticket that doesn't trace to an approved plan or an explicit
   request gets proposed, not created.
 
+## Discussion sessions
+
+When the user wants to discuss, research, or brainstorm a topic, open a separate session
+for it by following `~/.claude/commands/discuss.md`, passing their description as
+`--about`. Don't hold the discussion in this session.
+
 ## Selecting what's next
 
 When asked what to work on, rank by: unblocks the most downstream work → has a decided
