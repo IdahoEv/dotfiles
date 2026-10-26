@@ -30,9 +30,11 @@ other sessions actually load:
 
 ### 2. Audit
 
-Run the skill's four checks over the corpus. Parallelize across files where it
-helps, but keep duplication detection corpus-wide — it is the one check that
-cannot be done file-at-a-time.
+Invoke the `prompt-reviewer` agent in corpus mode with the complete committed
+prompt-file inventory and the audited commit. The agent loads `prompt-review`
+for the canonical criteria. Keep the inventory explicit so the reviewer cannot
+silently drift into the working tree or omit files. Duplication and scope
+comparisons must cover the whole corpus; do not split those checks file by file.
 
 Verify factual claims against reality, not against the file: run the commands,
 grep the paths, check tracker state via MCP when a ticket is named. An
