@@ -154,7 +154,8 @@ into one context.
 ~/.claude/skills/review-comments/poll-pr.sh <pr_number>
 ```
 
-Run in the background. Exit 0 → re-invoke `/review-comments`; 3 → signed off, ready to
+Run in the background. Exit 0 → re-invoke `/review-comments`, which runs each round in a
+fresh `review-repair-agent` so implementation context never reaches the review; 3 → signed off, ready to
 merge; 1 → timeout; 2 → no PR found; 4 → a reviewer said it couldn't run (e.g. Copilot
 billing): report that, run `agent-phase.sh --no-review`, and don't poll again.
 
@@ -181,15 +182,3 @@ not guess. Take `<ticket-ref>` from the `pr_title` the script reported rather th
 inventing a format. Under `trigger_mode=auto`, say reviews fire automatically; don't claim
 to have requested them.
 
-### 7. Context isolation
-
-Do not attempt to invoke `/compact` or `/clear` from this command; the executing
-agent cannot run those interactive commands on itself, and the old instruction
-did not reliably isolate the review context.
-
-Instead, Automatic Mode in `/review-comments` delegates comment analysis,
-responses, repairs, and validation to a fresh `review-repair-agent` context.
-Keep this session as the lightweight controller for polling, commit approval,
-and the next review round. Do not carry implementation rationale into the
-repair-agent kickoff; provide only the repo/branch/PR identity and required
-workflow constraints.

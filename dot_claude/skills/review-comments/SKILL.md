@@ -1,15 +1,12 @@
-# Review PR Comments Skill
+---
+name: review-comments-procedure
+description: Procedure for working through unresolved PR review comments in Automatic, Quick or Slow mode. Loaded by the /review-comments command; not invoked directly.
+user-invocable: false
+---
 
-Work through unresolved code review comments on the current branch's pull request.
+# Review PR Comments Procedure
 
-## Usage
-
-```text
-/review-comments
-/review-comments automatically
-/review-comments quickly
-/review-comments slowly
-```
+Work through unresolved code review comments on the current branch's pull request. The `/review-comments` command chooses the mode and owns commit, push and polling.
 
 ### Mode
 
@@ -19,7 +16,7 @@ Work through unresolved code review comments on the current branch's pull reques
 
 ## Guardrails
 
-**DO NOT** automatically commit and push without first showing the proposed commit message and getting the user's approval (the commit-approval `AskUserQuestion` described under **Commit, Push & Poll**, or a typed "execute" / "execute <message>").
+**DO NOT** commit or push without first showing the proposed commit message and getting the user's approval. Automatic Mode never commits; it returns a proposed message instead.
 
 **The approval prompt must be self-contained.** Text you write before an `AskUserQuestion` call is often not shown to the user (especially in background sessions) — only the question and its options are. So the findings, the verdict table, the description of fixes and the full proposed commit message must appear **inside the `AskUserQuestion` call** (question text and option `preview`), never only in the turn's prose. A question like "Commit these fixes with the proposed message?" with nothing in it is a bug: the user cannot see what they are approving.
 
@@ -30,28 +27,6 @@ Work through unresolved code review comments on the current branch's pull reques
 ```
 
 ## Instructions
-
-When this skill is invoked:
-
-### Context isolation for Automatic Mode
-
-For a top-level invocation in **Automatic Mode**, use a fresh `review-repair-agent`
-context for the actual review/response/repair work. First perform §1 only to
-identify the current branch and PR, then delegate §§2–4 plus Automatic Mode's
-combined validation and summary to that agent. Pass the repository, branch,
-PR number/URL, and mode explicitly. Do not pre-read the implementation or review
-comments in the parent context; the point is to avoid carrying implementation
-reasoning into review and repair.
-
-The agent must return the structured findings, validation results, actions taken,
-remaining decisions, and proposed commit message. The parent session owns the
-commit-approval prompt and all commit/push/re-review/polling actions in
-**Commit, Push & Poll**. Do not commit or push from the agent.
-
-This is top-level routing only. When the `review-repair-agent` is reading this
-skill, it must execute the review instructions directly and **must not delegate
-to itself**. Quick and Slow modes remain in the current session because their
-interactive discussion is intentional.
 
 ### 1. Get the Current Branch and PR
 
@@ -192,7 +167,7 @@ Always also fetch reviews (`gh api repos/{owner}/{repo}/pulls/{pr}/reviews --pag
 
 ### 4. Process Each Unresolved Comment
 
-For each unresolved comment thread, do the following:
+For each unresolved comment thread, do the following. Steps 4a–4c and the menus, `AskUserQuestion` prompts, commit steps and "return to the menu" steps in 4d apply to Quick and Slow modes only. Automatic Mode uses 4d for its mechanics and records each GitHub write as a planned action instead of running it (see **Automatic Mode**).
 
 #### a. Display the Comment
 
@@ -445,27 +420,21 @@ Verdict column rules:
 
 ### Default: "Automatic Mode"
 
-If invoked with no arguments or with "automatically", perform this skill in "Automatic Mode".
-
-For a top-level invocation, delegate the review/response/repair work to
-`review-repair-agent` as described in **Context isolation**. Inside the agent,
-execute the workflow directly and do not delegate again.
-
-Automatic Mode is deliberately non-interactive per comment: do not display each
-comment and wait for a menu, do not call `AskUserQuestion` for per-comment
-choices, and do not pause for approval before each repair. Sections 4a–4d define
-the available actions and their mechanics; choose among them using the confidence
-rule below. Ambiguous decisions are deferred to the parent session for the user.
+Automatic Mode is non-interactive and edits files only. It makes **no GitHub writes**: no reactions, replies, thread resolutions, review-body edits or PR comments. It never calls `AskUserQuestion`, never commits and never returns to a menu. Whoever runs it posts the GitHub actions only after the user approves the commit and the push succeeds, so a declined commit leaves the PR untouched.
 
 1. Go through every comment up front to perform your analysis.
-2. Automatically perform your recommended action for each comment based on your analysis and confidence level:
-  - If you have high confidence in your recommendation (fix, mark resolved, dismiss, disagree, etc) and that the user will agree with your recommendation, automatically apply it without asking the user.
-  - If you are not confident in your recommendation or there's a strong reason the user might disagree, skip the comment with no action.
-3. Once all fixes are applied, run validation and formatting (see **Validation & Formatting** below) once across all changed files and resolve anything it surfaces before showing the summary. If a fix can't be made to pass validation, flag it in the summary rather than leaving it broken.
+2. Act on your recommendation for each comment, based on your confidence:
+  - High confidence that the action is right and the user will agree (fix, mark resolved, disagree, etc.): make any code edits now, and record each GitHub write the action needs as a planned action.
+  - Low confidence, or a strong reason the user might disagree: skip it, take no action and plan none.
+3. Once all fixes are applied, run validation and formatting (see **Validation & Formatting** below) once across all changed files and resolve anything it surfaces. If a fix can't be made to pass validation, flag it rather than leaving it broken.
 
-At the end, show a summary using the **structured findings table format** above — one row per file:line touched, verdict glyph plus terse reason in the Verdict column. Put the fuller rationale for any non-obvious verdict (why something was rejected or only partially valid) in a sentence or two above or below the table, not squeezed into a cell. Note validation status (lint/typecheck/tests) as a line beneath the table rather than as a table column.
+Return this report:
 
-**After showing the summary**, if any file changes were made, draft a commit message, then ask for approval with a self-contained `AskUserQuestion` — see **Commit, Push & Poll** below for exactly what it must contain. If no files changed, just end with the summary.
+1. The findings summary in the **structured findings table format** above: one row per file:line touched, verdict glyph plus terse reason. Put fuller rationale for non-obvious verdicts in a sentence or two outside the table. Put validation status (lint/typecheck/tests) on a line beneath the table, separating pre-existing failures from regressions.
+2. One line per fix: `file:line` — what changed.
+3. **Planned GitHub actions**, one numbered row each: kind (`react +1` / `react -1` / `reply` / `resolve-thread` / `review-body-resolve` / `pr-comment`), target (comment `databaseId`, thread node `id`, or review `id` plus file path and comment number), and for replies and comments the exact body, with the disclosure line already appended. Bodies for coderabbit replies tag `@coderabbitai`. Include the Copilot review-body summary comment from §3b when it applies.
+4. `Files changed: yes|no`.
+5. If files changed, a proposed commit message: a subject line, a short body, and the `Co-Authored-By` trailer.
 
 ### "Quick Mode"
 
@@ -476,87 +445,6 @@ If invoked with "quickly", perform this skill in "Quick Mode": instead of workin
 ### "Slow Mode"
 
 If invoked with "slowly", perform this skill in "Slow Mode": work through the comments one-by-one, giving the user the opportunity to fully process each comment and take action before moving to the next one.
-
-## Commit, Push & Poll
-
-This section governs the commit/push/poll cycle that follows a completed Automatic Mode run.
-
-### After showing the summary (Automatic Mode only)
-
-If any file changes were made, do not commit yet. Print the report as normal text (reviewer findings, structured findings table, short description of each fix, validation status, proposed commit message), **and then repeat the essentials inside a single `AskUserQuestion` call**, because the preceding text may not be visible:
-
-- `question`: the reviewer findings and the structured findings table (compact: file:line, finding, verdict), a one-line description per fix, the validation status line, and the full proposed commit message. End with "Commit and push with this message?".
-- Option 1, "Commit and push (Recommended)": `preview` = the full proposed commit message (plus the `git diff --stat` if short).
-- Option 2, "Commit with a different message": user supplies the text via "Other".
-- Option 3, "Don't commit yet": leave the changes in the working tree.
-
-Never ask the commit question without the table and commit message in it. The commit message format:
-
-```
-Proposed commit message:
-
-  Fix A-6 externalId requirement: extend page query to include Pulse external ID
-
-  SegmentMemberRow currently only carries internal member id; A-6 bulk fetch
-  requires externalId. Members with null externalId fall through to per-member
-  collection rather than being included in the bulk request.
-
-  Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
-
-Say "execute" to commit and push with this message, or "execute <your message>" to override.
-```
-
-Then wait for the user's answer (typed "execute" remains valid as well).
-
-### "execute" shorthand
-
-| User input | Meaning |
-|---|---|
-| `execute` | Commit and push using the proposed message shown above, then start the polling loop |
-| `execute <text>` | Commit and push using `<text>` as the full commit message instead, then start the polling loop |
-
-Co-author trailer (`Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>`) is always appended unless the user's override message already contains it.
-
-### Re-requesting a Copilot review (after every commit + push)
-
-GitHub only auto-requests Copilot's review once, when the PR is first opened (via `/open-pr`). A later push — including one that fixes the very comments Copilot raised — does **not** trigger another Copilot pass on its own; it has to be re-requested explicitly, or there's nothing to poll for.
-
-After a successful `git push`, ask via **AskUserQuestion** before starting the polling loop
-(skip the question and the request while `~/.config/local-review-only` exists; `request-review.sh` refuses then):
-
-```text
-Question: "Request another Copilot review round for this push?"
-Header: "Re-review"
-Options:
-  1. **Request Copilot review** - "Fire another Copilot pass on the new commit(s)" (recommended on round 1 of a PR; still useful on later rounds if the fixes were substantial)
-  2. **Skip this round** - "Don't request one — one pass was enough, or you're handling the rest manually" (recommended on round 2+ of a PR, since one round is often sufficient)
-```
-
-If "Request Copilot review": run
-
-```bash
-request-review.sh
-```
-
-(resolves the PR from the current branch; pass `--pr <N>` if needed, or `--level copilot+claude` to also dispatch the `claude.yml` smoke-test review). This is also callable standalone, any time, outside this skill's flow — e.g. if the user just says "request a copilot review."
-
-### Polling loop (automatic, after every commit + push)
-
-After a successful `git push`, mark the review as running (`agent-phase.sh REVIEW`) and run
-the polling script in the background:
-
-```bash
-~/.claude/skills/review-comments/poll-pr.sh
-```
-
-The script polls every 45 seconds for up to 2 hours. Exit codes:
-
-- **0** — new review activity detected (possible complaints). **Immediately re-invoke the review-comments skill in Automatic Mode** without waiting for the user to say anything.
-- **3** — AI reviewers have signed off (latest non-author activity is a review that is APPROVED or whose body matches a known all-clear marker — Copilot "Merge recommended"/"No issues found", CodeRabbit "Merge approved"/"Verified successful" — and there are zero unresolved threads). Do **not** re-process comments; instead announce to the user, e.g.: **"✅ Reviewers signed off (Copilot, 14:32) — no unresolved threads. PR looks ready to merge."** Run `agent-phase.sh --no-review` (sets `[REVIEWED]`, keeps `[PR]`), then stop and wait for the user.
-- **1** (timeout) — notify the user: "No new bot activity after 2 hours. Polling stopped." Run `agent-phase.sh --no-review` too, so the row shows `[REVIEWED]` instead of a review in flight.
-- **4** — a reviewer posted a "job was not started" notice (Actions billing or spending limit) instead of a review. It is not a review round and not a sign-off. Tell the user which reviewer could not run, run `agent-phase.sh --no-review`, and stop; do not re-poll.
-
-Note the distinction: exit 0 means "something happened, go look"; exit 3 means "checked, and it's an all-clear." A findings-in-body review (Copilot Suppressed comments, CodeRabbit Outside-diff-range) does not match the sign-off markers, so it correctly exits 0.
 
 ## Error Handling
 
