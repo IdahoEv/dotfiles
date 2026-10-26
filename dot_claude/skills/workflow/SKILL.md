@@ -173,10 +173,11 @@ prompt that calls it. Never split them across two reviews.
   observable in this one.
 
 For judging prompts that already exist — staleness, bloat, scope leakage,
-duplication — `prompt-review` holds the criteria and evidence bar, and the
-`prompt-reviewer` agent applies them to an explicit scope. `/prompt-audit [repo]`
-collects the committed corpus and delegates to that agent; `branch-reviewer`
-uses the same agent on prompt files in its diff. Don't restate the checks here.
+duplication — `prompt-review` holds the criteria and evidence bar. The
+`prompt-reviewer` agent applies them for dedicated prompt reviews and corpus
+audits; `/prompt-audit [repo]` collects the committed corpus and delegates to
+that agent. `branch-reviewer` applies the skill directly to prompt files in its
+narrow diff. Don't restate the checks here.
 
 ## 7. Cloud counterparts
 
