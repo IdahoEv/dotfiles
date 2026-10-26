@@ -58,4 +58,4 @@ If significant, well-supported findings remain after round 5, stop and ask the u
 
 - No push, history rewriting, or edits outside the current worktree. Do not make workflow success depend on speculative hardening.
 - Ask only for missing test commands, the unsound-design decision, or when the cycle reaches its stop limit / needs human judgment.
-- For prompt files (`CLAUDE.md`, `.claude/**`, or chezmoi's `dot_claude/**`), invoke `prompt-reviewer` in diff mode against the same BASE; it uses the `prompt-review` skill as the rubric. Don't treat prose as ordinary runtime code.
+- For prompt files (`CLAUDE.md`, `.claude/**`, or chezmoi's `dot_claude/**`), use the `prompt-review` skill in diff mode against the same BASE; don't treat prose as ordinary runtime code.
