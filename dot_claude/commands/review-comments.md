@@ -82,7 +82,7 @@ On request, run `request-review.sh`. Pass `--pr <N>` if needed, or `--level copi
 Run `agent-phase.sh REVIEW`, then run this in the background:
 
 ```bash
-~/.claude/skills/review-comments/poll-pr.sh
+~/.claude/skills/review-comments-procedure/poll-pr.sh
 ```
 
 It polls every 45 s for up to 2 h. Exit codes:

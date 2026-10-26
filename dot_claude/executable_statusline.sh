@@ -95,7 +95,7 @@ if [ -n "$pr_num" ] || [ -f "$rounds_file" ]; then
       # On failure (offline, rate-limited) touch the cache so the retry waits out
       # the staleness window instead of firing on every render.
       ( trap 'rm -f "$cache.tmp"; rmdir "$cache.lock"' EXIT
-        cd "$cwd" && ~/.claude/skills/review-comments/review-state.sh --bare ${pr_num:+--pr "$pr_num"} \
+        cd "$cwd" && ~/.claude/skills/review-comments-procedure/review-state.sh --bare ${pr_num:+--pr "$pr_num"} \
           > "$cache.tmp" 2>/dev/null && mv "$cache.tmp" "$cache" || touch "$cache"
       ) </dev/null >/dev/null 2>&1 &
     fi

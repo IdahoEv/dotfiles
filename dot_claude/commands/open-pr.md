@@ -151,7 +151,7 @@ into one context.
 ### 5. Poll
 
 ```bash
-~/.claude/skills/review-comments/poll-pr.sh <pr_number>
+~/.claude/skills/review-comments-procedure/poll-pr.sh <pr_number>
 ```
 
 Run in the background. Exit 0 → re-invoke `/review-comments`, which runs each round in a

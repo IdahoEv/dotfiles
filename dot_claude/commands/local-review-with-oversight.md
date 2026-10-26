@@ -38,7 +38,7 @@ agent-phase.sh REVIEW
 
 (`open-pr.sh` sets this later too; setting it now makes the agent-view row show that the
 ticket is in review.) Skip if it's already `REVIEW`. Review rounds feed the statusline: at
-the start of round k run `~/.claude/skills/review-comments/review-state.sh --set-local "<k-1>*"`, and when it ends `--set-local <k>`.
+the start of round k run `~/.claude/skills/review-comments-procedure/review-state.sh --set-local "<k-1>*"`, and when it ends `--set-local <k>`.
 
 ### 1. Launch the reviewer (each round)
 
