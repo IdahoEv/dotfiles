@@ -37,9 +37,9 @@ interface, not a consumer. Say which you found.
 ## Prompt files are reviewed differently
 
 If the diff touches `CLAUDE.md`, `.claude/**`, or chezmoi's `dot_claude/**`,
-review those files with the `prompt-review` skill in `--diff` mode, scoped to
-the same BASE — its default scope is the whole repo's prompt corpus, which
-would blow this review's scope. Use its bar for those files. The
+invoke the `prompt-reviewer` agent in diff mode with the same BASE and only the
+changed prompt files. The agent loads the `prompt-review` skill as its rubric;
+do not expand to the whole prompt corpus during a branch review. The
 failing-input bar above finds nothing in prose — a bloated or stale instruction
 has no caller — so applying it to a prompt returns "no findings" on a file that
 is genuinely wrong. Code files in the same diff still get the bar above.
