@@ -65,7 +65,7 @@ A typed `execute` commits with the proposed message; `execute <text>` uses `<tex
 1. `git add` exactly the paths the agent listed, commit, and `git push`. If either fails, post nothing, report the error, and stop.
 2. **After the push succeeds**, run the planned actions in order using the `gh api` snippets in the `review-comments-procedure` skill's §4d (reactions, Reply, Mark Resolved, including the review-body `[RESOLVED]` edit); `pr-comment` rows go through `gh pr comment`. Skip 4d's conversational steps — the bodies are already final. Post each body exactly as planned. Confirm each resolution through the API. Report every action that fails, and keep going.
 
-If no files changed but there are planned actions (for example, rejections only), post them directly. There's no commit to gate them on.
+If no files changed but there are planned actions (for example, rejections only), post them directly. There's no commit to gate them on. Then run `agent-phase.sh --no-review`, say polling has stopped because nothing was pushed to trigger a new review, and stop. Skip steps 6 and 7.
 
 ## 6. Re-request review
 
@@ -94,6 +94,7 @@ It polls every 45 s for up to 2 h. Exit codes:
 - **0**: new review activity. Re-invoke `/review-comments` immediately, without waiting for the user. Each round gets a fresh agent.
 - **3**: reviewers signed off and there are no unresolved threads. Announce it, e.g. "✅ Reviewers signed off (Copilot, 14:32) — no unresolved threads. PR looks ready to merge." Run `agent-phase.sh --no-review` and stop.
 - **1**: timeout. Say "No new bot activity after 2 hours. Polling stopped." and run `agent-phase.sh --no-review`.
+- **2**: no PR found. Say so, run `agent-phase.sh --no-review`, and stop.
 - **4**: a reviewer couldn't run (Actions billing or spending limit). Name it, run `agent-phase.sh --no-review`, and don't re-poll.
 
 A review with findings only in its body (Copilot Suppressed comments, CodeRabbit Outside-diff-range) doesn't match a sign-off marker, so it correctly exits 0.
