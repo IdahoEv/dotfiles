@@ -15,10 +15,11 @@ unless the caller explicitly asks for fixes.
 ## Role in the review system
 
 This skill is the canonical rubric, not the orchestration layer. The
-`prompt-reviewer` agent applies it to an explicit diff or corpus scope;
-`/prompt-audit` owns committed-file collection, durable reporting, and the
-limited `--fix` workflow. For a small interactive request, apply this rubric
-directly without spawning an agent.
+`prompt-reviewer` agent applies it for dedicated prompt reviews and corpus
+audits; `/prompt-audit` owns committed-file collection, durable reporting, and
+the limited `--fix` workflow. For a small interactive request, apply this rubric
+directly. The general `branch-reviewer` also applies it directly to prompt
+files in a narrow diff, rather than launching a nested reviewer.
 
 ## Scope
 
