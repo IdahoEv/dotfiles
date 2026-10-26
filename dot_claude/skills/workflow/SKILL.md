@@ -174,7 +174,7 @@ prompt that calls it. Never split them across two reviews.
 
 For judging prompts that already exist — staleness, bloat, scope leakage,
 duplication — use the `prompt-review` skill, which holds the criteria and the
-evidence bar. `/prompt-audit [repo]` runs it over a whole repo; `branch-reviewer`
+evidence bar. `/prompt-audit [repo]` runs it over a whole repo; `/local-code-review-cycle`
 picks it up when a diff touches prompt files. Don't restate its checks here.
 
 ## 7. Cloud counterparts
