@@ -33,6 +33,26 @@ Work through unresolved code review comments on the current branch's pull reques
 
 When this skill is invoked:
 
+### Context isolation for Automatic Mode
+
+For a top-level invocation in **Automatic Mode**, use a fresh `review-repair-agent`
+context for the actual review/response/repair work. First perform §1 only to
+identify the current branch and PR, then delegate §§2–4 plus Automatic Mode's
+combined validation and summary to that agent. Pass the repository, branch,
+PR number/URL, and mode explicitly. Do not pre-read the implementation or review
+comments in the parent context; the point is to avoid carrying implementation
+reasoning into review and repair.
+
+The agent must return the structured findings, validation results, actions taken,
+remaining decisions, and proposed commit message. The parent session owns the
+commit-approval prompt and all commit/push/re-review/polling actions in
+**Commit, Push & Poll**. Do not commit or push from the agent.
+
+This is top-level routing only. When the `review-repair-agent` is reading this
+skill, it must execute the review instructions directly and **must not delegate
+to itself**. Quick and Slow modes remain in the current session because their
+interactive discussion is intentional.
+
 ### 1. Get the Current Branch and PR
 
 First, determine the current branch and find its associated PR:
