@@ -124,8 +124,8 @@ reset; "$TOOLS/agent-phase.sh" WIP; "$TOOLS/agent-phase.sh" --pr; "$TOOLS/agent-
 check "agent-phase emits set + no-review only" "WIP REVIEWED" "$(jq -r .phase "$LOG" | xargs)"
 reset
 mkdir -p "$ROOT/bin"; ln -sf "$TOOLS/wf-event.sh" "$ROOT/bin/wf-event.sh"
-PATH="$ROOT/bin:$PATH" bash "$REPO/dot_claude/skills/review-comments/executable_review-state.sh" --set-local '1*'
-PATH="$ROOT/bin:$PATH" bash "$REPO/dot_claude/skills/review-comments/executable_review-state.sh" --set-local 2
+PATH="$ROOT/bin:$PATH" bash "$REPO/dot_claude/skills/review-comments-procedure/executable_review-state.sh" --set-local '1*'
+PATH="$ROOT/bin:$PATH" bash "$REPO/dot_claude/skills/review-comments-procedure/executable_review-state.sh" --set-local 2
 check "review-state: round start/end" "2:start 2:end" "$(jq -r '"\(.round):\(.state)"' "$LOG" | xargs)"
 
 printf '%d passed, %d failed\n' "$pass" "$fail"
