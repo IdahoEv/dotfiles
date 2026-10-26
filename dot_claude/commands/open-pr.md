@@ -11,7 +11,7 @@ title/body is this command's job.
 
 ```text
 /open-pr
-/open-pr --review none|copilot|copilot+claude    # default: copilot; none while ~/.config/local-review-only exists
+/open-pr --review none|copilot|copilot+claude    # default: copilot; none while ~/.config/local-review-only exists (review locally first with /local-code-review-cycle)
 /open-pr --provider <name>         # --env is an alias; normally resolved from config
 /open-pr --no-multi                # ship only this repo; skip the sibling fan-out
 /open-pr --repos <dir>[,<dir>...]  # ship these sibling repos instead of auto-detecting
