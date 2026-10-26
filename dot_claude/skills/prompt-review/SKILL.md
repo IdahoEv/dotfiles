@@ -1,6 +1,6 @@
 ---
 name: prompt-review
-description: Canonical rubric for reviewing Claude prompt files — CLAUDE.md, skills, commands, agents, hooks, settings — for staleness, bloat, scope leakage, and duplication. Use for small interactive reviews; dedicated prompt reviews and corpus audits use the prompt-reviewer agent. Not for product code.
+description: Canonical rubric for reviewing Claude prompt files — CLAUDE.md, skills, commands, agents, hooks, settings — for staleness, bloat, scope leakage, and duplication. Apply directly for small interactive reviews; branch reviews and corpus audits run it through the prompt-reviewer agent. Not for product code.
 ---
 
 # Prompt Review
@@ -14,12 +14,11 @@ unless the caller explicitly asks for fixes.
 
 ## Role in the review system
 
-This skill is the canonical rubric, not the orchestration layer. The
-`prompt-reviewer` agent applies it for dedicated prompt reviews and corpus
-audits; `/prompt-audit` owns committed-file collection, durable reporting, and
-the limited `--fix` workflow. For a small interactive request, apply this rubric
-directly. The general `branch-reviewer` also applies it directly to prompt
-files in a narrow diff, rather than launching a nested reviewer.
+This skill is the rubric. The `prompt-reviewer` agent executes it: in diff
+mode when `/local-code-review-cycle` selects it for a branch touching prompt
+files, in corpus mode for `/prompt-audit`. `/prompt-audit` owns committed-file
+collection, the durable report, and the limited `--fix` workflow. For a small
+interactive request, apply this rubric directly.
 
 ## Scope
 

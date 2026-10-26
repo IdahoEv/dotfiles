@@ -28,6 +28,7 @@ Then choose the smallest set that covers the actual risks. Risk, coupling, and b
 - **Correctness:** use `correctness-reviewer` for non-trivial behavior or test changes. Tiny documentation-only or mechanical changes with no behavior impact may need only deterministic checks.
 - **Architecture:** use `architecture-reviewer` when the diff changes module boundaries, abstractions, public APIs, data flow, state ownership, multiple modules, or makes a consequential design choice. Include it for large or cross-cutting changes.
 - **Robustness:** use `robustness-reviewer` for realistic risks involving async/concurrent code, persistence, external services, retries/timeouts, cancellation, resource cleanup, lifecycle/state transitions, or recovery.
+- **Prompt:** use `prompt-reviewer` in diff mode with the same `BASE...HEAD` when the diff touches `CLAUDE.md`, `.claude/**`, or chezmoi's `dot_claude/**`. The code reviewers' failing-input bar finds nothing in prose, so don't send them prompt-only diffs; code files in the same diff still go to them.
 - **Project-specific:** invoke only when its documented trigger matches the changed area or a concrete risk in this diff. A specialist such as performance or UI/UX should not be run on unrelated changes.
 - Do not add a syntax reviewer. Use the project's formatter, compiler/type checker, linter, and tests for deterministic issues.
 - Run selected reviewers in parallel only when they can independently inspect the same committed diff. Give each the same `BASE...HEAD` scope and relevant ticket/acceptance criteria.
@@ -40,7 +41,7 @@ Each round:
 2. Deduplicate overlapping findings. Keep findings only when they concern changed code and have evidence plus a credible failure path, meaningful test gap, or material design cost. Discard stylistic preferences, hypothetical risks, extremely unlikely edge cases, and fixes whose complexity/cost exceeds the plausible impact. Require stronger evidence for defensive hardening than for a direct correctness bug. Never resurrect a dismissed finding without new evidence.
 3. Fix only actionable findings. Write a failing test first for behavior bugs when practical. Make the smallest adequate fix; do not expand scope. Record dismissed/deferred findings and brief reasons so later rounds do not repeat them.
 4. Run `FAST`; fix new failures and never disable, skip, or quarantine tests to get green. Commit round fixes locally using the project's commit convention and attribution trailer. Skip the commit if nothing changed. Never push.
-5. Stop when there are no actionable findings or remaining feedback is only repeats, speculative hardening, or low-value nits. In later rounds, rerun correctness and only the specialist reviewers relevant to the files/risks changed by the fixes; do not repeat a full review without a reason.
+5. Stop when there are no actionable findings or remaining feedback is only repeats, speculative hardening, or low-value nits. In later rounds, rerun only the reviewers relevant to the files/risks changed by the fixes; do not repeat a full review without a reason.
 
 If the first architecture review returns `DESIGN: unsound`, stop before changing code and ask the user whether to keep or rework the design. Include the concrete alternative and trade-offs. This gate applies only when the reviewer demonstrates a materially better alternative—not for style preferences.
 
@@ -58,4 +59,3 @@ If significant, well-supported findings remain after round 5, stop and ask the u
 
 - No push, history rewriting, or edits outside the current worktree. Do not make workflow success depend on speculative hardening.
 - Ask only for missing test commands, the unsound-design decision, or when the cycle reaches its stop limit / needs human judgment.
-- For prompt files (`CLAUDE.md`, `.claude/**`, or chezmoi's `dot_claude/**`), use the `prompt-review` skill in diff mode against the same BASE; don't treat prose as ordinary runtime code.
