@@ -41,13 +41,13 @@ Each round:
 3. Fix only actionable findings. Write a failing test first for behavior bugs when practical. Make the smallest adequate fix; do not expand scope. A real but out-of-scope finding is deferred: file an issue for it under the project's bookkeeping rule (tracker, epic, milestone) instead of growing the branch. Record dismissed/deferred findings and brief reasons so later rounds do not repeat them.
 4. Run `FAST`; fix new failures and never disable, skip, or quarantine tests to get green. Commit round fixes locally using the project's commit convention and attribution trailer. Skip the commit if nothing changed. Never push.
 
-   With `--confirm-commits`, ask before committing with one self-contained `AskUserQuestion`. Text printed before the call may not be shown, so the question itself holds the reviewers' findings (one line each), the verdict table, what was fixed, `FAST` status, and the full commit message. Table, between `---` rules:
+   With `--confirm-commits`, ask before committing with one self-contained `AskUserQuestion` holding the reviewers' findings (one line each), the verdict table, what was fixed, `FAST` status, and the full commit message. Table, between `---` rules:
 
    | # | Location | Finding | Verdict |
    |---|---|---|---|
    | 1 | `path:line` | terse description | ✅ fixed / ❌ dismissed — reason / ⏭ deferred — issue ref |
 
-   Options: "Commit and run another round" (only when another round is worth it), "Commit and finish" (Recommended when the fixes were small), "Don't commit yet"; the `preview` on each commit option is the full commit message. With no file changes, ask only whether to run another round or finish. Under this flag, also put judgment calls on scope or design intent in the question instead of silently dismissing them.
+   Options: "Commit and run another round" (only when another round is worth it), "Commit and finish" (Recommended when the fixes were small), "Don't commit yet"; the `preview` on each commit option is the full commit message. With no file changes, ask only whether to run another round or finish. "Don't commit yet" pauses the cycle: act on the user's instructions, then ask again. The next round reviews only committed changes, so it starts only after this round's commit. Put judgment calls on scope or design intent in this question rather than dismissing them silently.
 5. Stop when there are no actionable findings or remaining feedback is only repeats, speculative hardening, or low-value nits. In later rounds, rerun correctness and only the specialist reviewers relevant to the files/risks changed by the fixes; do not repeat a full review without a reason.
 
 If the first architecture review returns `DESIGN: unsound`, stop before changing code and ask the user whether to keep or rework the design. Include the concrete alternative and trade-offs. This gate applies only when the reviewer demonstrates a materially better alternative—not for style preferences.
