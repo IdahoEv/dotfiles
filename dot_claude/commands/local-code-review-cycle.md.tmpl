@@ -2,7 +2,7 @@
 
 Run a bounded review-and-fix cycle on the current worktree before `/open-pr`. The implementer does not review its own work: launch fresh, read-only reviewer agents. This command may commit fixes locally; it must never push.
 
-Usage: `/local-code-review-cycle [base]`. Base defaults to `origin/<default branch>`; pass another ref for a long-lived target branch.
+Usage: `/local-code-review-cycle [base] [--confirm-commits | --no-confirm-commits]`. Base defaults to `origin/<default branch>`; pass another ref for a long-lived target branch. `--confirm-commits` pauses for approval before each round's commit (§3 step 4); on this machine it is {{ if .is_work }}on by default, because every commit needs approval{{ else }}off by default{{ end }}.
 
 Use the project's documented test commands. `FAST` is the quick suite; `FULL` is the complete suite. If neither is documented, ask once before starting.
 
@@ -39,8 +39,16 @@ Each round:
 
 1. Launch fresh instances of the selected reviewers. State `BASE`, exact diff scope, ticket criteria, and already-triaged findings. Do not pre-read the implementation on the reviewer's behalf.
 2. Deduplicate overlapping findings. Keep findings only when they concern changed code and have evidence plus a credible failure path, meaningful test gap, or material design cost. Discard stylistic preferences, hypothetical risks, extremely unlikely edge cases, and fixes whose complexity/cost exceeds the plausible impact. Require stronger evidence for defensive hardening than for a direct correctness bug. Never resurrect a dismissed finding without new evidence.
-3. Fix only actionable findings. Write a failing test first for behavior bugs when practical. Make the smallest adequate fix; do not expand scope. Record dismissed/deferred findings and brief reasons so later rounds do not repeat them.
+3. Fix only actionable findings. Write a failing test first for behavior bugs when practical. Make the smallest adequate fix; do not expand scope. A real but out-of-scope finding is deferred: file an issue for it under the project's bookkeeping rule (tracker, epic, milestone) instead of growing the branch. Record dismissed/deferred findings and brief reasons so later rounds do not repeat them. Never silently dismiss a judgment call on scope or design intent: put it in the round's approval question under `--confirm-commits`, otherwise ask before committing the round.
 4. Run `FAST`; fix new failures and never disable, skip, or quarantine tests to get green. Commit round fixes locally using the project's commit convention and attribution trailer. Skip the commit if nothing changed. Never push.
+
+   With `--confirm-commits`, ask before committing with one self-contained `AskUserQuestion` holding the reviewers' findings (one line each), the verdict table, what was fixed, `FAST` status, and the full commit message. Table, between `---` rules:
+
+   | # | Location | Finding | Verdict |
+   |---|---|---|---|
+   | 1 | `path:line` | terse description | ✅ fixed / ❌ dismissed — reason / ⏭ deferred — issue ref |
+
+   Options: "Commit and run another round" (only when another round is worth it), "Commit and finish" (Recommended when the fixes were small), "Don't commit yet"; the `preview` on each commit option is the full commit message. With no file changes, ask only whether to run another round or finish. "Don't commit yet" pauses the cycle: act on the user's instructions, then ask again. The next round reviews only committed changes, so it starts only after this round's commit.
 5. Stop when there are no actionable findings or remaining feedback is only repeats, speculative hardening, or low-value nits. In later rounds, rerun only the reviewers relevant to the files/risks changed by the fixes; do not repeat a full review without a reason.
 
 If the first architecture review returns `DESIGN: unsound`, stop before changing code and ask the user whether to keep or rework the design. Include the concrete alternative and trade-offs. This gate applies only when the reviewer demonstrates a materially better alternative—not for style preferences.
@@ -52,10 +60,10 @@ If significant, well-supported findings remain after round 5, stop and ask the u
 - Run `agent-phase.sh --no-review` when available.
 - Run `FULL` once after final review fixes. Re-run only failing checks as needed and compare against the baseline.
 - Report reviewers selected and why, rounds, findings fixed/dismissed/deferred, test status (including baseline failures), and commits added. Keep output terse: one line per round (`R<k>: N fixed / M dismissed or deferred`).
-- List real but out-of-scope findings only; do not implement them or open tickets unless asked.
+- List deferred findings with the issue filed for each; do not implement them.
 - End with `/open-pr` as the next step. Include the review-cycle summary in the PR body's "Review cycle" note.
 
 ## Guardrails
 
 - No push, history rewriting, or edits outside the current worktree. Do not make workflow success depend on speculative hardening.
-- Ask only for missing test commands, the unsound-design decision, or when the cycle reaches its stop limit / needs human judgment.
+- Ask only for missing test commands, per-round commit approval under `--confirm-commits`, the unsound-design decision, or when the cycle reaches its stop limit / needs human judgment.
