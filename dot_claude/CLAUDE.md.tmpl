@@ -132,3 +132,6 @@ GitHub) running; `[REVIEWED]` / `[REVIEWED][PR]` = review finished; `[PR]` alone
 never reviewed. Review flows run `agent-phase.sh REVIEW` when a round starts and
 `agent-phase.sh --no-review` (REVIEW → REVIEWED) when review ends.
 
+`[TALK]` marks a non-ticket `/discuss` session. It has no phase until it files a ticket and
+moves into that worktree, at which point its kickoff relabels it `[PLAN]`.
+

@@ -4,6 +4,13 @@
 #   start-ticket.sh <id> [--provider github|shortcut] [--no-tab] [--launcher iterm|bg|none]
 #   start-ticket.sh <id> --print-title            # read-only: title + proposed label
 #   start-ticket.sh --tab-only <worktree> <kickoff> [--launcher iterm|bg|none]
+#   start-ticket.sh --session [<topic>] [--about <text>] [--launcher iterm|bg|none]
+#
+# --session opens a non-ticket discussion session (/discuss): no ticket, branch
+# or worktree. It launches in the main checkout (for a bare repo, the worktree
+# holding the default branch), named "[TALK] <topic>", with a kickoff built
+# from the project preamble plus session-kickoff.md, whose rules move the
+# session onto a ticket worktree when the user asks for code.
 #
 # Resolves a ticket (GitHub issue or Shortcut story) to a branch, creates a
 # worktree via worktree-manager.sh, marks the ticket in progress, writes a
@@ -191,11 +198,14 @@ fit() {
 # Tab name = "Is<n> <slug>" where the ticket number is ALWAYS kept and the slug is
 # truncated instead (to START_TICKET_TAB_MAXLEN). The name is re-asserted after
 # commands are written so iTerm's automatic title updates don't clobber it.
-open_tab() {  # <worktree> <kickoff>
-  local wt="$1" kf="$2"
-  local branch; branch="$(git -C "$wt" branch --show-current 2>/dev/null || basename "$wt")"
-
-  local label; label="$(make_label "$branch" "${START_TICKET_TAB_MAXLEN:-30}")"
+open_tab() {  # <worktree> <kickoff> [<label>]
+  local wt="$1" kf="$2" label="${3:-}"
+  if [ -n "$label" ]; then
+    label="$(fit "$label" "${START_TICKET_TAB_MAXLEN:-30}" words)"
+  else
+    local branch; branch="$(git -C "$wt" branch --show-current 2>/dev/null || basename "$wt")"
+    label="$(make_label "$branch" "${START_TICKET_TAB_MAXLEN:-30}")"
+  fi
 
   local delay="${START_TICKET_CLAUDE_DELAY:-3}"
 
@@ -275,14 +285,16 @@ OSA
 # Unlike the iTerm launcher, the kickoff is submitted immediately; the default
 # permission mode is therefore "plan" (Claude proposes before editing).
 # claude's own output goes to stderr to keep this script's stdout parseable.
-open_bg() {  # <worktree> <kickoff>
-  local wt="$1" kf="$2"
+open_bg() {  # <worktree> <kickoff> [<label>]
+  local wt="$1" kf="$2" label="${3:-}"
   command -v claude >/dev/null || die "claude CLI not found (needed by the bg launcher)"
-  local branch; branch="$(git -C "$wt" branch --show-current 2>/dev/null || basename "$wt")"
-  local label; label="$(make_label "$branch" "${START_TICKET_BG_MAXLEN:-70}" pretty)"
-  # The phase prefix is budgeted outside make_label's maxlen: truncating the
-  # slug is fine, truncating "[PLAN]" would defeat the point of the label.
-  label="[PLAN] $label"
+  if [ -z "$label" ]; then
+    local branch; branch="$(git -C "$wt" branch --show-current 2>/dev/null || basename "$wt")"
+    label="$(make_label "$branch" "${START_TICKET_BG_MAXLEN:-70}" pretty)"
+    # The phase prefix is budgeted outside make_label's maxlen: truncating the
+    # slug is fine, truncating "[PLAN]" would defeat the point of the label.
+    label="[PLAN] $label"
+  fi
   local perm; perm="$(setting bg_permission_mode START_TICKET_BG_PERMISSION_MODE plan)"
   local args=(--bg --name "$label")
   [ "$perm" = "default" ] || args+=(--permission-mode "$perm")
@@ -296,21 +308,74 @@ open_bg() {  # <worktree> <kickoff>
   fi
 }
 
-launch_session() {  # <worktree> <kickoff> — uses the resolved $launcher
+launch_session() {  # <worktree> <kickoff> [<label>] — uses the resolved $launcher
+  local tab_label="${3:-}"
   case "$launcher" in
-    iterm) open_tab "$1" "$2" ;;
-    bg)    open_bg  "$1" "$2" ;;
+    iterm) open_tab "$1" "$2" "${tab_label#\[TALK\] }" ;;
+    bg)    open_bg  "$1" "$2" "${3:-}" ;;
     none)  : ;;
   esac
 }
 
+# ---- discussion session (--session) ------------------------------------------
+# The main checkout, or for a bare repo (the dotfiles dev copy) the worktree
+# holding the default branch; else the current checkout.
+session_dir() {
+  local common main b wt="" line cur=""
+  common="$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" \
+    || die "not inside a git repo"
+  if [ "$(git -C "$common" rev-parse --is-bare-repository)" != true ]; then
+    gt::main_root
+    return 0
+  fi
+  b="$(gt::default_branch 2>/dev/null || git -C "$common" symbolic-ref --short HEAD 2>/dev/null || true)"
+  if [ -n "$b" ]; then
+    while IFS= read -r line; do
+      case "$line" in
+        "worktree "*) cur="${line#worktree }" ;;
+        "branch refs/heads/$b") wt="$cur"; break ;;
+      esac
+    done < <(git -C "$common" worktree list --porcelain)
+  fi
+  [ -n "$wt" ] && { printf '%s' "$wt"; return 0; }
+  git rev-parse --show-toplevel 2>/dev/null || die "bare repo with no worktree for '$b'"
+}
+
+run_session() {  # <topic> <about>
+  local topic about="$2" dir repo label slug kf
+  topic="$(gt::sanitize_label "$1")"
+  dir="$(session_dir)"
+  repo="$(basename "$(gt::main_root "$dir")")"
+  label="[TALK] ${topic:-$repo Discussion}"
+  slug="$(gt::slug_title "${topic:-discussion}")"
+  local _tmp="${TMPDIR:-/tmp}"; kf="${_tmp%/}/${repo}-session-${slug:-discussion}.md"
+  {
+    printf 'Discussion session for `%s` in `%s` (no ticket). Topic: %s.\n' \
+      "$repo" "$dir" "${topic:-open}"
+    [ -n "$about" ] && printf '\n%s\n' "$about"
+    if _doc="$(gt::find_doc kickoff-preamble.md "$dir")"; then
+      local pre; pre="$(cat "${_doc%%$'\t'*}")"
+      pre="$(subst "$pre" '{{ID}}' '')"
+      pre="$(subst "$pre" '{{BRANCH}}' '')"
+      pre="$(subst "$pre" '{{PARENT}}' '')"
+      printf '\n%s\n' "$pre"
+    fi
+    printf '\n%s\n' "$(cat "$SCRIPT_DIR/session-kickoff.md")"
+    printf '\nCosmetic, before your first reply: run `session-label.sh --color project` (skip if not found; silent outside a background session).\n'
+  } > "$kf"
+  printf 'dir=%s\nkickoff=%s\nlabel=%s\n' "$dir" "$kf" "$label"
+  launch_session "$dir" "$kf" "$label"
+}
+
 # ---- args ------------------------------------------------------------------
-id="" provider="" mode="full" launcher_flag="" tab_wt="" tab_kf=""
+id="" provider="" mode="full" launcher_flag="" tab_wt="" tab_kf="" about=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --provider) provider="${2:?--provider needs a value}"; shift 2 ;;
     --no-tab)   mode="no-tab"; shift ;;
     --print-title) mode="print-title"; shift ;;
+    --session)  mode="session"; shift ;;
+    --about)    about="${2:?--about needs a value}"; shift 2 ;;
     --tab-only) mode="tab-only"
                 tab_wt="${2:?--tab-only needs <worktree> <kickoff>}"
                 tab_kf="${3:?--tab-only needs <worktree> <kickoff>}"
@@ -338,6 +403,11 @@ esac
 
 if [ "$mode" = "tab-only" ]; then
   launch_session "$tab_wt" "$tab_kf"
+  exit 0
+fi
+
+if [ "$mode" = "session" ]; then
+  run_session "$id" "$about"
   exit 0
 fi
 
