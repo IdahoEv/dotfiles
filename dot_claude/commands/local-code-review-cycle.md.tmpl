@@ -12,7 +12,7 @@ Use the project's documented test commands. `FAST` is the quick suite; `FULL` is
 - Stop if the current branch is the base/default branch or the working tree is dirty; ask the user to commit or resolve stray changes first. Do not rewrite history or force-update branches. If behind BASE, merge BASE into the branch and resolve conflicts before review.
 - Record the changed-file set from `git diff --name-only BASE...HEAD`. Stop if empty.
 - Run `FAST` as a baseline. Record pre-existing failures and compare later runs against them.
-- Run `agent-phase.sh REVIEW` when available. At the start of round k, update the review statusline with `~/.claude/skills/review-comments/review-state.sh --set-local "<k-1>*"`; when the round ends, set it to `<k>`, as supported by the existing workflow.
+- Run `agent-phase.sh REVIEW` when available. At the start of round k, update the review statusline with `~/.claude/skills/review-comments-procedure/review-state.sh --set-local "<k-1>*"`; when the round ends, set it to `<k>`, as supported by the existing workflow.
 
 ## 2. Discover and select reviewers
 

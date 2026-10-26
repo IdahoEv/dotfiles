@@ -13,7 +13,6 @@ title/body is this command's job.
 /open-pr
 /open-pr --review none|copilot|copilot+claude    # default: copilot; none while ~/.config/local-review-only exists (review locally first with /local-code-review-cycle)
 /open-pr --provider <name>         # --env is an alias; normally resolved from config
-/open-pr --no-compact              # skip the post-ship context compaction
 /open-pr --no-multi                # ship only this repo; skip the sibling fan-out
 /open-pr --repos <dir>[,<dir>...]  # ship these sibling repos instead of auto-detecting
 ```
@@ -152,10 +151,11 @@ into one context.
 ### 5. Poll
 
 ```bash
-~/.claude/skills/review-comments/poll-pr.sh <pr_number>
+~/.claude/skills/review-comments-procedure/poll-pr.sh <pr_number>
 ```
 
-Run in the background. Exit 0 → re-invoke `/review-comments`; 3 → signed off, ready to
+Run in the background. Exit 0 → re-invoke `/review-comments`, which runs each round in a
+fresh `review-repair-agent` so implementation context never reaches the review; 3 → signed off, ready to
 merge; 1 → timeout; 2 → no PR found; 4 → a reviewer said it couldn't run (e.g. Copilot
 billing): report that, run `agent-phase.sh --no-review`, and don't poll again.
 
@@ -182,7 +182,3 @@ not guess. Take `<ticket-ref>` from the `pr_title` the script reported rather th
 inventing a format. Under `trigger_mode=auto`, say reviews fire automatically; don't claim
 to have requested them.
 
-### 7. Compact
-
-The implementation context isn't needed for the review-poll cycle that follows. Run
-`/compact` after reporting, unless `--no-compact` was passed.
