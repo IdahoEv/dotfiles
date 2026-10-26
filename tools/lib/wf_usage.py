@@ -34,9 +34,11 @@ def parse_ts(s):
     if not isinstance(s, str) or not s:
         return None
     try:
-        return datetime.fromisoformat(s.replace("Z", "+00:00"))
+        dt = datetime.fromisoformat(s.replace("Z", "+00:00"))
     except ValueError:
         return None
+    # Naive times can't be ordered against the UTC ones every writer emits.
+    return dt if dt.tzinfo else None
 
 
 def transcripts_for_session(session_id, root=None):

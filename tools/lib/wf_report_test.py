@@ -219,9 +219,10 @@ class MalformedLog(unittest.TestCase):
             fh.write('{"ts":123,"run_id":"a","event":"x"}\n')
             fh.write('{"ts":"2026-10-20T00:00:00Z","run_id":["a"],"event":"x"}\n')
             fh.write('[1,2]\n')
+            fh.write('{"ts":"2026-10-20T00:00:00","run_id":"naive","event":"x"}\n')
             fh.write('{"ts":"2026-10-20T00:00:00Z","run_id":"ok#1","event":"x"}\n')
         events, bad = wf_report.load_events(path)
-        self.assertEqual(bad, 3)
+        self.assertEqual(bad, 4)
         self.assertEqual([e["run_id"] for e in events], ["ok#1"])
 
 
