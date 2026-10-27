@@ -15,7 +15,7 @@ unless the caller explicitly asks for fixes.
 ## Role in the review system
 
 This skill is the rubric. The `prompt-reviewer` agent executes it: in diff
-mode when `/local-code-review-cycle` selects it for a branch touching prompt
+mode when `/local-review-cycle` selects it for a branch touching prompt
 files, in corpus mode for `/prompt-audit`. `/prompt-audit` owns committed-file
 collection, the durable report, and the limited `--fix` workflow. For a small
 interactive request, apply this rubric directly.
@@ -123,7 +123,7 @@ Also flag: a rule firing every session that sits in a skill (belongs in
 in a skill, where it costs nothing until invoked). And a `description` that
 doesn't name the firing situations in the user's own words — it is matched
 before the body is ever read. A **reviewer agent's** `description` must
-additionally end with a `Use when: <conditions>.` clause: `/local-code-review-cycle`
+additionally end with a `Use when: <conditions>.` clause: `/local-review-cycle`
 selects reviewers by matching that clause against the diff, so a reviewer
 without one is invisible to selection — a finding, not a nit.
 

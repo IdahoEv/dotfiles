@@ -2,3 +2,7 @@
 .claude/agents/branch-reviewer.md
 .claude/agents/preemptive-code-reviewer.md
 .claude/skills/review-comments
+.claude/commands/local-code-review-cycle.md
+.claude/commands/review-comments.md
+.claude/skills/review-comments-procedure
+.claude/agents/review-repair-agent.md
