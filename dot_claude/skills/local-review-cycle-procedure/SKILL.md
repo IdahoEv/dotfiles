@@ -15,7 +15,7 @@ Use the project's documented test commands. `FAST` is the quick suite; `FULL` is
 ## 1. Preflight
 
 - Set `BASE` from the kickoff. Fetch origin and use remote refs directly.
-- Stop if the current branch is the base/default branch or the working tree is dirty; stop and report it — the implementing session must commit or resolve stray changes first. Do not rewrite history or force-update branches. If behind BASE, merge BASE into the branch and resolve conflicts before review.
+- Stop and report if the branch is the base/default branch or the tree is dirty (the implementing session must commit or resolve stray changes first). Do not rewrite history or force-update branches. If behind BASE, merge BASE into the branch and resolve conflicts before review.
 - Record the changed-file set from `git diff --name-only BASE...HEAD`. Stop if empty.
 - Run `FAST` as a baseline. Record pre-existing failures and compare later runs against them.
 - Run `agent-phase.sh REVIEW` when available. At the start of round k, update the review statusline with `~/.claude/skills/github-review-procedure/github-review-state.sh --set-local "<k-1>*"`; when the round ends, set it to `<k>`.

@@ -1,6 +1,6 @@
 # Workflow & Review Architecture
 
-State as of #40, #46, #61 and #62 (2026-10). **Keep this current:** any change to the dotfiles workflow — commands, agents, skills, hooks, or the scripts behind them — must check whether this document needs updating.
+State as of 2026-10. **Keep this current:** any change to the dotfiles workflow — commands, agents, skills, hooks, or the scripts behind them — must check whether this document needs updating.
 
 ## Flow: where review happens
 
