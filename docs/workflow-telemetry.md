@@ -45,6 +45,7 @@ Medians per merged ticket are shown only once there are ≥3 merged runs.
 | `phase` | `agent-phase.sh` (set and `--no-review`) | `phase` |
 | `review.round` | `review-state.sh --set-local` | `round`, `state=start\|end` |
 | `review.result` | Review prompts, one line at cycle end (bot batches: final report only) | `round`, `fixed`, `dismissed`, `deferred`, `reviewers`, `source=bot` for PR-bot batches. Bot-batch `deferred` means Skipped (nothing filed), unlike the local cycle's deferred-with-issue |
+| `review.finding` | `/local-code-review-cycle`, one line per triaged finding | `reviewer`, `severity`, `verdict=fixed\|dismissed\|deferred`, `round`, `reason` (required for dismissed/deferred; short phrase, no code or prompt text). `wf-report.sh` renders per-reviewer counts and dismissed findings with reasons |
 | `pr.open` | `open-pr.sh`, including failures | `outcome`, `exit_code`, `duration_ms`, `pr_number`, `pr_action`, `review` |
 | `finalize.check` | `finalize-check.sh` | `verdict`, `pr_number`, `pr_state` |
 
@@ -60,7 +61,7 @@ Logs hold only identifiers, counts, and Claude Code enum values: no prompts, dif
 | Cost | Tokens × `tools/lib/model-pricing.json` (first-party list price, as-of date inside) | Estimate |
 | Stage time | Intervals between `phase` events | Measured |
 | Test time / reruns | Transcript Bash calls matching the test pattern, timed from tool_use to tool_result; a rerun is the same command repeated | Heuristic |
-| Findings fixed / dismissed / deferred | `review.result`, reported by the model | Self-reported |
+| Findings fixed / dismissed / deferred | `review.result` (totals) and `review.finding` (per finding, with reviewer and reason), reported by the model | Self-reported |
 
 ## Limitations
 
@@ -68,7 +69,7 @@ Logs hold only identifiers, counts, and Claude Code enum values: no prompts, dif
 - Usage is counted only for sessions that emitted an event inside the run, between the run's first and last event. Launcher sessions (`/start`, the governor) are excluded.
 - Models missing from the price table (e.g. routed `glm-*`) leave the total cost `unknown`. Their tokens are still counted.
 - Cost is at list price. It ignores plan billing and Bedrock/Vertex rates.
-- `review.result` is the one model-emitted event and a deliberate exception to "deterministic emits only": the fixed/dismissed/deferred triage exists nowhere but the model's context. If the model skips it, findings show as unknown. Round counts still come from `review-state.sh`.
+- `review.result` and `review.finding` are the model-emitted events and a deliberate exception to "deterministic emits only": the fixed/dismissed/deferred triage exists nowhere but the model's context. If the model skips them, findings show as unknown. Round counts still come from `review-state.sh`.
 - `--prune` can lose an event appended in the instant between its final copy and the file swap. Prune when no sessions are active. A `kill -9` mid-prune leaves `events.jsonl.lock` behind; remove it by hand.
 - The test pattern is a heuristic. A command that merely mentions a runner inside quotes can match.
 - Runs from before the hooks were installed have no events.

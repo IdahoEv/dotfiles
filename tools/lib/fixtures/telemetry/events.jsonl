@@ -5,8 +5,13 @@
 {"v":1,"ts":"2026-10-20T09:10:00.000Z","event":"phase","run_id":"acme/w#1","session_id":"s-main","phase":"WIP"}
 {"v":1,"ts":"2026-10-20T09:30:00.000Z","event":"phase","run_id":"acme/w#1","session_id":"s-main","phase":"REVIEW"}
 {"v":1,"ts":"2026-10-20T09:30:01.000Z","event":"review.round","run_id":"acme/w#1","session_id":"s-main","round":1,"state":"start"}
+{"v":1,"ts":"2026-10-20T09:39:00.000Z","event":"review.finding","run_id":"acme/w#1","session_id":"s-main","reviewer":"correctness-reviewer","severity":"High","verdict":"fixed","round":1}
+{"v":1,"ts":"2026-10-20T09:39:10.000Z","event":"review.finding","run_id":"acme/w#1","session_id":"s-main","reviewer":"correctness-reviewer","severity":"Medium","verdict":"dismissed","round":1,"reason":"hypothetical risk"}
+{"v":1,"ts":"2026-10-20T09:39:20.000Z","event":"review.finding","run_id":"acme/w#1","session_id":"s-main","reviewer":"robustness-reviewer","severity":"Low","verdict":"deferred","round":1,"reason":"out of scope acme/w#77"}
 {"v":1,"ts":"2026-10-20T09:40:00.000Z","event":"review.round","run_id":"acme/w#1","session_id":"s-main","round":1,"state":"end"}
 {"v":1,"ts":"2026-10-20T09:40:01.000Z","event":"review.round","run_id":"acme/w#1","session_id":"s-main","round":2,"state":"start"}
+{"v":1,"ts":"2026-10-20T09:44:00.000Z","event":"review.finding","run_id":"acme/w#1","session_id":"s-main","reviewer":"correctness-reviewer","severity":"Critical","verdict":"fixed","round":2}
+{"v":1,"ts":"2026-10-20T09:44:10.000Z","event":"review.finding","run_id":"acme/w#1","session_id":"s-main","reviewer":"robustness-reviewer","severity":"High","verdict":"dismissed","round":2,"reason":"cost exceeds plausible impact"}
 {"v":1,"ts":"2026-10-20T09:45:00.000Z","event":"review.round","run_id":"acme/w#1","session_id":"s-main","round":2,"state":"end"}
 {"v":1,"ts":"2026-10-20T09:15:00.000Z","event":"session.fail","run_id":"sc-9","session_id":"s-int","error":"rate_limit"}
 this line is not json

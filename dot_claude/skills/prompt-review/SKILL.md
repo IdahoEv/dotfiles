@@ -122,7 +122,10 @@ Also flag: a rule firing every session that sits in a skill (belongs in
 `CLAUDE.md`), and a rule firing once per task that sits in `CLAUDE.md` (belongs
 in a skill, where it costs nothing until invoked). And a `description` that
 doesn't name the firing situations in the user's own words — it is matched
-before the body is ever read.
+before the body is ever read. A **reviewer agent's** `description` must
+additionally end with a `Use when: <conditions>.` clause: `/local-code-review-cycle`
+selects reviewers by matching that clause against the diff, so a reviewer
+without one is invisible to selection — a finding, not a nit.
 
 ## Output
 
