@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
-# review-state.sh [--pr N] [--local N[*]] [--bare] — print the review-rounds status line:
+# github-review-state.sh [--pr N] [--local N[*]] [--bare] — print the review-rounds status line:
 #   Code Review Rounds: 2 local*, 1 Copilot, 0 Coderabbit
-# review-state.sh --set-local N[*] — record the session's local rounds for this worktree.
+# github-review-state.sh --set-local N[*] — record the session's local rounds for this worktree.
 #
 # The statusline shows this (--bare drops the "Code Review Rounds:" prefix). Local
 # rounds live in the session, so the review cycle records them with --set-local into
 # <git-dir>/local-review-rounds; without --local, that file is the local count.
 #
 # Rounds = reviews each bot has submitted on the PR, not counting "job was not
-# started" billing notices (keep UNAVAILABLE_RE in step with poll-pr.sh). The
+# started" billing notices (keep UNAVAILABLE_RE in step with github-review-poll.sh). The
 # local count is the caller's (it lives in the session, not in GitHub), passed
 # as --local; keep its trailing * if a local round is running. A * follows a
 # type's name when a round is in flight: Copilot while its latest review request
@@ -36,7 +36,7 @@ while [ $# -gt 0 ]; do
       esac
       if command -v wf-event.sh >/dev/null; then wf-event.sh "${wf_args[@]}" || true; fi
       exit 0 ;;
-    *) echo "usage: review-state.sh [--pr N] [--local N[*]] [--bare] | --set-local N[*]" >&2; exit 1 ;;
+    *) echo "usage: github-review-state.sh [--pr N] [--local N[*]] [--bare] | --set-local N[*]" >&2; exit 1 ;;
   esac
 done
 if [ -z "$local_n" ]; then

@@ -182,7 +182,7 @@ Cloud sessions see only committed files, so projects that use them carry `cloud-
 `cloud-open-pr`, `cloud-finalize`, `cloud-code-review-cycle` and `cloud-governor` in
 `.claude/commands/`, `git` and `gh` only, each naming its global counterpart.
 
-- **Editing a global `start`, `open-pr`, `finalize`, `local-code-review-cycle` or
+- **Editing a global `start`, `open-pr`, `finalize`, `local-review-cycle` or
   `governor`:** check the repo's matching `cloud-*` file and report whether it needs the
   same change.
 - **Personal project with none:** suggest creating them once, modelled on Kardashev's.

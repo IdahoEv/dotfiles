@@ -22,13 +22,13 @@
 # Sign-off markers can be extended per repo/session via POLL_SIGNOFF_PATTERNS
 # (an extended-regex, alternation already included; it is ORed with the defaults),
 # e.g. for a future @claude reviewer:
-#   POLL_SIGNOFF_PATTERNS='@claude.*approved' poll-pr.sh
+#   POLL_SIGNOFF_PATTERNS='@claude.*approved' github-review-poll.sh
 #
 # A bot's "job was not started" notice (Actions billing / spending limit) is not
 # a review: it is excluded from the activity above and reported as exit 4. Keep
-# UNAVAILABLE_RE in step with review-state.sh.
+# UNAVAILABLE_RE in step with github-review-state.sh.
 #
-# Usage: poll-pr.sh [pr_number]
+# Usage: github-review-poll.sh [pr_number]
 # Exits 0 when new activity (possible complaints) is found; 1 on timeout;
 # 2 on setup error; 3 when AI reviewers have signed off (all-clear, no
 # unresolved threads); 4 when a reviewer reported it could not run.

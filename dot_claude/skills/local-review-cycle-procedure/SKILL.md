@@ -1,18 +1,24 @@
-# Local Code Review Cycle
+---
+name: local-review-cycle-procedure
+description: Procedure for running the bounded local review-and-fix cycle before /open-pr. Loaded by the /local-review-cycle command and the local-review-cycle-manager agent; not invoked directly.
+user-invocable: false
+---
 
-Run a bounded review-and-fix cycle on the current worktree before `/open-pr`. The implementer does not review its own work: launch fresh, read-only reviewer agents. This command may commit fixes locally; it must never push.
+# Local Review Cycle Procedure
 
-Usage: `/local-code-review-cycle [base] [--confirm-commits | --no-confirm-commits]`. Base defaults to `origin/<default branch>`; pass another ref for a long-lived target branch. `--confirm-commits` pauses for approval before each round's commit (§3 step 6); on this machine it is {{ if .is_work }}on by default, because every commit needs approval{{ else }}off by default{{ end }}.
+Run a bounded review-and-fix cycle on the current worktree before `/open-pr`. The implementer never reviews their own work: launch fresh, read-only reviewer agents. You commit fixes locally each round by default; never push — human review happens on the PR.
+
+Usage context: `--confirm-commits` holds each round for approval (per-round `AskUserQuestion`); by default you commit every round and human review happens on the PR. BASE comes from the kickoff and defaults to `origin/<default branch>`; a different ref targets a long-lived branch.
 
 Use the project's documented test commands. `FAST` is the quick suite; `FULL` is the complete suite. If neither is documented, ask once before starting.
 
 ## 1. Preflight
 
-- Set `BASE` from the argument or `origin/<default branch>`. Fetch origin and use remote refs directly.
+- Set `BASE` from the kickoff. Fetch origin and use remote refs directly.
 - Stop if the current branch is the base/default branch or the working tree is dirty; ask the user to commit or resolve stray changes first. Do not rewrite history or force-update branches. If behind BASE, merge BASE into the branch and resolve conflicts before review.
 - Record the changed-file set from `git diff --name-only BASE...HEAD`. Stop if empty.
 - Run `FAST` as a baseline. Record pre-existing failures and compare later runs against them.
-- Run `agent-phase.sh REVIEW` when available. At the start of round k, update the review statusline with `~/.claude/skills/review-comments-procedure/review-state.sh --set-local "<k-1>*"`; when the round ends, set it to `<k>`, as supported by the existing workflow.
+- Run `agent-phase.sh REVIEW` when available. At the start of round k, update the review statusline with `~/.claude/skills/github-review-procedure/github-review-state.sh --set-local "<k-1>*"`; when the round ends, set it to `<k>`, as supported by the existing workflow.
 
 ## 2. Discover and select reviewers
 
@@ -30,12 +36,13 @@ Selection is driven by the reviewers' own `description` fields, not by rules her
 - Do not add a syntax reviewer. Use the project's formatter, compiler/type checker, linter, and tests for deterministic issues.
 - If adding a new project-specific reviewer is part of the task, follow the `reviewer-contract` authoring convention, and reference the reviewer from the project's `CLAUDE.md` or review instructions. Do not invent or register new reviewers during an ordinary review cycle.
 - Run selected reviewers in parallel only when they can independently inspect the same committed diff. Give each the same diff scope and relevant ticket/acceptance criteria.
+- Never pass the kickoff's design context to reviewers. It is your triage context only — use it to judge intent when triaging, not to frame or filter what reviewers see.
 
 ## 3. Review and triage (at most 5 rounds)
 
 Each round:
 
-1. Round 1 scope is `BASE...HEAD`. At the start of each round, record the round-start SHA (`git rev-parse HEAD` at that moment, stated literally in the kickoff — a shell variable does not survive between tool calls). Round k+1's scope is `git diff <SHA recorded at the start of round k>..HEAD` — only round k's fix commits — plus a `correctness-reviewer` pass over the files those fixes touched. Never re-state `BASE...HEAD` as a later round's scope.
+1. Round 1 scope is `BASE...HEAD`. At the start of each round, record the round-start SHA (`git rev-parse HEAD` at that moment, stated literally — a shell variable does not survive between tool calls). Round k+1's scope is `git diff <SHA recorded at the start of round k>..HEAD` — only round k's fix commits — plus a `correctness-reviewer` pass over the files those fixes touched. Never re-state `BASE...HEAD` as a later round's scope.
 2. Launch fresh instances of the selected reviewers. State `BASE`, exact diff scope, ticket criteria, and already-triaged findings. Do not pre-read the implementation on the reviewer's behalf.
 3. Deduplicate overlapping findings. Keep findings only when they concern changed code and have evidence plus a credible failure path, meaningful test gap, or material design cost. Discard stylistic preferences, hypothetical risks, extremely unlikely edge cases, and fixes whose complexity/cost exceeds the plausible impact. Require stronger evidence for defensive hardening than for a direct correctness bug. Never resurrect a dismissed finding without new evidence.
 4. For each triaged finding, emit one telemetry event:
@@ -43,7 +50,7 @@ Each round:
    `wf-event.sh review.finding reviewer=<agent> severity=<Critical|High|Medium|Low> verdict=<fixed|dismissed|deferred> round=<k> reason=<short phrase>`
 
    `reason` is required for dismissed and deferred (the dismissal rationale or issue ref), optional for fixed. Identifiers and short phrases only — never code or prompt text.
-5. Fix only actionable findings. Write a failing test first for behavior bugs when practical. Make the smallest adequate fix; do not expand scope. A real but out-of-scope finding is deferred: file an issue for it under the project's bookkeeping rule (tracker, epic, milestone) instead of growing the branch. Record dismissed/deferred findings and brief reasons so later rounds do not repeat them. Never silently dismiss a judgment call on scope or design intent: put it in the round's approval question under `--confirm-commits`, otherwise ask before committing the round.
+5. Fix only actionable findings. Write a failing test first for behavior bugs when practical. Make the smallest adequate fix; do not expand scope. A real but out-of-scope finding is deferred: file an issue for it under the project's bookkeeping rule (tracker, epic, milestone) instead of growing the branch. Record dismissed/deferred findings and brief reasons so later rounds do not repeat them. Never silently dismiss a judgment call on scope or design intent: disclose it in the round summary of your report, and put it in the round's approval question under `--confirm-commits`.
 6. Run `FAST`; fix new failures and never disable, skip, or quarantine tests to get green. Commit round fixes locally using the project's commit convention and attribution trailer. Skip the commit if nothing changed. Never push.
 
    With `--confirm-commits`, ask before committing with one self-contained `AskUserQuestion` holding the reviewers' findings (one line each), the verdict table, what was fixed, `FAST` status, and the full commit message. Table, between `---` rules:
@@ -66,7 +73,7 @@ If significant, well-supported findings remain after round 5, stop and ask the u
 - Record the cycle totals with `wf-event.sh review.result round=<last round number> fixed=<n> dismissed=<n> deferred=<n> reviewers=<agent,agent>`, each field only when available. A failure surfaced by `FULL` and fixed here still counts.
 - Report reviewers selected and why, rounds, findings fixed/dismissed/deferred, test status (including baseline failures), and commits added. Keep output terse: one line per round (`R<k>: N fixed / M dismissed or deferred`).
 - List dismissed findings with the reason for each, and deferred findings with the issue filed for each; do not implement them. Dismissed-with-reasons is mandatory — no report or PR note without it.
-- End with `/open-pr` as the next step. Include the review-cycle summary in the PR body's "Review cycle" note: rounds, fixed/dismissed/deferred counts, and the dismissed findings with their reasons.
+- End by stating `/open-pr` is the next step. The report is the source for the PR body's "Review cycle" note: rounds, fixed/dismissed/deferred counts, and the dismissed findings with their reasons.
 
 ## Guardrails
 

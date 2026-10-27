@@ -1,12 +1,12 @@
 ---
-name: review-comments-procedure
-description: Procedure for working through unresolved PR review comments in Automatic, Quick or Slow mode. Loaded by the /review-comments command; not invoked directly.
+name: github-review-procedure
+description: Procedure for working through unresolved PR review comments in Automatic, Quick or Slow mode. Loaded by the /github-review-comments command; not invoked directly.
 user-invocable: false
 ---
 
 # Review PR Comments Procedure
 
-Work through unresolved code review comments on the current branch's pull request. The `/review-comments` command chooses the mode; in Automatic Mode it also owns commit, push, posting and polling.
+Work through unresolved code review comments on the current branch's pull request. The `/github-review-comments` command chooses the mode; in Automatic Mode it also owns commit, push, posting and polling.
 
 ### Mode
 

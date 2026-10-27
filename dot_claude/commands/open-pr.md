@@ -11,7 +11,7 @@ title/body is this command's job.
 
 ```text
 /open-pr
-/open-pr --review none|copilot|copilot+claude    # default: copilot; none while ~/.config/local-review-only exists (review locally first with /local-code-review-cycle)
+/open-pr --review none|copilot|copilot+claude    # default: copilot; none while ~/.config/local-review-only exists (review locally first with /local-review-cycle)
 /open-pr --provider <name>         # --env is an alias; normally resolved from config
 /open-pr --no-multi                # ship only this repo; skip the sibling fan-out
 /open-pr --repos <dir>[,<dir>...]  # ship these sibling repos instead of auto-detecting
@@ -130,7 +130,7 @@ This ticket is being implemented across several repos. The PR for
 
 Run `/open-pr --no-multi` here: review the diff, draft the commit message
 and PR title/body for THIS repo's changes, ship it, and then run the review
-cycle (`/review-comments`) through to sign-off. `--no-multi` is required —
+cycle (`/github-review-comments`) through to sign-off. `--no-multi` is required —
 the session that dispatched you already fanned out to every sibling on this
 ticket, so fanning out again would race it for the same PRs.
 
@@ -151,11 +151,11 @@ into one context.
 ### 5. Poll
 
 ```bash
-~/.claude/skills/review-comments-procedure/poll-pr.sh <pr_number>
+~/.claude/skills/github-review-procedure/github-review-poll.sh <pr_number>
 ```
 
-Run in the background. Exit 0 → re-invoke `/review-comments`, which runs each round in a
-fresh `review-repair-agent` so implementation context never reaches the review; 3 → signed off, ready to
+Run in the background. Exit 0 → re-invoke `/github-review-comments`, which runs each round in a
+fresh `github-review-repair-agent` so implementation context never reaches the review; 3 → signed off, ready to
 merge; 1 → timeout; 2 → no PR found; 4 → a reviewer said it couldn't run (e.g. Copilot
 billing): report that, run `agent-phase.sh --no-review`, and don't poll again.
 

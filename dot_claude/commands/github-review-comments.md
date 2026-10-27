@@ -6,15 +6,15 @@ argument-hint: "[automatically|quickly|slowly]"
 # Review PR Comments
 
 ```text
-/review-comments                 # Automatic Mode (default)
-/review-comments automatically
-/review-comments quickly
-/review-comments slowly
+/github-review-comments                 # Automatic Mode (default)
+/github-review-comments automatically
+/github-review-comments quickly
+/github-review-comments slowly
 ```
 
-**Quick or Slow:** load the `review-comments-procedure` skill and run it in that mode in this session. The interactive discussion is the point, so don't delegate it. Nothing below applies.
+**Quick or Slow:** load the `github-review-procedure` skill and run it in that mode in this session. The interactive discussion is the point, so don't delegate it. Nothing below applies.
 
-**Automatic:** this session is the controller. It never reads the code under review or the comments. A fresh `review-repair-agent` does the review and the edits, so implementation reasoning stays out of the review.
+**Automatic:** this session is the controller. It never reads the code under review or the comments. A fresh `github-review-repair-agent` does the review and the edits, so implementation reasoning stays out of the review.
 
 ## 1. Identify the PR
 
@@ -29,10 +29,10 @@ No PR → "No pull request found for the current branch." and stop.
 
 ## 2. Launch the agent
 
-Launch `review-repair-agent`. The kickoff carries only these lines:
+Launch `github-review-repair-agent`. The kickoff carries only these lines:
 
 ```text
-Run review-comments-procedure in Automatic Mode for one round.
+Run github-review-procedure in Automatic Mode for one round.
 Repo: <owner>/<repo>
 PR: #<n> <url>
 Branch: <branch>
@@ -63,7 +63,7 @@ A typed `execute` commits with the proposed message; `execute <text>` uses `<tex
 ## 5. Commit, push, post
 
 1. `git add` exactly the paths the agent listed, commit, and `git push`. If either fails, post nothing, report the error, and stop.
-2. **After the push succeeds**, run the planned actions in order using the `gh api` snippets in the `review-comments-procedure` skill's §4d (reactions, Reply, Mark Resolved, including the review-body `[RESOLVED]` edit); `pr-comment` rows go through `gh pr comment`. Skip 4d's conversational steps — the bodies are already final. Post each body exactly as planned. Confirm each resolution through the API. Report every action that fails, and keep going.
+2. **After the push succeeds**, run the planned actions in order using the `gh api` snippets in the `github-review-procedure` skill's §4d (reactions, Reply, Mark Resolved, including the review-body `[RESOLVED]` edit); `pr-comment` rows go through `gh pr comment`. Skip 4d's conversational steps — the bodies are already final. Post each body exactly as planned. Confirm each resolution through the API. Report every action that fails, and keep going.
 
 If no files changed but there are planned actions (for example, rejections only), post them directly. There's no commit to gate them on. Then run `agent-phase.sh --no-review`, say polling has stopped because nothing was pushed to trigger a new review, and stop. Skip steps 6 and 7.
 
@@ -86,12 +86,12 @@ On request, run `request-review.sh`. Pass `--pr <N>` if needed, or `--level copi
 Run `agent-phase.sh REVIEW`, then run this in the background:
 
 ```bash
-~/.claude/skills/review-comments-procedure/poll-pr.sh
+~/.claude/skills/github-review-procedure/github-review-poll.sh
 ```
 
 It polls every 45 s for up to 2 h. Exit codes:
 
-- **0**: new review activity. Re-invoke `/review-comments` immediately, without waiting for the user. Each round gets a fresh agent.
+- **0**: new review activity. Re-invoke `/github-review-comments` immediately, without waiting for the user. Each round gets a fresh agent.
 - **3**: reviewers signed off and there are no unresolved threads. Announce it, e.g. "✅ Reviewers signed off (Copilot, 14:32) — no unresolved threads. PR looks ready to merge." Run `agent-phase.sh --no-review` and stop.
 - **1**: timeout. Say "No new bot activity after 2 hours. Polling stopped." and run `agent-phase.sh --no-review`.
 - **2**: no PR found. Say so, run `agent-phase.sh --no-review`, and stop.

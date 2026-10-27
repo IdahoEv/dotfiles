@@ -90,8 +90,10 @@ fix descriptions, the full commit message) in the question text or option `previ
 **Exception:** If I explicitly say "commit this" or similar, proceed directly.
 {{ if not .is_work }}
 **Implementing a ticket:** no approval pause before committing. When the acceptance criteria
-are met and the project's relevant tests pass, commit, then run `/local-code-review-cycle`
-before asking me to review. This is a standing exception to the commit rule above, for ticket
+are met and the project's relevant tests pass, commit everything (clean tree), then run
+`/local-review-cycle` before asking me to review. It delegates the cycle to the
+`local-review-cycle-manager` agent, which commits each round itself and returns the report.
+This is a standing exception to the commit rule above, for ticket
 implementation only. If you cannot meet an AC or get the tests green, or about three focused
 attempts at the same failure make no progress, stop and ask for help — don't keep grinding,
 and never weaken, skip, or delete a test to get green. I'd rather spend review time on code

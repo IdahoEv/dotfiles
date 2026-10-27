@@ -15,7 +15,7 @@
 #
 # --review defaults to copilot, or to none while ~/.config/local-review-only
 # exists (this machine's Copilot quota is out; delete the file to restore it).
-# Review then happens before this script, via /local-code-review-cycle.
+# Review then happens before this script, via /local-review-cycle.
 #
 # Assumes the working tree is already committed — this script never commits.
 # It handles the mechanical, judgment-free parts of `/open-pr`: push, PR
