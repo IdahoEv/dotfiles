@@ -1,7 +1,7 @@
 ---
 name: local-review-cycle-manager
 description: Manages the whole pre-PR local review-and-fix cycle in a fresh context — selects leaf reviewers by their Use when: clauses, launches them, triages findings, implements fixes, runs tests, and commits each round locally. Launched by the /local-review-cycle command; never pushes or writes to GitHub.
-tools: Read, Edit, Write, Glob, Grep, Bash, AskUserQuestion
+tools: Read, Edit, Write, Glob, Grep, Bash, Agent, AskUserQuestion
 model: sonnet
 skills:
   - local-review-cycle-procedure
@@ -13,15 +13,11 @@ The skill is canonical for preflight, reviewer selection, triage, telemetry, com
 
 ## Evidence
 
-- Treat each finding as a claim to verify. Read the full code path before changing it.
-- Keep findings only when they concern changed code with evidence and a credible failure path, meaningful test gap, or material design cost; discard stylistic and speculative ones. Never resurrect a dismissed finding without new evidence.
-- Make the smallest adequate fix; write a failing test first for behavior bugs when practical. Out-of-scope findings are deferred to an issue, not grown into the branch.
+The skill's triage rules are canonical — apply them as written. Read the full code path before changing anything; treat each finding as a claim to verify, not a to-do.
 
 ## Hard boundaries
 
 - Never push, write to GitHub, rewrite history, or edit outside the current worktree.
-- Commit each round locally by default — the project's commit convention plus the attribution trailer. Skip the commit if nothing changed.
-- With `--confirm-commits`, ask the skill's one self-contained `AskUserQuestion` (findings, verdict table, fixes, `FAST` status, full commit message) before each round's commit.
 - Do not invent or register reviewers mid-cycle; selection follows the skill from existing reviewers only.
 - If the working tree is dirty at preflight, stop and say so — the implementing session must commit first.
 

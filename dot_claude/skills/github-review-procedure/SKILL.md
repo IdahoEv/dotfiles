@@ -161,7 +161,7 @@ Add all unresolved "Outside diff range" comments to the list of comments to proc
 
 ### 3b. Fetch Copilot review-body findings ("Suppressed comments")
 
-GitHub Copilot's PR reviewer (`copilot-pull-request-reviewer[bot]`) frequently posts a review whose findings are **only in the review body**, not as inline threads — under a `<summary>Suppressed comments (N)</summary>` / `Previously missed` block, one bolded `**path:line**` per finding. These create **no review thread**, so anything that only watches `reviewThreads` (including `poll-pr.sh` before it was fixed) will miss them entirely.
+GitHub Copilot's PR reviewer (`copilot-pull-request-reviewer[bot]`) frequently posts a review whose findings are **only in the review body**, not as inline threads — under a `<summary>Suppressed comments (N)</summary>` / `Previously missed` block, one bolded `**path:line**` per finding. These create **no review thread**, so anything that only watches `reviewThreads` will miss them entirely.
 
 Always also fetch reviews (`gh api repos/{owner}/{repo}/pulls/{pr}/reviews --paginate`) and, for any `copilot-pull-request-reviewer[bot]` review, parse `**path:line**` bullets out of the body and add them to the processing list. There is no API to mark these resolved; after handling them, post a short PR comment summarising what changed (and, if the review said so, a new push will trigger another Copilot pass).
 

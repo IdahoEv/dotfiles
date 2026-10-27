@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # telemetry.test.sh — event emission: schema, sanitization, failure policy,
-# concurrent appends, and the emit points in agent-phase / review-state / open-pr.
+# concurrent appends, and the emit points in agent-phase / github-review-state / open-pr.
 #
 #   lib/telemetry.test.sh
 #
@@ -126,7 +126,14 @@ reset
 mkdir -p "$ROOT/bin"; ln -sf "$TOOLS/wf-event.sh" "$ROOT/bin/wf-event.sh"
 PATH="$ROOT/bin:$PATH" bash "$REPO/dot_claude/skills/github-review-procedure/executable_github-review-state.sh" --set-local '1*'
 PATH="$ROOT/bin:$PATH" bash "$REPO/dot_claude/skills/github-review-procedure/executable_github-review-state.sh" --set-local 2
-check "review-state: round start/end" "2:start 2:end" "$(jq -r '"\(.round):\(.state)"' "$LOG" | xargs)"
+check "github-review-state: round start/end" "2:start 2:end" "$(jq -r '"\(.round):\(.state)"' "$LOG" | xargs)"
+reset
+ev review.finding reviewer=correctness-reviewer severity=High verdict=fixed round=1 reason=stale-name
+ev review.result round=1 fixed=1 dismissed=2 deferred=0 reviewers=correctness-reviewer,prompt-reviewer
+check "review.finding fields" "review.finding correctness-reviewer High fixed 1 stale-name" \
+  "$(jq -r 'select(.event=="review.finding") | "\(.event) \(.reviewer) \(.severity) \(.verdict) \(.round) \(.reason)"' "$LOG")"
+check "review.result fields" "review.result 1 1 2 0 correctness-reviewer,prompt-reviewer" \
+  "$(jq -r 'select(.event=="review.result") | "\(.event) \(.round) \(.fixed) \(.dismissed) \(.deferred) \(.reviewers)"' "$LOG")"
 
 printf '%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

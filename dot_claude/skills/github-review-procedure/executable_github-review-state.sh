@@ -26,7 +26,7 @@ while [ $# -gt 0 ]; do
     --bare)  bare=1; shift ;;
     --set-local)
       v="${2:?--set-local needs a value}"
-      [[ "$v" =~ ^[0-9]+\*?$ ]] || { echo "review-state: --set-local wants N or N*, got '$v'" >&2; exit 1; }
+      [[ "$v" =~ ^[0-9]+\*?$ ]] || { echo "github-review-state: --set-local wants N or N*, got '$v'" >&2; exit 1; }
       gd="$(git rev-parse --absolute-git-dir)"
       printf '%s\n' "$v" > "$gd/local-review-rounds.tmp" && mv "$gd/local-review-rounds.tmp" "$gd/local-review-rounds"
       # "<k-1>*" opens round k; a bare "<k>" closes it.

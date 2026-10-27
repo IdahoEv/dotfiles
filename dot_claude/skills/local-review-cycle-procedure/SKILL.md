@@ -1,6 +1,6 @@
 ---
 name: local-review-cycle-procedure
-description: Procedure for running the bounded local review-and-fix cycle before /open-pr. Loaded by the /local-review-cycle command and the local-review-cycle-manager agent; not invoked directly.
+description: Procedure for running the bounded local review-and-fix cycle before /open-pr. Preloaded by the local-review-cycle-manager agent, which the /local-review-cycle command launches; not invoked directly.
 user-invocable: false
 ---
 
@@ -8,17 +8,17 @@ user-invocable: false
 
 Run a bounded review-and-fix cycle on the current worktree before `/open-pr`. The implementer never reviews their own work: launch fresh, read-only reviewer agents. You commit fixes locally each round by default; never push — human review happens on the PR.
 
-Usage context: `--confirm-commits` holds each round for approval (per-round `AskUserQuestion`); by default you commit every round and human review happens on the PR. BASE comes from the kickoff and defaults to `origin/<default branch>`; a different ref targets a long-lived branch.
+Usage context: BASE comes from the kickoff and defaults to `origin/<default branch>`; a different ref targets a long-lived branch.
 
 Use the project's documented test commands. `FAST` is the quick suite; `FULL` is the complete suite. If neither is documented, ask once before starting.
 
 ## 1. Preflight
 
 - Set `BASE` from the kickoff. Fetch origin and use remote refs directly.
-- Stop if the current branch is the base/default branch or the working tree is dirty; ask the user to commit or resolve stray changes first. Do not rewrite history or force-update branches. If behind BASE, merge BASE into the branch and resolve conflicts before review.
+- Stop if the current branch is the base/default branch or the working tree is dirty; stop and report it — the implementing session must commit or resolve stray changes first. Do not rewrite history or force-update branches. If behind BASE, merge BASE into the branch and resolve conflicts before review.
 - Record the changed-file set from `git diff --name-only BASE...HEAD`. Stop if empty.
 - Run `FAST` as a baseline. Record pre-existing failures and compare later runs against them.
-- Run `agent-phase.sh REVIEW` when available. At the start of round k, update the review statusline with `~/.claude/skills/github-review-procedure/github-review-state.sh --set-local "<k-1>*"`; when the round ends, set it to `<k>`, as supported by the existing workflow.
+- Run `agent-phase.sh REVIEW` when available. At the start of round k, update the review statusline with `~/.claude/skills/github-review-procedure/github-review-state.sh --set-local "<k-1>*"`; when the round ends, set it to `<k>`.
 
 ## 2. Discover and select reviewers
 

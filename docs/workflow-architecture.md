@@ -8,7 +8,7 @@ State as of #40, #46, #61 and #62 (2026-10). **Keep this current:** any change t
 implement → commit → /local-review-cycle → /open-pr → bot review → /github-review-comments → /finalize
 ```
 
-Local review runs **before** the PR, on committed local fixes; `/github-review-comments` handles findings **after** the PR opens. The implementer never reviews its own work — and since #61, orchestration itself runs in a fresh `local-review-cycle-manager` agent, so the implementing session's history never reaches the cycle either. Leaf reviewers stay fresh, read-only contexts.
+Local review runs **before** the PR, on committed local fixes; `/github-review-comments` handles findings **after** the PR opens. The implementer never reviews its own work — orchestration itself runs in a fresh `local-review-cycle-manager` agent, so the implementing session's history never reaches the cycle either. Leaf reviewers stay fresh, read-only contexts.
 
 ```mermaid
 flowchart TD
@@ -103,7 +103,7 @@ flowchart LR
         direction TB
         C1[Owns: implementation edits and commits,<br/>PR body, GitHub writes, push]
     end
-    subgraph CycleMgr[local-review-cycle-manager — mid-tier]
+    subgraph CycleMgr[local-review-cycle-manager — sonnet]
         M1[Owns: cycle edits, round commits,<br/>telemetry events, statusline]
     end
     subgraph LeafReview[Leaf reviewers — read-only]
