@@ -35,6 +35,8 @@ flowchart TD
 | `agents/local-review-cycle-manager.md` | Agent | Fresh context that orchestrates the whole cycle — selects reviewers, triages, fixes, commits each round locally; never pushes. |
 | `skills/local-review-cycle-procedure/SKILL.md` | Skill | The cycle procedure (preflight, selection, triage, telemetry, report); loaded by the command and manager; not user-invocable. |
 | `agents/{correctness,architecture,robustness,prompt}-reviewer.md` | Agent | Fresh, isolated context; read-only leaf reviewers. |
+| `agents/{security,supply-chain}-reviewer.md` | Agent | Read-only security leaf reviewers — code-level vulnerabilities and build/config risk, selected by `Use when:` like the rest. |
+| `skills/security-review-rubric/SKILL.md` | Skill | OWASP-anchored rubric preloaded into both security reviewers; usable directly for interactive checks. Separate from the built-in `/security-review`, which stays as the interactive whole-branch pass. |
 | `agents/github-review-repair-agent.md` | Agent | Fresh context with edit tools; never commits/pushes/writes to GitHub. |
 | `skills/reviewer-contract/SKILL.md` | Skill | Shared contract loaded into every reviewer; avoids per-agent duplication. |
 | `skills/github-review-procedure/SKILL.md` | Skill | 3-mode procedure loaded by the command and repair agent; not user-invocable. |
@@ -111,6 +113,8 @@ flowchart LR
         L2[architecture-reviewer]
         L3[robustness-reviewer]
         L4[prompt-reviewer]
+        L5[security-reviewer]
+        L6[supply-chain-reviewer]
     end
     subgraph Repair[github-review-repair-agent — edits only]
         R1[Owns: working-tree edits,<br/>planned replies, proposed commit message]
