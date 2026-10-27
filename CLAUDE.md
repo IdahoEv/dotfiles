@@ -20,3 +20,5 @@ Chezmoi source for Evan's machines. The repo is also the source of `~/.claude`, 
 Create worktrees with `/start` or `wm`, not raw `git worktree add`. Changes go ticket → branch → PR. `/finalize` cleans up after merge.
 
 Delivery mechanics — source naming, `chezmoi -S <worktree> diff|apply`, the merge/pull/apply flow — are in `/workflow`'s `delivery.md`.
+
+`docs/workflow-architecture.md` documents the review/workflow architecture. Any change to the workflow — commands, agents, skills, hooks, or the scripts behind them — must check whether that document needs updating in the same PR.
