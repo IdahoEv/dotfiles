@@ -22,7 +22,8 @@ base_worktree= worktree= verdict= agent_phase=
 dotfiles_repo= deploy_root= deploy_branch= deploy_dirty_files= deploy_pull_rebase=
 ```
 
-The last five are empty (and `dotfiles_repo=no`) outside the dotfiles repo.
+Outside the dotfiles repo, `dotfiles_repo=no` and the four `deploy_*` keys are
+empty.
 
 `base` is the branch **the PR targets** (`base_source=pr`), falling back to the repo
 default when there's no PR to ask (`base_source=default`). On a stacked or
@@ -116,39 +117,41 @@ against another worktree: skip it and tell the user to run it themselves. Don't 
 
 ### 4. Ship to the machine (dotfiles repo only)
 
-Skip this step entirely unless `dotfiles_repo=dev` — in every other repo nothing
-deploys on merge.
+Skip this step entirely unless `dotfiles_repo=dev` (`deploy` or `no` → skip; in
+every other repo nothing deploys on merge).
 
-Merging the PR updated the source; the machine still runs the old `~/.claude` until
-the deploy clone is pulled and applied. That's this step.
-
-**Preflight** — from the step-1 keys, on `deploy_root`: if `deploy_branch` isn't
-`main`, `deploy_dirty_files` is non-zero, or `deploy_root` is empty, **stop and
-report why**. Don't fall back to `chezmoi apply` from the dev worktree — that
-deploys unmerged state and the next update reverts it. If `deploy_pull_rebase` is
-`false`, the internal pull makes merge commits: offer
-`git -C <deploy_root> config pull.rebase true` (per clone), then stop.
+**Preflight** — from the step-1 keys, in this order: `deploy_root` empty;
+`deploy_branch` isn't `main`; `deploy_dirty_files` non-zero. Any failure: skip
+the rest of this step, record `skipped — <reason>` for the report, and continue
+to step 5. Don't fall back to `chezmoi apply` from the dev worktree — that
+deploys unmerged state and the next update reverts it. If `deploy_pull_rebase`
+is `false`, the internal pull makes merge commits: offer
+`git -C <deploy_root> config pull.rebase true` (per clone), then skip the same
+way.
 
 **Run**:
 
 ```bash
 before=$(git -C <deploy_root> rev-parse HEAD)
-(cd <deploy_root> && chezmoi update)
+chezmoi -S <deploy_root> update
 git -C <deploy_root> diff --name-only ${before}..HEAD
 ```
 
-Report the changed-file list, or "already up to date" when `before` equals the new
-HEAD and chezmoi applied nothing.
+If `chezmoi update` exits non-zero, report its output, skip the reload report,
+and record `skipped — update failed` for the report. Otherwise report the
+changed-file list, or "already up to date" when `before` equals the new HEAD.
 
 **Reload report** — from the changed-file list, list each artifact with its
 action. Name files, not categories:
 
-- `dot_claude/skills|commands|agents|hooks/*` or `settings.json` → run
-  `/reload-skills`
-- root-level prompts (`CLAUDE.md`) → stop and restart sessions — these are
-  loaded once at session start and cannot be reloaded
-- `tools/*.sh` → new shells pick them up; PATH is set at shell init
-- shell configs (other `dot_*` / `*.tmpl`) → restart open shells
+- `dot_claude/skills|commands|agents|hooks/*`, or any `dot_claude/*settings*`
+  source (e.g. `modify_private_settings.json.tmpl`) → run `/reload-skills`
+- `dot_claude/CLAUDE.md*` → stop and restart sessions — loaded once at session
+  start, not reloadable
+- `tools/*` → new shells pick them up; PATH is set at shell init
+- shell configs (other `dot_*` / `*.tmpl`, i.e. non-`dot_claude`) → restart
+  open shells
+- anything else → list it as unmapped, no action
 
 ### 5. Remove this worktree and branch
 

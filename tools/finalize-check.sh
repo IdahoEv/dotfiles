@@ -449,7 +449,7 @@ fi
 # chezmoi is not installed.
 dotfiles_repo="no" deploy_root="" deploy_branch="" deploy_dirty_files=""
 deploy_pull_rebase=""
-canon_dir() { (cd -P "$1" 2>/dev/null && pwd -P); }
+canon_dir() { (cd -P "$1" 2>/dev/null && pwd -P) || true; }
 chezmoi_source=""
 if command -v chezmoi >/dev/null; then
   chezmoi_source="$(command chezmoi source-path 2>/dev/null || true)"
@@ -464,10 +464,10 @@ elif [ -f "$worktree/.chezmoiignore" ] && [ -d "$worktree/dot_claude" ]; then
 fi
 # Deploy-clone health for the caller's `chezmoi update` preflight. Read-only:
 # status/rev-parse/config only. Empty keys when there is nothing to preflight.
-if [ "$dotfiles_repo" != "no" ] && [ -n "$deploy_root" ] && [ -d "$deploy_root" ]; then
+if [ "$dotfiles_repo" != "no" ] && [ -n "$deploy_root" ] && [ -d "$deploy_root" ] \
+   && git -C "$deploy_root" rev-parse --git-dir >/dev/null 2>&1; then
   deploy_branch="$(git -C "$deploy_root" branch --show-current 2>/dev/null || true)"
-  deploy_dirty_files="$(git -C "$deploy_root" status --porcelain 2>/dev/null | wc -l | tr -d ' ')"
-  [ -n "$deploy_dirty_files" ] || deploy_dirty_files=0
+  deploy_dirty_files="$(git -C "$deploy_root" status --porcelain 2>/dev/null | wc -l | tr -d ' ' || true)"
   deploy_pull_rebase="false"
   if [ "$(git -C "$deploy_root" config --get pull.rebase 2>/dev/null || true)" = "true" ]; then
     deploy_pull_rebase="true"

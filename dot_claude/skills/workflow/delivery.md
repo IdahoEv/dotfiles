@@ -118,8 +118,9 @@ left local state there. If `chezmoi_deploy_pull_rebase` is not `true`, plain
 `tools/` is chezmoi-ignored and runs in place from the deploy clone, so a pull
 updates it and no apply is needed.
 
-When you merged via `/finalize`, its deploy step already ran `chezmoi update`
-here and reported what to reload — don't repeat it.
+If `/finalize` step 4 reported `updated` or `already up to date`, it already ran
+the update here — don't repeat it. If it was skipped or failed, follow the above
+yourself.
 
 ## Verify a prompt change
 
