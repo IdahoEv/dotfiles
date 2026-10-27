@@ -118,6 +118,9 @@ left local state there. If `chezmoi_deploy_pull_rebase` is not `true`, plain
 `tools/` is chezmoi-ignored and runs in place from the deploy clone, so a pull
 updates it and no apply is needed.
 
+When you merged via `/finalize`, its deploy step already ran `chezmoi update`
+here and reported what to reload — don't repeat it.
+
 ## Verify a prompt change
 
 `/governor` and `/start` are loaded by the session that runs them. Verify a

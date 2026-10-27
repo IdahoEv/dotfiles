@@ -19,7 +19,10 @@ branch= ticket_id= ticket_scheme= base= base_source= pr_number= pr_state=
 pr_merge_commit= pr_head_oid= pr_count= pr_open_other= head_oid= head_matches=
 merged= merge_commit_landed= base_fetch= shallow= tracking_refspec=
 base_worktree= worktree= verdict= agent_phase=
+dotfiles_repo= deploy_root= deploy_branch= deploy_dirty_files= deploy_pull_rebase=
 ```
+
+The last five are empty (and `dotfiles_repo=no`) outside the dotfiles repo.
 
 `base` is the branch **the PR targets** (`base_source=pr`), falling back to the repo
 default when there's no PR to ask (`base_source=default`). On a stacked or
@@ -111,7 +114,43 @@ git -C <base_worktree> pull --ff-only
 If `base_worktree` was empty, or this session is worktree-isolated and refuses to run git
 against another worktree: skip it and tell the user to run it themselves. Don't force it.
 
-### 4. Remove this worktree and branch
+### 4. Ship to the machine (dotfiles repo only)
+
+Skip this step entirely unless `dotfiles_repo=dev` — in every other repo nothing
+deploys on merge.
+
+Merging the PR updated the source; the machine still runs the old `~/.claude` until
+the deploy clone is pulled and applied. That's this step.
+
+**Preflight** — from the step-1 keys, on `deploy_root`: if `deploy_branch` isn't
+`main`, `deploy_dirty_files` is non-zero, or `deploy_root` is empty, **stop and
+report why**. Don't fall back to `chezmoi apply` from the dev worktree — that
+deploys unmerged state and the next update reverts it. If `deploy_pull_rebase` is
+`false`, the internal pull makes merge commits: offer
+`git -C <deploy_root> config pull.rebase true` (per clone), then stop.
+
+**Run**:
+
+```bash
+before=$(git -C <deploy_root> rev-parse HEAD)
+(cd <deploy_root> && chezmoi update)
+git -C <deploy_root> diff --name-only ${before}..HEAD
+```
+
+Report the changed-file list, or "already up to date" when `before` equals the new
+HEAD and chezmoi applied nothing.
+
+**Reload report** — from the changed-file list, list each artifact with its
+action. Name files, not categories:
+
+- `dot_claude/skills|commands|agents|hooks/*` or `settings.json` → run
+  `/reload-skills`
+- root-level prompts (`CLAUDE.md`) → stop and restart sessions — these are
+  loaded once at session start and cannot be reloaded
+- `tools/*.sh` → new shells pick them up; PATH is set at shell init
+- shell configs (other `dot_*` / `*.tmpl`) → restart open shells
+
+### 5. Remove this worktree and branch
 
 You cannot remove the worktree you're standing in.
 
@@ -134,17 +173,17 @@ You cannot remove the worktree you're standing in.
   agents`, or `claude stop <id>`), then run `git worktree unlock <worktree>` before the
   remove + branch delete themselves.
 
-### 5. Mark the session done
+### 6. Mark the session done
 
 ```bash
 agent-phase.sh DONE
 ```
 
-Last, and only if step 4 actually completed — `DONE` tells the user nothing remains in
+Last, and only if step 5 actually completed — `DONE` tells the user nothing remains in
 this session. If cleanup was skipped or blocked (dirty, locked, worktree-isolated), leave
 the phase at `MERGED` and say what's outstanding.
 
-### 6. Report
+### 7. Report
 
 ```
 Finalized <ticket-ref> — <title>
@@ -153,6 +192,8 @@ Finalized <ticket-ref> — <title>
 - Worktree removed: <path>
 - Branch deleted: <branch>
 - <base> worktree: synced / needs `git -C <path> pull --ff-only`
+- Deploy clone: updated (<n> files) / already up to date / skipped — <reason>   (dotfiles only)
+- Reload: <file> → /reload-skills; <file> → restart sessions; <file> → restart shells   (dotfiles only)
 - Epic <parent-ref>: <x>/<y> sub-issues done; remaining: <...>   (GitHub, if parented)
 - Follow-ups: <anything noticed>
 ```

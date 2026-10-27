@@ -52,6 +52,17 @@
 #                               refs. Also warned about on stderr.)
 #   base_worktree=<path>        (empty if not found)
 #   worktree=<path>             (the worktree being finalized)
+#   dotfiles_repo=dev|deploy|no (dev: this repo is the dotfiles source; deploy:
+#                               this IS the chezmoi deploy clone; no: any other
+#                               repo — /finalize's deploy step is gated on `dev`)
+#   deploy_root=<path>          (chezmoi source-path; dotfiles repos only,
+#                               empty if unresolvable)
+#   deploy_branch=<name>        (dotfiles only; `chezmoi update` requires main)
+#   deploy_dirty_files=<n>      (dotfiles only; >0 means someone left local
+#                               state in the clone that must not be stomped)
+#   deploy_pull_rebase=true|false
+#                               (dotfiles only; false means the internal pull
+#                               makes merge commits — offer the config fix)
 #   verdict=ready|not-merged|no-pr|local-commits|squash-merged|not-on-base|
 #           unknown
 #   agent_phase=MERGED|REVIEW|  the agent-view phase this verdict implies, for
@@ -424,6 +435,45 @@ elif [ "$merged" = "no" ]; then verdict="squash-merged"
 else verdict="unknown"
 fi
 
+# ---- dotfiles repo? ----------------------------------------------------------
+# /finalize's deploy step (chezmoi update in the deploy clone + reload report)
+# runs only in the dotfiles source repo, so the caller needs that answered here
+# with everything else. Mirrors wf::resolve_dotfiles_source() in
+# dot_claude/skills/workflow/executable_wf-context.sh, but local: tools/ runs
+# in place from the deploy clone and cannot depend on dot_claude/ paths being
+# deployed on the machine.
+#
+# The two clones are SEPARATE, so common-dir equality cannot identify a dev
+# worktree; the .chezmoiignore + dot_claude/ markers do. The deploy clone is
+# identified by chezmoi's own source-path, or the conventional path when
+# chezmoi is not installed.
+dotfiles_repo="no" deploy_root="" deploy_branch="" deploy_dirty_files=""
+deploy_pull_rebase=""
+canon_dir() { (cd -P "$1" 2>/dev/null && pwd -P); }
+chezmoi_source=""
+if command -v chezmoi >/dev/null; then
+  chezmoi_source="$(command chezmoi source-path 2>/dev/null || true)"
+fi
+[ -n "$chezmoi_source" ] || chezmoi_source="${CHEZMOI_SOURCE_DIR:-$HOME/.local/share/chezmoi}"
+if [ -n "$chezmoi_source" ] && [ "$(canon_dir "$chezmoi_source")" = "$(canon_dir "$worktree")" ]; then
+  dotfiles_repo="deploy"
+  deploy_root="$(canon_dir "$worktree")"
+elif [ -f "$worktree/.chezmoiignore" ] && [ -d "$worktree/dot_claude" ]; then
+  dotfiles_repo="dev"
+  deploy_root="$(canon_dir "$chezmoi_source")"
+fi
+# Deploy-clone health for the caller's `chezmoi update` preflight. Read-only:
+# status/rev-parse/config only. Empty keys when there is nothing to preflight.
+if [ "$dotfiles_repo" != "no" ] && [ -n "$deploy_root" ] && [ -d "$deploy_root" ]; then
+  deploy_branch="$(git -C "$deploy_root" branch --show-current 2>/dev/null || true)"
+  deploy_dirty_files="$(git -C "$deploy_root" status --porcelain 2>/dev/null | wc -l | tr -d ' ')"
+  [ -n "$deploy_dirty_files" ] || deploy_dirty_files=0
+  deploy_pull_rebase="false"
+  if [ "$(git -C "$deploy_root" config --get pull.rebase 2>/dev/null || true)" = "true" ]; then
+    deploy_pull_rebase="true"
+  fi
+fi
+
 printf 'branch=%s\nticket_id=%s\nticket_scheme=%s\nbase=%s\nbase_source=%s\n' \
   "$branch" "$ticket_id" "$ticket_scheme" "$base" "$base_source"
 printf 'pr_number=%s\npr_state=%s\npr_merge_commit=%s\npr_head_oid=%s\n' \
@@ -458,6 +508,10 @@ esac
 
 printf 'base_worktree=%s\nworktree=%s\nverdict=%s\nagent_phase=%s\n' \
   "$base_worktree" "$worktree" "$verdict" "$agent_phase"
+printf 'dotfiles_repo=%s\ndeploy_root=%s\ndeploy_branch=%s\n' \
+  "$dotfiles_repo" "$deploy_root" "$deploy_branch"
+printf 'deploy_dirty_files=%s\ndeploy_pull_rebase=%s\n' \
+  "$deploy_dirty_files" "$deploy_pull_rebase"
 
 # The one write this script makes; telemetry never changes its exit status.
 # shellcheck source=lib/telemetry.sh
