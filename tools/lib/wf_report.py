@@ -204,7 +204,19 @@ class Run:
         results = self.of("review.result")
         bot = [e for e in results if e.get("source") == "bot"]
         out = {"rounds": len(rounds), "bot_batches": len(bot),
-               "fixed": None, "dismissed": None, "deferred": None, "reviewers": set()}
+               "fixed": None, "dismissed": None, "deferred": None, "reviewers": set(),
+               "by_reviewer": defaultdict(lambda: defaultdict(int)),
+               "dismissed_findings": []}
+        for e in self.of("review.finding"):
+            rv, verdict = e.get("reviewer", "unknown"), e.get("verdict", "unknown")
+            if verdict not in ("fixed", "dismissed", "deferred"):
+                continue
+            counts = out["by_reviewer"][rv]
+            for k in ("fixed", "dismissed", "deferred"):
+                counts.setdefault(k, 0)
+            counts[verdict] += 1
+            if verdict == "dismissed":
+                out["dismissed_findings"].append((rv, e.get("round"), e.get("reason")))
         if results:
             for k in ("fixed", "dismissed", "deferred"):
                 vals = [e[k] for e in results if isinstance(e.get(k), int)]
@@ -215,6 +227,8 @@ class Run:
             out["rounds"] = max([out["rounds"]] + local_rounds)
         elif rounds:
             self.gaps.append("review rounds ran but no review.result: findings unknown")
+        if out["dismissed_findings"] and any(rsn is None for _, _, rsn in out["dismissed_findings"]):
+            self.gaps.append("a dismissed review.finding has no reason: report shows 'reason unknown'")
         return out
 
     def _failures(self):
@@ -252,7 +266,10 @@ class Run:
             "cost_usd": self.total_cost(),
             "cost_is_estimate": True,
             "output_tokens_by_agent": dict(self.by_agent),
-            "reviews": {**self.reviews, "reviewers": sorted(self.reviews["reviewers"])},
+            "reviews": {**self.reviews, "reviewers": sorted(self.reviews["reviewers"]),
+                        "by_reviewer": {r: dict(v) for r, v in self.reviews["by_reviewer"].items()},
+                        "dismissed_findings": [{"reviewer": rv, "round": rd, "reason": rs}
+                                      for rv, rd, rs in self.reviews["dismissed_findings"]]},
             "tests": {
                 "runs": len(self.tests),
                 "failed": sum(1 for t in self.tests if not t["ok"]),
@@ -292,6 +309,15 @@ def print_run(r, out):
         f = lambda k: "?" if rv[k] is None else rv[k]  # noqa: E731
         w(f"\nreview: {rv['rounds']} local round(s), {rv['bot_batches']} bot batch(es); fixed {f('fixed')} / dismissed {f('dismissed')} / deferred {f('deferred')}"
           f"{'  reviewers: ' + ', '.join(rv['reviewers']) if rv['reviewers'] else ''}\n")
+    if r.reviews["by_reviewer"]:
+        w("findings by reviewer:\n")
+        for name, counts in sorted(r.reviews["by_reviewer"].items()):
+            w(f"  {name}: {counts.get('fixed', 0)} fixed / {counts.get('dismissed', 0)} dismissed / {counts.get('deferred', 0)} deferred\n")
+        if r.reviews["dismissed_findings"]:
+            w("  dismissed:\n")
+            for rv_name, rnd, reason in r.reviews["dismissed_findings"]:
+                rr = f"R{rnd}" if isinstance(rnd, int) else "R?"
+                w(f"    {reason or 'reason unknown'} ({rv_name}, {rr})\n")
     t = d["tests"]
     w(f"tests: {t['runs']} run(s), {t['failed']} failed, {t['reruns']} rerun(s), {fmt_dur(t['seconds'])}\n")
     fl = d["failures"]

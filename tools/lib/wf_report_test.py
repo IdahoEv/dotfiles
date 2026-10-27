@@ -163,6 +163,12 @@ class Report(Base):
         self.assertEqual(r["reviews"]["rounds"], 2)
         self.assertEqual((r["reviews"]["fixed"], r["reviews"]["dismissed"], r["reviews"]["deferred"]), (5, 2, 1))
         self.assertEqual(r["reviews"]["bot_batches"], 1)
+        self.assertEqual(r["reviews"]["by_reviewer"], {
+            "correctness-reviewer": {"fixed": 2, "dismissed": 1, "deferred": 0},
+            "robustness-reviewer": {"fixed": 0, "dismissed": 1, "deferred": 1}})
+        self.assertEqual(r["reviews"]["dismissed_findings"], [
+            {"reviewer": "correctness-reviewer", "round": 1, "reason": "hypothetical risk"},
+            {"reviewer": "robustness-reviewer", "round": 2, "reason": "cost exceeds plausible impact"}])
         self.assertIn("copilot", r["reviews"]["reviewers"])
         self.assertEqual(r["tests"], {"runs": 2, "failed": 1, "reruns": 1, "seconds": 20.0})
         self.assertEqual(r["failures"]["pr_open_failed"], 1)
@@ -234,6 +240,42 @@ class Report(Base):
         self.assertIn("acme/w#1", out)
         self.assertIn("per-ticket medians need", out)
         self.assertIn("unparseable", out)
+        self.assertIn("findings by reviewer", out)
+        self.assertIn("hypothetical risk (correctness-reviewer, R1)", out)
+
+    def test_dismissed_finding_without_reason_is_gap_not_dropped(self):
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d)
+        path = os.path.join(d, "e.jsonl")
+        with open(path, "w") as fh:
+            fh.write(json.dumps({"v": 1, "ts": "2026-10-20T09:00:00Z", "run_id": "acme/w#5",
+                                 "event": "review.finding", "reviewer": "correctness-reviewer",
+                                 "severity": "High", "verdict": "dismissed", "round": 1}) + "\n")
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            rc = wf_report.main(["--log", path, "--now", NOW, "--json"])
+        self.assertEqual(rc, 0)
+        r = json.loads(buf.getvalue())["runs"][0]
+        self.assertEqual(r["reviews"]["dismissed_findings"],
+                         [{"reviewer": "correctness-reviewer", "round": 1, "reason": None}])
+        self.assertTrue(any("no reason" in g for g in r["gaps"]))
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            wf_report.main(["--log", path, "--now", NOW, "--run", "acme/w#5"])
+        self.assertIn("reason unknown (correctness-reviewer, R1)", buf.getvalue())
+
+    def test_unknown_finding_verdict_ignored(self):
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d)
+        path = os.path.join(d, "e.jsonl")
+        with open(path, "w") as fh:
+            fh.write(json.dumps({"v": 1, "ts": "2026-10-20T09:00:00Z", "run_id": "acme/w#5",
+                                 "event": "review.finding", "reviewer": "x", "verdict": "wat"}) + "\n")
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            wf_report.main(["--log", path, "--now", NOW, "--json"])
+        r = json.loads(buf.getvalue())["runs"][0]
+        self.assertEqual(r["reviews"]["by_reviewer"], {})
 
 
 class MalformedLog(unittest.TestCase):
