@@ -15,16 +15,16 @@ OS key: **L** = Linux, **W** = WSL, **PS** = native PowerShell. "L" without W me
 | --- | --- | --- | --- |
 | `dot_zshrc.tmpl:1` | `/opt/homebrew/bin/brew` (Apple-Silicon brew path) | L, PS | Template on `.chezmoi.os`; guard with `command -v brew` |
 | `dot_zshrc.tmpl:5` | `/usr/libexec/path_helper` | L, PS | Guard: `[[ -x /usr/libexec/path_helper ]] && eval "$(...)"` |
-| `dot_zshrc.tmpl:16` | Literal `/Users/evan/.local/bin` (redundant with `$HOME` on L4) | L, PS | `$HOME/.local/bin` — or delete the duplicate line |
-| `dot_shell_modules/directories:1` | `DEV=/Users/evan/Documents/Development` | L, PS | `$HOME/Documents/Development` |
-| `dot_shell_modules/development:1–2` | `export DEV="~/Documents/…"` — quoted tilde never expands (bug); duplicates `directories` | all | Unquote or merge into `directories` |
+| `dot_zshrc.tmpl:16` | Literal `/Users/evan/.local/bin` (redundant with `$HOME` on L4) | L, PS | Fixed in #65 — duplicate line deleted |
+| `dot_shell_modules/directories:1` | `DEV=/Users/evan/Documents/Development` | L, PS | Fixed in #65 — `$HOME/Documents/Development` |
+| `dot_shell_modules/development:1–2` | `export DEV="~/Documents/…"` — quoted tilde never expands (bug); duplicates `directories` | all | Fixed in #65 — merged into `directories`, module deleted |
 | `dot_shell_modules/zz-fzf:9–10` | `source $(brew --prefix)/opt/fzf/...` — Homebrew layout only | L, PS | Per-OS completion paths (Linux: `/usr/share/doc/fzf/examples/`); guard |
 | `dot_shell_modules/zz-fzf:4`, `git-fzf.sh:25`, `git:41,251`, `chezmoi:1`, `direnv:4` | `brew install …` hints | L, PS | Per-OS hint (apt/dnf/winget) or drop to "install X" |
 | `dot_shell_modules/git-fzf.sh:198` | `readlink -f` with a `/usr/bin/ruby` macOS fallback that's absent on Linux | L | Portable `realpath`/loop fallback (see `agent-phase.sh` pattern) |
 | `dot_shell_modules/git-fzf.sh:147–164` | — | — | Already handles `open`/`start`/`xdg-open`/`powershell.exe` via `$OSTYPE`; the model to copy |
 | `dot_shell_modules/git-tools-freshness:17` | `stat -f %m` BSD / `stat -c %Y` GNU | — | Already dual-handled; correct pattern |
 | `dot_shell_modules/00-utils:44` | `~/.ssh/id_*` glob errors in zsh when no match | all | `(N)` qualifier or null_glob |
-| `dot_config/iterm2/symlink_AppSupport` | Hard-coded `/Users/evan/Library/Application Support/iTerm2` | L, PS, macOS-other-user | Template the home dir; ignore file on non-macOS |
+| `dot_config/iterm2/symlink_AppSupport` | Hard-coded `/Users/evan/Library/Application Support/iTerm2` | L, PS, macOS-other-user | Home dir templated in #65 (`symlink_AppSupport.tmpl`); per-OS ignore still open (sub-issue 3) |
 | All zsh modules (`claude.tmpl`, `chezmoi`, `git-tools-freshness`, `git-fzf.sh`) | `compdef`, `${1:A}`, `${(f)}`, `$~pattern`, `(N)`, `setopt`, `print -P`, `&!` | PS | Not portable command-by-command — requires a PS profile rewrite (sub-issue 4) |
 
 ## tools/
@@ -46,8 +46,8 @@ OS key: **L** = Linux, **W** = WSL, **PS** = native PowerShell. "L" without W me
 
 | File | Assumption | Breaks on | Proposed fix |
 | --- | --- | --- | --- |
-| `modify_private_settings.json.tmpl:61` | Permission allowlist entry with literal `/Users/evan/.claude/skills/...` | L, W, PS | `{{ .chezmoi.homeDir }}` |
-| `modify_private_settings.json.tmpl:87–274` (~18 hook commands) | Literal `/Users/evan/.config/iterm2/cc-status` paths; iTerm OSC-6 `\033]6;1;bg;…` sequences via `/dev/tty` | L, W, PS | Template homeDir (pattern already exists at `:134,160` using `{{ .chezmoi.homeDir }}`); wrap OSC-6 blocks in TERM_PROGRAM guard; PS: conditionally swap hook commands per-OS |
+| `modify_private_settings.json.tmpl:61` | Permission allowlist entry with literal `/Users/evan/.claude/skills/...` | L, W, PS | Fixed in #65 — `{{ .chezmoi.homeDir }}` |
+| `modify_private_settings.json.tmpl:87–274` (~18 hook commands) | Literal `/Users/evan/.config/iterm2/cc-status` paths; iTerm OSC-6 `\033]6;1;bg;…` sequences via `/dev/tty` | L, W, PS | homeDir templated in #65; OSC-6 TERM_PROGRAM guard and per-OS hook swap still open |
 | `executable_statusline.sh` | bash, `jq`, process substitution, `find -mmin`, `/dev/tty` OSC-8, `$HOME` path sed | PS | PS statusline variant (sub-issue 5) |
 | `hooks/executable_no-cd-write.py` | `#!/usr/bin/env python3` shebang; invoked by path in settings | PS | Invoked via `python3 <path>` with guard; PS hooks need a wrapper |
 | `commands/*.md` (open-pr, finalize, start, review-comments, implement, pick, discuss, prompt-audit, create_plan, generate_prd) | Instruct Claude to run bash, `mktemp`, heredocs, `git worktree`, `$'…'` bashisms, `short` CLI, `poll-pr.sh` | PS | Per-OS command selection in the command bodies (Claude can adapt if told the platform); PS-native poll-pr/review-state |
@@ -69,7 +69,7 @@ Confirmed absences (don't re-investigate): no `sed -i ''`, `date -j`, or `stat -
 
 | # | Sub-issue | Scope | Why this order |
 | --- | --- | --- | --- |
-| 1 | De-hardcode paths | `/Users/evan` → `{{ .chezmoi.homeDir }}`/`$HOME` across zshrc, shell modules, settings template, iterm2 symlink; fix quoted-tilde `DEV` bug | Breaks Linux today; prereq for every port |
+| 1 | De-hardcode paths | `/Users/evan` → `{{ .chezmoi.homeDir }}`/`$HOME` across zshrc, shell modules, settings template, iterm2 symlink; fix quoted-tilde `DEV` bug | Breaks Linux today; prereq for every port. **Done — #65** |
 | 2 | Linux/WSL cleanup | iTerm/pbcopy guards, `~/Library` write guards, `readlink -f` portable fallback, per-OS install hints, fzf sourcing paths | Cheap wins; makes WSL near-fully working |
 | 3 | chezmoi OS branching + Windows delivery | `.chezmoi.os` logic, per-OS `.chezmoiignore`, Windows script-install mechanism replacing symlink/exec-bit delivery | Foundation for any Windows content |
 | 4 | PowerShell profile | `Microsoft.PowerShell_profile.ps1` equivalent: oh-my-posh prompt, fzf, aliases, directory/`DEV` conventions | First real PS artifact; validates #3 |
