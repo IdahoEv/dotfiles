@@ -276,6 +276,31 @@ class Report(Base):
             wf_report.main(["--log", path, "--now", NOW, "--json"])
         r = json.loads(buf.getvalue())["runs"][0]
         self.assertEqual(r["reviews"]["by_reviewer"], {})
+        self.assertTrue(any("unrecognized verdict" in g for g in r["gaps"]))
+
+    def test_finding_events_stand_in_for_missing_review_result(self):
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d)
+        path = os.path.join(d, "e.jsonl")
+        with open(path, "w") as fh:
+            fh.write(json.dumps({"v": 1, "ts": "2026-10-20T09:00:00Z", "run_id": "acme/w#5",
+                                 "event": "review.round", "round": 1, "state": "start"}) + "\n")
+            fh.write(json.dumps({"v": 1, "ts": "2026-10-20T09:05:00Z", "run_id": "acme/w#5",
+                                 "event": "review.round", "round": 1, "state": "end"}) + "\n")
+            fh.write(json.dumps({"v": 1, "ts": "2026-10-20T09:06:00Z", "run_id": "acme/w#5",
+                                 "event": "review.finding", "reviewer": "correctness-reviewer",
+                                 "severity": "High", "verdict": "fixed", "round": 1}) + "\n")
+            fh.write(json.dumps({"v": 1, "ts": "2026-10-20T09:06:10Z", "run_id": "acme/w#5",
+                                 "event": "review.finding", "reviewer": "correctness-reviewer",
+                                 "severity": "Medium", "verdict": "dismissed", "round": 1,
+                                 "reason": "hypothetical"}) + "\n")
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            wf_report.main(["--log", path, "--now", NOW, "--json"])
+        r = json.loads(buf.getvalue())["runs"][0]["reviews"]
+        self.assertEqual((r["fixed"], r["dismissed"], r["deferred"]), (1, 1, 0))
+        self.assertEqual(r["reviewers"], ["correctness-reviewer"])
+        self.assertFalse(any("findings unknown" in g for g in json.loads(buf.getvalue())["runs"][0]["gaps"]))
 
 
 class MalformedLog(unittest.TestCase):

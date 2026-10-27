@@ -1,13 +1,13 @@
 ---
 name: reviewer-contract
-description: Shared contract for review agents — diff-scoped review, finding-line format, read-only rule, and the Use when: description convention. Preloaded by every reviewer agent via skills:.
+description: Shared contract for review agents — diff scope, finding-line format, read-only rule, triage context. Preloaded by every reviewer agent via skills:.
 ---
 
 # Reviewer Contract
 
 ## Scope
 
-The caller supplies the base ref, exact diff range, and ticket/acceptance criteria. Review only that diff and the nearby code needed to verify behavior. Do not report issues outside the diff. Do not pre-read the implementation beyond what verification requires — the caller states the scope for a reason.
+The caller supplies the base ref, exact diff range, and ticket/acceptance criteria. Review only that diff and the nearby code needed to verify behavior. Do not report issues outside the diff.
 
 If the caller supplies no diff range or ticket context, ask for the missing scope rather than guessing.
 
@@ -19,7 +19,7 @@ At most the findings cap the caller or your agent file sets, most severe first. 
 
 Use Critical, High, Medium, or Low. Include only findings with evidence and a credible failure path, meaningful test gap, or material design cost. Say `no findings` when appropriate — a clean review is a real result. No praise or general summary.
 
-Specialist focus, evidence bars, and any verdict header your agent defines (e.g. a DESIGN gate) come from your agent file; this contract does not override them.
+Specialist focus, evidence bars, and any verdict header your agent defines (e.g. a DESIGN gate) come from your agent file; this contract does not override them. If your agent file or another preloaded skill specifies a different output format or review mode — `prompt-reviewer` follows the `prompt-review` rubric's format and may run in corpus mode, outside any single diff — follow that instead of the line above.
 
 ## Read-only
 

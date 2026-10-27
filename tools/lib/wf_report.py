@@ -207,9 +207,11 @@ class Run:
                "fixed": None, "dismissed": None, "deferred": None, "reviewers": set(),
                "by_reviewer": defaultdict(lambda: defaultdict(int)),
                "dismissed_findings": []}
+        bad_verdicts = 0
         for e in self.of("review.finding"):
             rv, verdict = e.get("reviewer", "unknown"), e.get("verdict", "unknown")
             if verdict not in ("fixed", "dismissed", "deferred"):
+                bad_verdicts += 1
                 continue
             counts = out["by_reviewer"][rv]
             for k in ("fixed", "dismissed", "deferred"):
@@ -217,6 +219,8 @@ class Run:
             counts[verdict] += 1
             if verdict == "dismissed":
                 out["dismissed_findings"].append((rv, e.get("round"), e.get("reason")))
+        if bad_verdicts:
+            self.gaps.append(f"{bad_verdicts} review.finding event(s) with unrecognized verdict skipped")
         if results:
             for k in ("fixed", "dismissed", "deferred"):
                 vals = [e[k] for e in results if isinstance(e.get(k), int)]
@@ -225,6 +229,11 @@ class Run:
                 out["reviewers"].update(r for r in str(e.get("reviewers", "")).split(",") if r)
             local_rounds = [e["round"] for e in results if isinstance(e.get("round"), int)]
             out["rounds"] = max([out["rounds"]] + local_rounds)
+        elif out["by_reviewer"]:
+            # No review.result line, but per-finding events carry the same triage.
+            for k in ("fixed", "dismissed", "deferred"):
+                out[k] = sum(c[k] for c in out["by_reviewer"].values())
+            out["reviewers"].update(out["by_reviewer"])
         elif rounds:
             self.gaps.append("review rounds ran but no review.result: findings unknown")
         if out["dismissed_findings"] and any(rsn is None for _, _, rsn in out["dismissed_findings"]):

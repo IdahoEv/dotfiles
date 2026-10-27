@@ -2,7 +2,7 @@
 
 Run a bounded review-and-fix cycle on the current worktree before `/open-pr`. The implementer does not review its own work: launch fresh, read-only reviewer agents. This command may commit fixes locally; it must never push.
 
-Usage: `/local-code-review-cycle [base] [--confirm-commits | --no-confirm-commits]`. Base defaults to `origin/<default branch>`; pass another ref for a long-lived target branch. `--confirm-commits` pauses for approval before each round's commit (§3 step 4); on this machine it is {{ if .is_work }}on by default, because every commit needs approval{{ else }}off by default{{ end }}.
+Usage: `/local-code-review-cycle [base] [--confirm-commits | --no-confirm-commits]`. Base defaults to `origin/<default branch>`; pass another ref for a long-lived target branch. `--confirm-commits` pauses for approval before each round's commit (§3 step 6); on this machine it is {{ if .is_work }}on by default, because every commit needs approval{{ else }}off by default{{ end }}.
 
 Use the project's documented test commands. `FAST` is the quick suite; `FULL` is the complete suite. If neither is documented, ask once before starting.
 
@@ -16,22 +16,22 @@ Use the project's documented test commands. `FAST` is the quick suite; `FULL` is
 
 ## 2. Discover and select reviewers
 
-Selection is driven by the reviewers' own `description` fields, not by rules here. Every reviewer — global or project-local — ends its `description` with a `Use when: <conditions>.` clause naming the diff shapes and risk signals that justify invoking it (the `reviewer-contract` skill documents this convention).
+Selection is driven by the reviewers' own `description` fields, not by rules here: every reviewer's `description` ends with a `Use when:` clause (the `reviewer-contract` skill holds the convention).
 
 - Read the project's `CLAUDE.md` and any referenced review/workflow documentation first.
 - Enumerate candidate reviewers: project-local agents under `.claude/agents/` (and the corresponding `dot_claude/agents/` source layout in a chezmoi dotfiles repository) take precedence when they fit; then the global agents in `dot_claude/agents/`.
 - Match each candidate's `Use when:` clause against the changed-file set (`git diff --name-only BASE...HEAD`) and the diff's risk signals — concurrency, persistence, external services, API or data-flow changes, prompt files, multiple modules touched. A reviewer is selected when its clause matches; a reviewer whose description has no `Use when:` clause is not auto-selected — its project docs must state the trigger.
 - Choose the smallest set whose clauses cover the actual risks. Risk, coupling, and behavior matter more than raw line count. Do not run every available reviewer by default.
-- Do not send code reviewers a prompt-only diff: their failing-input bar finds nothing in prose. A diff touching prompt files selects `prompt-reviewer` (in diff mode, same `BASE...HEAD`); code files in the same diff still go to the code reviewers.
+- Do not send code reviewers a prompt-only diff: their failing-input bar finds nothing in prose. Code files in the same diff still go to the code reviewers.
 - Do not add a syntax reviewer. Use the project's formatter, compiler/type checker, linter, and tests for deterministic issues.
-- If adding a new project-specific reviewer is part of the task, follow the convention: an agent definition whose `description` ends with a `Use when:` clause, plus clear scope, evidence requirements, and finding format, referenced from the project's `CLAUDE.md` or review instructions. Do not invent or register new reviewers during an ordinary review cycle.
+- If adding a new project-specific reviewer is part of the task, follow the `reviewer-contract` authoring convention, and reference the reviewer from the project's `CLAUDE.md` or review instructions. Do not invent or register new reviewers during an ordinary review cycle.
 - Run selected reviewers in parallel only when they can independently inspect the same committed diff. Give each the same diff scope and relevant ticket/acceptance criteria.
 
 ## 3. Review and triage (at most 5 rounds)
 
 Each round:
 
-1. Round 1 scope is `BASE...HEAD`. At the start of every round, record the round-start commit (`ROUND_START=$(git rev-parse HEAD)`); each round's commits become the next round's diff. From round 2 on, the kickoff names the exact scope instead: `git diff $ROUND_START..HEAD` — only the previous round's fix commits — plus a `correctness-reviewer` pass over the files those fixes touched. Never re-state `BASE...HEAD` as a later round's scope.
+1. Round 1 scope is `BASE...HEAD`. At the start of each round, record the round-start SHA (`git rev-parse HEAD` at that moment, stated literally in the kickoff — a shell variable does not survive between tool calls). Round k+1's scope is `git diff <SHA recorded at the start of round k>..HEAD` — only round k's fix commits — plus a `correctness-reviewer` pass over the files those fixes touched. Never re-state `BASE...HEAD` as a later round's scope.
 2. Launch fresh instances of the selected reviewers. State `BASE`, exact diff scope, ticket criteria, and already-triaged findings. Do not pre-read the implementation on the reviewer's behalf.
 3. Deduplicate overlapping findings. Keep findings only when they concern changed code and have evidence plus a credible failure path, meaningful test gap, or material design cost. Discard stylistic preferences, hypothetical risks, extremely unlikely edge cases, and fixes whose complexity/cost exceeds the plausible impact. Require stronger evidence for defensive hardening than for a direct correctness bug. Never resurrect a dismissed finding without new evidence.
 4. For each triaged finding, emit one telemetry event:
