@@ -1,3 +1,0 @@
-export DEV="~/Documents/Development"
-
-alias kar="cd $DEV/Kardashev"

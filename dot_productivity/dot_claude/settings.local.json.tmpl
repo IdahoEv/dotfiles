@@ -4,7 +4,7 @@
       "WebFetch(domain:code.claude.com)",
       "Bash(afplay:*)",
       "Bash(code --list-extensions:*)",
-      "Read(//Users/evan/Library/Application Support/Code/User/**)",
+      "Read(//{{ .chezmoi.homeDir | trimPrefix "/" }}/Library/Application Support/Code/User/**)",
       "Bash(system_profiler:*)",
       "Bash(ioreg:*)",
       "Read(//Library/Preferences/**)"
