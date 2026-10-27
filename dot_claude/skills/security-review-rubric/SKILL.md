@@ -5,25 +5,25 @@ description: Canonical security rubric for the security-reviewer and supply-chai
 
 # Security Review Rubric
 
-Anchored to the OWASP Top 10 (2025). Two halves — each agent applies its own and hands the other's territory to its sibling.
+Anchored to the OWASP Top 10 categories. Two halves — each agent applies its own and hands the other's territory to its sibling.
 
 ## Application code (security-reviewer)
 
 For each change, trace untrusted input to dangerous sinks and ask what guards the path:
 
-- **Access control (A01):** changed endpoints enforce authz; no privilege taken from client-side state; object references not guessable or unscoped (IDOR).
-- **Authentication (A07):** token/session creation, validation, expiry; credential storage and verification; no bypass via new defaults.
-- **Injection (A03):** SQL/NoSQL/command construction from input; XSS via `innerHTML`, templates, or attribute sinks; template injection.
-- **Cryptographic failures (A02):** hardcoded keys, weak algorithms or modes, plaintext secrets, unsalted or fast-hash comparisons.
-- **SSRF (A10):** outbound requests whose URL or host is user-influenced.
-- **Insecure design (A04):** a trust boundary the diff crosses without the check a straightforward design would include.
+- **Access control:** changed endpoints enforce authz; no privilege taken from client-side state; object references not guessable or unscoped (IDOR).
+- **Authentication:** token/session creation, validation, expiry; credential storage and verification; no bypass via new defaults.
+- **Injection:** SQL/NoSQL/command construction from input; XSS via `innerHTML`, templates, or attribute sinks; template injection.
+- **Cryptographic failures:** hardcoded keys, weak algorithms or modes, plaintext secrets, unsalted or fast-hash comparisons.
+- **SSRF:** outbound requests whose URL or host is user-influenced.
+- **Insecure design:** a trust boundary the diff crosses without the check a straightforward design would include.
 
 ## Build and configuration (supply-chain-reviewer)
 
-- **Components (A06):** added/updated dependencies — advisories, unmaintained packages, install scripts; lockfile consistency.
-- **Misconfiguration (A05):** debug modes, permissive CORS, default credentials, verbose errors, exposed ports or tooling in config.
-- **Integrity (A08):** CI workflows — untrusted input reaching privileged steps (`pull_request_target`, script steps), unpinned action refs, `curl | sh`, unverified artifacts.
-- **Secrets (A02):** credentials in config/env/deploy files; secrets echoed into logs or shipped into artifacts.
+- **Components:** added/updated dependencies — advisories, unmaintained packages, install scripts; lockfile consistency.
+- **Misconfiguration:** debug modes, permissive CORS, default credentials, verbose errors, exposed ports or tooling in config.
+- **Integrity:** CI workflows — untrusted input reaching privileged steps (`pull_request_target`, script steps), unpinned action refs, `curl | sh`, unverified artifacts.
+- **Secrets:** credentials in config/env/deploy files (a secret in a file that ships as config belongs here; one in executable source belongs to security-reviewer); secrets echoed into logs or shipped into artifacts.
 
 ## Evidence bar
 

@@ -14,7 +14,7 @@ Follow the reviewer-contract skill and the application-code half of the security
 - Authn/authz/session handling: token creation, validation, expiry; credential storage.
 - Injection: query or command construction, XSS in DOM/template rendering.
 - SSRF: outbound requests with user-influenced URLs.
-- Cryptographic misuse and secrets in source code.
+- Cryptographic misuse and secrets hardcoded in executable source (secrets in config, env, or deploy files go to `supply-chain-reviewer`).
 
 Report only findings with a concrete attack path — the input, the sink, and the guard that is missing. Leave dependency, CI, and config/deploy risks to `supply-chain-reviewer`.
 
