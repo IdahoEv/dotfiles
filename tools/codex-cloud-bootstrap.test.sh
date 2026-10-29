@@ -42,7 +42,7 @@ cat > "$tmp/valid.md" <<'VALID'
 ## Completion report
 VALID
 
-PATH="$tmp/bin:$PATH" MOCK_WORKFLOW_FILE="$tmp/valid.md" \
+PATH="$tmp/bin:$PATH" TMPDIR="$tmp" MOCK_WORKFLOW_FILE="$tmp/valid.md" \
   bash "$bootstrap" > "$tmp/success.out" || fail "valid workflow should load"
 grep -q 'workflow_source_commit=0123456789abcdef0123456789abcdef01234567' "$tmp/success.out" || fail "source SHA should be reported"
 workflow_file="$(sed -n 's/^workflow_source_path=//p' "$tmp/success.out")"
@@ -52,14 +52,14 @@ pass "fetches and validates a committed workflow and reports its SHA"
 cat > "$tmp/invalid.md" <<'INVALID'
 This is an incomplete workflow.
 INVALID
-if PATH="$tmp/bin:$PATH" MOCK_WORKFLOW_FILE="$tmp/invalid.md" \
+if PATH="$tmp/bin:$PATH" TMPDIR="$tmp" MOCK_WORKFLOW_FILE="$tmp/invalid.md" \
   bash "$bootstrap" > "$tmp/invalid.out" 2> "$tmp/invalid.err"; then
   fail "invalid workflow must fail closed"
 fi
 grep -q 'failed validation' "$tmp/invalid.err" || fail "validation failure should be actionable"
 pass "rejects an invalid workflow without falling back"
 
-if PATH="$tmp/bin:$PATH" MOCK_CURL_FAIL=1 MOCK_WORKFLOW_FILE="$tmp/valid.md" \
+if PATH="$tmp/bin:$PATH" TMPDIR="$tmp" MOCK_CURL_FAIL=1 MOCK_WORKFLOW_FILE="$tmp/valid.md" \
   bash "$bootstrap" > "$tmp/network.out" 2> "$tmp/network.err"; then
   fail "network failure must fail closed"
 fi
