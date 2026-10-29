@@ -55,7 +55,7 @@ Logs hold only identifiers, counts, and Claude Code enum values: no prompts, dif
 
 ### Overlap methodology
 
-`key` on `review.finding` is `sha256(path + "\n" + bucket + "\n" + claim)`, where path is the repo-relative file exactly as `git diff --name-only` prints it, bucket is the 10-line decade of the finding's primary line (`L41-L50`; `L0` for file-level), and claim is one normalized sentence (lowercase, punctuation-stripped, whitespace-collapsed, leading article dropped) stating only the file and what is wrong. The recipe lives in `local-review-cycle-procedure`; only the hash is logged. A finding overlaps when the same key is raised by ≥2 *distinct* reviewers — the same reviewer re-raising it across rounds is not overlap. Phrasing drift means two reviewers wording the same bug differently produce different hashes, so overlap is a lower bound.
+`key` on `review.finding` is `sha256(path + "\n" + bucket + "\n" + claim)`, where path is the repo-relative file exactly as `git diff --name-only` prints it, bucket is the 10-line decade of the finding's primary line (`L41-L50`; `L0` for file-level), and claim is one normalized sentence stating only the file and what is wrong. The exact normalization recipe lives in `local-review-cycle-procedure`; only the hash is logged. A finding overlaps when the same key is raised by ≥2 *distinct* reviewers — the same reviewer re-raising it across rounds is not overlap. Phrasing drift means two reviewers wording the same bug differently produce different hashes, so overlap is a lower bound.
 
 ## Measured vs. estimated
 

@@ -432,7 +432,7 @@ def print_aggregate(runs, out, min_n=3):
     if len(mixes) > 0:
         w("reviewer mix vs rounds (merged runs):\n")
         for sig, rounds_list in sorted(mixes.items(), key=lambda kv: -len(kv[1])):
-            w(f"  {sig}  {len(rounds_list)} run(s)  median {statistics.median(rounds_list)} rounds\n")
+            w(f"  {sig}  {len(rounds_list)} run(s)  median {statistics.median(rounds_list):g} rounds\n")
 
 
 def prune(path, days, now):

@@ -161,19 +161,18 @@ class Report(Base):
         self.assertEqual(r["wall_seconds"], 81 * 60)
         self.assertEqual(r["sessions"], 1, "launcher session of ticket.start is excluded")
         self.assertEqual(r["reviews"]["rounds"], 2)
-        self.assertEqual((r["reviews"]["fixed"], r["reviews"]["dismissed"], r["reviews"]["deferred"]), (4, 4, 1))
+        self.assertEqual((r["reviews"]["fixed"], r["reviews"]["dismissed"], r["reviews"]["deferred"]), (5, 3, 1))
         self.assertEqual(r["reviews"]["bot_batches"], 1)
         self.assertEqual(r["reviews"]["by_reviewer"], {
             "correctness-reviewer": {"fixed": 2, "dismissed": 1, "deferred": 0,
                                      "valid": 2, "rejected": 1, "partial": 0, "validity_unreported": 0},
-            "robustness-reviewer": {"fixed": 0, "dismissed": 2, "deferred": 1,
+            "robustness-reviewer": {"fixed": 1, "dismissed": 1, "deferred": 1,
                                     "valid": 0, "rejected": 1, "partial": 1, "validity_unreported": 1}})
         self.assertEqual(r["reviews"]["validity"], {"valid": 2, "rejected": 2, "partial": 1, "validity_unreported": 1})
         self.assertEqual(r["reviews"]["overlap"], {"keys_total": 4, "keys_raised_by_2plus": 1,
                                                    "pairs": {"correctness-reviewer↔robustness-reviewer": 1}})
         self.assertEqual(r["reviews"]["dismissed_findings"], [
             {"reviewer": "correctness-reviewer", "round": 1, "reason": "hypothetical risk"},
-            {"reviewer": "robustness-reviewer", "round": 1, "reason": "duplicate of correctness finding"},
             {"reviewer": "robustness-reviewer", "round": 2, "reason": "cost exceeds plausible impact"}])
         self.assertIn("copilot", r["reviews"]["reviewers"])
         self.assertEqual(r["tests"], {"runs": 2, "failed": 1, "reruns": 1, "seconds": 20.0})
@@ -383,8 +382,9 @@ class Report(Base):
         self.assertIn("reviewer effectiveness (merged runs):", out)
         self.assertIn("correctness-reviewer: 3 valid / 0 rejected / 0 partial (3 run(s))", out)
         self.assertIn("reviewer mix vs rounds (merged runs):", out)
-        self.assertIn("correctness-reviewer + robustness-reviewer  2 run(s)  median 2.0 rounds", out)
+        self.assertIn("correctness-reviewer + robustness-reviewer  2 run(s)  median 2 rounds", out)
         self.assertIn("correctness-reviewer  1 run(s)  median 1 rounds", out)
+        self.assertNotIn("median 2.0", out)
 
 
 class MalformedLog(unittest.TestCase):
