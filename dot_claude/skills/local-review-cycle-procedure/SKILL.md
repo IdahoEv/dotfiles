@@ -44,12 +44,24 @@ Each round:
 
 1. Round 1 scope is `BASE...HEAD`. At the start of each round, record the round-start SHA (`git rev-parse HEAD` at that moment, stated literally — a shell variable does not survive between tool calls). Round k+1's scope is `git diff <SHA recorded at the start of round k>..HEAD` — only round k's fix commits — plus a `correctness-reviewer` pass over the files those fixes touched. Never re-state `BASE...HEAD` as a later round's scope.
 2. Launch fresh instances of the selected reviewers. State `BASE`, exact diff scope, ticket criteria, and already-triaged findings. Do not pre-read the implementation on the reviewer's behalf.
-3. Deduplicate overlapping findings. Keep findings only when they concern changed code and have evidence plus a credible failure path, meaningful test gap, or material design cost. Discard stylistic preferences, hypothetical risks, extremely unlikely edge cases, and fixes whose complexity/cost exceeds the plausible impact. Require stronger evidence for defensive hardening than for a direct correctness bug. Never resurrect a dismissed finding without new evidence.
+3. Deduplicate overlapping findings. Keep findings only when they concern changed code and have evidence plus a credible failure path, meaningful test gap, or material design cost. Discard stylistic preferences, hypothetical risks, extremely unlikely edge cases, and fixes whose complexity/cost exceeds the plausible impact. Require stronger evidence for defensive hardening than for a direct correctness bug. Never resurrect a dismissed finding without new evidence. When two reviewers raise the same finding, it is one triaged finding but two `review.finding` events sharing one `key`; the deduped instance is what gets fixed or dismissed.
 4. For each triaged finding, emit one telemetry event:
 
-   `wf-event.sh review.finding reviewer=<agent> severity=<Critical|High|Medium|Low> verdict=<fixed|dismissed|deferred> round=<k> reason=<short phrase>`
+   `wf-event.sh review.finding reviewer=<agent> severity=<Critical|High|Medium|Low> verdict=<fixed|dismissed|deferred> validity=<valid|rejected|partial> round=<k> reason=<short phrase> key=<sha256 hex>`
 
-   `reason` is required for dismissed and deferred (the dismissal rationale or issue ref), optional for fixed. Identifiers and short phrases only — never code or prompt text.
+   `reason` is required for dismissed and deferred (the dismissal rationale or issue ref), optional for fixed. `validity` is your judgment of the finding itself, independent of the verdict: `valid` (real finding), `rejected` (not a real issue on the merits), `partial` (partly real — right concern, wrong location or overstated). Identifiers and short phrases only — never code or prompt text.
+
+   `key` identifies the finding for cross-reviewer overlap: required on valid and partial, optional on rejected (still emit when two reviewers raised the same rejected finding). Compute it as:
+
+   ```bash
+   printf '%s\n%s\n%s\n' "<path>" "<bucket>" "<claim>" | shasum -a 256 | cut -d' ' -f1
+   ```
+
+   - `<path>`: repo-relative, forward slashes, no `./` — exactly as `git diff --name-only` prints it.
+   - `<bucket>`: the 10-line decade of the finding's primary line (line 42 → `L41-L50`, line 7 → `L1-L10`); file-level findings use `L0`.
+   - `<claim>`: one sentence, file + what is wrong only (no severity, fix, evidence, or line number). Lowercase; strip trailing punctuation; collapse all whitespace to single spaces; drop a leading `the `, `a `, or `an `; delete every character except `a-z0-9 .-/`. Do not paraphrase or unify synonyms — two reviewers wording the same bug differently miss, and that under-count is accepted.
+
+   Only the hash is logged — never the path, bucket, or claim. Reuse the same `key` when the same finding reappears in a later round; dedupe identical (reviewer, key, round) repeats within a round.
 5. Fix only actionable findings. Write a failing test first for behavior bugs when practical. Make the smallest adequate fix; do not expand scope. A real but out-of-scope finding is deferred: file an issue for it under the project's bookkeeping rule (tracker, epic, milestone) instead of growing the branch. Record dismissed/deferred findings and brief reasons so later rounds do not repeat them. Never silently dismiss a judgment call on scope or design intent: disclose it in the round summary of your report, and put it in the round's approval question under `--confirm-commits`.
 6. Run `FAST`; fix new failures and never disable, skip, or quarantine tests to get green. Commit round fixes locally using the project's commit convention and attribution trailer. Skip the commit if nothing changed. Never push.
 
@@ -71,7 +83,7 @@ If significant, well-supported findings remain after round 5, stop and ask the u
 - Run `agent-phase.sh --no-review`.
 - Run `FULL` once after final review fixes. Re-run only failing checks as needed and compare against the baseline.
 - Record the cycle totals with `wf-event.sh review.result round=<last round number> fixed=<n> dismissed=<n> deferred=<n> reviewers=<agent,agent>`, each field only when available. A failure surfaced by `FULL` and fixed here still counts.
-- Report reviewers selected and why, rounds, findings fixed/dismissed/deferred, test status (including baseline failures), and commits added. Keep output terse: one line per round (`R<k>: N fixed / M dismissed or deferred`).
+- Report reviewers selected and why, rounds, findings fixed/dismissed/deferred (with validity), overlap count (findings raised by ≥2 reviewers), test status (including baseline failures), and commits added. Keep output terse: one line per round (`R<k>: N fixed / M dismissed or deferred`).
 - List dismissed findings with the reason for each, and deferred findings with the issue filed for each; do not implement them. Dismissed-with-reasons is mandatory — no report or PR note without it.
 - End by stating `/open-pr` is the next step. The report is the source for the PR body's "Review cycle" note: rounds, fixed/dismissed/deferred counts, and the dismissed findings with their reasons.
 

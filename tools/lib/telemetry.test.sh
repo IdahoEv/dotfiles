@@ -128,10 +128,10 @@ PATH="$ROOT/bin:$PATH" bash "$REPO/dot_claude/skills/github-review-procedure/exe
 PATH="$ROOT/bin:$PATH" bash "$REPO/dot_claude/skills/github-review-procedure/executable_github-review-state.sh" --set-local 2
 check "github-review-state: round start/end" "2:start 2:end" "$(jq -r '"\(.round):\(.state)"' "$LOG" | xargs)"
 reset
-ev review.finding reviewer=correctness-reviewer severity=High verdict=fixed round=1 reason=stale-name
+ev review.finding reviewer=correctness-reviewer severity=High verdict=fixed validity=valid round=1 reason=stale-name key=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 ev review.result round=1 fixed=1 dismissed=2 deferred=0 reviewers=correctness-reviewer,prompt-reviewer
-check "review.finding fields" "review.finding correctness-reviewer High fixed 1 stale-name" \
-  "$(jq -r 'select(.event=="review.finding") | "\(.event) \(.reviewer) \(.severity) \(.verdict) \(.round) \(.reason)"' "$LOG")"
+check "review.finding fields" "review.finding correctness-reviewer High fixed valid 1 stale-name aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" \
+  "$(jq -r 'select(.event=="review.finding") | "\(.event) \(.reviewer) \(.severity) \(.verdict) \(.validity) \(.round) \(.reason) \(.key)"' "$LOG")"
 check "review.result fields" "review.result 1 1 2 0 correctness-reviewer,prompt-reviewer" \
   "$(jq -r 'select(.event=="review.result") | "\(.event) \(.round) \(.fixed) \(.dismissed) \(.deferred) \(.reviewers)"' "$LOG")"
 

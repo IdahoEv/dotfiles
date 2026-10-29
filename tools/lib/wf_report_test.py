@@ -161,13 +161,19 @@ class Report(Base):
         self.assertEqual(r["wall_seconds"], 81 * 60)
         self.assertEqual(r["sessions"], 1, "launcher session of ticket.start is excluded")
         self.assertEqual(r["reviews"]["rounds"], 2)
-        self.assertEqual((r["reviews"]["fixed"], r["reviews"]["dismissed"], r["reviews"]["deferred"]), (5, 2, 1))
+        self.assertEqual((r["reviews"]["fixed"], r["reviews"]["dismissed"], r["reviews"]["deferred"]), (4, 4, 1))
         self.assertEqual(r["reviews"]["bot_batches"], 1)
         self.assertEqual(r["reviews"]["by_reviewer"], {
-            "correctness-reviewer": {"fixed": 2, "dismissed": 1, "deferred": 0},
-            "robustness-reviewer": {"fixed": 0, "dismissed": 1, "deferred": 1}})
+            "correctness-reviewer": {"fixed": 2, "dismissed": 1, "deferred": 0,
+                                     "valid": 2, "rejected": 1, "partial": 0, "validity_unreported": 0},
+            "robustness-reviewer": {"fixed": 0, "dismissed": 2, "deferred": 1,
+                                    "valid": 0, "rejected": 1, "partial": 1, "validity_unreported": 1}})
+        self.assertEqual(r["reviews"]["validity"], {"valid": 2, "rejected": 2, "partial": 1, "validity_unreported": 1})
+        self.assertEqual(r["reviews"]["overlap"], {"keys_total": 4, "keys_raised_by_2plus": 1,
+                                                   "pairs": {"correctness-reviewer↔robustness-reviewer": 1}})
         self.assertEqual(r["reviews"]["dismissed_findings"], [
             {"reviewer": "correctness-reviewer", "round": 1, "reason": "hypothetical risk"},
+            {"reviewer": "robustness-reviewer", "round": 1, "reason": "duplicate of correctness finding"},
             {"reviewer": "robustness-reviewer", "round": 2, "reason": "cost exceeds plausible impact"}])
         self.assertIn("copilot", r["reviews"]["reviewers"])
         self.assertEqual(r["tests"], {"runs": 2, "failed": 1, "reruns": 1, "seconds": 20.0})
@@ -241,6 +247,9 @@ class Report(Base):
         self.assertIn("per-ticket medians need", out)
         self.assertIn("unparseable", out)
         self.assertIn("findings by reviewer", out)
+        self.assertIn("2 valid / 1 rejected / 0 partial / 0 unreported", out)
+        self.assertIn("overlap: 1 of 4 hashed finding(s) raised by ≥2 reviewers "
+                      "(correctness-reviewer↔robustness-reviewer: 1)", out)
         self.assertIn("hypothetical risk (correctness-reviewer, R1)", out)
 
     def test_dismissed_finding_without_reason_is_gap_not_dropped(self):
@@ -301,6 +310,81 @@ class Report(Base):
         self.assertEqual((r["fixed"], r["dismissed"], r["deferred"]), (1, 1, 0))
         self.assertEqual(r["reviewers"], ["correctness-reviewer"])
         self.assertFalse(any("findings unknown" in g for g in json.loads(buf.getvalue())["runs"][0]["gaps"]))
+
+    def write_log(self, events):
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d)
+        path = os.path.join(d, "e.jsonl")
+        with open(path, "w") as fh:
+            for e in events:
+                fh.write(json.dumps(e) + "\n")
+        return path
+
+    def finding(self, ts, run, **kw):
+        return {"v": 1, "ts": ts, "run_id": run, "event": "review.finding",
+                "reviewer": "correctness-reviewer", "severity": "High", "verdict": "fixed", **kw}
+
+    def test_old_finding_events_without_validity_counted_as_unreported(self):
+        path = self.write_log([self.finding("2026-10-20T09:00:00Z", "acme/w#5", round=1),
+                               self.finding("2026-10-20T09:01:00Z", "acme/w#5", verdict="dismissed", round=1)])
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            wf_report.main(["--log", path, "--now", NOW, "--json"])
+        r = json.loads(buf.getvalue())["runs"][0]
+        self.assertEqual(r["reviews"]["validity"], {"validity_unreported": 2})
+        self.assertEqual(r["reviews"]["by_reviewer"]["correctness-reviewer"]["validity_unreported"], 2)
+        self.assertFalse(any("unrecognized validity" in g for g in r["gaps"]))
+
+    def test_bad_validity_and_key_values_are_gapped(self):
+        path = self.write_log([
+            self.finding("2026-10-20T09:00:00Z", "acme/w#5", round=1, validity="wat"),
+            self.finding("2026-10-20T09:01:00Z", "acme/w#5", round=1, validity="valid", key="not-hex")])
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            wf_report.main(["--log", path, "--now", NOW, "--json"])
+        r = json.loads(buf.getvalue())["runs"][0]
+        self.assertEqual(r["reviews"]["validity"], {"valid": 1, "validity_unreported": 1})
+        self.assertEqual(r["reviews"]["overlap"], {"keys_total": 0, "keys_raised_by_2plus": 0, "pairs": {}})
+        self.assertTrue(any("unrecognized validity" in g for g in r["gaps"]))
+        self.assertTrue(any("malformed key" in g for g in r["gaps"]))
+
+    def test_same_reviewer_re_raising_is_not_overlap(self):
+        key = "a" * 64
+        path = self.write_log([
+            self.finding("2026-10-20T09:00:00Z", "acme/w#5", round=1, validity="valid", key=key),
+            self.finding("2026-10-20T09:05:00Z", "acme/w#5", round=2, validity="valid", key=key),
+            self.finding("2026-10-20T09:06:00Z", "acme/w#5", round=2, reviewer="robustness-reviewer",
+                         verdict="dismissed", validity="valid", key="b" * 64)])
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            wf_report.main(["--log", path, "--now", NOW, "--json"])
+        r = json.loads(buf.getvalue())["runs"][0]["reviews"]
+        self.assertEqual(r["overlap"], {"keys_total": 2, "keys_raised_by_2plus": 0, "pairs": {}})
+
+    def test_aggregate_mix_vs_rounds_and_effectiveness(self):
+        events = []
+        for i, (run, reviewers, rounds) in enumerate([
+                ("acme/w#10", ["correctness-reviewer", "robustness-reviewer"], 2),
+                ("acme/w#11", ["correctness-reviewer", "robustness-reviewer"], 2),
+                ("acme/w#12", ["correctness-reviewer"], 1)]):
+            ts = f"2026-10-20T1{i}:00:00Z"
+            events.append({"v": 1, "ts": ts, "run_id": run, "event": "review.result",
+                           "round": rounds, "fixed": 1, "dismissed": 0, "deferred": 0,
+                           "reviewers": ",".join(reviewers)})
+            events.append({"v": 1, "ts": ts, "run_id": run, "event": "review.finding",
+                           "reviewer": reviewers[0], "severity": "High", "verdict": "fixed",
+                           "round": 1, "validity": "valid", "key": f"{i:x}" * 32})
+            events.append({"v": 1, "ts": ts, "run_id": run, "event": "finalize.check", "verdict": "ready"})
+        path = self.write_log(events)
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            wf_report.main(["--log", path, "--now", NOW, "--since", "30d"])
+        out = buf.getvalue()
+        self.assertIn("reviewer effectiveness (merged runs):", out)
+        self.assertIn("correctness-reviewer: 3 valid / 0 rejected / 0 partial (3 run(s))", out)
+        self.assertIn("reviewer mix vs rounds (merged runs):", out)
+        self.assertIn("correctness-reviewer + robustness-reviewer  2 run(s)  median 2.0 rounds", out)
+        self.assertIn("correctness-reviewer  1 run(s)  median 1 rounds", out)
 
 
 class MalformedLog(unittest.TestCase):

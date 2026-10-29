@@ -206,21 +206,43 @@ class Run:
         out = {"rounds": len(rounds), "bot_batches": len(bot),
                "fixed": None, "dismissed": None, "deferred": None, "reviewers": set(),
                "by_reviewer": defaultdict(lambda: defaultdict(int)),
-               "dismissed_findings": []}
-        bad_verdicts = 0
+               "dismissed_findings": [], "validity_totals": defaultdict(int),
+               "keys": defaultdict(set), "has_validity": False}
+        bad_verdicts = bad_validity = bad_keys = 0
         for e in self.of("review.finding"):
             rv, verdict = e.get("reviewer", "unknown"), e.get("verdict", "unknown")
             if verdict not in ("fixed", "dismissed", "deferred"):
                 bad_verdicts += 1
                 continue
             counts = out["by_reviewer"][rv]
-            for k in ("fixed", "dismissed", "deferred"):
+            for k in ("fixed", "dismissed", "deferred",
+                      "valid", "rejected", "partial", "validity_unreported"):
                 counts.setdefault(k, 0)
             counts[verdict] += 1
+            validity = e.get("validity")
+            if validity in ("valid", "rejected", "partial"):
+                counts[validity] = counts.get(validity, 0) + 1
+                out["validity_totals"][validity] += 1
+                out["has_validity"] = True
+            else:
+                counts["validity_unreported"] = counts.get("validity_unreported", 0) + 1
+                out["validity_totals"]["validity_unreported"] += 1
+                if validity is not None:
+                    bad_validity += 1
+            key = e.get("key")
+            if key is not None:
+                if re.fullmatch(r"[0-9a-f]{16,64}", str(key)):
+                    out["keys"][key].add(rv)
+                else:
+                    bad_keys += 1
             if verdict == "dismissed":
                 out["dismissed_findings"].append((rv, e.get("round"), e.get("reason")))
         if bad_verdicts:
             self.gaps.append(f"{bad_verdicts} review.finding event(s) with unrecognized verdict skipped")
+        if bad_validity:
+            self.gaps.append(f"{bad_validity} review.finding event(s) with unrecognized validity counted as unreported")
+        if bad_keys:
+            self.gaps.append(f"{bad_keys} review.finding event(s) with malformed key skipped from overlap")
         if results:
             for k in ("fixed", "dismissed", "deferred"):
                 vals = [e[k] for e in results if isinstance(e.get(k), int)]
@@ -238,6 +260,15 @@ class Run:
             self.gaps.append("review rounds ran but no review.result: findings unknown")
         if out["dismissed_findings"] and any(rsn is None for _, _, rsn in out["dismissed_findings"]):
             self.gaps.append("a dismissed review.finding has no reason: report shows 'reason unknown'")
+        out["overlap"] = {"keys_total": len(out["keys"]), "keys_raised_by_2plus": 0, "pairs": defaultdict(int)}
+        for key, reviewers in out["keys"].items():
+            if len(reviewers) < 2:
+                continue
+            out["overlap"]["keys_raised_by_2plus"] += 1
+            names = sorted(reviewers)
+            for i in range(len(names)):
+                for j in range(i + 1, len(names)):
+                    out["overlap"]["pairs"][f"{names[i]}↔{names[j]}"] += 1
         return out
 
     def _failures(self):
@@ -275,10 +306,18 @@ class Run:
             "cost_usd": self.total_cost(),
             "cost_is_estimate": True,
             "output_tokens_by_agent": dict(self.by_agent),
-            "reviews": {**self.reviews, "reviewers": sorted(self.reviews["reviewers"]),
-                        "by_reviewer": {r: dict(v) for r, v in self.reviews["by_reviewer"].items()},
-                        "dismissed_findings": [{"reviewer": rv, "round": rd, "reason": rs}
-                                      for rv, rd, rs in self.reviews["dismissed_findings"]]},
+            "reviews": {
+                **{k: v for k, v in self.reviews.items()
+                   if k not in ("keys", "has_validity", "by_reviewer", "reviewers", "overlap",
+                                "validity_totals", "dismissed_findings")},
+                "reviewers": sorted(self.reviews["reviewers"]),
+                "by_reviewer": {r: dict(v) for r, v in self.reviews["by_reviewer"].items()},
+                "validity": dict(self.reviews["validity_totals"]),
+                "overlap": {"keys_total": self.reviews["overlap"]["keys_total"],
+                            "keys_raised_by_2plus": self.reviews["overlap"]["keys_raised_by_2plus"],
+                            "pairs": dict(self.reviews["overlap"]["pairs"])},
+                "dismissed_findings": [{"reviewer": rv, "round": rd, "reason": rs}
+                                       for rv, rd, rs in self.reviews["dismissed_findings"]]},
             "tests": {
                 "runs": len(self.tests),
                 "failed": sum(1 for t in self.tests if not t["ok"]),
@@ -321,7 +360,15 @@ def print_run(r, out):
     if r.reviews["by_reviewer"]:
         w("findings by reviewer:\n")
         for name, counts in sorted(r.reviews["by_reviewer"].items()):
-            w(f"  {name}: {counts.get('fixed', 0)} fixed / {counts.get('dismissed', 0)} dismissed / {counts.get('deferred', 0)} deferred\n")
+            w(f"  {name}: {counts.get('fixed', 0)} fixed / {counts.get('dismissed', 0)} dismissed / {counts.get('deferred', 0)} deferred")
+            if r.reviews["has_validity"]:
+                w(f"  ({counts.get('valid', 0)} valid / {counts.get('rejected', 0)} rejected / "
+                  f"{counts.get('partial', 0)} partial / {counts.get('validity_unreported', 0)} unreported)")
+            w("\n")
+        ov = r.reviews["overlap"]
+        if ov["keys_total"]:
+            pairs = ", ".join(f"{p}: {n}" for p, n in sorted(ov["pairs"].items())) or "none"
+            w(f"  overlap: {ov['keys_raised_by_2plus']} of {ov['keys_total']} hashed finding(s) raised by ≥2 reviewers ({pairs})\n")
         if r.reviews["dismissed_findings"]:
             w("  dismissed:\n")
             for rv_name, rnd, reason in r.reviews["dismissed_findings"]:
@@ -355,6 +402,37 @@ def print_aggregate(runs, out, min_n=3):
     w(f"median est. cost per merged ticket: "
       f"{fmt_usd(statistics.median(priced)) if priced else 'unknown'} ({len(priced)}/{len(finished)} fully priced)\n")
     w(f"median review rounds: {statistics.median(d['reviews']['rounds'] for d in finished)}\n")
+
+    # Reviewer effectiveness, overlap, and mix-vs-rounds — all self-reported
+    # from review.finding/review.result; pre-change runs show as unreported.
+    eff, runs_by_reviewer = defaultdict(lambda: defaultdict(int)), defaultdict(int)
+    for d in finished:
+        for name, counts in d["reviews"]["by_reviewer"].items():
+            runs_by_reviewer[name] += 1
+            for k in ("valid", "rejected", "partial"):
+                eff[name][k] += counts.get(k, 0)
+    if any(sum(eff[n].values()) for n in eff):
+        w("reviewer effectiveness (merged runs):\n")
+        for name, counts in sorted(eff.items()):
+            if sum(counts.values()):
+                w(f"  {name}: {counts['valid']} valid / {counts['rejected']} rejected / {counts['partial']} partial ({runs_by_reviewer[name]} run(s))\n")
+    keys_total = sum(d["reviews"]["overlap"]["keys_total"] for d in finished)
+    if keys_total:
+        overlapped = sum(d["reviews"]["overlap"]["keys_raised_by_2plus"] for d in finished)
+        pair_totals = defaultdict(int)
+        for d in finished:
+            for p, n in d["reviews"]["overlap"]["pairs"].items():
+                pair_totals[p] += n
+        pairs = ", ".join(f"{p}: {n}" for p, n in sorted(pair_totals.items())) or "none"
+        w(f"reviewer overlap: {overlapped} of {keys_total} hashed finding(s) raised by ≥2 reviewers ({pairs})\n")
+    mixes = defaultdict(list)
+    for d in finished:
+        if d["reviews"]["reviewers"]:
+            mixes[" + ".join(d["reviews"]["reviewers"])].append(d["reviews"]["rounds"])
+    if len(mixes) > 0:
+        w("reviewer mix vs rounds (merged runs):\n")
+        for sig, rounds_list in sorted(mixes.items(), key=lambda kv: -len(kv[1])):
+            w(f"  {sig}  {len(rounds_list)} run(s)  median {statistics.median(rounds_list)} rounds\n")
 
 
 def prune(path, days, now):
