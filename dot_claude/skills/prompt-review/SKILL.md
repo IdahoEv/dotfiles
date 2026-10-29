@@ -81,6 +81,10 @@ Each rule belongs in the narrowest scope that holds it, stated **once**.
 - **Work vs. personal:** a Shortcut/employer-specific rule in a shared or
   personal-machine section leaks work conventions where they don't apply. In
   `.tmpl` files, check which conditional branch the text sits in.
+- **Private-repo references.** Project codenames, ticket titles, internal doc
+  IDs, hostnames, and stack details from work or closed-source personal repos
+  never belong in committed prompt files — examples must be generic. Flag
+  every occurrence, including ones used only illustratively.
 
 Flag a global rule that names one repo, a project rule that would hold
 everywhere (promote on the *second* sighting, not the first), and anything in

@@ -32,6 +32,13 @@ unless explicitly asked for in this session. Proposing an approach in a ticket i
 governing move; implementing it is not. If a request would change product code, say so
 and point at `/start`.
 
+**Never open a question at startup.** The session often opens while the user is
+mid-typing, and a question modal covers their prompt. After the startup steps
+above, end your first turn with one plain-text line saying the session is ready
+— plus at most a sentence of what you could look at — and wait for the user's
+message. Use `AskUserQuestion` only in response to a user prompt, when a real
+decision blocks work; never to solicit a topic or offer suggestions unprompted.
+
 **Be terse, and put the artifact last.** Output here is reference material to come back
 to — a table of tickets ready for work, a sequencing decision, a drift report. Verbose
 preamble buries it in scrollback. So: no narration of what you're about to do, no
