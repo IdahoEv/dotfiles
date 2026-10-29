@@ -120,7 +120,7 @@ setting() {
 
 # Words that are noise in THIS repo's ticket titles — typically the project's
 # own name, which every ticket repeats and which therefore tells the reader
-# nothing when they're scanning a list of them. Set `label_noise=pers api` in
+# nothing when they're scanning a list of them. Set `label_noise=billing core` in
 # .start-ticket.conf. Consumed by gt::distill_title.
 GT_LABEL_NOISE="$(setting label_noise GT_LABEL_NOISE "")"
 export GT_LABEL_NOISE
@@ -135,9 +135,9 @@ export GT_LABEL_NOISE
 # The slug is distilled from $ST_TITLE when the provider supplied one, and only
 # falls back to the branch segment when it didn't. That ordering is the whole
 # point: the branch segment is itself a lossy tracker slug, so truncating it
-# truncates a truncation — Shortcut's "-a-l--decide-pers-data-deletio" becomes
-# the useless "a l decide pers data deletio", while the title it came from
-# distills to "Data Deletion Retention Policy". See gt::distill_title.
+# truncates a truncation — Shortcut's "-core--decide-billing-data-deletio"
+# becomes the useless "core decide billing data deletio", while the title it
+# came from distills to "Data Deletion Retention Policy". See gt::distill_title.
 make_label() {
   local branch="$1" maxlen="$2" pretty="${3:-}" num="" slug="$1" distilled=""
   if [[ "$branch" =~ ^([0-9]+)-(.+)$ ]]; then

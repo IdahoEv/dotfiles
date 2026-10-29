@@ -55,9 +55,9 @@ document it.
 - **No "why this document exists" section.** One line of provenance (repo,
   branch, commit, date) earns its place; the rest is a link to the ticket.
 - **No defending scope.** "This deliberately does not repeat X" → link X.
-- **Facts carry themselves.** `member_period_index` — "0-indexed count of prior
-  periods; drives taper" is the fact. "A Jigsaw-only field with no Legacy
-  analogue" is an argument for a different doc.
+- **Facts carry themselves.** `retry_backoff_seconds` — "seconds before the
+  first retry; doubles per attempt" is the fact. "A queue-only field with no
+  dashboard analogue" is an argument for a different doc.
 - **Analysis is a different document.** "Which fields are useful for ML,"
   "questions for product," "recommended exclusions" are design input for the
   downstream decision. Put them in that doc or the ticket and link.
@@ -169,7 +169,7 @@ Never cut a constraint or known failure mode, even past 3 lines.
 - Tables over bulleted comparisons; Notion renders them well and they force
   parallel structure.
 - Properties (Status, ID, owner) are metadata — never restate them in the body.
-- Linked docs replace recapped docs. Cite `PERS-ADR-010`, don't re-explain it.
+- Linked docs replace recapped docs. Cite `ADR-010`, don't re-explain it.
 
 ## Report
 

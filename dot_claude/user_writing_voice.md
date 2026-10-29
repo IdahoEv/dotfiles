@@ -4,7 +4,7 @@ description: Voice, tone, diction, and structural patterns to match when writing
 type: user
 ---
 
-When writing documents on Evan's behalf, match the following patterns. These were derived by comparing his hand-written PERS design documents against generated text.
+When writing documents on Evan's behalf, match the following patterns. These were derived by comparing his hand-written design documents against generated text.
 
 ## First-person ownership — direct and unhesitant
 
@@ -38,7 +38,7 @@ The "why" is attached directly to the "what" as a subordinate clause or the next
 Used for caveats, examples, and alternatives without breaking flow.
 
 - "(or whatever)"
-- "(a.k.a. Jigsaw)"
+- "(a.k.a. the migration)"
 - "(e.g. what rule was run, what ML model, if any, contributed, etc.)"
 - "(which will probably be either weekly or daily)"
 

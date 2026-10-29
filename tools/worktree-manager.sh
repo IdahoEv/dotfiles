@@ -475,8 +475,8 @@ fetch_shortcut_ticket() {
     #
     # Shortcut builds its slug by lowercasing and hyphenating the WHOLE title,
     # bracketed track tags included, then truncating to a fixed width — so
-    # "[A/L] Decide PERS data deletion & retention policy (...)" arrives as
-    # "-a-l--decide-pers-data-deletio": leading junk, and the one word that
+    # "[Core] Decide billing data deletion & retention policy (...)" arrives as
+    # "-core--decide-billing-data-deletio": leading junk, and the one word that
     # identifies the ticket cut in half. Everything downstream (worktree dir,
     # agent-view row) inherits that. Distilling the title instead yields
     # "data-deletion-retention-policy". See gt::slug_title in lib/repo-facts.sh.

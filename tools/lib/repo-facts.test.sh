@@ -42,8 +42,8 @@ $1" 2>/dev/null)" && rc=0 || rc=$?
 
 check "strips leading tags, parens, stopwords, verb; keeps tail" \
   "Data Deletion Retention Policy" \
-  "$(GT_LABEL_NOISE="pers" gt::distill_title \
-     '[A/L] Decide PERS data deletion & retention policy (member deletion)')"
+  "$(GT_LABEL_NOISE="billing" gt::distill_title \
+     '[Core] Decide billing data deletion & retention policy (account deletion)')"
 
 check "strips multiple leading tags" \
   "Collector Adapter Contract" \
@@ -61,7 +61,7 @@ check "preserves acronym case" \
   "$(gt::distill_title 'Enable dd-trace APM log correlation')"
 
 check "empty title yields empty, not an error" "" "$(gt::distill_title '')"
-check "title of only tags yields empty"        "" "$(gt::distill_title '[A/L]')"
+check "title of only tags yields empty"        "" "$(gt::distill_title '[X/Y]')"
 check "title of only stopwords yields empty"   "" "$(gt::distill_title 'the and of')"
 
 # A glob in the title must not expand against the cwd. Guarded by `tr`, but the
@@ -89,8 +89,8 @@ check "negative maxw does not abort a strict caller" \
 
 # ---- gt::sanitize_label / override ------------------------------------------
 check "override wins over the title" \
-  "Planner Drops Subjects" \
-  "$(GT_LABEL_OVERRIDE='Planner Drops Subjects' gt::label_from_title 'Investigate why the planner drops subjects')"
+  "Exporter Drops Rows" \
+  "$(GT_LABEL_OVERRIDE='Exporter Drops Rows' gt::label_from_title 'Investigate why the exporter drops rows with no synced_at')"
 
 check "unusable override falls back to the distiller" \
   "Rewards Thing" \
@@ -156,19 +156,19 @@ r="$(gt::sanitize_label "$GT_LABEL_OVERRIDE")"
 # The core invariant: $GT_LABEL_OVERRIDE moves the DISPLAY LABEL and must not
 # move the branch slug, because a branch name is matched against later
 # (find_ticket_branch, an open PR, shell history) while a label is not.
-_split_title='Investigate why the planner drops subjects with no applicable_date'
+_split_title='Investigate why the exporter drops rows with no synced_at'
 
 check "override moves the display label" \
-  "Planner Drops Subjects" \
-  "$(GT_LABEL_OVERRIDE='Planner Drops Subjects' gt::label_from_title "$_split_title")"
+  "Exporter Drops Rows" \
+  "$(GT_LABEL_OVERRIDE='Exporter Drops Rows' gt::label_from_title "$_split_title")"
 
 check "override does NOT move the slug" \
   "$(gt::slug_title "$_split_title")" \
-  "$(GT_LABEL_OVERRIDE='Planner Drops Subjects' gt::slug_title "$_split_title")"
+  "$(GT_LABEL_OVERRIDE='Exporter Drops Rows' gt::slug_title "$_split_title")"
 
 check "slug override is the explicit escape hatch" \
-  "planner-drops-subjects" \
-  "$(GT_LABEL_SLUG_OVERRIDE='Planner Drops Subjects' gt::slug_title "$_split_title")"
+  "exporter-drops-rows" \
+  "$(GT_LABEL_SLUG_OVERRIDE='Exporter Drops Rows' gt::slug_title "$_split_title")"
 
 check "an unusable slug override falls back to the distiller" \
   "$(gt::slug_title "$_split_title")" \

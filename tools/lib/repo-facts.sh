@@ -98,15 +98,15 @@ gt::ticket_scheme() {  # <branch> → shortcut | github | unknown
 # for agent-view session names, branch slugs, and worktree directory names.
 #
 # The problem this solves: a tracker slug is already lossy. Shortcut turns
-# "[A/L] Decide PERS data deletion & retention policy (member deletion, ...)"
-# into "-a-l--decide-pers-data-deletio", and anything that then truncates THAT
-# is truncating a truncation — the reader is left with "a l decide pers data
-# deletio", whose only informative word is cut in half. Distilling from the
-# title instead keeps the words that distinguish one ticket from another.
+# "[Core] Decide billing data deletion & retention policy (account deletion, ...)"
+# into "-core--decide-billing-data-deletio", and anything that then truncates THAT
+# is truncating a truncation — the reader is left with "core decide billing
+# data deletio", whose only informative word is cut in half. Distilling from
+# the title instead keeps the words that distinguish one ticket from another.
 #
 # The rules, in order, and why each one earns its place:
-#   1. Leading [bracketed] tags — track/project markers ([A], [A/L], [ops],
-#      [PERS]) that are constant across many tickets, so they never
+#   1. Leading [bracketed] tags — track/project markers ([A], [core], [ops],
+#      and the like) that are constant across many tickets, so they never
 #      discriminate between two rows in a list.
 #   2. (Parentheticals) — in these trackers they elaborate, and the title
 #      already stands without them.
@@ -116,9 +116,9 @@ gt::ticket_scheme() {  # <branch> → shortcut | github | unknown
 #      survives it — "what" discriminates better than "how" when the budget is
 #      four words, and most tickets in a backlog are Design or Build.
 #   5. Keep the LAST n words, not the first. English puts the head of a noun
-#      phrase at the end: "unified rewards representation" degrades to
-#      "rewards representation", which is still the subject, whereas keeping
-#      the front gives "design unified" — the generic half.
+#      phrase at the end: "unified notifications representation" degrades to
+#      "notifications representation", which is still the subject, whereas
+#      keeping the front gives "design unified" — the generic half.
 #
 # Acronyms (APM, ADR, SQL) keep their case; everything else is Title Cased, so
 # the result reads as a name rather than a sentence fragment.
@@ -209,9 +209,9 @@ gt::slug_title() {  # <title> [<max-words>] → "short-label-words"
 # gt::distill_title deletes and slices; it never reorders, substitutes, or
 # recognizes that two words mean the same thing. That handles the common
 # "<verb> <modifier> <head noun>" title shape at zero cost and zero variance,
-# and visibly degrades when the subject sits at the FRONT: "Rewards structures
-# are wrong in the legacy mapping layer" loses "Rewards", and "Investigate why
-# the planner drops subjects" loses "planner".
+# and visibly degrades when the subject sits at the FRONT: "Invoice totals
+# are wrong in the staging import layer" loses "Invoice", and "Investigate why
+# the exporter drops rows" loses "exporter".
 #
 # A model reading the title gets those right. So a caller that has already read
 # the title with judgment available — /start, which is a Claude session — may

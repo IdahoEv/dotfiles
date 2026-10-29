@@ -105,9 +105,9 @@ which is usually right but loses the subject when the title is front-loaded:
 
 | Title | `proposed_label` | Write instead |
 | --- | --- | --- |
-| Rewards structures are wrong in the legacy mapping layer | `Wrong Legacy Mapping Layer` | `Rewards Structures Legacy Mapping` |
-| Investigate why the planner drops subjects with no applicable_date | `Subjects No Applicable Date` | `Planner Drops Subjects` |
-| [A/L] Decide PERS data deletion & retention policy (member deletion) | `Data Deletion Retention Policy` | use it — already right |
+| Invoice totals are wrong in the staging import layer | `Wrong Staging Import Layer` | `Invoice Totals Staging Import` |
+| Investigate why the exporter drops rows with no synced_at | `Rows No Synced At` | `Exporter Drops Rows` |
+| [Core] Decide billing data deletion & retention policy (account deletion) | `Data Deletion Retention Policy` | use it — already right |
 
 Report the label you chose. If you genuinely need the branch named too (rare — a
 deliberate rename, not a nicer wording), `GT_LABEL_SLUG_OVERRIDE` does that; say so in the

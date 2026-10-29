@@ -502,7 +502,7 @@ wf::project_facts() {
   # answered. gt::default_branch_ref's probe loop is the fallback, but it tries
   # development → main → master in fixed order with no reference to the remote:
   # in a repo carrying both `development` and `master` where the true default is
-  # `master` (wellth-api-v3's shape), it confidently returns `development`. That
+  # `master`, it confidently returns `development`. That
   # is a guess, and commits_behind/ahead_default would be measured against the
   # wrong base, so label it as one rather than passing it off as fact.
   # Source unconditionally — the ticket parse below needs gt::ticket_from_branch
