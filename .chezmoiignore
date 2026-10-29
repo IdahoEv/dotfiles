@@ -4,6 +4,7 @@
 # Repo docs, not deployed.
 docs
 CLAUDE.md
+AGENTS.md
 
 # git-tools scripts; run in place from the deploy clone, symlinked into
 # ~/.local/bin by run_after_link-tools.sh rather than deployed.

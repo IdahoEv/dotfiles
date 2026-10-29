@@ -1,12 +1,12 @@
 # Cloud workflow for non-Claude hosts
 
-Non-Claude agents (Codex Cloud now, Gemini later) run the dotfiles' own command files (`dot_claude/commands/*.md`) through a per-host adapter. No workflow steps are restated here or in the adapter, so editing a command changes what cloud agents do on the next run.
+Non-Claude agents (Codex Cloud first) run the dotfiles' own command files (`dot_claude/commands/*.md`) through a per-host adapter. No workflow steps are restated here or in the adapter, so editing a command changes what cloud agents do on the next run.
 
 | Piece | Path | Role |
 | --- | --- | --- |
 | Bootstrap | `tools/cloud-workflow-bootstrap.sh` | Resolves `WORKFLOW_REF` (default `main`) to a commit SHA, fetches the repo as one tarball at that SHA, checks required files, exposes `tools/*.sh` on `workflow_bin`, prints `key=value`. Any failure exits non-zero; no cached copy is used. |
 | Adapter | `workflow/adapters/<host>.md` | Run protocol plus a Claude-construct → host-behavior map. Mappings only. |
-| Drift test | `tools/cloud-workflow-adapter.test.sh` | Fails when a covered command uses a Claude-only construct the adapter doesn't map, or the adapter maps one no covered command uses. |
+| Drift test | `tools/cloud-workflow-adapter.test.sh` | Fails when a covered command uses a Claude-only construct on the test's known list that the adapter doesn't map, or the adapter maps one no covered command uses. |
 
 ## Invocation
 
@@ -16,7 +16,7 @@ Requirements: Bash, curl, tar, Python 3 (only when `WORKFLOW_REF` is not a full 
 
 ## Trust and pinning
 
-`main` is a moving target: with the default ref, any push to `main` changes what the next cloud task does, and the bootstrap script itself is fetched from `main`. For a stable pilot, pass `WORKFLOW_REF=<full sha>` and fetch the bootstrap from the same SHA. The reported `workflow_source_commit` is the resolved commit, not a promise that the ref was fixed in advance.
+`main` is a moving target: with the default ref, any push to `main` changes what the next cloud task does, and the bootstrap script itself is fetched from `main`. For a stable pilot, pass `WORKFLOW_REF=<full sha>` ; the adapter's download URL uses the same ref. The reported `workflow_source_commit` is the resolved commit, not a promise that the ref was fixed in advance.
 
 ## Coverage and limits
 
@@ -26,4 +26,4 @@ The tests prove the bootstrap and adapter in source control, not that a phone-la
 
 ## Adding a host
 
-Copy `workflow/adapters/codex.md`, change the construct behaviors, and add the host to the drift test's adapter list. The bootstrap and commands do not change.
+Copy `workflow/adapters/codex.md`, change the construct behaviors, and add a `check` call for it in the drift test. The bootstrap and commands do not change.

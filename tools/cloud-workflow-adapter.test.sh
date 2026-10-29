@@ -18,7 +18,7 @@ adapter, commands = sys.argv[1], sys.argv[2:]
 construct = re.compile(
     r"mcp__[a-z_]+__|\b(?:AskUserQuestion|EnterWorktree|ExitWorktree|TodoWrite|EnterPlanMode|ExitPlanMode)\b"
     r"|\b(?:agent-phase|session-label|sibling-worktrees|github-review-poll)\.sh\b"
-    r"|\bGT_LABEL_[A-Z_]+\b|--tab-only|--no-multi|claude agents|Co-Authored-By|git push --no-verify"
+    r"|\bGT_LABEL_[A-Z_]+\b|--tab-only|--no-multi|--review|--launcher|github-review-repair-agent|~/\.config/local-review-only|claude agents|Co-Authored-By|git push --no-verify"
     r"|~/\.claude/"
     r"|(?<![\w/.-])/(?:start|open-pr|finalize|discuss|board|github-review-comments|local-review-cycle)\b"
 )
@@ -64,3 +64,9 @@ if check "$fixture/adapter.md" "${commands[@]}" 2>"$fixture/err"; then
 fi
 grep -q 'TodoWrite' "$fixture/err" || fail "the stale row should be named"
 [[ "$pass_new" == 1 ]] && printf 'PASS detects unmapped constructs and stale rows\n'
+
+if grep -q 'bash <(' "$adapter"; then fail "adapter must not run the bootstrap via process substitution (hides download failure)"; fi
+for rule in 'workflow_source_commit=' 'not run' 'Workflow source:'; do
+  grep -q -- "$rule" "$adapter" || fail "adapter protocol is missing: $rule"
+done
+printf 'PASS adapter protocol keeps fail-closed download, SHA stamp, and unrun-check rules\n'
