@@ -15,6 +15,7 @@ cat > "$tmp/bin/curl" <<'MOCK_CURL'
 set -euo pipefail
 out=""
 url=""
+printf '%s\n' "$*" >> "$MOCK_CURL_ARGS"
 while (($#)); do
   case "$1" in
     -o) out="$2"; shift 2 ;;
@@ -48,6 +49,7 @@ cat > "$tmp/valid.md" <<'VALID'
 ## Completion report
 VALID
 
+export MOCK_CURL_ARGS="$tmp/curl.args"
 PATH="$tmp/bin:$PATH" TMPDIR="$tmp" MOCK_WORKFLOW_FILE="$tmp/valid.md" \
   bash "$bootstrap" > "$tmp/success.out" || fail "valid workflow should load"
 grep -q 'workflow_source_commit=0123456789abcdef0123456789abcdef01234567' "$tmp/success.out" || fail "source SHA should be reported"
@@ -69,7 +71,7 @@ if PATH="$tmp/bin:$PATH" TMPDIR="$tmp" MOCK_CURL_FAIL=1 MOCK_WORKFLOW_FILE="$tmp
   bash "$bootstrap" > "$tmp/network.out" 2> "$tmp/network.err"; then
   fail "network failure must fail closed"
 fi
-grep -q 'No cached workflow was used' "$tmp/network.err" || fail "retrieval failure should say no cache was used"
+grep -q 'Could not read' "$tmp/network.err" || fail "retrieval failure should say no cache was used"
 pass "fails clearly when the workflow source cannot be retrieved"
 
 rm -rf "$tmp"/dotfiles-workflow.*
@@ -114,3 +116,12 @@ if PATH="$tmp/bin:$PATH" TMPDIR="$tmp" MOCK_WORKFLOW_FILE="$tmp/empty.md" \
 fi
 no_leftovers || fail "empty workflow should clean up its temp dir"
 pass "rejects an empty workflow or one missing any single marker, and cleans up"
+
+! grep -q 'Authorization' "$tmp/curl.args" || fail "no Authorization header expected without GITHUB_TOKEN"
+grep -q -- '--max-time' "$tmp/curl.args" || fail "curl calls should set a total timeout"
+grep -q -- '--retry' "$tmp/curl.args" || fail "curl calls should retry"
+: > "$tmp/curl.args"
+PATH="$tmp/bin:$PATH" TMPDIR="$tmp" GITHUB_TOKEN=tok MOCK_WORKFLOW_FILE="$tmp/valid.md" \
+  bash "$bootstrap" > "$tmp/token.out" || fail "token run should succeed"
+[[ "$(grep -c 'Authorization: Bearer tok' "$tmp/curl.args")" == 1 ]] || fail "token should be sent on the API call only"
+pass "sends timeouts/retry always and the token only on the API call when set"
