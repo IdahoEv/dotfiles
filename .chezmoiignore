@@ -9,6 +9,10 @@ CLAUDE.md
 # ~/.local/bin by run_after_link-tools.sh rather than deployed.
 tools
 
+# Host-neutral workflow contract, fetched at runtime by cloud agents from the
+# repo; not a $HOME file.
+workflow
+
 # Test harness, not a runtime file. It resolves the source-tree names
 # (executable_*), which do not exist at the deployed path. Patterns match
 # TARGET paths — source prefixes (dot_claude/, executable_) stripped.
