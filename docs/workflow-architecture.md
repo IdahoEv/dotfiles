@@ -138,3 +138,7 @@ Key invariant: outputs always flow **up**; the parent session owns every push an
 - **Project reviewers:** agent-format file ending in a `Use when:` clause, in the repo's `.claude/agents/` (precedence over global); reference it from the project's `CLAUDE.md`.
 - **Personal, work-machine reviewers for shared repos:** `docs/local/reviewers/*.md` — globally gitignored, symlinked into every worktree by `wm`. No work content in dotfiles.
 - **New reviewer:** follow `reviewer-contract`'s authoring convention and cite it from project docs; the orchestrator must never invent reviewers mid-cycle.
+
+## Non-Claude hosts (cloud agents)
+
+Codex (later Gemini) runs the command files in `dot_claude/commands/` directly; nothing is restated. `tools/cloud-workflow-bootstrap.sh` fetches the repo at one commit, and `workflow/adapters/<host>.md` maps the Claude-only constructs those commands use (slash commands, `AskUserQuestion`, MCP, session labels, agent view) to host behavior or a stop-and-report. `tools/cloud-workflow-adapter.test.sh` fails when a covered command gains or drops such a construct without the adapter changing, so editing `start.md` or `open-pr.md` means updating the adapter's map in the same PR. v1 covers `/start` and `/open-pr` only; the independent review stage is not ported, so cloud PRs say `Independent review: not performed`. Details: `docs/cloud-workflow.md`.

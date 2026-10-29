@@ -9,8 +9,7 @@ CLAUDE.md
 # ~/.local/bin by run_after_link-tools.sh rather than deployed.
 tools
 
-# Host-neutral workflow contract, fetched at runtime by cloud agents from the
-# repo; not a $HOME file.
+# Cloud-agent host adapters, fetched at runtime from the repo; not a $HOME file.
 workflow
 
 # Test harness, not a runtime file. It resolves the source-tree names
