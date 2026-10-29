@@ -66,7 +66,7 @@ grep -q 'TodoWrite' "$fixture/err" || fail "the stale row should be named"
 [[ "$pass_new" == 1 ]] && printf 'PASS detects unmapped constructs and stale rows\n'
 
 if grep -q 'bash <(' "$adapter"; then fail "adapter must not run the bootstrap via process substitution (hides download failure)"; fi
-for rule in 'workflow_source_commit=' 'not run' 'Workflow source:'; do
+for rule in 'workflow_source_commit=' 'Never imply a check passed' 'Workflow source:'; do
   grep -q -- "$rule" "$adapter" || fail "adapter protocol is missing: $rule"
 done
 printf 'PASS adapter protocol keeps fail-closed download, SHA stamp, and unrun-check rules\n'
