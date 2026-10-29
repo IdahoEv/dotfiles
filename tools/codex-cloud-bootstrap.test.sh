@@ -24,7 +24,13 @@ while (($#)); do
 done
 [[ "${MOCK_CURL_FAIL:-}" != 1 ]] || exit 22
 if [[ "$url" == "https://api.github.com/repos/IdahoEv/dotfiles/commits/main" ]]; then
-  printf '{"sha":"0123456789abcdef0123456789abcdef01234567"}\n'
+  if [[ -n "${MOCK_API_BODY:-}" ]]; then
+    printf '%s\n' "$MOCK_API_BODY"
+  else
+    printf '{"sha":"0123456789abcdef0123456789abcdef01234567"}\n'
+  fi
+elif [[ "${MOCK_RAW_FAIL:-}" == 1 ]]; then
+  exit 22
 elif [[ "$url" == "https://raw.githubusercontent.com/IdahoEv/dotfiles/0123456789abcdef0123456789abcdef01234567/workflow/ticket-to-pr.md" ]]; then
   [[ -n "$out" ]] || exit 2
   cp "$MOCK_WORKFLOW_FILE" "$out"
@@ -65,3 +71,46 @@ if PATH="$tmp/bin:$PATH" TMPDIR="$tmp" MOCK_CURL_FAIL=1 MOCK_WORKFLOW_FILE="$tmp
 fi
 grep -q 'No cached workflow was used' "$tmp/network.err" || fail "retrieval failure should say no cache was used"
 pass "fails clearly when the workflow source cannot be retrieved"
+
+rm -rf "$tmp"/dotfiles-workflow.*
+no_leftovers() { ! compgen -G "$tmp/dotfiles-workflow.*" >/dev/null; }
+
+run_failing() {
+  rm -f "$tmp/case.err"
+  if PATH="$tmp/bin:$PATH" TMPDIR="$tmp" MOCK_WORKFLOW_FILE="$tmp/valid.md" "$@" \
+    bash "$bootstrap" > "$tmp/case.out" 2> "$tmp/case.err"; then
+    fail "$label must fail closed"
+  fi
+}
+
+label="raw fetch failure"; run_failing env MOCK_RAW_FAIL=1
+grep -q 'Could not fetch' "$tmp/case.err" || fail "raw fetch failure should be reported"
+no_leftovers || fail "raw fetch failure should clean up its temp dir"
+pass "fails closed when the workflow file cannot be fetched at the resolved SHA"
+
+label="malformed SHA"; run_failing env 'MOCK_API_BODY={"sha":"abc"}'
+grep -q 'invalid commit response' "$tmp/case.err" || fail "malformed SHA should be rejected"
+pass "rejects a malformed commit SHA"
+
+label="non-JSON API body"; run_failing env 'MOCK_API_BODY=not json'
+grep -q 'invalid commit response' "$tmp/case.err" || fail "non-JSON body should be rejected"
+pass "rejects a non-JSON commit response"
+
+for missing in '<!-- workflow-contract: ticket-to-pr/v1 -->' '## Required behavior' '## Safety boundaries' '## Completion report'; do
+  grep -vxF "$missing" "$tmp/valid.md" > "$tmp/partial.md"
+  label="workflow missing '$missing'"
+  rm -f "$tmp/case.err"
+  if PATH="$tmp/bin:$PATH" TMPDIR="$tmp" MOCK_WORKFLOW_FILE="$tmp/partial.md" \
+    bash "$bootstrap" > "$tmp/case.out" 2> "$tmp/case.err"; then
+    fail "$label must fail closed"
+  fi
+  grep -q 'failed validation' "$tmp/case.err" || fail "$label should report validation failure"
+  no_leftovers || fail "$label should clean up its temp dir"
+done
+: > "$tmp/empty.md"
+if PATH="$tmp/bin:$PATH" TMPDIR="$tmp" MOCK_WORKFLOW_FILE="$tmp/empty.md" \
+  bash "$bootstrap" > "$tmp/case.out" 2> "$tmp/case.err"; then
+  fail "empty workflow must fail closed"
+fi
+no_leftovers || fail "empty workflow should clean up its temp dir"
+pass "rejects an empty workflow or one missing any single marker, and cleans up"

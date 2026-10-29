@@ -8,6 +8,7 @@ readonly repo="IdahoEv/dotfiles"
 readonly workflow_path="workflow/ticket-to-pr.md"
 readonly api_url="https://api.github.com/repos/${repo}/commits/main"
 readonly temp_root="${TMPDIR:-/tmp}"
+readonly curl_opts=(--fail --silent --show-error --location --connect-timeout 10 --max-time 60 --retry 2)
 
 fail() {
   printf 'codex-cloud-bootstrap: ERROR: %s\n' "$*" >&2
@@ -17,10 +18,14 @@ fail() {
 command -v curl >/dev/null 2>&1 || fail "curl is required to retrieve the committed workflow."
 command -v python3 >/dev/null 2>&1 || fail "python3 is required to validate the GitHub commit response."
 
-commit_json="$(curl --fail --silent --show-error --location \
+auth_header=()
+[[ -z "${GITHUB_TOKEN:-}" ]] || auth_header=(-H "Authorization: Bearer $GITHUB_TOKEN")
+
+commit_json="$(curl "${curl_opts[@]}" \
   -H 'Accept: application/vnd.github+json' \
   -H 'X-GitHub-Api-Version: 2022-11-28' \
-  "$api_url")" || fail "Could not read $api_url; check network access and GitHub availability. No cached workflow was used."
+  ${auth_header[@]+"${auth_header[@]}"} \
+  "$api_url")" || fail "Could not read $api_url; check network access, GitHub availability, and the unauthenticated rate limit (60 requests/hour/IP; set GITHUB_TOKEN to raise it). No cached workflow was used."
 
 commit_sha="$(printf '%s' "$commit_json" | python3 -c '
 import json, re, sys
@@ -35,11 +40,11 @@ print(value)
 
 work_dir="$(mktemp -d "${temp_root%/}/dotfiles-workflow.XXXXXX")" \
   || fail "Could not create a temporary directory."
+trap 'rm -rf "$work_dir"' EXIT
 workflow_file="$work_dir/ticket-to-pr.md"
 workflow_url="https://raw.githubusercontent.com/$repo/$commit_sha/$workflow_path"
 
-if ! curl --fail --silent --show-error --location "$workflow_url" -o "$workflow_file"; then
-  rm -rf "$work_dir"
+if ! curl "${curl_opts[@]}" "$workflow_url" -o "$workflow_file"; then
   fail "Could not fetch $workflow_url; check network access and repository visibility. No cached workflow was used."
 fi
 
@@ -63,7 +68,6 @@ if not content.strip() or missing:
     sys.exit("workflow is empty or missing required contract markers: " + ", ".join(missing))
 PY
 then
-  rm -rf "$work_dir"
   fail "The committed workflow failed validation at $workflow_url. No cached workflow was used."
 fi
 
@@ -73,6 +77,8 @@ commit=$commit_sha
 path=$workflow_path
 url=$workflow_url
 EOF
+
+trap - EXIT
 
 printf 'workflow_source_repo=%s\n' "$repo"
 printf 'workflow_source_commit=%s\n' "$commit_sha"
