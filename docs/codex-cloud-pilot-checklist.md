@@ -9,7 +9,7 @@ Status recorded during implementation of dotfiles issue #74. These are observati
 | Runtime workflow retrieval | **Not run** | Bootstrap is implemented to resolve `main` to a full commit SHA, fetch the workflow at that immutable SHA, validate contract markers, and fail closed. Execute it in the target Codex Cloud environment. |
 | Test execution | **Not run** | The mocked bootstrap test is committed, but this session had no checked-out working tree/shell attached to the GitHub repositories, so it was not executed here. Run `bash -n tools/codex-cloud-bootstrap.sh tools/codex-cloud-bootstrap.test.sh` and `bash tools/codex-cloud-bootstrap.test.sh`; then run Kardashev's quiet Core test command in the pilot. |
 | Branch / PR creation | **Partially verified** | This session successfully created review branches and open PRs via GitHub integration. Codex Cloud's own `git push` / `gh pr create` permissions and project branch conventions remain unverified in the target runtime. |
-| Workflow SHA traceability | **Partially verified** | The implementation PR identifies its branch commit as `a628e74686caef3381b45493fefe8e5ec97f6050`. The bootstrap prints the exact SHA fetched from `main`; verify the real pilot's output and that same SHA in its Kardashev PR description. |
+| Workflow SHA traceability | **Partially verified** | The bootstrap prints the exact SHA fetched from `main`; verify the real pilot's output and that same SHA in its Kardashev PR description. The final runtime SHA cannot be known until the source-of-truth PR is merged. |
 
 ## Pilot completion rule
 
