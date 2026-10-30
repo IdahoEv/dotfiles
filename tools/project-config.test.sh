@@ -168,5 +168,12 @@ check "migrate: no bogus projects owner"  "no"  "$([ -e "$N/projects" ] && echo 
 check "migrate: providers dot-prefixed"   "yes" "$([ -d "$N/.open-pr-providers" ] && echo yes || echo no)"
 check "migrate: old root removed"         "no"  "$([ -e "$MH/.config/git-tools" ] && echo yes || echo no)"
 
+MH2="$ROOT/mighome2"; mkdir -p "$MH2/.config/git-tools/projects/o/r"
+git init -q "$MH2/.config/git-tools"; git init -q "$MH2/.config/git-tools/projects"
+msg="$(HOME="$MH2" sh "$MIG" 2>&1)"
+check "migrate: colliding .git not nested" "no" "$([ -e "$MH2/.config/project-overlays/.git/.git" ] && echo yes || echo no)"
+case "$msg" in *"finish by hand"*) w=yes ;; *) w=no ;; esac
+check "migrate: collision warns"           "yes" "$w"
+
 printf '%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

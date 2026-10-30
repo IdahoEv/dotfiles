@@ -23,6 +23,7 @@ mkdir -p "$new"
 if [ -d "$old/projects" ]; then
   for d in "$old/projects"/* "$old/projects"/.[!.]*; do
     [ -e "$d" ] || continue
+    [ -e "$new/$(basename "$d")" ] && continue
     mv "$d" "$new/$(basename "$d")"
   done
   rmdir "$old/projects" 2>/dev/null || true
@@ -36,6 +37,7 @@ done
 # Anything else moves across untouched.
 for d in "$old"/* "$old"/.[!.]*; do
   [ -e "$d" ] || continue
+  [ -e "$new/$(basename "$d")" ] && continue
   mv "$d" "$new/$(basename "$d")"
 done
 
