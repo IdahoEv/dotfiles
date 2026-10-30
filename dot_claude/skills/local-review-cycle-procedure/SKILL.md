@@ -18,7 +18,7 @@ Use the project's documented test commands. `FAST` is the quick suite; `FULL` is
 - Stop and report if the branch is the base/default branch or the tree is dirty (the implementing session must commit or resolve stray changes first). Do not rewrite history or force-update branches. If behind BASE, merge BASE into the branch and resolve conflicts before review.
 - Record the changed-file set from `git diff --name-only BASE...HEAD`. Stop if empty.
 - Run `FAST` as a baseline. Record pre-existing failures and compare later runs against them.
-- Run `agent-phase.sh REVIEW` when available. At the start of round k, update the review statusline with `~/.claude/skills/github-review-procedure/github-review-state.sh --set-local "<k-1>*"`; when the round ends, set it to `<k>`.
+- Run `agent-phase.sh REVIEW` when available. At the start of round k, mark the running round on the statusline with `~/.claude/skills/github-review-procedure/github-review-state.sh --set-local "<k-1>*"`.
 
 ## 2. Discover and select reviewers
 
@@ -51,7 +51,7 @@ Each round:
 
    `reason` is required for dismissed and deferred (the dismissal rationale or issue ref), optional for fixed. Identifiers and short phrases only — never code or prompt text.
 5. Fix only actionable findings. Write a failing test first for behavior bugs when practical. Make the smallest adequate fix; do not expand scope. A real but out-of-scope finding is deferred: file an issue for it under the project's bookkeeping rule (tracker, epic, milestone) instead of growing the branch. Record dismissed/deferred findings and brief reasons so later rounds do not repeat them. Never silently dismiss a judgment call on scope or design intent: disclose it in the round summary of your report, and put it in the round's approval question under `--confirm-commits`.
-6. Run `FAST`; fix new failures and never disable, skip, or quarantine tests to get green. Commit round fixes locally using the project's commit convention and attribution trailer. Skip the commit if nothing changed. Never push.
+6. Run `FAST`; fix new failures and never disable, skip, or quarantine tests to get green. Commit round fixes locally using the project's commit convention and attribution trailer. Skip the commit if nothing changed. Never push. When the round's work is committed (or nothing changed), close the round on the statusline with `~/.claude/skills/github-review-procedure/github-review-state.sh --set-local "<k>"`.
 
    With `--confirm-commits`, ask before committing with one self-contained `AskUserQuestion` holding the reviewers' findings (one line each), the verdict table, what was fixed, `FAST` status, and the full commit message. Table, between `---` rules:
 
@@ -70,7 +70,7 @@ If significant, well-supported findings remain after round 5, stop and ask the u
 
 - Run `agent-phase.sh --no-review`.
 - Run `FULL` once after final review fixes. Re-run only failing checks as needed and compare against the baseline.
-- Record the cycle totals with `wf-event.sh review.result round=<last round number> fixed=<n> dismissed=<n> deferred=<n> reviewers=<agent,agent>`, each field only when available. A failure surfaced by `FULL` and fixed here still counts.
+- Record the cycle totals with `wf-event.sh review.result round=<last round number> fixed=<n> dismissed=<n> deferred=<n> reviewers=<agent,agent>`, each field only when available. A failure surfaced by `FULL` and fixed here still counts. The `round=` field also records the final local count on the statusline, so include it.
 - Report reviewers selected and why, rounds, findings fixed/dismissed/deferred, test status (including baseline failures), and commits added. Keep output terse: one line per round (`R<k>: N fixed / M dismissed or deferred`).
 - List dismissed findings with the reason for each, and deferred findings with the issue filed for each; do not implement them. Dismissed-with-reasons is mandatory — no report or PR note without it.
 - End by stating `/open-pr` is the next step. The report is the source for the PR body's "Review cycle" note: rounds, fixed/dismissed/deferred counts, and the dismissed findings with their reasons.
