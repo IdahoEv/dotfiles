@@ -24,7 +24,7 @@
 #   none             worktree + kickoff only (same as --no-tab).
 #
 # Launcher is chosen by, in order: --launcher flag → $START_TICKET_LAUNCHER →
-# `launcher=` in .start-ticket.conf / ~/.config/start-ticket/config → iterm.
+# `launcher=` in .start-ticket.conf / ~/.config/start-ticket/config → iterm (none off macOS).
 # Put `launcher=bg` in the per-machine ~/.config/start-ticket/config to opt in.
 #
 # Run from anywhere inside the target repo. Provider is chosen by, in order:
@@ -188,6 +188,16 @@ fit() {
   printf '%s…' "${text:0:$((maxlen - 1))}"
 }
 
+# Tries each clipboard tool in turn (a tool on PATH can still fail, e.g. xclip
+# with no DISPLAY on WSL); returns 1 if none succeeds.
+copy_to_clipboard() {  # <file>
+  local f="$1" t
+  for t in pbcopy wl-copy "xclip -selection clipboard" clip.exe; do
+    command -v "${t%% *}" >/dev/null && $t < "$f" 2>/dev/null && return 0
+  done
+  return 1
+}
+
 # ---- iTerm tab ---------------------------------------------------------------
 # Opens a new iTerm tab, split into two horizontal panes:
 #   top    — `claude` (bare); the kickoff prompt is typed into its input via a
@@ -209,10 +219,15 @@ open_tab() {  # <worktree> <kickoff> [<label>]
 
   local delay="${START_TICKET_CLAUDE_DELAY:-3}"
 
-  command -v pbcopy >/dev/null && pbcopy < "$kf" 2>/dev/null || true
+  local copied=""
+  copy_to_clipboard "$kf" && copied=1
 
   if [ "${TERM_PROGRAM:-}" != "iTerm.app" ] && [ "${LC_TERMINAL:-}" != "iTerm2" ]; then
-    printf '\nNot in iTerm. Kickoff is on the clipboard and at %s\n  cd %q && claude   # then paste the kickoff\n' "$kf" "$wt"
+    if [ -n "$copied" ]; then
+      printf '\nNot in iTerm. Kickoff is on the clipboard and at %s\n  cd %q && claude   # then paste the kickoff\n' "$kf" "$wt"
+    else
+      printf '\nNot in iTerm. Kickoff is at %s\n  cd %q && claude   # then paste the kickoff\n' "$kf" "$wt"
+    fi
     return
   fi
 
@@ -395,7 +410,9 @@ if [ "$mode" = "tab-only" ]; then
 fi
 
 launcher="$launcher_flag"
-[ -n "$launcher" ] || launcher="$(setting launcher START_TICKET_LAUNCHER iterm)"
+default_launcher=iterm
+[ "$(uname)" = Darwin ] || default_launcher=none
+[ -n "$launcher" ] || launcher="$(setting launcher START_TICKET_LAUNCHER "$default_launcher")"
 case "$launcher" in
   iterm|bg|none) ;;
   *) die "unknown launcher '$launcher' (expected iterm, bg, or none)" ;;

@@ -12,6 +12,11 @@
 
 set -euo pipefail
 
+if [ "$(uname)" != Darwin ]; then
+  printf 'iTerm2 is macOS-only — skipping Ticket profile setup.\n'
+  exit 0
+fi
+
 dir="$HOME/Library/Application Support/iTerm2/DynamicProfiles"
 file="$dir/ticket-tab.json"
 

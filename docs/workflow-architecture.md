@@ -52,7 +52,7 @@ flowchart TD
 3. **Evidence bar + triage.** Findings need a credible failure path, test gap, or material design cost. Already-triaged findings pass forward; nothing is resurrected without new evidence.
 4. **Gates and caps.** `DESIGN: unsound` halts before code changes; max 5 rounds; `FAST` per round, `FULL` once at finish; `--confirm-commits` is opt-in hold-for-review — by default the manager commits every round and human review happens on the PR.
 5. **Isolation of side effects.** Reviewers read-only; repair agent edits only; commands own GitHub writes. The cycle manager is the deliberate exception: it owns the working-tree edits, round commits, telemetry and statusline during the cycle — but never pushes or writes to GitHub. Planned GitHub replies are posted only after the parent pushes.
-6. **Measured.** Every triaged finding → `wf-event.sh review.finding`; cycle end → `review.result`. `wf-report.sh` shows which reviewers earn their tokens.
+6. **Measured.** Every triaged finding → `wf-event.sh review.finding` (with validity and an overlap key); cycle end → `review.result`. `wf-report.sh` shows which reviewers earn their tokens: valid/rejected/partial counts, overlap between reviewers, and rounds by reviewer mix.
 
 ## Commands: what to use when
 
@@ -138,3 +138,7 @@ Key invariant: outputs always flow **up**; the parent session owns every push an
 - **Project reviewers:** agent-format file ending in a `Use when:` clause, in the repo's `.claude/agents/` (precedence over global); reference it from the project's `CLAUDE.md`.
 - **Personal, work-machine reviewers for shared repos:** `docs/local/reviewers/*.md` — globally gitignored, symlinked into every worktree by `wm`. No work content in dotfiles.
 - **New reviewer:** follow `reviewer-contract`'s authoring convention and cite it from project docs; the orchestrator must never invent reviewers mid-cycle.
+
+## Non-Claude hosts (cloud agents)
+
+Codex (later Gemini) runs the command files in `dot_claude/commands/` directly; nothing is restated. `tools/cloud-workflow-bootstrap.sh` fetches the repo at one commit, and `workflow/adapters/<host>.md` maps the Claude-only constructs those commands use (slash commands, MCP, session labels, agent view, review options) to host behavior or a stop-and-report. `tools/cloud-workflow-adapter.test.sh` fails when a covered command gains or drops a construct on its known list without the adapter changing, so editing `start.md` or `open-pr.md` means updating the adapter's map in the same PR. v1 covers `/start` and `/open-pr` only; the independent review stage is not ported, so cloud PRs say `Independent review: not performed`. Details: `docs/cloud-workflow.md`.
