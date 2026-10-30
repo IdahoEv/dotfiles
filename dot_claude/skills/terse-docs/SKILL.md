@@ -49,56 +49,48 @@ justifying clause looks locally reasonable.
 
 ## Write like a person
 
-The budget buys words back; this section decides what the survivors read
-like. Terse prose in a machine register is short and still unreadable —
-the reader is being talked to, not handed a deposit of findings.
+Short is not enough; the prose must also read like a person wrote it.
+This section is for prose documents; code comments follow their own
+section below. Reasons that link one claim to another stay ("because,"
+"so"); reasons that defend why the doc or field exists still go.
 
 - **An author in the sentence.** Recommendations and uncertainty get a
   first-person owner: "I recommend weekly," "we rejected X as too
   complex." Passive voice and system-as-agent ("was considered and
-  rejected," "the schema chooses") hide who decided — the reader's first
+  rejected," "the schema chooses") hide who decided, the reader's first
   question.
 - **Plain words, said the way you'd say them aloud.** A noun phrase
-  invented for this doc ("preparedness document," "growth point,"
-  "occurrence identity") is a coinage: define it at first use or use the
-  plain phrase. A well-recognized term that is the standard name —
-  `immutable`, `incentive`, `care gap`, `foreign key` — is not a coinage:
-  keep it, especially when it is shorter than the paraphrase. The
-  targets are invented coinages and formalism compressions, not standard
-  vocabulary.
-- **Codeword budget: one term per sentence the reader must translate.**
-  Familiar jargon still costs a translation, so a sentence carrying three
-  of them fails even for an expert reader.
-- **No formalism compressions** — "immutable by database trigger,"
-  "raises unconditionally," "status-gated," "no DRAFT-only exemption."
-  These are bureaucratic, not dense. Unpack them into how a person would
-  say it.
+  invented for this doc ("readiness doc," "expansion slot," "event
+  identity") is a coinage: define it at first use or use the plain
+  phrase. Standard names (`immutable`, `foreign key`, `idempotent`) stay,
+  especially when shorter than the paraphrase. Compressions like
+  "immutable by database trigger," "status-gated," or "no exception for
+  unpublished records" are bureaucratic, not dense: say them the way a
+  person would. A sentence carrying more than two terms the reader must
+  translate fails, even for an expert.
 - **Every sentence parses in one pass.** Real subject, real verb, no
   noun-stacks. Each item in a list gets a verb or becomes a table row.
-  Vary sentence length — a longer sentence carrying one complete thought
-  beats three clipped fragments.
+  Vary sentence length: one complete thought in a longer sentence beats
+  three clipped fragments.
 - **Ground every abstraction** with a concrete example within a sentence
-  or two: "how much money is at stake — $30/month minus $2 per missed
-  day," not `value_amount (integer, minor units)`.
-- **Ask the reader's question, then answer it.** "What is this member's
-  total stake right now? A filter and a sum across every kind at once."
-  The question carries the reader through the reasoning.
-- **Conversational is not padded.** A dash aside that restates the
-  sentence's point ("— the wrong moment to work this out for the first
-  time") is throat-clearing in casual dress. Make the point once, inside
-  the sentence, or cut it.
-- **Uncertainty is a request, not a hedge.** "TBD — I want your feedback
-  on the cadence," not "may potentially be revisited."
+  or two: "how much a customer owes, $30/month minus $2 per late day,"
+  not `price_amount (integer, minor units)`.
+- **Ask the reader's question, then answer it** (optional in reference
+  docs). "What is this account's balance right now? A filter and a sum
+  across every entry type at once."
+- **Uncertainty is a request, not a hedge.** "TBD, I want your feedback
+  on the cadence," not "may potentially be revisited." A dash aside that
+  restates the sentence's point is throat-clearing in casual dress.
 - **Emphasis budget.** Bold the decision or the one thing that matters.
   Bold per fact is bold on nothing.
 - **Identifiers starve prose.** A paragraph threading code identifiers
   through every sentence is unreadable even when each sentence parses.
-  Move the identifiers to a list or table where each sits on its own
-  line; let the prose carry the reasoning.
+  Move the identifiers to a list or table; let the prose carry the
+  reasoning.
 - **Titles and headings in plain words.** A reader who knows the domain
   must know what the doc is about from the title alone. Stacked noun
-  modifiers ("Breaking Rule Schema Changes: Insert-and-Re-point") fail;
-  "Changing `rule.json` when old rule rows can't be edited" passes.
+  modifiers ("Schema Changes That Break Consumers: Insert-and-Re-point")
+  fail; "Changing `config.json` when old rows can't be edited" passes.
   Define any abbreviation at first use; a legend the reader must hold in
   memory across sections is a rewrite signal.
 
