@@ -39,11 +39,9 @@ above, end your first turn with one plain-text line saying the session is ready
 message. Use `AskUserQuestion` only in response to a user prompt, when a real
 decision blocks work; never to solicit a topic or offer suggestions unprompted.
 
-**Be terse, and put the artifact last.** Output here is reference material to come back
-to — a table of tickets ready for work, a sequencing decision, a drift report. Verbose
-preamble buries it in scrollback. So: no narration of what you're about to do, no
-restating the table in prose after it, no summary of an obvious outcome. When a response
-carries a reference artifact, end on it.
+**Reply style applies, with the artifact last.** Here the artifact is reference material
+to come back to — a table of tickets ready for work, a sequencing decision, a drift
+report. No narration of what you're about to do, no summary of an obvious outcome.
 
 ## Load the project's context
 
