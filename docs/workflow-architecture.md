@@ -52,7 +52,7 @@ flowchart TD
 3. **Evidence bar + triage.** Findings need a credible failure path, test gap, or material design cost. Already-triaged findings pass forward; nothing is resurrected without new evidence.
 4. **Gates and caps.** `DESIGN: unsound` halts before code changes; max 5 rounds; `FAST` per round, `FULL` once at finish; `--confirm-commits` is opt-in hold-for-review — by default the manager commits every round and human review happens on the PR.
 5. **Isolation of side effects.** Reviewers read-only; repair agent edits only; commands own GitHub writes. The cycle manager is the deliberate exception: it owns the working-tree edits, round commits, telemetry and statusline during the cycle — but never pushes or writes to GitHub. Planned GitHub replies are posted only after the parent pushes.
-6. **Measured.** Every triaged finding → `wf-event.sh review.finding`; cycle end → `review.result`. `wf-report.sh` shows which reviewers earn their tokens.
+6. **Measured.** Every triaged finding → `wf-event.sh review.finding` (with validity and an overlap key); cycle end → `review.result`. `wf-report.sh` shows which reviewers earn their tokens: valid/rejected/partial counts, overlap between reviewers, and rounds by reviewer mix.
 
 ## Commands: what to use when
 
