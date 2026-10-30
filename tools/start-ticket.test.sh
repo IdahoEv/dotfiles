@@ -129,6 +129,10 @@ has "xclip fallback claims clipboard" "on the clipboard" <(printf '%s' "$out")
 stub_clip wl-copy
 tab_only "$CB/bin:$CB/sys" >/dev/null
 has "wl-copy preferred over xclip" "kickoff text" "$CB/wl-copy.out"
+printf '#!/bin/sh\nexit 1\n' > "$CB/bin/wl-copy"; printf '#!/bin/sh\nexit 1\n' > "$CB/bin/xclip"
+stub_clip clip.exe
+out="$(tab_only "$CB/bin:$CB/sys")"
+has "failing wl-copy/xclip fall through to clip.exe" "kickoff text" "$CB/clip.exe.out"
 
 # ---- setup-ticket-profile.sh off macOS ----------------------------------------
 mkdir -p "$CB/uname-bin"

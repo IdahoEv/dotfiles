@@ -188,6 +188,16 @@ fit() {
   printf '%s…' "${text:0:$((maxlen - 1))}"
 }
 
+# Tries each clipboard tool in turn (a tool on PATH can still fail, e.g. xclip
+# with no DISPLAY on WSL); returns 1 if none succeeds.
+copy_to_clipboard() {  # <file>
+  local f="$1" t
+  for t in pbcopy wl-copy "xclip -selection clipboard" clip.exe; do
+    command -v "${t%% *}" >/dev/null && $t < "$f" 2>/dev/null && return 0
+  done
+  return 1
+}
+
 # ---- iTerm tab ---------------------------------------------------------------
 # Opens a new iTerm tab, split into two horizontal panes:
 #   top    — `claude` (bare); the kickoff prompt is typed into its input via a
@@ -198,17 +208,6 @@ fit() {
 # Tab name = "Is<n> <slug>" where the ticket number is ALWAYS kept and the slug is
 # truncated instead (to START_TICKET_TAB_MAXLEN). The name is re-asserted after
 # commands are written so iTerm's automatic title updates don't clobber it.
-# First available clipboard tool wins; returns 1 if none is installed.
-copy_to_clipboard() {  # <file>
-  local f="$1"
-  if command -v pbcopy >/dev/null; then pbcopy < "$f" 2>/dev/null
-  elif command -v wl-copy >/dev/null; then wl-copy < "$f" 2>/dev/null
-  elif command -v xclip >/dev/null; then xclip -selection clipboard < "$f" 2>/dev/null
-  elif command -v clip.exe >/dev/null; then clip.exe < "$f" 2>/dev/null
-  else return 1
-  fi
-}
-
 open_tab() {  # <worktree> <kickoff> [<label>]
   local wt="$1" kf="$2" label="${3:-}"
   if [ -n "$label" ]; then
