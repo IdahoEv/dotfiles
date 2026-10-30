@@ -1,6 +1,6 @@
 ---
 name: terse-docs
-description: Write or cut documentation — Notion RFCs/ADRs, design docs, READMEs, PRDs, planning docs, PR bodies, code comments, docstrings. Use when asked to write, draft, revise, shorten, or tighten a document, or when a doc has grown past the length a busy reader will finish. Enforces conclusion-first, high-density prose and deletes the show-your-work reflex.
+description: Write or cut documentation — Notion RFCs/ADRs, design docs, READMEs, PRDs, planning docs, PR bodies, code comments, docstrings. Use when asked to write, draft, revise, shorten, or tighten a document, or when a doc has grown past the length a busy reader will finish. Enforces conclusion-first, high-density prose in a plain human voice, and deletes the show-your-work reflex.
 ---
 
 # Terse Docs
@@ -46,6 +46,61 @@ this," "why this doc doesn't duplicate its sibling." Fix below.
 
 A reference doc that argues is the most common bloat case, because each
 justifying clause looks locally reasonable.
+
+## Write like a person
+
+The budget buys words back; this section decides what the survivors read
+like. Terse prose in a machine register is short and still unreadable —
+the reader is being talked to, not handed a deposit of findings.
+
+- **An author in the sentence.** Recommendations and uncertainty get a
+  first-person owner: "I recommend weekly," "we rejected X as too
+  complex." Passive voice and system-as-agent ("was considered and
+  rejected," "the schema chooses") hide who decided — the reader's first
+  question.
+- **Plain words, said the way you'd say them aloud.** A noun phrase
+  invented for this doc ("preparedness document," "growth point,"
+  "occurrence identity") is a coinage: define it at first use or use the
+  plain phrase. A well-recognized term that is the standard name —
+  `immutable`, `incentive`, `care gap`, `foreign key` — is not a coinage:
+  keep it, especially when it is shorter than the paraphrase. The
+  targets are invented coinages and formalism compressions, not standard
+  vocabulary.
+- **Codeword budget: one term per sentence the reader must translate.**
+  Familiar jargon still costs a translation, so a sentence carrying three
+  of them fails even for an expert reader.
+- **No formalism compressions** — "immutable by database trigger,"
+  "raises unconditionally," "status-gated," "no DRAFT-only exemption."
+  These are bureaucratic, not dense. Unpack them into how a person would
+  say it.
+- **Every sentence parses in one pass.** Real subject, real verb, no
+  noun-stacks. Each item in a list gets a verb or becomes a table row.
+  Vary sentence length — a longer sentence carrying one complete thought
+  beats three clipped fragments.
+- **Ground every abstraction** with a concrete example within a sentence
+  or two: "how much money is at stake — $30/month minus $2 per missed
+  day," not `value_amount (integer, minor units)`.
+- **Ask the reader's question, then answer it.** "What is this member's
+  total stake right now? A filter and a sum across every kind at once."
+  The question carries the reader through the reasoning.
+- **Conversational is not padded.** A dash aside that restates the
+  sentence's point ("— the wrong moment to work this out for the first
+  time") is throat-clearing in casual dress. Make the point once, inside
+  the sentence, or cut it.
+- **Uncertainty is a request, not a hedge.** "TBD — I want your feedback
+  on the cadence," not "may potentially be revisited."
+- **Emphasis budget.** Bold the decision or the one thing that matters.
+  Bold per fact is bold on nothing.
+- **Identifiers starve prose.** A paragraph threading code identifiers
+  through every sentence is unreadable even when each sentence parses.
+  Move the identifiers to a list or table where each sits on its own
+  line; let the prose carry the reasoning.
+- **Titles and headings in plain words.** A reader who knows the domain
+  must know what the doc is about from the title alone. Stacked noun
+  modifiers ("Breaking Rule Schema Changes: Insert-and-Re-point") fail;
+  "Changing `rule.json` when old rule rows can't be edited" passes.
+  Define any abbreviation at first use; a legend the reader must hold in
+  memory across sections is a rewrite signal.
 
 ## Reference docs: state, don't justify
 
@@ -100,7 +155,9 @@ Before adding a section, stop at the first rung that works:
 
 1. **Link it** — the fact lives somewhere already (ticket, schema, code, prior ADR).
 2. **Table it** — options, trade-offs, requirements, and comparisons are tables.
-   Prose comparing three options is the single biggest source of bloat.
+   Prose comparing three options is the single biggest source of bloat. One
+   clause per cell; a cell that needs three clauses is prose or a nested list
+   under the table.
 3. **One sentence** — most "sections" are a sentence.
 4. **Write the section** — only when a reader genuinely needs the walkthrough.
 
@@ -110,7 +167,10 @@ Before adding a section, stop at the first rung that works:
   option | why not. Not a subsection apiece.
 - **Restating the title**, the ticket, or the previous paragraph.
 - **Transitional throat-clearing** — "It's worth noting," "As discussed above,"
-  "In order to," "It is important to understand that."
+  "In order to," "It is important to understand that." Cut these; **keep the
+  connectives that carry logic** — *because, so, but, which means* — one per
+  logical link. A reader who must infer why fact B follows fact A is paying
+  your debt.
 - **Background the audience has.** Teammates don't need the project explained.
 - **Hedge stacks** — "may potentially," "could possibly." Say it or cut it.
 - **Summaries of a doc under 1,000 words.** The doc is the summary.
