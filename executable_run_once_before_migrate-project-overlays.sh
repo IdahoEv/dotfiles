@@ -21,7 +21,7 @@ mkdir -p "$new"
 
 # Flatten projects/ first: its owner dirs become the new root's children.
 if [ -d "$old/projects" ]; then
-  for d in "$old/projects"/*; do
+  for d in "$old/projects"/* "$old/projects"/.[!.]*; do
     [ -e "$d" ] || continue
     mv "$d" "$new/$(basename "$d")"
   done

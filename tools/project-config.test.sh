@@ -148,10 +148,25 @@ check "overlay preamble not merged"  "ok"  "$b"
 echo brief > "$OV2/claude/agents/rel.md"
 out="$(run_start)"
 case "$out" in *"Personal project Claude assets"*) a=yes ;; *) a=no ;; esac
-case "$out" in *"$OV2/claude/agents/rel.md"*) b=yes ;; *) b=no ;; esac
+b=no; printf '%s\n' "$out" | grep -qxF -- "- $OV2/claude/agents/rel.md" && b=yes
 check "kickoff lists overlay agent" "yes" "$a"
-check "kickoff names agent path"    "yes" "$b"
+check "kickoff names agent path on its own line" "yes" "$b"
 rm -rf "$OV2/claude"
+
+# ---- migration script --------------------------------------------------------
+MIG="$TOOLS/../executable_run_once_before_migrate-project-overlays.sh"
+MH="$ROOT/mighome"; mkdir -p "$MH/.config/git-tools/projects/o/r" "$MH/.config/git-tools/open-pr-providers"
+git init -q "$MH/.config/git-tools/projects"
+echo '*~' > "$MH/.config/git-tools/projects/.gitignore"
+echo x > "$MH/.config/git-tools/projects/o/r/f"
+HOME="$MH" sh "$MIG" >/dev/null 2>&1
+N="$MH/.config/project-overlays"
+check "migrate: owner dir flattened"      "yes" "$([ -f "$N/o/r/f" ] && echo yes || echo no)"
+check "migrate: store .git follows"       "yes" "$([ -d "$N/.git" ] && echo yes || echo no)"
+check "migrate: store .gitignore follows" "yes" "$([ -f "$N/.gitignore" ] && echo yes || echo no)"
+check "migrate: no bogus projects owner"  "no"  "$([ -e "$N/projects" ] && echo yes || echo no)"
+check "migrate: providers dot-prefixed"   "yes" "$([ -d "$N/.open-pr-providers" ] && echo yes || echo no)"
+check "migrate: old root removed"         "no"  "$([ -e "$MH/.config/git-tools" ] && echo yes || echo no)"
 
 printf '%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

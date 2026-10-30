@@ -362,8 +362,8 @@ personal_assets_block() {  # <dir> → markdown, or empty
   local dir="$1" f out=""
   while IFS= read -r f; do
     [ -n "$f" ] || continue
-    [ -n "$out" ] || out="$(printf '\n## Personal project Claude assets\n\nThese live in the per-project overlay, outside this checkout. Invoke them without copying files: an agent — launch it as a `general-purpose` agent with the file body as its brief, honoring any `model` frontmatter; a command or skill — read the file and follow it inline. When the repo itself defines a same-named agent/command/skill, that one wins.\n')"
-    out="$(printf '%s- %s\n' "$out" "$f")"
+    [ -n "$out" ] || out="$(printf '\n## Personal project Claude assets\n\nThese live in the per-project overlay, outside this checkout. Invoke them without copying files: an agent — launch it as a `general-purpose` agent with the file body as its brief, honoring any `model` frontmatter; a command or skill — read the file and follow it inline. When the repo itself defines a same-named agent/command/skill, that one wins.\n')"$'\n\n'
+    out="${out}- ${f}"$'\n'
   done < <(gt::overlay_claude_files "" "$dir")
   printf '%s' "$out"
 }
