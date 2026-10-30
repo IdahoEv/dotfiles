@@ -7,8 +7,8 @@ argument-hint: [optional: max count, theme, or time available]
 
 Scan this project's tickets and choose a **set** that can start now and run side by
 side in separate worktrees. Read-only: no tickets created or edited, no sessions
-started. Intended for a Governor session; follow `/governor`'s conduct (terse, artifact
-last, stay in the primary worktree).
+started. Intended for a Governor session; follow `/governor`'s conduct (reply style, stay
+in the primary worktree).
 
 ## Gather
 
