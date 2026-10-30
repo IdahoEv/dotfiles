@@ -24,7 +24,7 @@
 #   none             worktree + kickoff only (same as --no-tab).
 #
 # Launcher is chosen by, in order: --launcher flag → $START_TICKET_LAUNCHER →
-# `launcher=` in .start-ticket.conf / ~/.config/start-ticket/config → iterm.
+# `launcher=` in .start-ticket.conf / ~/.config/start-ticket/config → iterm (none off macOS).
 # Put `launcher=bg` in the per-machine ~/.config/start-ticket/config to opt in.
 #
 # Run from anywhere inside the target repo. Provider is chosen by, in order:
@@ -198,6 +198,17 @@ fit() {
 # Tab name = "Is<n> <slug>" where the ticket number is ALWAYS kept and the slug is
 # truncated instead (to START_TICKET_TAB_MAXLEN). The name is re-asserted after
 # commands are written so iTerm's automatic title updates don't clobber it.
+# First available clipboard tool wins; returns 1 if none is installed.
+copy_to_clipboard() {  # <file>
+  local f="$1"
+  if command -v pbcopy >/dev/null; then pbcopy < "$f" 2>/dev/null
+  elif command -v wl-copy >/dev/null; then wl-copy < "$f" 2>/dev/null
+  elif command -v xclip >/dev/null; then xclip -selection clipboard < "$f" 2>/dev/null
+  elif command -v clip.exe >/dev/null; then clip.exe < "$f" 2>/dev/null
+  else return 1
+  fi
+}
+
 open_tab() {  # <worktree> <kickoff> [<label>]
   local wt="$1" kf="$2" label="${3:-}"
   if [ -n "$label" ]; then
@@ -209,10 +220,15 @@ open_tab() {  # <worktree> <kickoff> [<label>]
 
   local delay="${START_TICKET_CLAUDE_DELAY:-3}"
 
-  command -v pbcopy >/dev/null && pbcopy < "$kf" 2>/dev/null || true
+  local copied=""
+  copy_to_clipboard "$kf" && copied=1
 
   if [ "${TERM_PROGRAM:-}" != "iTerm.app" ] && [ "${LC_TERMINAL:-}" != "iTerm2" ]; then
-    printf '\nNot in iTerm. Kickoff is on the clipboard and at %s\n  cd %q && claude   # then paste the kickoff\n' "$kf" "$wt"
+    if [ -n "$copied" ]; then
+      printf '\nNot in iTerm. Kickoff is on the clipboard and at %s\n  cd %q && claude   # then paste the kickoff\n' "$kf" "$wt"
+    else
+      printf '\nNot in iTerm. Kickoff is at %s\n  cd %q && claude   # then paste the kickoff\n' "$kf" "$wt"
+    fi
     return
   fi
 
@@ -395,7 +411,9 @@ if [ "$mode" = "tab-only" ]; then
 fi
 
 launcher="$launcher_flag"
-[ -n "$launcher" ] || launcher="$(setting launcher START_TICKET_LAUNCHER iterm)"
+default_launcher=iterm
+[ "$(uname)" = Darwin ] || default_launcher=none
+[ -n "$launcher" ] || launcher="$(setting launcher START_TICKET_LAUNCHER "$default_launcher")"
 case "$launcher" in
   iterm|bg|none) ;;
   *) die "unknown launcher '$launcher' (expected iterm, bg, or none)" ;;

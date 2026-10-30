@@ -1,4 +1,4 @@
-require_command chezmoi "chezmoi not installed. Install with: brew install chezmoi" || return
+require_command chezmoi "chezmoi not installed. $(install_hint chezmoi)" || return
 
 alias cm="chezmoi"
 

@@ -107,5 +107,35 @@ n="$(wc -l < "$WF_TELEMETRY_LOG")"
 (cd "$ROOT/widgets" && PATH=/usr/bin:/bin START_TICKET_PROVIDER_DIR="$STP" "$ST" 8 --no-tab >/dev/null 2>&1)
 check "unresolved provider records nothing" "$n" "$(wc -l < "$WF_TELEMETRY_LOG")"
 
+# ---- clipboard fallback (open_tab via --tab-only, not in iTerm) ----------------
+CB="$ROOT/clip"; mkdir -p "$CB/bin" "$CB/sys"
+for t in git cat dirname basename sed tr wc mktemp rm date grep awk head cut sort uname env bash; do
+  p="$(command -v "$t")" && ln -sf "$p" "$CB/sys/$t"
+done
+printf 'kickoff text\n' > "$CB/kf"
+stub_clip() {  # <name>
+  printf '#!/bin/sh\ncat > "%s/%s.out"\n' "$CB" "$1" > "$CB/bin/$1"; chmod +x "$CB/bin/$1"
+}
+tab_only() {  # PATH-dir-list → stdout
+  (cd "$ROOT/widgets" && env -u TERM_PROGRAM -u LC_TERMINAL PATH="$1" "$ST" --tab-only "$ROOT/wt" "$CB/kf" --launcher iterm 2>/dev/null)
+}
+out="$(tab_only "$CB/sys")"
+has "no clipboard tool: prints kickoff path" "Kickoff is at $CB/kf" <(printf '%s' "$out")
+check "no clipboard tool: does not claim clipboard" "" "$(grep -F 'on the clipboard' <<<"$out")"
+stub_clip xclip
+out="$(tab_only "$CB/bin:$CB/sys")"
+has "xclip fallback receives kickoff" "kickoff text" "$CB/xclip.out"
+has "xclip fallback claims clipboard" "on the clipboard" <(printf '%s' "$out")
+stub_clip wl-copy
+tab_only "$CB/bin:$CB/sys" >/dev/null
+has "wl-copy preferred over xclip" "kickoff text" "$CB/wl-copy.out"
+
+# ---- setup-ticket-profile.sh off macOS ----------------------------------------
+mkdir -p "$CB/uname-bin"
+printf '#!/bin/sh\necho Linux\n' > "$CB/uname-bin/uname"; chmod +x "$CB/uname-bin/uname"
+out="$(PATH="$CB/uname-bin:$PATH" "$TOOLS/setup-ticket-profile.sh" 2>&1)"; rc=$?
+check "profile setup exits 0 on Linux" "0" "$rc"
+check "profile setup creates no ~/Library" "no" "$([ -e "$HOME/Library" ] && echo yes || echo no)"
+
 printf '%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
