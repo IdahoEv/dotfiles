@@ -38,7 +38,7 @@ gco() {
       local ref=$(_fzf_git_each_ref --no-multi)
       [ -n "$ref" ] && git checkout "$ref"
     else
-      echo "fzf not installed. Use 'gco <branch>' or install fzf: brew install fzf" >&2
+      echo "fzf not installed. Use 'gco <branch>' or install fzf. $(install_hint fzf)" >&2
       return 1
     fi
   else

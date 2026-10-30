@@ -24,6 +24,19 @@ require_command() {
   return 0
 }
 
+# Print a per-OS install command for a package.
+# Usage:
+#   require_command fzf "fzf not installed. $(install_hint fzf)" || return
+install_hint() {
+  if has_command brew; then
+    echo "Install with: brew install $1"
+  elif has_command apt; then
+    echo "Install with: sudo apt install $1"
+  else
+    echo "Install $1 with your package manager"
+  fi
+}
+
 # Check multiple commands at once
 # Usage:
 #   require_commands fzf bat delta || return
