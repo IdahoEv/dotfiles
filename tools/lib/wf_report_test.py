@@ -347,6 +347,17 @@ class Report(Base):
         self.assertTrue(any("unrecognized validity" in g for g in r["gaps"]))
         self.assertTrue(any("malformed key" in g for g in r["gaps"]))
 
+    def test_valid_finding_without_key_is_gapped(self):
+        path = self.write_log([
+            self.finding("2026-10-20T09:00:00Z", "acme/w#5", round=1, validity="valid"),
+            self.finding("2026-10-20T09:01:00Z", "acme/w#5", round=1, validity="partial"),
+            self.finding("2026-10-20T09:02:00Z", "acme/w#5", round=1, validity="rejected")])
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            wf_report.main(["--log", path, "--now", NOW, "--json"])
+        r = json.loads(buf.getvalue())["runs"][0]
+        self.assertIn("2 valid/partial review.finding event(s) without key excluded from overlap", r["gaps"])
+
     def test_same_reviewer_re_raising_is_not_overlap(self):
         key = "a" * 64
         path = self.write_log([

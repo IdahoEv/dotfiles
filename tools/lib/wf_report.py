@@ -208,7 +208,7 @@ class Run:
                "by_reviewer": defaultdict(lambda: defaultdict(int)),
                "dismissed_findings": [], "validity_totals": defaultdict(int),
                "keys": defaultdict(set), "has_validity": False}
-        bad_verdicts = bad_validity = bad_keys = 0
+        bad_verdicts = bad_validity = bad_keys = missing_keys = 0
         for e in self.of("review.finding"):
             rv, verdict = e.get("reviewer", "unknown"), e.get("verdict", "unknown")
             if verdict not in ("fixed", "dismissed", "deferred"):
@@ -235,6 +235,8 @@ class Run:
                     out["keys"][key].add(rv)
                 else:
                     bad_keys += 1
+            elif validity in ("valid", "partial"):
+                missing_keys += 1
             if verdict == "dismissed":
                 out["dismissed_findings"].append((rv, e.get("round"), e.get("reason")))
         if bad_verdicts:
@@ -243,6 +245,8 @@ class Run:
             self.gaps.append(f"{bad_validity} review.finding event(s) with unrecognized validity counted as unreported")
         if bad_keys:
             self.gaps.append(f"{bad_keys} review.finding event(s) with malformed key skipped from overlap")
+        if missing_keys:
+            self.gaps.append(f"{missing_keys} valid/partial review.finding event(s) without key excluded from overlap")
         if results:
             for k in ("fixed", "dismissed", "deferred"):
                 vals = [e[k] for e in results if isinstance(e.get(k), int)]
