@@ -22,7 +22,7 @@
 
 # From: https://github.com/junegunn/fzf-git.sh
 
-require_command fzf "fzf not installed. git-fzf features disabled. Install with: brew install fzf" || return
+require_command fzf "fzf not installed. git-fzf features disabled. $(install_hint fzf)" || return
 
 # shellcheck disable=SC2039
 [[ $0 == - ]] && return
@@ -195,7 +195,7 @@ _fzf_git_check() {
 }
 
 __fzf_git=${BASH_SOURCE[0]:-${(%):-%x}}
-__fzf_git=$(readlink -f "$__fzf_git" 2> /dev/null || /usr/bin/ruby --disable-gems -e 'puts File.expand_path(ARGV.first)' "$__fzf_git" 2> /dev/null)
+__fzf_git=$(readlink -f "$__fzf_git" 2> /dev/null || realpath "$__fzf_git" 2> /dev/null || echo "$__fzf_git")
 
 _fzf_git_files() {
   _fzf_git_check || return

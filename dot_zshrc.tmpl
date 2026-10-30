@@ -1,8 +1,20 @@
-eval "$(/opt/homebrew/bin/brew shellenv)"
-eval "$(oh-my-posh init zsh --config  $(brew --prefix oh-my-posh)/themes/quick-term.omp.json)"
+for __brew in /opt/homebrew/bin/brew /usr/local/bin/brew /home/linuxbrew/.linuxbrew/bin/brew; do
+    [[ -x $__brew ]] && { eval "$($__brew shellenv)"; break; }
+done
+unset __brew
 
 export PATH="$HOME/bin:$HOME/.local/bin:$PATH"
-eval "$(/usr/libexec/path_helper)" # might cause issues at work where I haven't installed latex
+[[ -x /usr/libexec/path_helper ]] && eval "$(/usr/libexec/path_helper)" # might cause issues at work where I haven't installed latex
+
+if (( $+commands[oh-my-posh] )); then
+    __posh_theme="$HOME/.config/oh-my-posh/theme.json"
+    for __dir in "$(command -v brew >/dev/null && brew --prefix oh-my-posh 2>/dev/null)/themes" "$POSH_THEMES_PATH" "$HOME/.cache/oh-my-posh/themes"; do
+        [[ -f $__dir/quick-term.omp.json ]] && { __posh_theme="$__dir/quick-term.omp.json"; break; }
+    done
+    [[ -f $__posh_theme ]] && eval "$(oh-my-posh init zsh --config $__posh_theme)"
+    unset __posh_theme __dir
+fi
+
 
 
 # load modules

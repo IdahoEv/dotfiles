@@ -422,7 +422,7 @@ fetch_shortcut_ticket() {
 
     # Check if short CLI is available
     if ! command -v short >/dev/null 2>&1; then
-        error "'short' CLI not found. Install with: brew install short"
+        error "'short' CLI not found. Install it from https://github.com/shortcut/short (brew install short on macOS)"
     fi
 
     info "Fetching Shortcut ticket #${ticket_id}..."
@@ -543,7 +543,7 @@ save_ticket_details() {
 select_branch_interactive() {
     # Check if fzf is available
     if ! command -v fzf >/dev/null 2>&1; then
-        error "fzf not found. Install with: brew install fzf"
+        error "fzf not found. Install with: brew install fzf (macOS) or sudo apt install fzf (Debian/Ubuntu)"
     fi
 
     info "Loading branches and worktrees..."
