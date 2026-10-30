@@ -63,7 +63,7 @@ Each round:
 
    Only the hash is logged — never the path, bucket, or claim. Reuse the same `key` when the same finding reappears in a later round; dedupe identical (reviewer, key, round) repeats within a round.
 5. Fix only actionable findings. Write a failing test first for behavior bugs when practical. Make the smallest adequate fix; do not expand scope. A real but out-of-scope finding is deferred: file an issue for it under the project's bookkeeping rule (tracker, epic, milestone) instead of growing the branch. Record dismissed/deferred findings and brief reasons so later rounds do not repeat them. Never silently dismiss a judgment call on scope or design intent: disclose it in the round summary of your report, and put it in the round's approval question under `--confirm-commits`.
-6. Run `FAST`; fix new failures and never disable, skip, or quarantine tests to get green. Commit round fixes locally using the project's commit convention and attribution trailer. Skip the commit if nothing changed. Never push. When the round's work is committed (or nothing changed), close the round on the statusline with `~/.claude/skills/github-review-procedure/github-review-state.sh --set-local "<k>"`.
+6. Run `FAST`; fix new failures and never disable, skip, or quarantine tests to get green. Commit round fixes locally using the project's commit convention and attribution trailer. Skip the commit if nothing changed. Never push.
 
    With `--confirm-commits`, ask before committing with one self-contained `AskUserQuestion` holding the reviewers' findings (one line each), the verdict table, what was fixed, `FAST` status, and the full commit message. Table, between `---` rules:
 
@@ -72,6 +72,8 @@ Each round:
    | 1 | `path:line` | terse description | ✅ fixed / ❌ dismissed — reason / ⏭ deferred — issue ref |
 
    Options: "Commit and run another round" (only when another round is worth it), "Commit and finish" (Recommended when the fixes were small), "Don't commit yet"; the `preview` on each commit option is the full commit message. With no file changes, ask only whether to run another round or finish. "Don't commit yet" pauses the cycle: act on the user's instructions, then ask again. The next round reviews only committed changes, so it starts only after this round's commit.
+
+   Once the round is committed (or nothing changed), close it on the statusline with `~/.claude/skills/github-review-procedure/github-review-state.sh --set-local "<k>"`.
 7. Stop when there are no actionable findings or remaining feedback is only repeats, speculative hardening, or low-value nits. In later rounds, scope follows step 1: reviewers see only the fix-commit diff plus the correctness pass on touched files; a full `BASE...HEAD` re-review needs a concrete reason.
 
 If the first architecture review returns `DESIGN: unsound`, stop before changing code and ask the user whether to keep or rework the design. Include the concrete alternative and trade-offs. This gate applies only when the reviewer demonstrates a materially better alternative—not for style preferences.
@@ -82,7 +84,7 @@ If significant, well-supported findings remain after round 5, stop and ask the u
 
 - Run `agent-phase.sh --no-review`.
 - Run `FULL` once after final review fixes. Re-run only failing checks as needed and compare against the baseline.
-- Record the cycle totals with `wf-event.sh review.result round=<last round number> fixed=<n> dismissed=<n> deferred=<n> reviewers=<agent,agent>`, each field only when available; counts are triaged findings, so a finding raised by two reviewers counts once. A failure surfaced by `FULL` and fixed here still counts. The `round=` field also records the final local count on the statusline, so include it.
+- Record the cycle totals with `wf-event.sh review.result round=<last round number> fixed=<n> dismissed=<n> deferred=<n> reviewers=<agent,agent>`, `round=` always, the other fields only when available; counts are triaged findings, so a finding raised by two reviewers counts once. A failure surfaced by `FULL` and fixed here still counts. `round=` also records the final local count on the statusline.
 - Report reviewers selected and why, rounds, findings fixed/dismissed/deferred (with validity), overlap count (findings raised by ≥2 reviewers), test status (including baseline failures), and commits added. Keep output terse: one line per round (`R<k>: N fixed / M dismissed or deferred`).
 - List dismissed findings with the reason for each, and deferred findings with the issue filed for each; do not implement them. Dismissed-with-reasons is mandatory — no report or PR note without it.
 - End by stating `/open-pr` is the next step. The report is the source for the PR body's "Review cycle" note: rounds, fixed/dismissed/deferred counts, and the dismissed findings with their reasons.

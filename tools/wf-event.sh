@@ -56,18 +56,18 @@ wf::emit "$@"
 
 # review.result is the reliable end-of-cycle signal; carry its round count to
 # the statusline's file so a skipped prose step can't leave a stale count.
-if [ "${1:-}" = "review.result" ]; then
+sync_rounds() {
+  local dir="." round="" arg gd
+  if [ "${1:-}" = "--dir" ]; then dir="${2:-.}"; shift 2; fi
+  [ "${1:-}" = "review.result" ] || return 0
+  shift
   for arg in "$@"; do
-    case "$arg" in
-      round=*) round="${arg#round=}" ;;
-    esac
+    case "$arg" in round=*) round="${arg#round=}" ;; esac
   done
-  if [[ "${round:-}" =~ ^[0-9]+$ ]]; then
-    gd="$(git rev-parse --absolute-git-dir 2>/dev/null || true)"
-    if [ -n "$gd" ]; then
-      printf '%s\n' "$round" > "$gd/local-review-rounds.tmp" \
-        && mv "$gd/local-review-rounds.tmp" "$gd/local-review-rounds" 2>/dev/null || true
-    fi
-  fi
-fi
+  [[ "$round" =~ ^[0-9]+$ ]] || return 0
+  gd="$(git -C "$dir" rev-parse --absolute-git-dir 2>/dev/null)" || return 0
+  printf '%s\n' "$round" > "$gd/local-review-rounds.tmp" \
+    && mv "$gd/local-review-rounds.tmp" "$gd/local-review-rounds"
+}
+sync_rounds "$@" 2>/dev/null || true
 exit 0
