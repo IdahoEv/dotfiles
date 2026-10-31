@@ -6,7 +6,7 @@ Takes a ticket id (`/start 22`). No id → list the repo's open tickets and ask 
 **Chains.** Arguments are space-separated *groups*; a group is one id or a comma list
 (`/start 12,13 14 15,16,17`, the line `/pick` ends with). Each group is its own session:
 run steps 1–4 once per group, independently, and finish one group's launch before the
-next. A comma group is a chain (GitHub only, max 3): one worktree, branch, kickoff and
+next. A comma group is a chain (GitHub only): one worktree, branch, kickoff and
 session for all its tickets, named from the first; the kickoff tells the session how to run
 the chain. Pass the group to `start-ticket.sh` as-is (`start-ticket.sh 12,13`); the label
 you write is for the head ticket's title.

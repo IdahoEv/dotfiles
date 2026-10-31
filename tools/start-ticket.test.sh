@@ -146,9 +146,10 @@ check "single id re-run keeps the chain file" "7 8 9" "$(tr '\n' ' ' < "$(git -C
 check "single id: kickoff has no chain block" "0" "$(grep -c 'chain of' "$(get kickoff <<<"$out")")"
 check "single id: marks only itself" "mark 7" "$(grep '^mark' "$FAKE_LOG")"
 
-chain 7,8,9,10 >/dev/null; rc=$?
-check "chain over 3 links is refused" "1" "$rc"
-has "chain cap is explained" "at most 3" "$ROOT/chain.err"
+# Four links are fine now; only the label collapses.
+git -C "$ROOT/widgets" worktree add -q "$ROOT/cwt4" -b 7-ticket-7b
+FAKE_WT="$ROOT/cwt4" chain 7,8,9,10 >/dev/null
+check "chain over 3 links is accepted" "7,8,9,10" "$(get chain <<<"$(FAKE_WT="$ROOT/cwt4" chain 7,8,9,10)")"
 chain 7,8,7 >/dev/null; rc=$?
 check "duplicate ids are refused" "1" "$rc"
 chain 7,,8 >/dev/null; rc=$?
@@ -167,6 +168,8 @@ has "chain: session name joins the ids" "[PLAN] Is7+8 Ticket 7" "$ROOT/claude.ar
 git -C "$ROOT/widgets" worktree add -q "$ROOT/swt" -b 7-single
 (cd "$ROOT/widgets" && FAKE_WT="$ROOT/swt" PATH="$ROOT/stubbin:$PATH" START_TICKET_PROVIDER_DIR="$CP" "$ST" 7 --provider fake --launcher bg >/dev/null 2>&1)
 has "single id: session name unchanged" "[PLAN] Is7 Ticket 7" "$ROOT/claude.args"
+(cd "$ROOT/widgets" && PATH="$ROOT/stubbin:$PATH" START_TICKET_PROVIDER_DIR="$CP" FAKE_WT="$ROOT/cwt4" "$ST" 7,8,9,10 --provider fake --launcher bg >/dev/null 2>&1)
+has "long chain: label collapses to first+last" "[PLAN] Is7+10 Ticket 7" "$ROOT/claude.args"
 
 # ---- clipboard fallback (open_tab via --tab-only, not in iTerm) ----------------
 CB="$ROOT/clip"; mkdir -p "$CB/bin" "$CB/sys"

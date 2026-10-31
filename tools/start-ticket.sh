@@ -27,7 +27,7 @@
 # `launcher=` in .start-ticket.conf / ~/.config/start-ticket/config → iterm (none off macOS).
 # Put `launcher=bg` in the per-machine ~/.config/start-ticket/config to opt in.
 #
-# A comma list (`12,13,14`, github only, at most 3) is a chain: one worktree and
+# A comma list (`12,13,14`, github only) is a chain: one worktree and
 # branch named from the head (first) ticket, one kickoff and session for all of
 # them, every ticket marked in progress, membership recorded one id per line in
 # <git-dir>/chain (read by open-pr.sh and finalize-check.sh).
@@ -135,7 +135,12 @@ chain_tag() {
   local f ids
   f="$(git -C "$1" rev-parse --absolute-git-dir 2>/dev/null)/chain"
   [ -f "$f" ] || return 0
+  # Long chains collapse to first+last: the label is a glanceable row name, and
+  # <git-dir>/chain is the authoritative membership list.
   ids="$(paste -sd+ "$f")"
+  case "$ids" in
+    *+*+*+*) ids="${ids%%+*}+${ids##*+}" ;;
+  esac
   case "$ids" in *+*) printf '%s' "$ids" ;; esac
 }
 
@@ -507,7 +512,6 @@ ids=("$id")
 case "$id" in
   *,*)
     IFS=, read -ra ids <<<"$id"
-    [ "${#ids[@]}" -le 3 ] || die "a chain holds at most 3 tickets (got ${#ids[@]})"
     seen=","
     for _i in "${ids[@]}"; do
       [ -n "$_i" ] || die "empty ticket id in chain '$id'"
