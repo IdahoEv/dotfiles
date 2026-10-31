@@ -18,7 +18,7 @@ Use the project's documented test commands. `FAST` is the quick suite; `FULL` is
 - Stop and report if the branch is the base/default branch or the tree is dirty (the implementing session must commit or resolve stray changes first). Do not rewrite history or force-update branches. If behind BASE, merge BASE into the branch and resolve conflicts before review.
 - Record the changed-file set from `git diff --name-only BASE...HEAD`. Stop if empty.
 - Run `FAST` as a baseline. Record pre-existing failures and compare later runs against them.
-- Run `agent-phase.sh REVIEW` when available. At the start of round k, update the review statusline with `~/.claude/skills/github-review-procedure/github-review-state.sh --set-local "<k-1>*"`; when the round ends, set it to `<k>`.
+- Run `agent-phase.sh REVIEW` when available. At the start of round k, mark the running round on the statusline with `~/.claude/skills/github-review-procedure/github-review-state.sh --set-local "<k-1>*"`.
 
 ## 2. Discover and select reviewers
 
@@ -72,6 +72,8 @@ Each round:
    | 1 | `path:line` | terse description | ✅ fixed / ❌ dismissed — reason / ⏭ deferred — issue ref |
 
    Options: "Commit and run another round" (only when another round is worth it), "Commit and finish" (Recommended when the fixes were small), "Don't commit yet"; the `preview` on each commit option is the full commit message. With no file changes, ask only whether to run another round or finish. "Don't commit yet" pauses the cycle: act on the user's instructions, then ask again. The next round reviews only committed changes, so it starts only after this round's commit.
+
+   Once the round is committed (or nothing changed), close it on the statusline with `~/.claude/skills/github-review-procedure/github-review-state.sh --set-local "<k>"`.
 7. Stop when there are no actionable findings or remaining feedback is only repeats, speculative hardening, or low-value nits. In later rounds, scope follows step 1: reviewers see only the fix-commit diff plus the correctness pass on touched files; a full `BASE...HEAD` re-review needs a concrete reason.
 
 If the first architecture review returns `DESIGN: unsound`, stop before changing code and ask the user whether to keep or rework the design. Include the concrete alternative and trade-offs. This gate applies only when the reviewer demonstrates a materially better alternative—not for style preferences.
@@ -82,7 +84,7 @@ If significant, well-supported findings remain after round 5, stop and ask the u
 
 - Run `agent-phase.sh --no-review`.
 - Run `FULL` once after final review fixes. Re-run only failing checks as needed and compare against the baseline.
-- Record the cycle totals with `wf-event.sh review.result round=<last round number> fixed=<n> dismissed=<n> deferred=<n> reviewers=<agent,agent>`, each field only when available; counts are triaged findings, so a finding raised by two reviewers counts once. A failure surfaced by `FULL` and fixed here still counts.
+- Record the cycle totals with `wf-event.sh review.result round=<last round number> fixed=<n> dismissed=<n> deferred=<n> reviewers=<agent,agent>`, `round=` always, the other fields only when available; counts are triaged findings, so a finding raised by two reviewers counts once. A failure surfaced by `FULL` and fixed here still counts. `round=` also records the final local count on the statusline.
 - Report reviewers selected and why, rounds, findings fixed/dismissed/deferred (with validity), overlap count (findings raised by ≥2 reviewers), test status (including baseline failures), and commits added. Keep output terse: one line per round (`R<k>: N fixed / M dismissed or deferred`).
 - List dismissed findings with the reason for each, and deferred findings with the issue filed for each; do not implement them. Dismissed-with-reasons is mandatory — no report or PR note without it.
 - End by stating `/open-pr` is the next step. The report is the source for the PR body's "Review cycle" note: rounds, fixed/dismissed/deferred counts, and the dismissed findings with their reasons.
