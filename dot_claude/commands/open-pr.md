@@ -53,7 +53,8 @@ result and repairs a double (including a cross-dialect one) itself.
 On a chained branch (`git rev-parse --absolute-git-dir`'s `chain` file lists several ids),
 the summary covers every ticket, one line each. If the chain stopped early, ship a draft
 (`--draft`) whose body names the completed tickets and a **Remaining** note listing the
-rest; pass only the completed ids as `--issue <a,b>` so unfinished tickets aren't closed.
+rest; pass only the completed ids as `--issue <a,b>` so unfinished tickets aren't closed. If no ticket completed, open no PR: report the
+stall and stop.
 
 **Body: a real summary, and stop there** — no `Closes #<NNN>`, no Shortcut URL, no
 tracker-linking footer. `open-pr.sh` appends `provider::pr_body_footer` when the provider
