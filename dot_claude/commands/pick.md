@@ -39,7 +39,8 @@ Group the ready tickets into **chains**: ordered runs worked serially in one wor
 one session, one PR. Chains run side by side with each other. Judge from ticket text and
 a quick look at the code areas named; don't read implementations in depth.
 
-- **At most 3 links** per chain. A single ticket is a chain of one.
+- **No fixed link cap**, but keep the combined estimate within one "large" ticket — the
+  chain is one PR and one review pass. A single ticket is a chain of one.
 - **Within a chain**, tickets may overlap in files and may depend on each other; order
   them so each prerequisite comes first. Chain tickets that share files or are
   dependency-ordered rather than leaving them to collide as separate sessions.
