@@ -142,7 +142,7 @@ has "chain: preamble ID is the head" "Ticket 7 on 7-ticket-7." "$kf"
 : > "$FAKE_LOG"
 out="$(chain 7)"
 check "single id: no chain stdout" "" "$(get chain <<<"$out")"
-check "single id: no chain file" "no" "$([ -e "$(git -C "$ROOT/cwt" rev-parse --absolute-git-dir)/chain" ] && echo yes || echo no)"
+check "single id re-run keeps the chain file" "7 8 9" "$(tr '\n' ' ' < "$(git -C "$ROOT/cwt" rev-parse --absolute-git-dir)/chain" | sed 's/ $//')"
 check "single id: kickoff has no chain block" "0" "$(grep -c 'chain of' "$(get kickoff <<<"$out")")"
 check "single id: marks only itself" "mark 7" "$(grep '^mark' "$FAKE_LOG")"
 
@@ -164,7 +164,8 @@ mkdir -p "$ROOT/stubbin"
 printf '#!/bin/sh\nprintf "%%s\\n" "$@" > "%s/claude.args"\n' "$ROOT" > "$ROOT/stubbin/claude"; chmod +x "$ROOT/stubbin/claude"
 (cd "$ROOT/widgets" && PATH="$ROOT/stubbin:$PATH" START_TICKET_PROVIDER_DIR="$CP" "$ST" 7,8 --provider fake --launcher bg >/dev/null 2>&1)
 has "chain: session name joins the ids" "[PLAN] Is7+8 Ticket 7" "$ROOT/claude.args"
-(cd "$ROOT/widgets" && PATH="$ROOT/stubbin:$PATH" START_TICKET_PROVIDER_DIR="$CP" "$ST" 7 --provider fake --launcher bg >/dev/null 2>&1)
+git -C "$ROOT/widgets" worktree add -q "$ROOT/swt" -b 7-single
+(cd "$ROOT/widgets" && FAKE_WT="$ROOT/swt" PATH="$ROOT/stubbin:$PATH" START_TICKET_PROVIDER_DIR="$CP" "$ST" 7 --provider fake --launcher bg >/dev/null 2>&1)
 has "single id: session name unchanged" "[PLAN] Is7 Ticket 7" "$ROOT/claude.args"
 
 # ---- clipboard fallback (open_tab via --tab-only, not in iTerm) ----------------

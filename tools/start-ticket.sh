@@ -424,7 +424,7 @@ Tickets ${chain_csv//,/, } are one chain: one worktree, one branch, one PR.
 2. Work the tickets in order. After each: meet its acceptance criteria, run the tests, commit. Then run \`/local-review-cycle <base> --rounds 1\` (design/architecture and obvious correctness bugs only), where \`<base>\` is the previous ticket's commit SHA, or \`origin/<default branch>\` for the first. Note each ticket's commit SHA.
 3. After the last ticket: run the full \`/local-review-cycle\` (up to 5 rounds) against \`origin/<default branch>\`, covering the whole chain.
 4. Then run \`/open-pr\` yourself, without pausing. One PR closes every ticket.
-5. If a ticket fails its acceptance criteria or stalls after about 3 focused attempts, stop the chain. Run \`/open-pr --draft\` with the completed tickets and a note on what remains; list the unfinished tickets there without closing them.
+5. If a ticket fails its acceptance criteria or stalls after about 3 focused attempts, stop the chain. Run \`/open-pr --draft\` with the completed tickets (pass only their ids as \`--issue <a,b>\`) and a note on what remains; list the unfinished tickets there without closing them.
 CHAIN
 }
 
@@ -585,7 +585,7 @@ for _i in "${ids[@]}"; do
 done
 
 chain_file="$(git -C "$wt" rev-parse --absolute-git-dir)/chain"
-if [ -n "$chain_csv" ]; then printf '%s\n' "${ids[@]}" > "$chain_file"; else rm -f "$chain_file"; fi
+[ -z "$chain_csv" ] || printf '%s\n' "${ids[@]}" > "$chain_file"
 
 # mark_in_progress is best-effort and some tracker CLIs fail while exiting 0, so
 # read the state back here rather than making the caller verify. ticket_state is

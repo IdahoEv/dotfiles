@@ -71,6 +71,8 @@ Lead with the set; end on the table and the `/start` line.
    Chain is a letter (`A`, `B`, …), the same for every link of a chain.
 4. **Start line** — last, in a code block so it can be pasted: one space-separated group
    per chain, ids comma-separated in chain order, e.g. `/start 12,13 14 15,16,17`.
+   Chains need the GitHub provider; on a Shortcut-provider repo every chain is a single
+   ticket, so the line is space-separated ids only.
 
 State anything you couldn't determine (e.g. unreadable tracker, unclear code area)
 rather than guessing. Don't offer to start the tickets; the start line is the next step.

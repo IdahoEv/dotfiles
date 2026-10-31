@@ -202,6 +202,9 @@ else
   # A chain's membership is the fallback ahead of the branch name: the branch
   # only carries the head ticket.
   chain_file="$(git rev-parse --absolute-git-dir)/chain"
+  if [ -z "$issue" ] && [ -n "$draft" ] && [ -s "$chain_file" ]; then
+    die "a draft PR on a chained branch must name the completed tickets with --issue <a,b>"
+  fi
   if [ -z "$issue" ] && [ -s "$chain_file" ]; then
     issue="$(paste -sd, "$chain_file")"
   fi

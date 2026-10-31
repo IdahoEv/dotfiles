@@ -132,6 +132,12 @@ check "chain: body-file footers appended, none duplicated" "Closes #42 Closes #4
 new_repo 42-foo; chain_file 42 43
 run --title "Add foo" --issue 42 --review none >/dev/null
 check "--issue beats the chain file" "Closes #42" "$(body)"
+new_repo 42-foo; chain_file 42 43
+run --title "Add foo" --draft --review none >/dev/null 2>&1; rc=$?
+check "chain: --draft without --issue is refused" "1" "$rc"
+new_repo 42-foo; chain_file 42 43
+run --title "Add foo" --draft --issue 42 --review none >/dev/null
+check "chain: --draft closes only the named tickets" "Closes #42" "$(body)"
 new_repo 42-foo
 run --title "Add foo" --issue 42,x --review none >/dev/null; rc=$?
 check "bad id in --issue list is refused" "1" "$rc"

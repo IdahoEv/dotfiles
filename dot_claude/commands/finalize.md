@@ -83,9 +83,9 @@ Act on `verdict`:
 
 Use `ticket_id` and `ticket_scheme` from step 1. `chain_ids` lists every ticket the branch
 closed (a chained session; equal to `ticket_id` otherwise): run the check below for
-**each** id. A ticket still `OPEN` after a PR that listed it under `Closes` is closed as
-below; one the PR never claimed (a draft PR from a stopped chain) is **not** closed —
-report it as unfinished.
+**each** id. If a ticket is still `OPEN` and the PR listed it under `Closes`, close it as below.
+If the PR never claimed it (a draft PR from a stopped chain), leave it open and report
+it as unfinished.
 
 **GitHub** (`ticket_scheme=github`):
 ```bash
