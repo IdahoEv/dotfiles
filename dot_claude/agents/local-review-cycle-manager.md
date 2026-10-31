@@ -23,4 +23,4 @@ The skill's triage rules are canonical — apply them as written. Read the full 
 
 ## Output
 
-Return exactly the report the skill's §4 specifies: reviewers selected and why, one line per round, fixed/dismissed/deferred counts, test status, commits added, and the mandatory dismissed-findings-with-reasons list, ending with `/open-pr` as the next step. The implementing session prints it verbatim and carries it into the PR body's "Review cycle" note, so make it complete enough to act on without redoing the review.
+Return exactly the report the skill's §4 specifies: reviewers selected and why, one line per round, fixed/dismissed/deferred counts, test status, commits added, and the mandatory dismissed-findings-with-reasons list, ending with `/open-pr` as the next step. The implementing session prints it unaltered as top-level markdown, so headings and tables must stand on their own, and carries it into the PR body's "Review cycle" note, so make it complete enough to act on without redoing the review.
