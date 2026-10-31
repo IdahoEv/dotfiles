@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # open-pr.sh — push the current branch, open (or reuse) its PR, and trigger review bots.
 #
-#   open-pr.sh [--title "<short title>"] [--body-file <path>] [--issue <N>]
+#   open-pr.sh [--title "<short title>"] [--body-file <path>] [--issue <N>[,<N>…]] [--draft]
 #               [--review none|copilot|copilot+claude] [--provider github|kardashev]
 #
 # Provider: --provider, else `openpr_provider=` in .start-ticket.conf, else the
@@ -9,6 +9,10 @@
 # github. github: `<NNN>-slug` branch → issue NNN, title as given, `Closes #NNN`
 # footer, no review triggers (--review is ignored). kardashev: `Is<NNN>:` titles
 # plus Copilot/claude.yml triggers.
+#
+# Chains: --issue takes a comma list, and a branch with <git-dir>/chain (written by
+# start-ticket.sh 12,13) closes every ticket in it. The head issue (first) prefixes
+# the title; each issue gets its own `Closes` footer. --draft opens a draft PR.
 #
 # Ticketless: no issue in the branch and no --issue → the PR opens with the given
 # title and body, no `Closes` line.
@@ -86,12 +90,13 @@ find_provider_file() {  # <name> → path, or empty
 }
 
 # ---- args -------------------------------------------------------------------
-title="" body_file="" issue="" review="" provider=""
+title="" body_file="" issue="" review="" provider="" draft=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --title)          title="${2:?--title needs a value}"; shift 2 ;;
     --body-file)      body_file="${2:?--body-file needs a value}"; shift 2 ;;
     --issue)          issue="${2:?--issue needs a value}"; shift 2 ;;
+    --draft)          draft=1; shift ;;
     --review)         review="${2:?--review needs a value}"; shift 2 ;;
     --provider|--env) provider="${2:?--provider needs a value}"; shift 2 ;;
     -h|--help)        sed -n '2,32p' "$0"; exit 0 ;;
@@ -114,7 +119,10 @@ case "$review" in
 esac
 
 if [ -n "$issue" ]; then
-  [[ "$issue" =~ ^[1-9][0-9]*$ ]] || die "--issue must be a positive integer (got '$issue')"
+  IFS=, read -ra _ids <<<"$issue"
+  for _i in "${_ids[@]}"; do
+    [[ "$_i" =~ ^[1-9][0-9]*$ ]] || die "--issue must be positive integers, comma-separated (got '$issue')"
+  done
 fi
 
 git rev-parse --is-inside-work-tree >/dev/null 2>&1 || die "not inside a git repo"
@@ -191,11 +199,22 @@ else
   # Resolve the issue number (branch convention first, else --issue). The
   # title/body conventions hang off it, so it's resolved for both — not just
   # the default body, as the old inline version did.
+  # A chain's membership is the fallback ahead of the branch name: the branch
+  # only carries the head ticket.
+  chain_file="$(git rev-parse --absolute-git-dir)/chain"
+  if [ -z "$issue" ] && [ -s "$chain_file" ]; then
+    issue="$(paste -sd, "$chain_file")"
+  fi
   if [ -z "$issue" ]; then
     issue="$(provider::issue_from_branch "$branch")"
   fi
+  issues=()
   if [ -n "$issue" ]; then
-    [[ "$issue" =~ ^[1-9][0-9]*$ ]] || die "issue number '$issue' isn't a positive integer"
+    IFS=, read -ra issues <<<"$issue"
+    for _i in "${issues[@]}"; do
+      [[ "$_i" =~ ^[1-9][0-9]*$ ]] || die "issue number '$_i' isn't a positive integer"
+    done
+    issue="${issues[0]}"
   fi
 
   title="$(provider::pr_title "$issue" "$title")"
@@ -207,23 +226,30 @@ else
     # /open-pr's drafting step provider-agnostic and stops a hand-written
     # footer from duplicating or contradicting the provider's.
     # Providers that need no footer leave pr_body_footer undefined / empty.
-    footer=""
-    if [ -n "$issue" ] && declare -f provider::pr_body_footer >/dev/null; then
-      footer="$(provider::pr_body_footer "$issue")"
-    fi
-    if [ -n "$footer" ] && ! grep -qixF -- "$footer" "$body_file"; then
-      # Don't mutate the caller's file; gh reads the body from a copy.
-      body_tmp="$(mktemp "${TMPDIR:-/tmp}/open-pr-body.XXXXXX")"
-      { cat -- "$body_file"; printf '\n%s\n' "$footer"; } > "$body_tmp"
-      body_args=(--body-file "$body_tmp")
-    else
-      body_args=(--body-file "$body_file")
+    body_args=(--body-file "$body_file")
+    if declare -f provider::pr_body_footer >/dev/null; then
+      for _i in ${issues[@]+"${issues[@]}"}; do
+        footer="$(provider::pr_body_footer "$_i")"
+        if [ -n "$footer" ] && ! grep -qixF -- "$footer" "${body_tmp:-$body_file}"; then
+          # Don't mutate the caller's file; gh reads the body from a copy.
+          if [ -z "$body_tmp" ]; then
+            body_tmp="$(mktemp "${TMPDIR:-/tmp}/open-pr-body.XXXXXX")"
+            cat -- "$body_file" > "$body_tmp"
+          fi
+          printf '\n%s\n' "$footer" >> "$body_tmp"
+          body_args=(--body-file "$body_tmp")
+        fi
+      done
     fi
   else
     # Ticketless (no issue from the branch or --issue): nothing to link, so the
     # body is empty rather than an error.
     if [ -n "$issue" ]; then
-      body_args=(--body "$(provider::pr_body "$issue")")
+      default_body=""
+      for _i in "${issues[@]}"; do
+        default_body+="${default_body:+$'\n'}$(provider::pr_body "$_i")"
+      done
+      body_args=(--body "$default_body")
     else
       body_args=(--body "")
     fi
@@ -237,6 +263,7 @@ git push -u origin "$branch" >/dev/null
 
 if [ -n "$create_pr" ]; then
   create_args=(--title "$title" --head "$branch")
+  [ -z "$draft" ] || create_args+=(--draft)
   create_args+=("${body_args[@]}")
   # gh pr create prints the new PR URL to stdout; suppress it to keep this
   # script's stdout limited to the documented key=value fields (pr_url below).
