@@ -46,6 +46,7 @@ flowchart TD
 | `commands/pick.md`, `commands/start.md`, `tools/start-ticket.sh` | Command + script | Chained sessions: `/pick` emits chains and a paste-ready `/start 12,13 14` line; `/start` launches one session per space-separated group; `start-ticket.sh 12,13` makes one worktree/branch/kickoff/label for the group and records the ids in `<git-dir>/chain`. |
 | `tools/open-pr.sh`, `tools/finalize-check.sh` | Script | Read `<git-dir>/chain`: `open-pr.sh` writes a `Closes` footer per ticket (and `--draft` for a stopped chain); `finalize-check.sh` reports `chain_ids` so `/finalize` verifies every ticket. |
 | `tools/agent-phase.sh`, `github-review-state.sh` | Script | Statusline bookkeeping (`[REVIEW]` etc.); no review logic. |
+| `tools/reviewer-model.sh` | Script | Ops toggle: flips the eight review-chain agents' `model:` between `sonnet` (committed default) and `auto` in the deploy clone, then applies; no review logic. |
 
 ## Patterns
 
