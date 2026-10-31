@@ -40,14 +40,16 @@ sys.exit(1 if undocumented or stale else 0)
 PY
 }
 
-adapter="$repo/workflow/adapters/codex.md"
 commands=("$repo/dot_claude/commands/start.md" "$repo/dot_claude/commands/open-pr.md")
-check "$adapter" "${commands[@]}" || fail "codex adapter has drifted from the commands it covers"
-printf 'PASS codex adapter maps every Claude-only construct in its covered commands\n'
+for adapter_name in codex agy; do
+  adapter="$repo/workflow/adapters/${adapter_name}.md"
+  check "$adapter" "${commands[@]}" || fail "${adapter_name} adapter has drifted from the commands it covers"
+  printf 'PASS %s adapter maps every Claude-only construct in its covered commands\n' "$adapter_name"
+done
 
 fixture="$(mktemp -d)"
 trap 'rm -rf "$fixture"' EXIT
-cp "$adapter" "$fixture/adapter.md"
+cp "$repo/workflow/adapters/codex.md" "$fixture/adapter.md"
 cp "${commands[@]}" "$fixture/"
 
 printf '\nCall AskUserQuestion here, then mcp__github__create.\n' >> "$fixture/start.md"
@@ -65,8 +67,11 @@ fi
 grep -q 'TodoWrite' "$fixture/err" || fail "the stale row should be named"
 [[ "$pass_new" == 1 ]] && printf 'PASS detects unmapped constructs and stale rows\n'
 
-if grep -q 'bash <(' "$adapter"; then fail "adapter must not run the bootstrap via process substitution (hides download failure)"; fi
-for rule in 'workflow_source_commit=' 'Never imply a check passed' 'Workflow source:'; do
-  grep -q -- "$rule" "$adapter" || fail "adapter protocol is missing: $rule"
+for adapter_name in codex agy; do
+  adapter="$repo/workflow/adapters/${adapter_name}.md"
+  if grep -q 'bash <(' "$adapter"; then fail "$adapter_name adapter must not run the bootstrap via process substitution (hides download failure)"; fi
+  for rule in 'workflow_source_commit=' 'Never imply a check passed' 'Workflow source:'; do
+    grep -q -- "$rule" "$adapter" || fail "$adapter_name adapter protocol is missing: $rule"
+  done
 done
 printf 'PASS adapter protocol keeps fail-closed download, SHA stamp, and unrun-check rules\n'

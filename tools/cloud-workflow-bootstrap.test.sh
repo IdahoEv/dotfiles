@@ -51,6 +51,7 @@ make_archive() {
   printf '# Start\n' > "$root/dot_claude/commands/start.md"
   printf '# Open PR\n' > "$root/dot_claude/commands/open-pr.md"
   printf '# Codex adapter\n' > "$root/workflow/adapters/codex.md"
+  printf '# AGY adapter\n' > "$root/workflow/adapters/agy.md"
   printf '#!/usr/bin/env bash\necho start-ticket\n' > "$root/tools/start-ticket.sh"
   printf '#!/usr/bin/env bash\necho open-pr\n' > "$root/tools/open-pr.sh"
   printf '#!/usr/bin/env bash\nexit 0\n' > "$root/tools/open-pr.test.sh"
@@ -61,6 +62,7 @@ make_archive() {
 make_archive valid
 make_archive no-start dot_claude/commands/start.md
 make_archive no-adapter workflow/adapters/codex.md
+make_archive no-agy-adapter workflow/adapters/agy.md
 make_archive no-tool tools/open-pr.sh
 : > "$tmp/empty.tar.gz"
 printf 'not a tarball' > "$tmp/corrupt.tar.gz"
@@ -116,7 +118,8 @@ expect_failure "corrupt archive" 'Could not extract' corrupt
 pass "fails closed when the archive cannot be fetched or extracted"
 
 expect_failure "missing command" 'missing required' no-start
-expect_failure "missing adapter" 'missing required' no-adapter
+expect_failure "missing codex adapter" 'missing required' no-adapter
+expect_failure "missing agy adapter" 'missing required' no-agy-adapter
 expect_failure "missing tool" 'missing required' no-tool
 pass "rejects a snapshot missing a required command, adapter, or tool"
 

@@ -18,6 +18,7 @@ readonly required_files=(
   dot_claude/commands/start.md
   dot_claude/commands/open-pr.md
   workflow/adapters/codex.md
+  workflow/adapters/agy.md
   tools/start-ticket.sh
   tools/open-pr.sh
 )
