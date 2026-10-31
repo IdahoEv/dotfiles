@@ -84,7 +84,7 @@ sequenceDiagram
         Note over Mgr: round k+1 scope = round k fix commits only
     end
     Mgr->>Mgr: FULL once → wf-event review.result
-    Mgr-->>Impl: report (verbatim → PR body's "Review cycle" note)
+    Mgr-->>Impl: report (unaltered → PR body's "Review cycle" note)
     Impl->>Cmd: /open-pr
     Cmd->>GH: open PR
     GH-->>Cmd: bot review comments

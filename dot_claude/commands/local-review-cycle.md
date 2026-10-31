@@ -38,4 +38,4 @@ If the agent runs in the background, wait for its completion notice. Don't act o
 
 ## 3. Report
 
-Print the manager's report **verbatim**, then say the next step is `/open-pr`, carrying the report's summary into the PR body's "Review cycle" note (rounds, fixed/dismissed/deferred counts, dismissed findings with reasons). Do not re-review or second-guess the manager's triage.
+Print the manager's report **unaltered, at top level** — no blockquote, no code fence, tables emitted directly, because quoting or fencing stops the terminal rendering its tables — then say the next step is `/open-pr`, carrying the report's summary into the PR body's "Review cycle" note (rounds, fixed/dismissed/deferred counts, dismissed findings with reasons). Do not re-review or second-guess the manager's triage.

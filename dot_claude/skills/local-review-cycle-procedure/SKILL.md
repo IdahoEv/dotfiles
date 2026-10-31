@@ -73,6 +73,7 @@ If significant, well-supported findings remain after round 5, stop and ask the u
 - Record the cycle totals with `wf-event.sh review.result round=<last round number> fixed=<n> dismissed=<n> deferred=<n> reviewers=<agent,agent>`, each field only when available. A failure surfaced by `FULL` and fixed here still counts.
 - Report reviewers selected and why, rounds, findings fixed/dismissed/deferred, test status (including baseline failures), and commits added. Keep output terse: one line per round (`R<k>: N fixed / M dismissed or deferred`).
 - List dismissed findings with the reason for each, and deferred findings with the issue filed for each; do not implement them. Dismissed-with-reasons is mandatory — no report or PR note without it.
+- The report is printed at top level; if any of it is quoted, re-emit the table outside the quote.
 - End by stating `/open-pr` is the next step. The report is the source for the PR body's "Review cycle" note: rounds, fixed/dismissed/deferred counts, and the dismissed findings with their reasons.
 
 ## Guardrails

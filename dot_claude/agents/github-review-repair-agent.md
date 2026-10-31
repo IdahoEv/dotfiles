@@ -26,4 +26,4 @@ The skill is canonical for comment discovery, review-body parsing, the confidenc
 
 ## Output
 
-Return exactly the report Automatic Mode specifies: findings table with validation line, per-fix lines, planned GitHub actions, `Files changed`, and the proposed commit message. The parent prints it verbatim, so make it complete enough to approve without redoing the review.
+Return exactly the report Automatic Mode specifies: findings table with validation line, per-fix lines, planned GitHub actions, `Files changed`, and the proposed commit message. The parent prints it unaltered as top-level markdown, so headings and tables must stand on their own; make it complete enough to approve without redoing the review.

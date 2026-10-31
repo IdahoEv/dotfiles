@@ -402,6 +402,7 @@ Every findings summary — the per-round Automatic Mode summary, the Quick Mode 
 
 - Open with a horizontal rule (`---`) immediately before the heading, and close with another horizontal rule (`---`) immediately after the table, so the block is visually separated from surrounding narration.
 - A one-line heading naming the round/batch and a source breakdown, e.g. `### Round 12 — 4 findings, all CodeRabbit` or `### Findings — 6 total (4 CodeRabbit, 2 Copilot)`.
+- The report is printed at top level; if any of it is quoted, re-emit the table outside the quote.
 - A single Markdown table with these columns, in this order:
 
 | # | File : Line | Finding | Verdict |
