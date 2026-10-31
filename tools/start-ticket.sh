@@ -86,9 +86,9 @@ SCRIPT_DIR="$(cd -P "$(dirname "$_src")" && pwd)"
 . "$SCRIPT_DIR/lib/repo-facts.sh"
 # Provider lookup (first dir containing <name>.sh wins):
 #   1. $START_TICKET_PROVIDER_DIR (explicit override)
-#   2. <main-repo-root>/.git-tools/start-ticket-providers  (per-repo)
-#   3. ~/.config/git-tools/start-ticket-providers          (per-machine)
-#   4. this repo's start-ticket-providers/                 (shipped defaults)
+#   2. <main-repo-root>/.project-overlays/start-ticket-providers  (per-repo)
+#   3. ~/.config/project-overlays/.start-ticket-providers          (per-machine)
+#   4. this repo's start-ticket-providers/                         (shipped defaults)
 # Same layering as open-pr.sh's find_provider_file.
 find_provider_file() {  # <name> → path, or empty
   local name="$1" main_root common pd f
@@ -97,8 +97,8 @@ find_provider_file() {  # <name> → path, or empty
     common="$(cd -P "$common" 2>/dev/null && pwd)" && main_root="$(dirname "$common")" || main_root=""
   fi
   for pd in "${START_TICKET_PROVIDER_DIR:-}" \
-            "${main_root:-}/.git-tools/start-ticket-providers" \
-            "$HOME/.config/git-tools/start-ticket-providers" \
+            "${main_root:-}/.project-overlays/start-ticket-providers" \
+            "$HOME/.config/project-overlays/.start-ticket-providers" \
             "$SCRIPT_DIR/start-ticket-providers"; do
     [ -n "$pd" ] || continue
     f="$pd/$name.sh"
@@ -356,6 +356,18 @@ session_dir() {
   git rev-parse --show-toplevel 2>/dev/null || die "bare repo with no worktree for '$b'"
 }
 
+# Personal, project-scoped Claude assets from the overlay's claude/ dir, as a
+# kickoff section. Empty (and so omitted) when the repo defines none.
+personal_assets_block() {  # <dir> → markdown, or empty
+  local dir="$1" f out=""
+  while IFS= read -r f; do
+    [ -n "$f" ] || continue
+    [ -n "$out" ] || out="$(printf '\n## Personal project Claude assets\n\nThese live in the per-project overlay, outside this checkout. Invoke them without copying files: an agent — launch it as a `general-purpose` agent with the file body as its brief, honoring any `model` frontmatter; a command or skill — read the file and follow it inline. When the repo itself defines a same-named agent/command/skill, that one wins.\n')"$'\n\n'
+    out="${out}- ${f}"$'\n'
+  done < <(gt::overlay_claude_files "" "$dir")
+  printf '%s' "$out"
+}
+
 run_session() {  # <topic> <about>
   local topic about="$2" dir repo label slug kf
   topic="$(gt::sanitize_label "$1")"
@@ -375,6 +387,7 @@ run_session() {  # <topic> <about>
       pre="$(subst "$pre" '{{PARENT}}' '')"
       printf '\n%s\n' "$pre"
     fi
+    printf '%s' "$(personal_assets_block "$dir")"
     printf '\n%s\n' "$(cat "$SCRIPT_DIR/session-kickoff.md")"
     printf '\nCosmetic, before your first reply: run `session-label.sh --color project` (skip if not found; silent outside a background session).\n'
   } > "$kf"
@@ -469,7 +482,7 @@ if [ -z "$provider" ]; then
 fi
 
 pf="$(find_provider_file "$provider")"
-[ -n "$pf" ] || die "no provider script for '$provider' (searched: START_TICKET_PROVIDER_DIR, <repo>/.git-tools/start-ticket-providers, ~/.config/git-tools/start-ticket-providers, git-tools/start-ticket-providers)"
+[ -n "$pf" ] || die "no provider script for '$provider' (searched: START_TICKET_PROVIDER_DIR, <repo>/.project-overlays/start-ticket-providers, ~/.config/project-overlays/.start-ticket-providers, workflow-tools/start-ticket-providers)"
 # shellcheck source=/dev/null
 source "$pf"
 
@@ -538,6 +551,7 @@ _tmp="${TMPDIR:-/tmp}"; kickoff="${_tmp%/}/${repo_name}-kickoff-${id}.md"
     _pre="$(subst "$_pre" '{{PARENT}}' "$ST_PARENT")"
     printf '%s\n' "$_pre"
   fi
+  printf '%s' "$(personal_assets_block "$repo_root")"
   printf '\nCosmetic, after the plan is proposed: run `session-label.sh --color project` (skip if not found; silent outside a background session).\n'
 } > "$kickoff"
 

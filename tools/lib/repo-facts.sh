@@ -286,14 +286,21 @@ gt::label_from_title() {  # <title> [<max-words>] → "Short Label Words"
 # its owner, or it names things that must not reach a public remote) sits in a
 # per-machine overlay keyed by the origin remote:
 #
-#   $GIT_TOOLS_PROJECTS_DIR (default ~/.config/git-tools/projects)/<owner>/<repo>/
+#   $PROJECT_OVERLAYS_DIR (default ~/.config/project-overlays)/<owner>/<repo>/
 #
 # Keyed by remote rather than checkout path, so every worktree of a repo — and a
 # fresh clone — resolves the same directory with nothing copied into it. The
-# projects root may itself be a git repo (project-config.sh store-init) pointed
+# overlays root may itself be a git repo (project-config.sh store-init) pointed
 # at a remote that is private enough for the config.
-gt::projects_root() {
-  printf '%s' "${GIT_TOOLS_PROJECTS_DIR:-$HOME/.config/git-tools/projects}"
+gt::overlays_root() {
+  if [ -n "${PROJECT_OVERLAYS_DIR:-}" ]; then
+    printf '%s' "$PROJECT_OVERLAYS_DIR"
+  elif [ -n "${GIT_TOOLS_PROJECTS_DIR:-}" ]; then
+    printf 'GIT_TOOLS_PROJECTS_DIR is deprecated; use PROJECT_OVERLAYS_DIR\n' >&2
+    printf '%s' "$GIT_TOOLS_PROJECTS_DIR"
+  else
+    printf '%s' "$HOME/.config/project-overlays"
+  fi
 }
 
 # <owner>/<repo> (or <group>/<sub>/<repo>) from an origin URL: scp-style ssh,
@@ -322,7 +329,34 @@ gt::overlay_dir() {  # [<dir>] → path, or nothing
   [ -n "$url" ] || return 0
   key="$(gt::repo_key "$url")"
   [ -n "$key" ] || return 0
-  printf '%s/%s' "$(gt::projects_root)" "$key"
+  printf '%s/%s' "$(gt::overlays_root)" "$key"
+}
+
+# Personal, project-scoped Claude assets (agents, commands, skills) for the repo
+# containing <dir>: <overlay>/claude, mirroring a repo's .claude/ layout. The
+# directory may not exist — callers test for what they want.
+gt::overlay_claude_dir() {  # [<dir>] → path, or nothing
+  local ov
+  ov="$(gt::overlay_dir "${1:-.}")"
+  [ -n "$ov" ] || return 0
+  printf '%s/claude' "$ov"
+}
+
+# Every asset file under <overlay>/claude, one absolute path per line, or nothing.
+# <kind> limits the listing to one subdirectory (agents|commands|skills).
+gt::overlay_claude_files() {  # [<kind>] [<dir>] → paths
+  local kind="${1:-}" cd
+  cd="$(gt::overlay_claude_dir "${2:-.}")"
+  [ -n "$cd" ] || return 0
+  local sub k
+  for sub in ${kind:-agents commands skills}; do
+    [ -d "$cd/$sub" ] || continue
+    for k in "$cd/$sub"/*.md; do [ -f "$k" ] && printf '%s\n' "$k"; done
+    if [ "$sub" = skills ]; then
+      for k in "$cd/skills"/*/SKILL.md; do [ -f "$k" ] && printf '%s\n' "$k"; done
+    fi
+  done
+  return 0
 }
 
 # The main checkout's root, even from a linked worktree. Nothing outside a repo.
@@ -373,6 +407,10 @@ gt::find_doc() {  # <name> [<dir>] → "path\tsource"
   ov="$(gt::overlay_dir "$dir")"
   if [ -n "$ov" ] && [ -f "$ov/$name" ]; then
     printf '%s\toverlay' "$ov/$name"; return 0
+  fi
+  # claude/ assets are findable by their subpath too (find agents/foo.md).
+  if [ -n "$ov" ] && [ -f "$ov/claude/$name" ]; then
+    printf '%s\toverlay' "$ov/claude/$name"; return 0
   fi
   return 1
 }

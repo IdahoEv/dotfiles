@@ -24,11 +24,11 @@ check() {  # <description> <expected> <actual>
 ROOT="$(cd -P "$(mktemp -d "${TMPDIR:-/tmp}/session-label-test.XXXXXX")" && pwd)"
 trap 'rm -rf "$ROOT"' EXIT
 export HOME="$ROOT/home"; mkdir -p "$HOME"
-unset GIT_TOOLS_PROJECTS_DIR CLAUDE_JOB_DIR
+unset GIT_TOOLS_PROJECTS_DIR PROJECT_OVERLAYS_DIR CLAUDE_JOB_DIR
 export GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@t
 export SESSION_LABEL_COLORS_FILE="$ROOT/project-colors"
 export SESSION_LABEL_STATE_FILE="$ROOT/state.json"
-OV="$HOME/.config/git-tools/projects/acme/widgets"
+OV="$HOME/.config/project-overlays/acme/widgets"
 
 git init -q "$ROOT/widgets"
 git -C "$ROOT/widgets" commit -q --allow-empty -m init

@@ -45,7 +45,7 @@ If the agent runs in the background, wait for its completion notice. Don't act o
 
 ## 3. Report
 
-Print the agent's report **verbatim**. If it says `Files changed: no` and lists no planned actions, run `agent-phase.sh --no-review`, say the round found nothing to do and polling has stopped, and stop.
+Print the agent's report **unaltered, at top level** — no blockquote, no code fence, tables emitted directly, because quoting or fencing stops the terminal rendering its tables. If it says `Files changed: no` and lists no planned actions, run `agent-phase.sh --no-review`, say the round found nothing to do and polling has stopped, and stop.
 
 ## 4. Approve the commit
 

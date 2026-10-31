@@ -42,7 +42,7 @@ flowchart TD
 | `skills/github-review-procedure/SKILL.md` | Skill | 3-mode procedure loaded by the command and repair agent; not user-invocable. |
 | `commands/github-review-comments.md` | Command | Routes mode, launches agent, owns commits and GitHub writes. |
 | `commands/prompt-audit.md` + `skills/prompt-review/` | Command + skill | Corpus-level prompt rubric; runs through `prompt-reviewer`. |
-| `tools/wf-event.sh`, `tools/wf-report.sh`, `tools/lib/telemetry.sh` | Script | Telemetry: one event per triaged finding, one per cycle. |
+| `tools/wf-event.sh`, `tools/wf-report.sh`, `tools/lib/telemetry.sh` | Script | Telemetry: one event per triaged finding, one per cycle. `review.result round=N` also writes the statusline's `local-review-rounds` file. |
 | `tools/agent-phase.sh`, `github-review-state.sh` | Script | Statusline bookkeeping (`[REVIEW]` etc.); no review logic. |
 
 ## Patterns
@@ -52,7 +52,7 @@ flowchart TD
 3. **Evidence bar + triage.** Findings need a credible failure path, test gap, or material design cost. Already-triaged findings pass forward; nothing is resurrected without new evidence.
 4. **Gates and caps.** `DESIGN: unsound` halts before code changes; max 5 rounds; `FAST` per round, `FULL` once at finish; `--confirm-commits` is opt-in hold-for-review — by default the manager commits every round and human review happens on the PR.
 5. **Isolation of side effects.** Reviewers read-only; repair agent edits only; commands own GitHub writes. The cycle manager is the deliberate exception: it owns the working-tree edits, round commits, telemetry and statusline during the cycle — but never pushes or writes to GitHub. Planned GitHub replies are posted only after the parent pushes.
-6. **Measured.** Every triaged finding → `wf-event.sh review.finding`; cycle end → `review.result`. `wf-report.sh` shows which reviewers earn their tokens.
+6. **Measured.** Every triaged finding → `wf-event.sh review.finding` (with validity and an overlap key); cycle end → `review.result`. `wf-report.sh` shows which reviewers earn their tokens: valid/rejected/partial counts, overlap between reviewers, and rounds by reviewer mix.
 
 ## Commands: what to use when
 
@@ -84,7 +84,7 @@ sequenceDiagram
         Note over Mgr: round k+1 scope = round k fix commits only
     end
     Mgr->>Mgr: FULL once → wf-event review.result
-    Mgr-->>Impl: report (verbatim → PR body's "Review cycle" note)
+    Mgr-->>Impl: report (unaltered → PR body's "Review cycle" note)
     Impl->>Cmd: /open-pr
     Cmd->>GH: open PR
     GH-->>Cmd: bot review comments
@@ -136,7 +136,7 @@ Key invariant: outputs always flow **up**; the parent session owns every push an
 
 - **Machine:** machine behavior lives in templates and `is_*` data, never in agent bodies. The cycle command itself is machine-independent — `--confirm-commits` is opt-in per invocation on every machine.
 - **Project reviewers:** agent-format file ending in a `Use when:` clause, in the repo's `.claude/agents/` (precedence over global); reference it from the project's `CLAUDE.md`.
-- **Personal, work-machine reviewers for shared repos:** `docs/local/reviewers/*.md` — globally gitignored, symlinked into every worktree by `wm`. No work content in dotfiles.
+- **Personal, work-machine reviewers for shared repos:** `docs/local/reviewers/*.md` — globally gitignored, symlinked into every worktree by `wm`. No work content in dotfiles. New personal agents default to the per-project overlay (`~/.config/project-overlays/<owner>/<repo>/claude/`, keyed by the origin remote), which also holds governor.md, kickoff preambles, and conf keys; `docs/local/` stays for content tied to this checkout's tree — scratch notes, temporary docs, throwaway experiments. Rule of thumb: a fresh clone needs it → overlay; only this checkout → `docs/local/`.
 - **New reviewer:** follow `reviewer-contract`'s authoring convention and cite it from project docs; the orchestrator must never invent reviewers mid-cycle.
 
 ## Non-Claude hosts (cloud agents)

@@ -22,10 +22,10 @@ OS key: **L** = Linux, **W** = WSL, **PS** = native PowerShell. "L" without W me
 | `dot_shell_modules/zz-fzf:4`, `git-fzf.sh:25`, `git:41,251`, `chezmoi:1`, `direnv:4` | `brew install …` hints | L, PS | Per-OS hint (apt/dnf/winget) or drop to "install X" |
 | `dot_shell_modules/git-fzf.sh:198` | `readlink -f` with a `/usr/bin/ruby` macOS fallback that's absent on Linux | L | Portable `realpath`/loop fallback (see `agent-phase.sh` pattern) |
 | `dot_shell_modules/git-fzf.sh:147–164` | — | — | Already handles `open`/`start`/`xdg-open`/`powershell.exe` via `$OSTYPE`; the model to copy |
-| `dot_shell_modules/git-tools-freshness:17` | `stat -f %m` BSD / `stat -c %Y` GNU | — | Already dual-handled; correct pattern |
+| `dot_shell_modules/workflow-tools-freshness:17` | `stat -f %m` BSD / `stat -c %Y` GNU | — | Already dual-handled; correct pattern |
 | `dot_shell_modules/00-utils:44` | `~/.ssh/id_*` glob errors in zsh when no match | all | `(N)` qualifier or null_glob |
 | `dot_config/iterm2/symlink_AppSupport` | Hard-coded `/Users/evan/Library/Application Support/iTerm2` | L, PS, macOS-other-user | Home dir templated in #65 (`symlink_AppSupport.tmpl`); per-OS ignore still open (sub-issue 3) |
-| All zsh modules (`claude.tmpl`, `chezmoi`, `git-tools-freshness`, `git-fzf.sh`) | `compdef`, `${1:A}`, `${(f)}`, `$~pattern`, `(N)`, `setopt`, `print -P`, `&!` | PS | Not portable command-by-command — requires a PS profile rewrite (sub-issue 4) |
+| All zsh modules (`claude.tmpl`, `chezmoi`, `workflow-tools-freshness`, `git-fzf.sh`) | `compdef`, `${1:A}`, `${(f)}`, `$~pattern`, `(N)`, `setopt`, `print -P`, `&!` | PS | Not portable command-by-command — requires a PS profile rewrite (sub-issue 4) |
 
 ## tools/
 

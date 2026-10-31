@@ -2,13 +2,15 @@
 # project-config.sh — manage the per-project config overlay (see lib/repo-facts.sh).
 #
 #   project-config.sh dir                  overlay path for the current repo
+#   project-config.sh claude-dir           overlay claude/ dir (agents/commands/skills)
+#   project-config.sh list [agents|commands|skills]  overlay claude/ asset paths
 #   project-config.sh find <name>          "<path><TAB><repo|overlay>", or exit 1
 #   project-config.sh init                 scaffold the overlay; never overwrites
-#   project-config.sh store-init [<url>]   git-init the projects root (no commits)
+#   project-config.sh store-init [<url>]   git-init the overlays root (no commits)
 #
 # The overlay lives outside every project checkout, so nothing in it can be
 # committed to a project by accident. Lookup order and precedence: see
-# git-tools-usage.md.
+# workflow-tools-usage.md.
 
 set -euo pipefail
 
@@ -33,8 +35,8 @@ need_overlay() {
 cmd_init() {
   need_overlay
   local root t name dest
-  root="$(gt::projects_root)"
-  mkdir -p "$OVERLAY"
+  root="$(gt::overlays_root)"
+  mkdir -p "$OVERLAY/claude/agents" "$OVERLAY/claude/commands" "$OVERLAY/claude/skills"
   # No kickoff-preamble template: an empty one is indistinguishable from real
   # config once copied. Create the file when there is something to say.
   for t in "$SCRIPT_DIR"/project-config-templates/*; do
@@ -47,7 +49,7 @@ cmd_init() {
 
 cmd_store_init() {
   local root url="${1:-}"
-  root="$(gt::projects_root)"
+  root="$(gt::overlays_root)"
   mkdir -p "$root"
   # Test the root itself, not "inside a repo": a store nested under another
   # checkout (e.g. a dotfiles tree) must still get its own repo.
@@ -61,6 +63,8 @@ cmd_store_init() {
 
 case "${1:-}" in
   dir)        need_overlay; printf '%s\n' "$OVERLAY" ;;
+  claude-dir) need_overlay; printf '%s\n' "$OVERLAY/claude" ;;
+  list)       need_overlay; gt::overlay_claude_files "${2:-}" ;;
   find)       [ -n "${2:-}" ] || die "usage: find <name>"; gt::find_doc "$2"; echo ;;
   init)       cmd_init ;;
   store-init) cmd_store_init "${2:-}" ;;

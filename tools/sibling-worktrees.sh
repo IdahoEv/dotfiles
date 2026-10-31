@@ -15,7 +15,7 @@
 # run speculatively on every ship.
 #
 # Ticket id is taken from --ticket, else parsed from --branch, else from the
-# current branch, using the two conventions git-tools creates:
+# current branch, using the two conventions these tools create:
 #   <id>-<slug>              GitHub issues  (worktree-manager default)
 #   [<prefix>/]sc-<id>/<slug>  Shortcut     (worktree-manager --sc)
 # The LAST sc-<id> in a branch wins (a follow-up branch can name several),

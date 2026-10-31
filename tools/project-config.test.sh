@@ -23,12 +23,12 @@ check() {  # <description> <expected> <actual>
 ROOT="$(cd -P "$(mktemp -d "${TMPDIR:-/tmp}/project-config-test.XXXXXX")" && pwd)"
 trap 'rm -rf "$ROOT"' EXIT
 export HOME="$ROOT/home"; mkdir -p "$HOME"
-unset GIT_TOOLS_PROJECTS_DIR
+unset GIT_TOOLS_PROJECTS_DIR PROJECT_OVERLAYS_DIR
 export GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@t
 # shellcheck source=lib/repo-facts.sh
 . "$TOOLS/lib/repo-facts.sh"
 PC="$TOOLS/project-config.sh"
-PROJ="$HOME/.config/git-tools/projects"
+PROJ="$HOME/.config/project-overlays"
 
 # ---- repo_key ----------------------------------------------------------------
 check "key: scp ssh"       "o/r" "$(gt::repo_key git@github.com:o/r.git)"
@@ -52,8 +52,13 @@ check "overlay dir"          "$OV" "$(gt::overlay_dir "$ROOT/repo")"
 check "overlay dir, worktree" "$OV" "$(gt::overlay_dir "$ROOT/wt")"
 git init -q "$ROOT/bare-less"
 check "no origin -> empty"   ""    "$(gt::overlay_dir "$ROOT/bare-less")"
-check "GIT_TOOLS_PROJECTS_DIR" "$ROOT/elsewhere/acme/widgets" \
-  "$(GIT_TOOLS_PROJECTS_DIR="$ROOT/elsewhere" gt::overlay_dir "$ROOT/repo")"
+check "PROJECT_OVERLAYS_DIR" "$ROOT/elsewhere/acme/widgets" \
+  "$(PROJECT_OVERLAYS_DIR="$ROOT/elsewhere" gt::overlay_dir "$ROOT/repo")"
+check "deprecated var still resolves" "$ROOT/old/acme/widgets" \
+  "$(GIT_TOOLS_PROJECTS_DIR="$ROOT/old" gt::overlay_dir "$ROOT/repo" 2>/dev/null)"
+err="$(GIT_TOOLS_PROJECTS_DIR="$ROOT/old" gt::overlay_dir "$ROOT/repo" 2>&1 >/dev/null)"
+case "$err" in *deprecated*) r=yes ;; *) r=no ;; esac
+check "deprecated var warns" "yes" "$r"
 
 # ---- conf: repo > overlay > machine, per key -----------------------------------
 mkdir -p "$OV" "$HOME/.config/start-ticket"
@@ -75,6 +80,18 @@ check "doc from overlay" "$OV/governor.md	overlay" "$(gt::find_doc governor.md "
 mkdir -p "$ROOT/repo/.claude"; echo repo-gov > "$ROOT/repo/.claude/governor.md"
 check "repo doc wins"    "$ROOT/repo/.claude/governor.md	repo" "$(gt::find_doc governor.md "$ROOT/repo")"
 gt::find_doc missing.md "$ROOT/repo" >/dev/null; check "missing doc -> rc 1" "1" "$?"
+# ---- claude/ assets: dir, listing, find by subpath --------------------------------
+check "claude dir" "$OV/claude" "$(gt::overlay_claude_dir "$ROOT/repo")"
+check "claude dir, no origin" "" "$(gt::overlay_claude_dir "$ROOT/bare-less")"
+mkdir -p "$OV/claude/agents" "$OV/claude/commands" "$OV/claude/skills/dep-skill"
+echo agent > "$OV/claude/agents/dep.md"
+echo cmd   > "$OV/claude/commands/ship.md"
+echo skill > "$OV/claude/skills/dep-skill/SKILL.md"
+check "list all" "$OV/claude/agents/dep.md
+$OV/claude/commands/ship.md
+$OV/claude/skills/dep-skill/SKILL.md" "$(gt::overlay_claude_files "" "$ROOT/repo")"
+check "list one kind" "$OV/claude/agents/dep.md" "$(gt::overlay_claude_files agents "$ROOT/repo")"
+check "find claude subpath" "$OV/claude/agents/dep.md	overlay" "$(gt::find_doc agents/dep.md "$ROOT/repo")"
 
 # ---- project-config.sh -----------------------------------------------------------
 git init -q "$ROOT/repo2"
@@ -86,6 +103,9 @@ check "dir"  "$OV2" "$(cd "$ROOT/repo2" && "$PC" dir)"
 check "init writes governor.md" "yes" "$([ -f "$OV2/governor.md" ] && echo yes)"
 check "init writes conf"        "yes" "$([ -f "$OV2/start-ticket.conf" ] && echo yes)"
 check "init scaffolds color line" "yes" "$(grep -q '^# color=' "$OV2/start-ticket.conf" && echo yes)"
+check "init scaffolds claude dirs" "yes" "$([ -d "$OV2/claude/skills" ] && echo yes)"
+check "claude-dir" "$OV2/claude" "$(cd "$ROOT/repo2" && "$PC" claude-dir)"
+check "list empty" "" "$(cd "$ROOT/repo2" && "$PC" list)"
 echo mine > "$OV2/governor.md"
 (cd "$ROOT/repo2" && "$PC" init >/dev/null 2>&1)
 check "init never overwrites" "mine" "$(cat "$OV2/governor.md")"
@@ -125,6 +145,35 @@ case "$out" in *"Repo rules."*) a=yes ;; *) a=no ;; esac
 case "$out" in *"Overlay rules"*) b=leaked ;; *) b=ok ;; esac
 check "repo preamble wins"           "yes" "$a"
 check "overlay preamble not merged"  "ok"  "$b"
+echo brief > "$OV2/claude/agents/rel.md"
+out="$(run_start)"
+case "$out" in *"Personal project Claude assets"*) a=yes ;; *) a=no ;; esac
+b=no; printf '%s\n' "$out" | grep -qxF -- "- $OV2/claude/agents/rel.md" && b=yes
+check "kickoff lists overlay agent" "yes" "$a"
+check "kickoff names agent path on its own line" "yes" "$b"
+rm -rf "$OV2/claude"
+
+# ---- migration script --------------------------------------------------------
+MIG="$TOOLS/../executable_run_once_before_migrate-project-overlays.sh"
+MH="$ROOT/mighome"; mkdir -p "$MH/.config/git-tools/projects/o/r" "$MH/.config/git-tools/open-pr-providers"
+git init -q "$MH/.config/git-tools/projects"
+echo '*~' > "$MH/.config/git-tools/projects/.gitignore"
+echo x > "$MH/.config/git-tools/projects/o/r/f"
+HOME="$MH" sh "$MIG" >/dev/null 2>&1
+N="$MH/.config/project-overlays"
+check "migrate: owner dir flattened"      "yes" "$([ -f "$N/o/r/f" ] && echo yes || echo no)"
+check "migrate: store .git follows"       "yes" "$([ -d "$N/.git" ] && echo yes || echo no)"
+check "migrate: store .gitignore follows" "yes" "$([ -f "$N/.gitignore" ] && echo yes || echo no)"
+check "migrate: no bogus projects owner"  "no"  "$([ -e "$N/projects" ] && echo yes || echo no)"
+check "migrate: providers dot-prefixed"   "yes" "$([ -d "$N/.open-pr-providers" ] && echo yes || echo no)"
+check "migrate: old root removed"         "no"  "$([ -e "$MH/.config/git-tools" ] && echo yes || echo no)"
+
+MH2="$ROOT/mighome2"; mkdir -p "$MH2/.config/git-tools/projects/o/r"
+git init -q "$MH2/.config/git-tools"; git init -q "$MH2/.config/git-tools/projects"
+msg="$(HOME="$MH2" sh "$MIG" 2>&1)"
+check "migrate: colliding .git not nested" "no" "$([ -e "$MH2/.config/project-overlays/.git/.git" ] && echo yes || echo no)"
+case "$msg" in *"finish by hand"*) w=yes ;; *) w=no ;; esac
+check "migrate: collision warns"           "yes" "$w"
 
 printf '%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

@@ -6,6 +6,10 @@
 #   wf-event.sh --hook        # Claude Code hook: reads the hook payload on stdin
 #
 # For hooks and prompts; scripts source lib/telemetry.sh directly. Always exits 0.
+#
+# review.result round=N also records N as the worktree's completed local review
+# rounds (<git-dir>/local-review-rounds, the statusline's source), because the
+# reviewer-cycle prose step that closes a round is the part models skip.
 
 _src="${BASH_SOURCE[0]}"
 while [ -h "$_src" ]; do
@@ -49,4 +53,21 @@ case "${1:-}" in
   --hook)    hook; exit 0 ;;
 esac
 wf::emit "$@"
+
+# review.result is the reliable end-of-cycle signal; carry its round count to
+# the statusline's file so a skipped prose step can't leave a stale count.
+sync_rounds() {
+  local dir="." round="" arg gd
+  if [ "${1:-}" = "--dir" ]; then dir="${2:-.}"; shift 2; fi
+  [ "${1:-}" = "review.result" ] || return 0
+  shift
+  for arg in "$@"; do
+    case "$arg" in round=*) round="${arg#round=}" ;; esac
+  done
+  [[ "$round" =~ ^[0-9]+$ ]] || return 0
+  gd="$(git -C "$dir" rev-parse --absolute-git-dir 2>/dev/null)" || return 0
+  printf '%s\n' "$round" > "$gd/local-review-rounds.tmp" \
+    && mv "$gd/local-review-rounds.tmp" "$gd/local-review-rounds"
+}
+sync_rounds "$@" 2>/dev/null || true
 exit 0
