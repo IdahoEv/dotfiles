@@ -1,0 +1,24 @@
+{
+  "$schema": "https://antigravity.google/schemas/v1/settings.json",
+  "permissions": {
+    "allow": [
+      "command(git)",
+      "command(gh)",
+      "command(ls)",
+      "command(which)",
+      "command(mktemp)",
+      "command(regex:bash .*tools/.*\\.test\\.sh)",
+      "command(regex:yarn (build|test|lint).*)",
+      "command(docker-compose)"
+    ],
+    "ask": [],
+    "deny": [
+      "command(regex:rm -rf .*)",
+      "command(regex:curl .*)",
+      "command(regex:wget .*)",
+      "write_file(.env*)",
+      "write_file(.git/)",
+      "write_file(secrets/)"
+    ]
+  }
+}
