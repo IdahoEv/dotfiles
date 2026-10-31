@@ -16,6 +16,8 @@
 # Output (stdout, parseable key=value, one per line):
 #   branch=<name>
 #   ticket_id=<id>              (empty if unparseable)
+#   chain_ids=<id,id>           (every ticket the branch closes, from
+#                               <git-dir>/chain; just ticket_id when not a chain)
 #   ticket_scheme=shortcut|github|unknown
 #   base=<branch>               (the branch the PR targets, falling back to
 #                               origin's default; empty if unresolvable)
@@ -165,6 +167,8 @@ fi
 # ---- ticket -----------------------------------------------------------------
 ticket_id="$(gt::ticket_from_branch "$branch")"
 ticket_scheme="$(gt::ticket_scheme "$branch")"
+_chain="$(git -C "$worktree" rev-parse --absolute-git-dir 2>/dev/null)/chain"
+if [ -s "$_chain" ]; then chain_ids="$(paste -sd, "$_chain")"; else chain_ids="$ticket_id"; fi
 
 # ---- PR ---------------------------------------------------------------------
 # Shortcut-tracked repos still host their PRs on GitHub, so `gh` is the right
@@ -474,8 +478,8 @@ if [ "$dotfiles_repo" != "no" ] && [ -n "$deploy_root" ] && [ -d "$deploy_root" 
   fi
 fi
 
-printf 'branch=%s\nticket_id=%s\nticket_scheme=%s\nbase=%s\nbase_source=%s\n' \
-  "$branch" "$ticket_id" "$ticket_scheme" "$base" "$base_source"
+printf 'branch=%s\nticket_id=%s\nchain_ids=%s\nticket_scheme=%s\nbase=%s\nbase_source=%s\n' \
+  "$branch" "$ticket_id" "$chain_ids" "$ticket_scheme" "$base" "$base_source"
 printf 'pr_number=%s\npr_state=%s\npr_merge_commit=%s\npr_head_oid=%s\n' \
   "$pr_number" "$pr_state" "$pr_merge_commit" "$pr_head_oid"
 printf 'pr_count=%s\npr_open_other=%s\n' "$pr_count" "$pr_open_other"

@@ -1,6 +1,6 @@
 ---
 description: Run the bounded pre-PR review-and-fix cycle on the current branch
-argument-hint: "[base] [--confirm-commits]"
+argument-hint: "[base] [--confirm-commits] [--rounds N]"
 ---
 
 # Local Review Cycle
@@ -9,6 +9,7 @@ argument-hint: "[base] [--confirm-commits]"
 /local-review-cycle                  # commit each round, review on the PR
 /local-review-cycle --confirm-commits
 /local-review-cycle origin/main
+/local-review-cycle <sha> --rounds 1   # chain link: one design/correctness pass over <sha>..HEAD
 ```
 
 This session is the launcher. It never reads the diff under review or triages findings — a fresh `local-review-cycle-manager` agent runs the whole cycle, so implementation history stays out of the orchestration. The manager commits each round locally by default and never pushes. `--confirm-commits` holds each round for the skill's approval question instead.
@@ -29,6 +30,7 @@ BASE: <ref>
 Working directory: <absolute cwd>
 Ticket: <ticket ref and one-line acceptance criteria | "none — <one-line change summary>">
 Flags: --confirm-commits | (none)
+Rounds: <N, only when --rounds was given | omit the line entirely>
 Design context: <1–3 lines: the implementer's reasoning behind the diff's shape | omit the line entirely>
 ```
 

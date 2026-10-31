@@ -8,7 +8,7 @@ user-invocable: false
 
 Run a bounded review-and-fix cycle on the current worktree before `/open-pr`. The implementer never reviews their own work: launch fresh, read-only reviewer agents. You commit fixes locally each round by default; never push — human review happens on the PR.
 
-Usage context: BASE comes from the kickoff and defaults to `origin/<default branch>`; a different ref targets a long-lived branch.
+Usage context: BASE comes from the kickoff and defaults to `origin/<default branch>`; a different ref targets a long-lived branch or, in a chain, the previous link's commit. A `Rounds: N` kickoff line lowers the round cap below 5; with `Rounds: 1` reviewers focus on design/architecture and obvious correctness bugs only.
 
 Use the project's documented test commands. `FAST` is the quick suite; `FULL` is the complete suite. If neither is documented, ask once before starting.
 
@@ -38,7 +38,7 @@ Selection is driven by the reviewers' own `description` fields, not by rules her
 - Run selected reviewers in parallel only when they can independently inspect the same committed diff. Give each the same diff scope and relevant ticket/acceptance criteria.
 - Never pass the kickoff's design context to reviewers. It is your triage context only — use it to judge intent when triaging, not to frame or filter what reviewers see.
 
-## 3. Review and triage (at most 5 rounds)
+## 3. Review and triage (at most 5 rounds, or `Rounds: N` if the kickoff set fewer)
 
 Each round:
 

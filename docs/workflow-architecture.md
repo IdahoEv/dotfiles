@@ -43,6 +43,8 @@ flowchart TD
 | `commands/github-review-comments.md` | Command | Routes mode, launches agent, owns commits and GitHub writes. |
 | `commands/prompt-audit.md` + `skills/prompt-review/` | Command + skill | Corpus-level prompt rubric; runs through `prompt-reviewer`. |
 | `tools/wf-event.sh`, `tools/wf-report.sh`, `tools/lib/telemetry.sh` | Script | Telemetry: one event per triaged finding, one per cycle. `review.result round=N` also writes the statusline's `local-review-rounds` file. |
+| `commands/pick.md`, `commands/start.md`, `tools/start-ticket.sh` | Command + script | Chained sessions: `/pick` emits chains and a paste-ready `/start 12,13 14` line; `/start` launches one session per space-separated group; `start-ticket.sh 12,13` makes one worktree/branch/kickoff/label for the group and records the ids in `<git-dir>/chain`. |
+| `tools/open-pr.sh`, `tools/finalize-check.sh` | Script | Read `<git-dir>/chain`: `open-pr.sh` writes a `Closes` footer per ticket (and `--draft` for a stopped chain); `finalize-check.sh` reports `chain_ids` so `/finalize` verifies every ticket. |
 | `tools/agent-phase.sh`, `github-review-state.sh` | Script | Statusline bookkeeping (`[REVIEW]` etc.); no review logic. |
 
 ## Patterns
@@ -52,7 +54,8 @@ flowchart TD
 3. **Evidence bar + triage.** Findings need a credible failure path, test gap, or material design cost. Already-triaged findings pass forward; nothing is resurrected without new evidence.
 4. **Gates and caps.** `DESIGN: unsound` halts before code changes; max 5 rounds; `FAST` per round, `FULL` once at finish; `--confirm-commits` is opt-in hold-for-review — by default the manager commits every round and human review happens on the PR.
 5. **Isolation of side effects.** Reviewers read-only; repair agent edits only; commands own GitHub writes. The cycle manager is the deliberate exception: it owns the working-tree edits, round commits, telemetry and statusline during the cycle — but never pushes or writes to GitHub. Planned GitHub replies are posted only after the parent pushes.
-6. **Measured.** Every triaged finding → `wf-event.sh review.finding` (with validity and an overlap key); cycle end → `review.result`. `wf-report.sh` shows which reviewers earn their tokens: valid/rejected/partial counts, overlap between reviewers, and rounds by reviewer mix.
+6. **Chained sessions.** A chain (max 3 tickets, overlapping files allowed, dependencies satisfied by order) is one session and one PR. The session plans the whole chain once (one approval), then per ticket: commit → `/local-review-cycle <previous link's SHA> --rounds 1` (design and obvious correctness only). After the last ticket: full cycle (up to 5 rounds) over `origin/<default>...HEAD`, then the session runs `/open-pr` itself. A ticket that fails its ACs or stalls after ~3 attempts stops the chain: draft PR for the completed links, unfinished tickets listed but not closed.
+7. **Measured.** Every triaged finding → `wf-event.sh review.finding` (with validity and an overlap key); cycle end → `review.result`. `wf-report.sh` shows which reviewers earn their tokens: valid/rejected/partial counts, overlap between reviewers, and rounds by reviewer mix.
 
 ## Commands: what to use when
 
@@ -61,7 +64,8 @@ flowchart TD
 | Non-trivial change committed, pre-PR | `/local-review-cycle` (auto-invoked by CLAUDE.md after ticket implementation; launches `local-review-cycle-manager`) |
 | PR opened, bot comments arrived | `/github-review-comments` → Automatic (agent round), Quick (one agent turn), Slow (ask me per comment) |
 | Review of the prompt corpus itself | `/prompt-audit`, `/prompt-review` |
-| Merged | `/finalize` |
+| Several ready tickets to start | `/pick` (groups them into chains), then paste its `/start` line |
+| Merged | `/finalize` (every ticket in a chain) |
 
 ## Agent invocation sequence
 
