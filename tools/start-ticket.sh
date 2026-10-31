@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # start-ticket.sh — spin up a worktree + Claude session for a tracker ticket.
 #
-#   start-ticket.sh <id> [--provider github|shortcut] [--no-tab] [--launcher iterm|bg|none]
+#   start-ticket.sh <id>[,<id>…] [--provider github|shortcut] [--no-tab] [--launcher iterm|bg|none]
 #   start-ticket.sh <id> --print-title            # read-only: title + proposed label
 #   start-ticket.sh --tab-only <worktree> <kickoff> [--launcher iterm|bg|none]
 #   start-ticket.sh --session [<topic>] [--about <text>] [--launcher iterm|bg|none]
@@ -26,6 +26,11 @@
 # Launcher is chosen by, in order: --launcher flag → $START_TICKET_LAUNCHER →
 # `launcher=` in .start-ticket.conf / ~/.config/start-ticket/config → iterm (none off macOS).
 # Put `launcher=bg` in the per-machine ~/.config/start-ticket/config to opt in.
+#
+# A comma list (`12,13,14`, github only, at most 3) is a chain: one worktree and
+# branch named from the head (first) ticket, one kickoff and session for all of
+# them, every ticket marked in progress, membership recorded one id per line in
+# <git-dir>/chain (read by open-pr.sh and finalize-check.sh).
 #
 # Run from anywhere inside the target repo. Provider is chosen by, in order:
 #   --provider flag → .start-ticket.conf (provider=…) → autodetect (gh vs short).
@@ -125,6 +130,15 @@ setting() {
 GT_LABEL_NOISE="$(setting label_noise GT_LABEL_NOISE "")"
 export GT_LABEL_NOISE
 
+# chain_tag <worktree> → "12+13" for a chain worktree, empty otherwise.
+chain_tag() {
+  local f ids
+  f="$(git -C "$1" rev-parse --absolute-git-dir 2>/dev/null)/chain"
+  [ -f "$f" ] || return 0
+  ids="$(paste -sd+ "$f")"
+  case "$ids" in *+*) printf '%s' "$ids" ;; esac
+}
+
 # make_label <branch> <maxlen> [pretty] → short tab / agent-view row label.
 # Branch "<n>-<slug>" -> "Is<n> <slug>"; Shortcut "<user>/sc-<id>/<slug>" ->
 # "Sc<id> <slug>". The ticket number is ALWAYS kept; the slug is truncated.
@@ -141,7 +155,7 @@ export GT_LABEL_NOISE
 make_label() {
   local branch="$1" maxlen="$2" pretty="${3:-}" num="" slug="$1" distilled=""
   if [[ "$branch" =~ ^([0-9]+)-(.+)$ ]]; then
-    num="Is${BASH_REMATCH[1]}"
+    num="Is${ST_CHAIN_TAG:-${BASH_REMATCH[1]}}"
     slug="${BASH_REMATCH[2]}"
   elif [[ "$branch" =~ (^|/)sc-([0-9]+)/(.+)$ ]]; then
     num="Sc${BASH_REMATCH[2]}"
@@ -214,6 +228,7 @@ open_tab() {  # <worktree> <kickoff> [<label>]
     label="$(fit "$label" "${START_TICKET_TAB_MAXLEN:-30}" words)"
   else
     local branch; branch="$(git -C "$wt" branch --show-current 2>/dev/null || basename "$wt")"
+    ST_CHAIN_TAG="$(chain_tag "$wt")"
     label="$(make_label "$branch" "${START_TICKET_TAB_MAXLEN:-30}")"
   fi
 
@@ -305,6 +320,7 @@ open_bg() {  # <worktree> <kickoff> [<label>]
   command -v claude >/dev/null || die "claude CLI not found (needed by the bg launcher)"
   if [ -z "$label" ]; then
     local branch; branch="$(git -C "$wt" branch --show-current 2>/dev/null || basename "$wt")"
+    ST_CHAIN_TAG="$(chain_tag "$wt")"
     label="$(make_label "$branch" "${START_TICKET_BG_MAXLEN:-70}" pretty)"
     # The phase prefix is budgeted outside make_label's maxlen: truncating the
     # slug is fine, truncating "[PLAN]" would defeat the point of the label.
@@ -395,6 +411,23 @@ run_session() {  # <topic> <about>
   launch_session "$dir" "$kf" "$label"
 }
 
+# The chain's working agreement, appended to the kickoff after the ticket
+# sections. Review cadence: a cheap 1-round pass per link, the full cycle once.
+chain_block() {
+  cat <<CHAIN
+
+## Chain workflow
+
+Tickets ${chain_csv//,/, } are one chain: one worktree, one branch, one PR.
+
+1. Plan the whole chain once and propose that single plan; one approval covers every ticket.
+2. Work the tickets in order. After each: meet its acceptance criteria, run the tests, commit. Then run \`/local-review-cycle <base> --rounds 1\` (design/architecture and obvious correctness bugs only), where \`<base>\` is the previous ticket's commit SHA, or \`origin/<default branch>\` for the first. Note each ticket's commit SHA.
+3. After the last ticket: run the full \`/local-review-cycle\` (up to 5 rounds) against \`origin/<default branch>\`, covering the whole chain.
+4. Then run \`/open-pr\` yourself, without pausing. One PR closes every ticket.
+5. If a ticket fails its acceptance criteria or stalls after about 3 focused attempts, stop the chain. Run \`/open-pr --draft\` with the completed tickets (pass only their ids as \`--issue <a,b>\`) and a note on what remains (if none completed, open no PR and report the stall); list the unfinished tickets there without closing them.
+CHAIN
+}
+
 # ---- args ------------------------------------------------------------------
 id="" provider="" mode="full" launcher_flag="" tab_wt="" tab_kf="" about=""
 while [ $# -gt 0 ]; do
@@ -438,12 +471,12 @@ esac
 # included. The id and scheme are passed explicitly because the ticket branch
 # may not exist yet when this fires — but only once the provider is known:
 # before that, guessing github would file the failure under a wrong run id.
-wf_t0="" wf_event="" wf_dir="."
+wf_t0="" wf_event="" wf_dir="." chain_csv=""
 on_exit() {
   local rc=$? scheme=github
   [ -n "$wf_t0" ] || return 0
   [ "${provider:-}" = shortcut ] && scheme=shortcut
-  wf::emit --dir "$wf_dir" "$wf_event" ${id:+${provider:+"ticket=$id" "scheme=$scheme"}} \
+  wf::emit --dir "$wf_dir" "$wf_event" ${id:+${provider:+"ticket=$id" "scheme=$scheme"}} ${chain_csv:+"chain=$chain_csv"} \
     "outcome=$([ "$rc" -eq 0 ] && echo ok || echo fail)" "exit_code=$rc" \
     "duration_ms=$(( $(wf::mono_ms) - wf_t0 ))" "mode=$mode" "launcher=$launcher" \
     "provider=${provider:-}" "ticket_in_progress=${ticket_in_progress:-}"
@@ -465,7 +498,26 @@ if [ "$mode" = "session" ]; then
   exit 0
 fi
 
-[ -n "$id" ] || die "usage: start-ticket.sh <id> [--provider github|shortcut] [--no-tab|--print-title] [--launcher iterm|bg|none]"
+[ -n "$id" ] || die "usage: start-ticket.sh <id>[,<id>…] [--provider github|shortcut] [--no-tab|--print-title] [--launcher iterm|bg|none]"
+
+# ---- chain ids -------------------------------------------------------------
+# `12,13` → head 12 plus the rest. `id` stays the head, so everything that names
+# the branch, worktree, and telemetry run keeps its single-ticket meaning.
+ids=("$id")
+case "$id" in
+  *,*)
+    IFS=, read -ra ids <<<"$id"
+    [ "${#ids[@]}" -le 3 ] || die "a chain holds at most 3 tickets (got ${#ids[@]})"
+    seen=","
+    for _i in "${ids[@]}"; do
+      [ -n "$_i" ] || die "empty ticket id in chain '$id'"
+      case "$seen" in *",$_i,"*) die "duplicate ticket $_i in chain '$id'" ;; esac
+      seen="$seen$_i,"
+    done
+    id="${ids[0]}"
+    chain_csv="$(IFS=,; echo "${ids[*]}")"
+    ;;
+esac
 
 # ---- repo + provider -----------------------------------------------------
 git rev-parse --is-inside-work-tree >/dev/null 2>&1 || die "not inside a git repo"
@@ -481,6 +533,9 @@ if [ -z "$provider" ]; then
   fi
 fi
 
+[ -z "$chain_csv" ] || [ "$provider" != shortcut ] \
+  || die "chains need the github provider (Shortcut branches carry one story id); start the tickets separately"
+
 pf="$(find_provider_file "$provider")"
 [ -n "$pf" ] || die "no provider script for '$provider' (searched: START_TICKET_PROVIDER_DIR, <repo>/.project-overlays/start-ticket-providers, ~/.config/project-overlays/.start-ticket-providers, workflow-tools/start-ticket-providers)"
 # shellcheck source=/dev/null
@@ -494,9 +549,16 @@ provider::available || die "provider '$provider' unavailable (CLI missing or not
 
 # ---- run ---------------------------------------------------------------
 ST_TITLE="" ST_BODY="" ST_URL="" ST_PARENT="" ST_BRANCH="" ST_REF=""
-provider::fetch "$id"
+# Chain links are fetched first and the head last, so ST_* (branch, label,
+# parent) are the head's when the loop ends; the per-ticket arrays keep the
+# kickoff sections.
+chain_titles=() chain_bodies=() chain_urls=()
+for ((_n = ${#ids[@]} - 1; _n >= 0; _n--)); do
+  provider::fetch "${ids[_n]}"
+  chain_titles[_n]="${ST_TITLE:-untitled}" chain_bodies[_n]="${ST_BODY:-(no description)}" chain_urls[_n]="${ST_URL:-}"
+  printf 'start-ticket: %s #%s — %s\n' "$provider" "${ids[_n]}" "${ST_TITLE:-?}" >&2
+done
 : "${ST_REF:=${provider} ticket ${id}}"
-printf 'start-ticket: %s #%s — %s\n' "$provider" "$id" "${ST_TITLE:-?}" >&2
 
 # --print-title: resolve the ticket and stop. Lets a caller that wants to supply
 # its own label (GT_LABEL_OVERRIDE) read the title FIRST — the branch and the
@@ -518,7 +580,12 @@ branch="$(git -C "$wt" branch --show-current)"
 wf_dir="$wt"
 
 declare -f provider::post_worktree >/dev/null && provider::post_worktree "$id" "$wt"
-provider::mark_in_progress "$id" || echo "start-ticket: WARN mark_in_progress failed" >&2
+for _i in "${ids[@]}"; do
+  provider::mark_in_progress "$_i" || echo "start-ticket: WARN mark_in_progress failed for $_i" >&2
+done
+
+chain_file="$(git -C "$wt" rev-parse --absolute-git-dir)/chain"
+[ -z "$chain_csv" ] || printf '%s\n' "${ids[@]}" > "$chain_file"
 
 # mark_in_progress is best-effort and some tracker CLIs fail while exiting 0, so
 # read the state back here rather than making the caller verify. ticket_state is
@@ -527,20 +594,27 @@ provider::mark_in_progress "$id" || echo "start-ticket: WARN mark_in_progress fa
 # the MCP tools — its CLI's state-set is broken).
 ticket_state="" ticket_in_progress="unknown"
 if declare -f provider::read_state >/dev/null; then
-  if ticket_state="$(provider::read_state "$id")"; then
-    ticket_in_progress="yes"
-  else
-    ticket_in_progress="no"
-  fi
+  ticket_in_progress="yes"
+  for _i in "${ids[@]}"; do
+    _ok=1; _st="$(provider::read_state "$_i")" || _ok=""
+    [ "$_i" = "$id" ] && ticket_state="$_st"
+    [ -n "$_ok" ] || ticket_in_progress="no"
+  done
 fi
 
 # ---- kickoff ---------------------------------------------------------
-_tmp="${TMPDIR:-/tmp}"; kickoff="${_tmp%/}/${repo_name}-kickoff-${id}.md"
+_tmp="${TMPDIR:-/tmp}"; kickoff="${_tmp%/}/${repo_name}-kickoff-$(IFS=-; echo "${ids[*]}").md"
 {
-  printf 'Working on %s in this worktree. Branch `%s` is checked out.\n\n' \
+  printf 'Working on %s in this worktree. Branch `%s` is checked out.\n' \
     "$ST_REF" "$branch"
-  printf '## %s — %s\n\n%s\n' "$id" "${ST_TITLE:-untitled}" "${ST_BODY:-(no description)}"
-  [ -n "$ST_URL" ] && printf '\n<%s>\n' "$ST_URL"
+  [ -z "$chain_csv" ] || printf 'This session is a chain of %d tickets, in order: %s.\n' "${#ids[@]}" "${chain_csv//,/, }"
+  printf '\n'
+  for ((_n = 0; _n < ${#ids[@]}; _n++)); do
+    [ "$_n" -eq 0 ] || printf '\n'
+    printf '## %s — %s\n\n%s\n' "${ids[_n]}" "${chain_titles[_n]}" "${chain_bodies[_n]}"
+    [ -z "${chain_urls[_n]}" ] || printf '\n<%s>\n' "${chain_urls[_n]}"
+  done
+  [ -z "$chain_csv" ] || chain_block
   # The repo's own preamble wins outright; else the per-project overlay's.
   if _doc="$(gt::find_doc kickoff-preamble.md "$repo_root")"; then
     pre="${_doc%%$'\t'*}"
@@ -559,5 +633,6 @@ _tmp="${TMPDIR:-/tmp}"; kickoff="${_tmp%/}/${repo_name}-kickoff-${id}.md"
 printf 'worktree=%s\nkickoff=%s\nbranch=%s\nprovider=%s\n' "$wt" "$kickoff" "$branch" "$provider"
 printf 'ticket_state=%s\nticket_in_progress=%s\nticket_parent=%s\n' \
   "$ticket_state" "$ticket_in_progress" "$ST_PARENT"
+printf 'chain=%s\n' "$chain_csv"
 [ "$mode" = "no-tab" ] && exit 0
 launch_session "$wt" "$kickoff"

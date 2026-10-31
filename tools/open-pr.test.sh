@@ -39,6 +39,7 @@ case "$1 $2" in
         --title) printf '%s' "$2" > "$GH_LOG.title"; shift 2 ;;
         --body)  printf '%s' "$2" > "$GH_LOG.body"; shift 2 ;;
         --body-file) cp "$2" "$GH_LOG.body"; shift 2 ;;
+        --draft) : > "$GH_LOG.draft"; shift ;;
         *) shift ;;
       esac
     done
@@ -114,6 +115,38 @@ check "ticketless: body untouched"    "Just a summary" "$(body)"
 new_repo scratch
 run --title "Quick fix" --issue 7 --review none >/dev/null
 check "--issue on unnumbered branch"  "Closes #7" "$(body)"
+
+# ---- chains (several issues, one PR) ------------------------------------------
+chain_file() { printf '%s\n' "$@" > "$(git rev-parse --absolute-git-dir)/chain"; }
+new_repo 42-foo
+run --title "Add foo" --issue 42,43,44 --review none >/dev/null
+check "--issue list: one Closes per issue" "Closes #42 Closes #43 Closes #44" "$(body | tr '\n' ' ' | sed 's/ $//')"
+check "--issue list: title uses the head"  "Add foo" "$(title)"
+new_repo 42-foo; chain_file 42 43
+run --title "Add foo" --review none >/dev/null
+check "chain file: Closes for every ticket" "Closes #42 Closes #43" "$(body | tr '\n' ' ' | sed 's/ $//')"
+new_repo 42-foo; chain_file 42 43
+printf 'Summary\n\nCloses #43\n' > "$ROOT/b.md"
+run --title "Add foo" --body-file "$ROOT/b.md" --review none >/dev/null
+check "chain: body-file footers appended, none duplicated" "Closes #42 Closes #43" "$(body | grep '^Closes' | sort | tr '\n' ' ' | sed 's/ $//')"
+new_repo 42-foo; chain_file 42 43
+run --title "Add foo" --issue 42 --review none >/dev/null
+check "--issue beats the chain file" "Closes #42" "$(body)"
+new_repo 42-foo; chain_file 42 43
+run --title "Add foo" --draft --review none >/dev/null 2>&1; rc=$?
+check "chain: --draft without --issue is refused" "1" "$rc"
+new_repo 42-foo; chain_file 42 43
+run --title "Add foo" --draft --issue 42 --review none >/dev/null
+check "chain: --draft closes only the named tickets" "Closes #42" "$(body)"
+new_repo 42-foo
+run --title "Add foo" --issue 42,x --review none >/dev/null; rc=$?
+check "bad id in --issue list is refused" "1" "$rc"
+new_repo 42-foo
+run --title "Add foo" --draft --review none >/dev/null
+check "--draft passed to gh pr create" "yes" "$([ -e "$GH_LOG.draft" ] && echo yes || echo no)"
+new_repo 42-foo
+run --title "Add foo" --review none >/dev/null
+check "no --draft by default" "no" "$([ -e "$GH_LOG.draft" ] && echo yes || echo no)"
 
 # ---- provider resolution ----------------------------------------------------
 resolved() {  # <branch> <conf> [args…] → provider= line
