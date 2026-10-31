@@ -7,6 +7,10 @@
 ## Key documents
 - GitHub issues on this repo — the tracker. **Repo is public: never put sensitive information in issues, PRs, or commits.**
 - Intake issues filed from other repos by `/workflow` land in this tracker and are triaged with the rest; their evidence is subject to the public-repo rule above.
+- `docs/workflow-architecture.md` — review/workflow architecture; must be checked for updates in any PR that changes the workflow.
+- `docs/platform-audit.md` — cross-platform support audit.
+- `docs/workflow-telemetry.md` — workflow telemetry design.
+- `docs/cloud-workflow.md` — how cloud agents run the workflow commands.
 
 ## Repositories
 - **dotfiles** (this repo) — source of truth
