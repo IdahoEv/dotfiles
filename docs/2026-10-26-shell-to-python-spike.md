@@ -31,7 +31,7 @@ State: LOC from `wc -l` at the merge of `origin/main` (telemetry scripts include
 | `sibling-worktrees.sh` | 161 | slash command, `finalize-check` | No | convert with `finalize-check` | 1 |
 | `session-label.sh` | 149 | slash commands; embeds Python heredoc | No | convert (with `agent-phase`) | 1 |
 | `workflow-session.sh` | 129 | human CLI (governor) | No | defer; below the readability pain line | 1 |
-| `lib/telemetry.sh` | 89 | sourced by 3 scripts (`open-pr`, `start-ticket`, `wf-event`) | **Yes** while bash callers remain | convert with step 6 | 1 |
+| `lib/telemetry.sh` | 89 | sourced by 5 scripts (`agent-phase`, `finalize-check`, `open-pr`, `start-ticket`, `wf-event`) | **Yes** while bash callers remain | convert with step 6 | 1 |
 | `cloud-workflow-bootstrap.sh` | 98 | cloud-agent bootstrap; must run before anything is installed | **Yes**: runs on hosts where only `bash` is assured | keep bash | — |
 | `request-review.sh` | 80 | slash command | No | defer (80 lines, readable) | 1 |
 | `project-config.sh` | 73 | slash command (`/governor`); sourced by repo-facts | No | defer | 1 |
