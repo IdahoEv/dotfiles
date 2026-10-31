@@ -1,4 +1,4 @@
-# git-tools-freshness — warn at shell start if the dotfiles deploy clone is stale.
+# workflow-tools-freshness — warn at shell start if the dotfiles deploy clone is stale.
 #
 # The scripts behind `wm`/`wmc`, start-ticket.sh, and the /start Claude command
 # live in tools/ of the deploy clone (~/.local/share/chezmoi), which is on PATH.

@@ -63,11 +63,11 @@ on_exit() {
 trap on_exit EXIT
 # Provider lookup (first dir containing <name>.sh wins):
 #   1. $OPEN_PR_PROVIDER_DIR (explicit override)
-#   2. <main-repo-root>/.git-tools/open-pr-providers  (per-repo)
-#   3. ~/.config/git-tools/open-pr-providers          (per-machine, environment-wide)
-#   4. this repo's open-pr-providers/                 (shipped defaults)
+#   2. <main-repo-root>/.project-overlays/open-pr-providers  (per-repo)
+#   3. ~/.config/project-overlays/.open-pr-providers          (per-machine, environment-wide)
+#   4. this repo's open-pr-providers/                         (shipped defaults)
 # This keeps environment-specific providers (e.g. a work environment) out of
-# the personal git-tools repo while letting any layer ship one.
+# the public dotfiles repo while letting any layer ship one.
 find_provider_file() {  # <name> → path, or empty
   local name="$1" main_root common pd f
   common="$(git rev-parse --git-common-dir 2>/dev/null || true)"
@@ -75,8 +75,8 @@ find_provider_file() {  # <name> → path, or empty
     common="$(cd -P "$common" 2>/dev/null && pwd)" && main_root="$(dirname "$common")" || main_root=""
   fi
   for pd in "${OPEN_PR_PROVIDER_DIR:-}" \
-            "${main_root:-}/.git-tools/open-pr-providers" \
-            "$HOME/.config/git-tools/open-pr-providers" \
+            "${main_root:-}/.project-overlays/open-pr-providers" \
+            "$HOME/.config/project-overlays/.open-pr-providers" \
             "$SCRIPT_DIR/open-pr-providers"; do
     [ -n "$pd" ] || continue
     f="$pd/$name.sh"
@@ -162,7 +162,7 @@ resolve_provider() {
 
 [ -n "$provider" ] || provider="$(resolve_provider)"
 pf="$(find_provider_file "$provider")"
-[ -n "$pf" ] || die "no provider script for '$provider' (searched: OPEN_PR_PROVIDER_DIR, <repo>/.git-tools/open-pr-providers, ~/.config/git-tools/open-pr-providers, git-tools/open-pr-providers)"
+[ -n "$pf" ] || die "no provider script for '$provider' (searched: OPEN_PR_PROVIDER_DIR, <repo>/.project-overlays/open-pr-providers, ~/.config/project-overlays/.open-pr-providers, workflow-tools/open-pr-providers)"
 # shellcheck source=/dev/null
 PROVIDER_TRIGGER_MODE=""   # providers may declare their own; default manual below
 source "$pf"
@@ -261,7 +261,7 @@ if [ -n "$create_pr" ] && [ -n "${issue:-}" ]; then
   expected="${expected% }"                     # bare prefix, e.g. "Is42:" / "sc-42:"
   if [ -n "$expected" ]; then
     # Strip every leading ticket prefix — this provider's own (repeated) AND a
-    # foreign dialect's. Both dialects git-tools creates are matched, because
+    # foreign dialect's. Both dialects these tools create are matched, because
     # the failure mode that reached production was a cross-dialect double
     # (`sc-73237: Is73237: …`), which an idempotency check on one dialect alone
     # cannot see. Then re-apply exactly one.

@@ -60,6 +60,14 @@ guessing at the tracker and the team.
 Also read the repo's `CLAUDE.md` for layout and conventions. Prefer `governor.md`
 where the two disagree — it's the file written for this purpose.
 
+**Announce personal project Claude assets.** Run `project-config.sh list`. When it
+prints paths, the per-project overlay carries personal agents, commands, or skills for
+this repo (outside the checkout, so they can't be committed). Say in your first reply
+that they exist and where. They are not registered with Claude Code: an agent is
+launched as a `general-purpose` agent with the file body as its brief (honor any
+`model` frontmatter); a command or skill is read and followed inline. A repo-defined
+same-named asset wins. Empty output means none — say nothing.
+
 **Ignore `standing_ticket` in `.claude/workflow-config.json`.** That marker pins
 `/workflow`'s config edits to one branch; it is not the ticket this session governs.
 A governor session has no standing ticket — it decides which ones exist.
