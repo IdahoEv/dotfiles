@@ -2,6 +2,14 @@
 
 Prepares a worktree + kickoff for a tracker ticket and opens a Claude session for it.
 Takes a ticket id (`/start 22`). No id → list the repo's open tickets and ask which one.
+
+**Chains.** Arguments are space-separated *groups*; a group is one id or a comma list
+(`/start 12,13 14 15,16,17`, the line `/pick` ends with). Each group is its own session:
+run steps 1–4 once per group, independently, and finish one group's launch before the
+next. A comma group is a chain (GitHub only, max 3): one worktree, branch, kickoff and
+session for all its tickets, named from the first; the kickoff tells the session how to run
+the chain. Pass the group to `start-ticket.sh` as-is (`start-ticket.sh 12,13`); the label
+you write is for the head ticket's title.
 For a session with no ticket (discussion, investigation), use `/discuss`.
 
 Ticket tracking is provider-based (**GitHub issues** or **Shortcut stories**), resolved
@@ -28,7 +36,7 @@ Creates the worktree, marks the ticket in progress, and writes a kickoff from th
 project's working agreement, so this command doesn't. Prints parseable `key=value` on stdout — capture all of it:
 
 ```
-worktree= kickoff= branch= provider= ticket_state= ticket_in_progress= ticket_parent=
+worktree= kickoff= branch= provider= ticket_state= ticket_in_progress= ticket_parent= chain=
 ```
 
 Non-zero exit (ticket not open, no provider, CLI not authed) → **stop** and report why.
@@ -39,7 +47,7 @@ An already-existing worktree still succeeds.
 The script already read the state back, so trust `ticket_in_progress`:
 
 - **`yes`** — done. No tool calls.
-- **`no` / `unknown`** — the write didn't land (on Shortcut this is expected: the `short`
+- **`no` / `unknown`** — the write didn't land (for a chain, for at least one of its tickets: check each id) (on Shortcut this is expected: the `short`
   CLI's state-set prints `Error fetching story NaN` and still exits 0). Repair it:
   - **GitHub** — `gh issue edit <id> --add-assignee @me`, reopening if needed.
   - **Shortcut** — use the MCP tools, never the CLI: `mcp__shortcut__stories-get-by-id`,
@@ -138,7 +146,7 @@ recomputes true state from git + the tracker when they disagree.
 
 ### 4. Report
 
-Worktree path, branch, ticket state (report what you read back — step 1a's re-read if it
+One block per group. Worktree path, branch, ticket state (report what you read back — step 1a's re-read if it
 repaired, else `ticket_state` — never what you intended to set), and for GitHub with a
 parent epic, its sub-issue progress and remaining
 siblings. Under `bg`, say the session is running in `claude agents` and shows as

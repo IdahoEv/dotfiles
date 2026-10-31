@@ -49,6 +49,11 @@ If this branch has no PR yet, also draft the PR title and body.
 …`. The provider adds its own prefix from the branch name; `open-pr.sh` verifies the
 result and repairs a double (including a cross-dialect one) itself.
 
+On a chained branch (`git rev-parse --absolute-git-dir`'s `chain` file lists several ids),
+the summary covers every ticket, one line each. If the chain stopped early, ship a draft
+(`--draft`) whose body names the completed tickets and a **Remaining** note listing the
+rest; pass only the completed ids as `--issue <a,b>` so unfinished tickets aren't closed.
+
 **Body: a real summary, and stop there** — no `Closes #<NNN>`, no Shortcut URL, no
 tracker-linking footer. `open-pr.sh` appends `provider::pr_body_footer` when the provider
 defines one. A hand-written footer either duplicates it or points into the wrong namespace
@@ -73,7 +78,7 @@ Append the Co-Authored-By trailer unless the approved message already has one.
 
 ```bash
 # first ship — pass the title BARE, exactly as drafted:
-open-pr.sh --title "<bare short title>" --body-file <tmp-file> --review <level> [--provider <name>]
+open-pr.sh --title "<bare short title>" --body-file <tmp-file> --review <level> [--provider <name>] [--draft] [--issue <a,b>]
 
 # existing PR — reuse its title/body:
 open-pr.sh --review <level> [--provider <name>]

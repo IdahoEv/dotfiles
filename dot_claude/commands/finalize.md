@@ -15,7 +15,7 @@ finalize-check.sh
 One read-only call answers every mechanical question. It prints:
 
 ```
-branch= ticket_id= ticket_scheme= base= base_source= pr_number= pr_state=
+branch= ticket_id= chain_ids= ticket_scheme= base= base_source= pr_number= pr_state=
 pr_merge_commit= pr_head_oid= pr_count= pr_open_other= head_oid= head_matches=
 merged= merge_commit_landed= base_fetch= shallow= tracking_refspec=
 base_worktree= worktree= verdict= agent_phase=
@@ -81,7 +81,11 @@ Act on `verdict`:
 
 ### 2. Confirm the ticket is closed
 
-Use `ticket_id` and `ticket_scheme` from step 1.
+Use `ticket_id` and `ticket_scheme` from step 1. `chain_ids` lists every ticket the branch
+closed (a chained session; equal to `ticket_id` otherwise): run the check below for
+**each** id. A ticket still `OPEN` after a PR that listed it under `Closes` is closed as
+below; one the PR never claimed (a draft PR from a stopped chain) is **not** closed —
+report it as unfinished.
 
 **GitHub** (`ticket_scheme=github`):
 ```bash
