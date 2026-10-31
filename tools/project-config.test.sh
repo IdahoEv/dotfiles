@@ -154,7 +154,7 @@ check "kickoff names agent path on its own line" "yes" "$b"
 rm -rf "$OV2/claude"
 
 # ---- migration script --------------------------------------------------------
-MIG="$TOOLS/../executable_run_once_before_migrate-project-overlays.sh"
+MIG="$TOOLS/../run_once_before_migrate-project-overlays.sh"
 MH="$ROOT/mighome"; mkdir -p "$MH/.config/git-tools/projects/o/r" "$MH/.config/git-tools/open-pr-providers"
 git init -q "$MH/.config/git-tools/projects"
 echo '*~' > "$MH/.config/git-tools/projects/.gitignore"
@@ -174,6 +174,16 @@ msg="$(HOME="$MH2" sh "$MIG" 2>&1)"
 check "migrate: colliding .git not nested" "no" "$([ -e "$MH2/.config/project-overlays/.git/.git" ] && echo yes || echo no)"
 case "$msg" in *"finish by hand"*) w=yes ;; *) w=no ;; esac
 check "migrate: collision warns"           "yes" "$w"
+# chezmoi runs a source only when run_ is its first prefix; any other prefix
+# (executable_, private_) silently turns it into a file deployed into $HOME.
+SRC="$(cd "$TOOLS/.." && pwd)"
+bad="$(cd "$SRC" && ls | grep -E '^[a-z_]+_run_' || true)"
+check "chezmoi scripts lead with run_" "" "$bad"
+if command -v chezmoi >/dev/null 2>&1; then
+  s="$(HOME="$MH" chezmoi -S "$SRC" managed --include=scripts 2>/dev/null)"
+  case "$s" in *migrate-project-overlays*) r=yes ;; *) r=no ;; esac
+  check "chezmoi sees migration as a script" "yes" "$r"
+fi
 
 printf '%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
