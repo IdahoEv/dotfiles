@@ -9,9 +9,12 @@
           "background": "#7c3aed",
           "background_templates": [
             "{{ if eq .OS \"windows\" }}#fbb317{{ end }}",
-            "{{ if eq .OS \"linux\" }}#6c6c6c{{ end }}"
+            "{{ if eq .OS \"linux\" }}#585858{{ end }}"
           ],
           "foreground": "#f2f3f8",
+          "foreground_templates": [
+            "{{ if eq .OS \"windows\" }}#111111{{ end }}"
+          ],
           "properties": {
             "alpine": "\uf300",
             "arch": "\uf303",
