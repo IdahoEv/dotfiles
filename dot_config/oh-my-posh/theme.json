@@ -6,10 +6,14 @@
       "segments": [
         {
           "background": "#c386f1",
+          "background_templates": [
+            "{{ if eq .OS \"windows\" }}#fbb317{{ end }}",
+            "{{ if eq .OS \"linux\" }}#6c6c6c{{ end }}"
+          ],
           "foreground": "#ffffff",
           "leading_diamond": "\ue0b6",
           "style": "diamond",
-          "template": " {{ .UserName }} ",
+          "template": " {{ if eq .OS \"windows\" }}\uf17a{{ else if eq .OS \"linux\" }}\uf17c{{ else }}\uf179{{ end }} {{ .UserName }}@{{ .HostName }} ",
           "trailing_diamond": "\ue0b0",
           "type": "session"
         },
