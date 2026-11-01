@@ -6,7 +6,7 @@
       "newline": true,
       "segments": [
         {
-          "background": "#c386f1",
+          "background": "#7c3aed",
           "background_templates": [
             "{{ if eq .OS \"windows\" }}#fbb317{{ end }}",
             "{{ if eq .OS \"linux\" }}#6c6c6c{{ end }}"
@@ -39,7 +39,7 @@
           "foreground": "#4e4e4e",
           "style": "powerline",
           "powerline_symbol": "\ue0b0",
-          "template": " {{ .UserName }}@{{ .HostName }} ",
+          "template": " {{ .UserName }}@{{ if .Env.POSH_HOST_ALIAS }}{{ .Env.POSH_HOST_ALIAS }}{{ else }}{{ .HostName }}{{ end }} ",
           "type": "session"
         },
         {

@@ -7,7 +7,8 @@ export PATH="$HOME/bin:$HOME/.local/bin:$PATH"
 [[ -x /usr/libexec/path_helper ]] && eval "$(/usr/libexec/path_helper)" # might cause issues at work where I haven't installed latex
 
 if (( $+commands[oh-my-posh] )); then
-    __posh_theme="$HOME/.config/oh-my-posh/theme.json"
+{{ if is_work }}    export POSH_HOST_ALIAS="work"
+{{ end }}    __posh_theme="$HOME/.config/oh-my-posh/theme.json"
     [[ -f $__posh_theme ]] && eval "$(oh-my-posh init zsh --config $__posh_theme)"
     unset __posh_theme
 fi
