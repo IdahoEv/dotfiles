@@ -6,3 +6,4 @@
 .claude/commands/review-comments.md
 .claude/skills/review-comments-procedure
 .claude/agents/review-repair-agent.md
+.shell_modules/git-tools-freshness

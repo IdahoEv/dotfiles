@@ -53,6 +53,12 @@ require_commands() {
   return 0
 }
 
+# WSL shells spawned by /init do not inherit systemd --user environment vars,
+# where ssh-agent.socket exports SSH_AUTH_SOCK.
+if [[ -z "$SSH_AUTH_SOCK" && -S "${XDG_RUNTIME_DIR:-}/openssh_agent" ]]; then
+  export SSH_AUTH_SOCK="$XDG_RUNTIME_DIR/openssh_agent"
+fi
+
 ssh-init() {
   ls ~/.ssh/id_* | grep -v "\.pub$" | xargs ssh-add
 }
