@@ -8,11 +8,8 @@ export PATH="$HOME/bin:$HOME/.local/bin:$PATH"
 
 if (( $+commands[oh-my-posh] )); then
     __posh_theme="$HOME/.config/oh-my-posh/theme.json"
-    for __dir in "$(command -v brew >/dev/null && brew --prefix oh-my-posh 2>/dev/null)/themes" "$POSH_THEMES_PATH" "$HOME/.cache/oh-my-posh/themes"; do
-        [[ -f $__dir/quick-term.omp.json ]] && { __posh_theme="$__dir/quick-term.omp.json"; break; }
-    done
     [[ -f $__posh_theme ]] && eval "$(oh-my-posh init zsh --config $__posh_theme)"
-    unset __posh_theme __dir
+    unset __posh_theme
 fi
 
 
