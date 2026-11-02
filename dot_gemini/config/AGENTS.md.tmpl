@@ -1,0 +1,8 @@
+### Shell Execution Rules
+- Do not chain commands with `&&`, `;`, or `|` when individual tool calls can be made.
+- Do not use command substitutions like `$(cmd)`. Run the inner command first, then use the literal result.
+- Avoid wrappers (`sudo`, `eval`). Call target binaries directly so commands remain auto-approvable.
+
+@[CLAUDE.md]({{ .chezmoi.homeDir }}/.claude/CLAUDE.md)
+
+@[AGY Workflow Adapter]({{ .chezmoi.homeDir }}/.local/share/chezmoi/workflow/adapters/agy.md)

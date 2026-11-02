@@ -17,8 +17,8 @@ import re, sys
 adapter, commands = sys.argv[1], sys.argv[2:]
 construct = re.compile(
     r"mcp__[a-z_]+__|\b(?:AskUserQuestion|EnterWorktree|ExitWorktree|TodoWrite|EnterPlanMode|ExitPlanMode)\b"
-    r"|\b(?:agent-phase|session-label|sibling-worktrees|github-review-poll)\.sh\b"
-    r"|\bGT_LABEL_[A-Z_]+\b|--tab-only|--no-multi|--review|--launcher|github-review-repair-agent|~/\.config/local-review-only|claude agents|Co-Authored-By|git push --no-verify"
+    r"|\b(?:agent-phase|session-label|sibling-worktrees|github-review-poll|github-review-state)\.sh\b"
+    r"|\bGT_LABEL_[A-Z_]+\b|--tab-only|--no-multi|--review|--launcher|--confirm-commits|github-review-repair-agent|local-review-cycle-manager|~/\.config/local-review-only|claude agents|Co-Authored-By|git push --no-verify"
     r"|~/\.claude/"
     r"|(?<![\w/.-])/(?:start|open-pr|finalize|discuss|board|github-review-comments|local-review-cycle)\b"
 )
@@ -40,12 +40,24 @@ sys.exit(1 if undocumented or stale else 0)
 PY
 }
 
-commands=("$repo/dot_claude/commands/start.md" "$repo/dot_claude/commands/open-pr.md")
-for adapter_name in codex agy; do
-  adapter="$repo/workflow/adapters/${adapter_name}.md"
-  check "$adapter" "${commands[@]}" || fail "${adapter_name} adapter has drifted from the commands it covers"
-  printf 'PASS %s adapter maps every Claude-only construct in its covered commands\n' "$adapter_name"
-done
+codex_commands=("$repo/dot_claude/commands/start.md" "$repo/dot_claude/commands/open-pr.md")
+check "$repo/workflow/adapters/codex.md" "${codex_commands[@]}" || fail "codex adapter has drifted from the commands it covers"
+printf 'PASS codex adapter maps every Claude-only construct in its covered commands\n'
+
+agy_commands=(
+  "$repo/dot_claude/commands/start.md"
+  "$repo/dot_claude/commands/local-review-cycle.md"
+  "$repo/dot_claude/agents/local-review-cycle-manager.md"
+  "$repo/dot_claude/skills/local-review-cycle-procedure/SKILL.md"
+  "$repo/dot_claude/commands/open-pr.md"
+  "$repo/dot_claude/commands/github-review-comments.md"
+  "$repo/dot_claude/agents/github-review-repair-agent.md"
+  "$repo/dot_claude/skills/github-review-procedure/SKILL.md"
+)
+check "$repo/workflow/adapters/agy.md" "${agy_commands[@]}" || fail "agy adapter has drifted from the commands it covers"
+printf 'PASS agy adapter maps every Claude-only construct in its covered commands\n'
+
+commands=("${codex_commands[@]}")
 
 fixture="$(mktemp -d)"
 trap 'rm -rf "$fixture"' EXIT
