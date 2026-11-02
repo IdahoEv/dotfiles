@@ -553,9 +553,11 @@ def main(argv: list[str] | None = None) -> int:
         sys.exit("repo_facts: Python 3.13+ required; install with: pyenv install 3.13")
     if argv is None:
         argv = sys.argv[1:]
-    if argv and argv[0] in {s.name for s in SPECS}:
+    if len(argv) > 1 and argv[0] in {s.name for s in SPECS if s.fields}:
         # The shell functions took "$1" verbatim: a leading-dash value is
         # data, not a flag ("--" ends option parsing for everything after).
+        # Only specs with positionals: a bare "--" is itself an unrecognized
+        # argument for a subcommand that takes none (overlays-root).
         argv = [argv[0], "--", *argv[1:]]
     # Facts may carry non-UTF-8 bytes from git (surrogateescape in _run);
     # stdout must pass them back through as bytes, as printf did.

@@ -505,6 +505,13 @@ class Cli(Base):
         r = self.run_cli("distill-title", "-Fix the thing")
         self.assertEqual((r.returncode, r.stdout), (0, b"Thing"))
 
+    def test_argless_fact_subcommands_still_work(self):
+        # overlays-root takes no positional: the "--" guard for dash values
+        # must not itself become an unrecognized argument.
+        r = self.run_cli("overlays-root")
+        self.assertEqual(r.returncode, 0)
+        self.assertTrue(r.stdout.endswith(b"project-overlays"), r.stdout)
+
     def test_crlf_conf_value_keeps_carriage_return(self):
         # sed split on \n only, so the \r of a CRLF file stayed in the value.
         repo = self.fake_remote_repo()
