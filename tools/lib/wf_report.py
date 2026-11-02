@@ -533,8 +533,8 @@ def main(argv=None):
     ap.add_argument("--test-re", default=os.environ.get("WF_TEST_RE", wf_usage.DEFAULT_TEST_RE))
     ap.add_argument("--now", help=argparse.SUPPRESS)
     a = ap.parse_args(argv)
-    if a.usage and (a.run or a.detail):
-        ap.error("--usage cannot be combined with --run or --detail")
+    if a.usage and (a.run or a.detail or a.prune is not None):
+        ap.error("--usage cannot be combined with --run, --detail or --prune")
 
     now = wf_usage.parse_ts(a.now) if a.now else datetime.now(timezone.utc)
     if a.prune is not None:

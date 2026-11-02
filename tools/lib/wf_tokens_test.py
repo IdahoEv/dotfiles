@@ -196,7 +196,7 @@ class TopSessions(UsageTest):
                 wf_report.main(["--usage", "--top", bad, "--log", self.events])
 
     def test_usage_rejects_run_and_detail(self):
-        for flag in (["--run", "x"], ["--detail"]):
+        for flag in (["--run", "x"], ["--detail"], ["--prune", "30"]):
             with self.assertRaises(SystemExit), redirect_stderr(io.StringIO()):
                 wf_report.main(["--usage", "--log", self.events, *flag])
 
