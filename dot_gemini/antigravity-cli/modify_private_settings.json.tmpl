@@ -1,0 +1,66 @@
+#!/usr/bin/env python3
+"""chezmoi modify script for ~/.gemini/antigravity-cli/settings.json.
+
+Owns $schema and permissions; everything else on disk passes through
+untouched, notably the machine-local trustedWorkspaces list.
+
+Merge semantics: dicts merge per-key, arrays are replaced wholesale.
+The command allow list mirrors the Bash allow list in
+dot_claude/modify_private_settings.json.tmpl; keep them in sync. Left out
+of AGY: the Shortcut curl entry (the curl deny wins), WebSearch/WebFetch
+and Edit rules (different mechanisms).
+"""
+
+import json
+import sys
+
+MANAGED = json.loads(r"""
+{
+  "$schema": "https://antigravity.google/schemas/v1/settings.json",
+  "permissions": {
+    "allow": [
+      "command(git)",
+      "command(gh)",
+      "command(ls)",
+      "command(which)",
+      "command(mktemp)",
+      "command(stat)",
+      "command(chezmoi)",
+      "command(agy)",
+      "command(start-ticket.sh)",
+      "command(ast-grep)",
+      "command(sg)",
+      "command(short)",
+      "command(regex:bash .*tools/.*\\.test\\.sh)",
+      "command(regex:yarn (live|install|db|tsc).*)",
+      "command(regex:yarn (build|test|lint).*)",
+      "command(regex:.*/github-review-procedure/github-review-poll\\.sh.*)",
+      "command(docker-compose)"
+    ],
+    "ask": [],
+    "deny": [
+      "command(regex:rm -rf .*)",
+      "command(regex:curl .*)",
+      "command(regex:wget .*)",
+      "write_file(.env*)",
+      "write_file(.git/)",
+      "write_file(secrets/)"
+    ]
+  }
+}
+""")
+
+
+def merge(base, over):
+    for key, value in over.items():
+        if isinstance(value, dict) and isinstance(base.get(key), dict):
+            merge(base[key], value)
+        else:
+            base[key] = value
+
+
+raw = sys.stdin.read()
+current = json.loads(raw) if raw.strip() else {}
+merge(current, MANAGED)
+json.dump(current, sys.stdout, indent=2, ensure_ascii=False)
+sys.stdout.write("\n")

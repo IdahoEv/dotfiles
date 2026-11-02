@@ -9,8 +9,8 @@ line, plugins, and personal prefs stay synced across machines.
 
 Merge semantics: dicts merge per-key, arrays are replaced wholesale.
 Deleting a key from MANAGED does NOT remove it from disk.
-The Bash(gh:*) allow entry is mirrored in
-dot_gemini/antigravity-cli/private_settings.json; keep them in sync.
+The Bash allow list is mirrored as command() entries in
+dot_gemini/antigravity-cli/modify_private_settings.json.tmpl; keep them in sync.
 
 Notable exclusions (left to each machine / fireworks):
   - env.ANTHROPIC_* and CLAUDE_CODE_SUBAGENT_MODEL (fireworks CLI)
@@ -60,6 +60,14 @@ MANAGED = json.loads(r"""
       "Bash(ast-grep:*)",
       "Bash(sg:*)",
       "Bash(short:*)",
+      "Bash(ls:*)",
+      "Bash(which:*)",
+      "Bash(mktemp:*)",
+      "Bash(stat:*)",
+      "Bash(chezmoi:*)",
+      "Bash(agy:*)",
+      "Bash(start-ticket.sh:*)",
+      "Bash(bash *tools/*.test.sh*)",
       "Bash(curl * https://api.app.shortcut.com/*)",
       "Bash({{ .chezmoi.homeDir }}/.claude/skills/github-review-procedure/github-review-poll.sh*)",
       "Edit(**/.env.example)",
