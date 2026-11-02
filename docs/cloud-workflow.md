@@ -22,7 +22,10 @@ Requirements: Bash, curl, tar, Python 3 (only when `WORKFLOW_REF` is not a full 
 
 ## Coverage and limits
 
-v1 covers `/start` and `/open-pr`. Not covered: `/finalize`, review cycles (so PRs from this path state `Independent review: not performed`), governor, discussion, planning. Constructs without a mapping stop the task with a report, never an improvisation. In Codex or remote AGY sessions, the task is already an isolated checkout, so worktree and session-launch steps are skipped; local AGY sessions create and switch into the ticket worktree.
+- **Codex Cloud (`workflow/adapters/codex.md`):** Covers `/start` and `/open-pr`. Not covered: `/finalize`, review cycles (PRs from this path state `Independent review: not performed`), governor, discussion, planning. The Codex task is already an isolated checkout, so worktree and session-launch steps are skipped.
+- **Antigravity (`workflow/adapters/agy.md`):** Covers `/start`, `/local-review-cycle`, and `/open-pr`. Maps `local-review-cycle-manager` and leaf reviewer specialists (`*-reviewer`) onto AGY's `define_subagent`/`invoke_subagent` tools, and deploys user rules and skill wrappers under `dot_gemini/config/` (`~/.gemini/config/`). Local AGY sessions create and switch into the ticket worktree; remote unreviewed runs skip the review cycle and state `Independent review: not performed`.
+
+Constructs without a mapping stop the task with a report, never an improvisation.
 
 The tests prove the bootstrap and adapter in source control, not that a phone-launched cloud task has network access, credentials, the right checkout, or build dependencies. Record those in `docs/cloud-pilot-checklist.md`.
 
