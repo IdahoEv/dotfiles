@@ -8,7 +8,7 @@ Translation layer only. The workflow itself is the dotfiles command files, fetch
 2. Add `workflow_bin` to `PATH` so command text such as `start-ticket.sh` and `open-pr.sh` runs unmodified. Keep `workflow_source_commit`.
 3. To run `/X <args>`, read `<workflow_root>/dot_claude/commands/X.md` and follow it step by step, applying the table below. Slash commands may only be run from the covered list: `start`, `open-pr`.
 4. The project repository's own instructions (`AGENTS.md`, `CLAUDE.md`, `.claude/kickoff-preamble.md`) stay authoritative for ticket, branch, build, and test rules.
-5. The PR body, final report, and any ticket comment include `Workflow source: IdahoEv/dotfiles@<workflow_source_commit>`, and the line `Independent review: not performed`. This overrides any command text that limits the PR body; when `open-pr.sh` reports a reused PR, add the lines with `gh pr edit --body` if missing.
+5. The PR body, final report, and any ticket comment include `Workflow source: IdahoEv/dotfiles@<workflow_source_commit>`, and the line `Independent review: not performed`. Pass each line to `open-pr.sh` as `--body-footer "<line>"`. When `open-pr.sh` reports a reused PR, add the lines with `gh pr edit --body` if missing.
 6. The `/start` output names `worktree=` and `kickoff=`. Because the launch step is skipped, switch into `worktree=` and read `kickoff=` as the task brief.
 7. Report each project check (tests, lint, build) as passed, failed, or not run with the reason, in the PR body and final report. Never imply a check passed unless it ran.
 8. There is no interactive user mid-task. Where a command would ask a question or wait for approval, stop and report the decision needed, unless the command itself says to proceed.

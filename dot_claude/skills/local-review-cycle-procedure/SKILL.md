@@ -78,16 +78,20 @@ Each round:
 
 If the first architecture review returns `DESIGN: unsound`, stop before changing code and ask the user whether to keep or rework the design. Include the concrete alternative and trade-offs. This gate applies only when the reviewer demonstrates a materially better alternative—not for style preferences.
 
+Once the first architecture review returns `DESIGN: sound` (or, when no architecture reviewer was selected, once round 1 starts), launch one background subagent to draft the PR body's two model sections: Summary (at most 3 one-line `- ` bullets) and Needs your judgment (at most 3 one-line items, or `none`), from the `BASE...HEAD` diff only. State `git rev-parse HEAD` to it literally as `<sha>` and tell it to diff against that sha; it writes the sections to temp files and runs `pr-body.sh draft save --base <BASE> --head <sha> --summary-file <f> --judgment-file <f>`. Don't wait for it. Fix commits make the draft stale; in Finish, if HEAD moved, launch the same subagent once more at the final HEAD.
+
 If significant, well-supported findings remain after round 5, stop and ask the user. Summarize what remains and the likely structural cause; do not silently extend the cycle.
 
 ## 4. Finish
 
 - Run `agent-phase.sh --no-review`.
+- If `git rev-parse HEAD` differs from the sha the early draft was written against, relaunch the draft subagent (§3) at the final HEAD once the last fix is committed.
 - Run `FULL` once after final review fixes. Re-run only failing checks as needed and compare against the baseline.
 - Record the cycle totals with `wf-event.sh review.result round=<last round number> fixed=<n> dismissed=<n> deferred=<n> reviewers=<agent,agent>`, `round=` always, the other fields only when available; counts are triaged findings, so a finding raised by two reviewers counts once. A failure surfaced by `FULL` and fixed here still counts. `round=` also records the final local count on the statusline.
 - Report reviewers selected and why, rounds, findings fixed/dismissed/deferred (with validity), overlap count (findings raised by ≥2 reviewers), test status (including baseline failures), and commits added. Keep output terse: one line per round (`R<k>: N fixed / M dismissed or deferred`).
 - List dismissed findings with the reason for each, and deferred findings with the issue filed for each; do not implement them. Dismissed-with-reasons is mandatory — no report or PR note without it.
-- End by stating `/open-pr` is the next step. The report is the source for the PR body's "Review cycle" note: rounds, fixed/dismissed/deferred counts, and the dismissed findings with their reasons.
+- Run `pr-body.sh review-write --rounds <n> --fixed <n> --dismissed <n> --deferred <n>`; `/open-pr` renders it as the PR body's Review line.
+- End by stating `/open-pr` is the next step. The report stays in this session; the PR body carries only the one-line Review summary written above.
 
 ## Guardrails
 

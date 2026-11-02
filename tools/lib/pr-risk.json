@@ -1,0 +1,32 @@
+{
+  "high": [
+    "dot_claude/hooks/*",
+    "dot_claude/settings*",
+    "dot_claude/*",
+    "workflow/*",
+    "tools/*",
+    "package.json",
+    "package-lock.json",
+    "yarn.lock",
+    "pnpm-lock.yaml",
+    "pyproject.toml",
+    "requirements*.txt",
+    "uv.lock",
+    "Gemfile",
+    "Gemfile.lock",
+    "go.mod",
+    "go.sum",
+    "Cargo.toml",
+    "Cargo.lock"
+  ],
+  "low": [
+    "docs/*",
+    "*.md",
+    "*_test.*",
+    "*.test.*",
+    "test/*",
+    "tests/*",
+    "*/test/*",
+    "*/tests/*"
+  ]
+}
