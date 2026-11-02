@@ -12,7 +12,7 @@ import shutil
 import sys
 import tempfile
 import unittest
-from contextlib import redirect_stdout
+from contextlib import redirect_stderr, redirect_stdout
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
@@ -116,6 +116,30 @@ class Breakdowns(UsageTest):
         self.assertEqual({k: v["messages"] for k, v in types.items()},
                          {"ticket": 1, "governor/jobs": 2, "other": 1})
 
+    def test_governor_substring_in_repo_name_is_not_governor(self):
+        self.transcript("a", [assistant("2026-10-20T09:00:00Z", "m-a", cwd="/home/u/dev/governor-app/7-x")])
+        self.assertEqual(set(self.rows(self.usage(), "type")), {"ticket"})
+
+    def test_subagent_keeps_cwd_when_main_transcript_is_outside_window(self):
+        self.transcript("s1", [assistant("2026-01-01T09:00:00Z", "a", cwd=WORKTREE)])
+        old = os.path.join(self.projects, "-p", "s1.jsonl")
+        os.utime(old, (0, 0))
+        self.transcript("s1", [assistant("2026-10-20T09:00:00Z", "b")], agent="Explore")
+        self.assertEqual(set(self.rows(self.usage(), "type")), {"ticket"})
+
+    def test_worktree_name_is_ticket_without_telemetry(self):
+        self.transcript("s1", [assistant("2026-10-20T09:00:00Z", "a", cwd=WORKTREE)])
+        r = self.usage()
+        self.assertEqual(set(self.rows(r, "ticket")), {"7-add-widget"})
+        self.assertEqual(set(self.rows(r, "stage")), {"—"})
+
+    def test_unreadable_pricing_keeps_tokens_and_blanks_weight(self):
+        self.transcript("s1", [assistant("2026-10-20T09:00:00Z", "a", out=42)])
+        self.pricing = os.path.join(self.root, "missing.json")
+        r = self.usage()
+        self.assertEqual(r["totals"]["output"], 42)
+        self.assertIsNone(r["totals"]["weighted"])
+
     def test_agent_type_split(self):
         self.transcript("s1", [assistant("2026-10-20T09:00:00Z", "a", out=100)])
         self.transcript("s1", [assistant("2026-10-20T09:01:00Z", "b", out=200)], agent="correctness-reviewer")
@@ -165,6 +189,25 @@ class TopSessions(UsageTest):
         self.assertEqual((top["span_start"][:16], top["span_end"][:16]), ("2026-10-20T09:00", "2026-10-20T10:00"))
         self.assertEqual(top["project_dir"], WORKTREE)
         self.assertNotIn("SECRET", json.dumps(r))
+
+    def test_non_positive_top_is_rejected(self):
+        for bad in ("0", "-1"):
+            with self.assertRaises(SystemExit), redirect_stderr(io.StringIO()):
+                wf_report.main(["--usage", "--top", bad, "--log", self.events])
+
+    def test_usage_rejects_run_and_detail(self):
+        for flag in (["--run", "x"], ["--detail"]):
+            with self.assertRaises(SystemExit), redirect_stderr(io.StringIO()):
+                wf_report.main(["--usage", "--log", self.events, *flag])
+
+    def test_partial_weight_is_starred_in_text(self):
+        self.transcript("s1", [assistant("2026-10-20T09:00:00Z", "a", cwd=OTHER),
+                               assistant("2026-10-20T09:01:00Z", "b", model=FW)])
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            wf_report.main(["--usage", "--by", "day", "--log", self.events, "--pricing", self.pricing,
+                            "--now", NOW, "--since", "30d"])
+        self.assertRegex(buf.getvalue(), r"\d\.\d+\*")
 
     def test_text_output_has_labelled_weighted_column_and_no_content(self):
         self.transcript("s1", [assistant("2026-10-20T09:00:00Z", "a", model=FW, cwd=OTHER)])

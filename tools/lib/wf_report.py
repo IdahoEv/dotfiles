@@ -508,6 +508,13 @@ def usage_report(a, now, events, pricing):
     return 0
 
 
+def _positive_int(s):
+    n = int(s)
+    if n < 1:
+        raise argparse.ArgumentTypeError("must be >= 1")
+    return n
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(prog="wf-report.sh", description=__doc__)
     ap.add_argument("--run", help="one run id, e.g. owner/repo#40 or sc-12345")
@@ -520,12 +527,14 @@ def main(argv=None):
                     help="tokens across all sessions under the projects dir, not just ticket runs")
     ap.add_argument("--by", action="append", choices=wf_tokens.VIEWS + ["sessions"],
                     help="with --usage: restrict to a breakdown (repeatable; default all)")
-    ap.add_argument("--top", type=int, default=10, help="with --usage: sessions in the top list (default 10)")
+    ap.add_argument("--top", type=_positive_int, default=10, help="with --usage: sessions in the top list (default 10)")
     ap.add_argument("--log", default=log_path())
     ap.add_argument("--pricing", default=os.path.join(os.path.dirname(os.path.abspath(__file__)), "model-pricing.json"))
     ap.add_argument("--test-re", default=os.environ.get("WF_TEST_RE", wf_usage.DEFAULT_TEST_RE))
     ap.add_argument("--now", help=argparse.SUPPRESS)
     a = ap.parse_args(argv)
+    if a.usage and (a.run or a.detail):
+        ap.error("--usage cannot be combined with --run or --detail")
 
     now = wf_usage.parse_ts(a.now) if a.now else datetime.now(timezone.utc)
     if a.prune is not None:

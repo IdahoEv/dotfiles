@@ -24,7 +24,7 @@ _WORKTREE_RE = re.compile(r"(?:\d+|[a-z]+-\d+)-[a-z]")
 def session_type(cwd, in_run):
     """ticket worktree | governor/jobs | other"""
     path = cwd or ""
-    if "/.claude/jobs/" in path or "/governor" in path or "-claude-jobs-" in path:
+    if "/.claude/jobs/" in path or "/.claude/worktrees/governor" in path:
         return "governor/jobs"
     if in_run or _WORKTREE_RE.match(os.path.basename(path)):
         return "ticket"
@@ -70,11 +70,11 @@ class Group:
 def collect(root, runs_by_session, runs, since, now, pricing):
     """[(rec, tags)] for every deduplicated message in [since, now]."""
     out, seen, cwds = [], set(), {}
+    mains = {sid: p for p, sid, agent in wf_usage.all_transcripts(root) if agent is None}
     for path, sid, agent in wf_usage.all_transcripts(root, since):
-        if agent is None:
-            cwds[sid] = wf_usage.session_cwd(path)
-    for path, sid, agent in wf_usage.all_transcripts(root, since):
-        cwd = cwds.get(sid)
+        if sid not in cwds:
+            cwds[sid] = wf_usage.session_cwd(mains[sid]) if sid in mains else None
+        cwd = cwds[sid]
         run = runs.get(runs_by_session.get(sid))
         for rec in wf_usage.read_usage(path, agent):
             if rec["ts"] is None or not (since <= rec["ts"] <= now) or rec["id"] in seen:
