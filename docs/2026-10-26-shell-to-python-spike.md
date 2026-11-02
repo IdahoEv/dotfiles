@@ -107,7 +107,7 @@ No other script runs per tool call or per render.
 
 Commands used: `python3 --version; command -v python3; python3 -c 'import sys; print(sys.executable)'; /usr/bin/python3 --version`.
 
-Verdict on a deployed `python3` dependency: **safe on both machines.** Both resolve `python3` to a pyenv 3.13 and both keep the 3.9.6 system interpreter as a fallback. Both machines are expected to stay on a current 3.x release. Pinning the floor at 3.9 (the oldest interpreter that Xcode CLT installs) means no `match`, no `X | Y` unions at runtime, no `tomllib`; use `from __future__ import annotations`. `agent-phase.sh` and `session-label.sh` already guard with `command -v python3 || exit 0`, and `docs/platform-audit.md` flags `python3` as a previously accepted assumption. Do not depend on pyenv: under a hook or cloud agent the shim may be absent, so the shebang is `#!/usr/bin/env python3` and each script fails with one install-hint line if the version is below 3.9.
+Verdict on a deployed `python3` dependency: **safe on both machines.** Both resolve `python3` to a pyenv 3.13. **The floor is 3.13.** 3.14 adds nothing these scripts use and would force an upgrade on both machines. The system 3.9.6 (Xcode CLT, EOL) is deliberately not supported, so scripts can use `match`, `X | Y` unions and `tomllib` freely. `agent-phase.sh` and `session-label.sh` already guard with `command -v python3 || exit 0`, and `docs/platform-audit.md` flags `python3` as a previously accepted assumption. Do not depend on pyenv being on `PATH`: under a hook or cloud agent the shim may be absent, so the shebang is `#!/usr/bin/env python3` and each script exits with one install-hint line if the version is below 3.13.
 
 ## Porting contract
 
