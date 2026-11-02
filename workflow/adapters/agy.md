@@ -16,10 +16,10 @@ Translation layer only. The workflow itself is the dotfiles command files; this 
 3. Tool execution in AGY:
    - Run shell commands using `run_command`. Attempt sandboxed execution first; retry with `BypassSandbox: true` if blocked by network or authentication requirements (e.g., `gh`).
    - Use `read_file`, `write_file`, and `edit_file` for file operations.
-   - Subagents (`invoke_subagent`, `define_subagent`) are available in AGY, but independent review subagents are not mapped in this v1 protocol.
-4. To run `/X <args>`, read `<workflow_root>/dot_claude/commands/X.md` (or deployed `~/.claude/commands/X.md`) and follow it step by step, applying the table below. Slash commands may only be run from the covered list: `start`, `open-pr`.
+   - Subagents (`invoke_subagent`, `define_subagent`) are used to run isolated orchestrator, leaf reviewer, and PR repair agents (`local-review-cycle-manager`, `*-reviewer`, and `github-review-repair-agent`).
+4. To run `/X <args>`, read `<workflow_root>/dot_claude/commands/X.md` (or deployed `~/.claude/commands/X.md`) and follow it step by step, applying the table below. Slash commands may only be run from the covered list: `start`, `local-review-cycle`, `open-pr`, `github-review-comments`.
 5. The project repository's own instructions (`AGENTS.md`, `CLAUDE.md`, `.claude/kickoff-preamble.md`) stay authoritative for ticket, branch, build, and test rules.
-6. The PR body, final report, and any ticket comment include `Workflow source: IdahoEv/dotfiles@<workflow_source_commit>`, and the line `Independent review: not performed`. Pass each line to `open-pr.sh` as `--body-footer "<line>"`. When `open-pr.sh` reports a reused PR, add the lines with `gh pr edit --body` if missing.
+6. The PR body, final report, and any ticket comment include `Workflow source: IdahoEv/dotfiles@<workflow_source_commit>`. When `/local-review-cycle` ran, carry its verbatim report summary into the PR body's "Review cycle" note; when it was skipped or not performed (e.g., remote unreviewed runs), include `Independent review: not performed`. Pass each footer line to `open-pr.sh` as `--body-footer "<line>"`. When `open-pr.sh` reports a reused PR, add the lines with `gh pr edit --body` if missing.
 7. The `/start` output names `worktree=` and `kickoff=`. Because the session launch step is skipped, switch into `worktree=` (set working directory) and read `kickoff=` as the task brief.
 8. Report each project check (tests, lint, build) as passed, failed, or not run with the reason, in the PR body and final report. Never imply a check passed unless it ran.
 9. Interactive prompts: In an interactive AGY session, use `ask_question` or user chat when human input is requested. In automated/headless execution, where a command would ask a question or wait for approval, stop and report the decision needed, unless the command itself says to proceed.
@@ -34,24 +34,29 @@ Maintained against the covered commands by `tools/cloud-workflow-adapter.test.sh
 | `/start` | Read and follow `start.md` using `run_command` and file tools. |
 | `/open-pr` | Read and follow `open-pr.md` using `run_command` and file tools. |
 | `/finalize` | Not available. Stop and report. |
-| `/local-review-cycle` | Not available; independent review is not performed (see protocol 6). Skip any mention. |
-| `/github-review-comments` | Not available. Skip; report that review follow-up is manual. |
+| `/local-review-cycle` | Read and follow `local-review-cycle.md` using `run_command` and subagent tools. |
+| `/github-review-comments` | Read and follow `github-review-comments.md` using `run_command`, file tools, and subagent tools (in Quick or Slow mode, load `skills/github-review-procedure/SKILL.md` inline in the current session; in Automatic mode, launch `github-review-repair-agent` and retain parent ownership of commits, push, and GitHub thread writes). |
 | `/discuss` | Not available. |
 | `/board` | Not available. |
 | `--tab-only` | Skip the step that opens a session. The AGY task is already the session. |
 | `--no-multi` | Always in effect. Skip the fan-out step to sibling repos. |
+| `--confirm-commits` | Honour as written; pass through in the `local-review-cycle-manager` kickoff. |
 | `sibling-worktrees.sh` | Do not run (fan-out is skipped). |
 | `GT_LABEL_OVERRIDE` | Do not set. Session labels do not exist here. |
 | `GT_LABEL_SLUG_OVERRIDE` | Do not set. The deterministic branch name stands. |
 | `agent-phase.sh` | Skip direct calls; scripts that call it already no-op. |
+| `github-review-state.sh` | Skip direct `--set-local` statusline calls; `wf-event.sh review.result` records the final round count. |
 | `session-label.sh` | Skip. |
+| `AskUserQuestion` | Follow protocol 9: in interactive sessions use `ask_question` with self-contained context; in headless/Telegram sessions print the self-contained question and options at the end of the turn and wait. |
 | `claude agents` | Ignore; there is no Claude agent view. |
 | `git push --no-verify` | Skip the no-op push; it only registers a push in the Claude agent view. |
-| `github-review-poll.sh` | Skip the poll step; report that no review wait was done. |
+| `github-review-poll.sh` | In interactive CLI sessions, run in the background via `run_command` and re-invoke `/github-review-comments` on exit 0; in single-turn headless/Telegram or remote runs, skip the poll step and report that review polling is manual. |
 | `mcp__shortcut__` | Not available. Shortcut tickets: stop and report. GitHub tickets need no MCP. |
-| `--review` | Always `--review none`; independent review is not performed. |
+| `mcp__github__` | Not required; use the `gh` CLI (`gh api ...`) via `run_command` as preferred by `github-review-procedure`. |
+| `--review` | Honour as written (`open-pr.sh` defaults to `none` when `~/.config/local-review-only` exists). |
 | `--launcher` | Never pass it. No session is launched. |
-| `~/.config/local-review-only` | Ignore; `--review none` already applies. |
-| `github-review-repair-agent` | Not available. Skip; report that review follow-up is manual. |
+| `~/.config/local-review-only` | Honour as written (`open-pr.sh` checks it automatically). |
+| `local-review-cycle-manager` | Define via `define_subagent` (`EnableWriteTools: true`, `EnableSubagentTools: true`, system prompt from `agents/local-review-cycle-manager.md` + `skills/local-review-cycle-procedure/SKILL.md` + `workflow/adapters/agy.md`, passing resolved `workflow_root` and `workflow_bin`) and launch via `invoke_subagent`. Inside the manager, define each reviewer selected under `local-review-cycle-procedure` §2 (all three discovery tiers: `.claude/agents/`, `docs/local/reviewers/` or project-overlay `claude/agents/`, and `dot_claude/agents/`) via `define_subagent` with `EnableWriteTools: false` and system prompt from the reviewer file body plus every skill in its `skills:` frontmatter (`skills/<skill>/SKILL.md`, e.g. `reviewer-contract`, `prompt-review`, `security-review-rubric`; always include `skills/reviewer-contract/SKILL.md` for tier-2 reviewers), then invoke in parallel via `invoke_subagent`. |
+| `github-review-repair-agent` | Define via `define_subagent` (`EnableWriteTools: true`, `EnableSubagentTools: false`, system prompt from `agents/github-review-repair-agent.md` + `skills/github-review-procedure/SKILL.md` + `skills/reviewer-contract/SKILL.md` + `workflow/adapters/agy.md`, passing resolved `workflow_root` and `workflow_bin`) and launch via `invoke_subagent` for one Automatic Mode round. The subagent edits files and runs validation only — never commits, pushes, or writes to GitHub; the parent session owns commit approval (`AskUserQuestion`), `git commit`, `git push`, and posting/resolving planned GitHub actions. |
 | `Co-Authored-By` | Use the attribution line the host/project instructs; if none, omit the trailer. |
 | `~/.claude/` | Paths under `~/.claude/` may exist in local environments; for repository or remote runs, use `<workflow_root>/dot_claude/` (names carry chezmoi prefixes such as `executable_`). |
