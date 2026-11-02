@@ -62,6 +62,7 @@ MANAGED = json.loads(r"""
       "Bash(short:*)",
       "Bash(curl * https://api.app.shortcut.com/*)",
       "Bash({{ .chezmoi.homeDir }}/.claude/skills/github-review-procedure/github-review-poll.sh*)",
+      "Edit(**/.env.example)",
       "WebSearch",
       "WebFetch"
     ],
@@ -76,6 +77,7 @@ MANAGED = json.loads(r"""
       "Read(./coverage/**)",
       "Read(./node_modules/**)",
       "Edit(./.env*)",
+      "Edit(!.env.example)",
       "Edit(./secrets/**)"
     ],
     "additionalDirectories": []
