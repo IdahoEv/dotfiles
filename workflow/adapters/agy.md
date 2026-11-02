@@ -45,7 +45,9 @@ Maintained against the covered commands by `tools/cloud-workflow-adapter.test.sh
 | `GT_LABEL_OVERRIDE` | Do not set. Session labels do not exist here. |
 | `GT_LABEL_SLUG_OVERRIDE` | Do not set. The deterministic branch name stands. |
 | `agent-phase.sh` | Skip direct calls; scripts that call it already no-op. |
+| `github-review-state.sh` | Skip direct `--set-local` statusline calls; `wf-event.sh review.result` records the final round count. |
 | `session-label.sh` | Skip. |
+| `AskUserQuestion` | Follow protocol 9: in interactive sessions use `ask_question` with self-contained context; in headless/Telegram sessions print the self-contained question and options at the end of the turn and wait. |
 | `claude agents` | Ignore; there is no Claude agent view. |
 | `git push --no-verify` | Skip the no-op push; it only registers a push in the Claude agent view. |
 | `github-review-poll.sh` | Skip the poll step; report that no review wait was done. |
@@ -53,7 +55,7 @@ Maintained against the covered commands by `tools/cloud-workflow-adapter.test.sh
 | `--review` | Honour as written (`open-pr.sh` defaults to `none` when `~/.config/local-review-only` exists). |
 | `--launcher` | Never pass it. No session is launched. |
 | `~/.config/local-review-only` | Honour as written (`open-pr.sh` checks it automatically). |
-| `local-review-cycle-manager` | Define via `define_subagent` (`EnableWriteTools: true`, `EnableSubagentTools: true`, system prompt from `agents/local-review-cycle-manager.md` + `skills/local-review-cycle-procedure/SKILL.md`) and launch via `invoke_subagent`. Inside the manager, define selected leaf reviewers (`agents/{correctness,architecture,robustness,prompt,security,supply-chain}-reviewer.md` + `skills/reviewer-contract/SKILL.md`, plus `skills/security-review-rubric/SKILL.md` for security reviewers) with `EnableWriteTools: false` and invoke in parallel. |
+| `local-review-cycle-manager` | Define via `define_subagent` (`EnableWriteTools: true`, `EnableSubagentTools: true`, system prompt from `agents/local-review-cycle-manager.md` + `skills/local-review-cycle-procedure/SKILL.md` + `workflow/adapters/agy.md`, passing resolved `workflow_root` and `workflow_bin`) and launch via `invoke_subagent`. Inside the manager, define each reviewer selected under `local-review-cycle-procedure` §2 (all three discovery tiers: `.claude/agents/`, `docs/local/reviewers/` or project-overlay `claude/agents/`, and `dot_claude/agents/`) via `define_subagent` with `EnableWriteTools: false` and system prompt from the reviewer file body plus every skill in its `skills:` frontmatter (`skills/<skill>/SKILL.md`, e.g. `reviewer-contract`, `prompt-review`, `security-review-rubric`; always include `skills/reviewer-contract/SKILL.md` for tier-2 reviewers), then invoke in parallel via `invoke_subagent`. |
 | `github-review-repair-agent` | Not available. Skip; report that review follow-up is manual. |
 | `Co-Authored-By` | Use the attribution line the host/project instructs; if none, omit the trailer. |
 | `~/.claude/` | Paths under `~/.claude/` may exist in local environments; for repository or remote runs, use `<workflow_root>/dot_claude/` (names carry chezmoi prefixes such as `executable_`). |

@@ -17,7 +17,7 @@ import re, sys
 adapter, commands = sys.argv[1], sys.argv[2:]
 construct = re.compile(
     r"mcp__[a-z_]+__|\b(?:AskUserQuestion|EnterWorktree|ExitWorktree|TodoWrite|EnterPlanMode|ExitPlanMode)\b"
-    r"|\b(?:agent-phase|session-label|sibling-worktrees|github-review-poll)\.sh\b"
+    r"|\b(?:agent-phase|session-label|sibling-worktrees|github-review-poll|github-review-state)\.sh\b"
     r"|\bGT_LABEL_[A-Z_]+\b|--tab-only|--no-multi|--review|--launcher|--confirm-commits|github-review-repair-agent|local-review-cycle-manager|~/\.config/local-review-only|claude agents|Co-Authored-By|git push --no-verify"
     r"|~/\.claude/"
     r"|(?<![\w/.-])/(?:start|open-pr|finalize|discuss|board|github-review-comments|local-review-cycle)\b"
@@ -47,6 +47,8 @@ printf 'PASS codex adapter maps every Claude-only construct in its covered comma
 agy_commands=(
   "$repo/dot_claude/commands/start.md"
   "$repo/dot_claude/commands/local-review-cycle.md"
+  "$repo/dot_claude/agents/local-review-cycle-manager.md"
+  "$repo/dot_claude/skills/local-review-cycle-procedure/SKILL.md"
   "$repo/dot_claude/commands/open-pr.md"
 )
 check "$repo/workflow/adapters/agy.md" "${agy_commands[@]}" || fail "agy adapter has drifted from the commands it covers"
