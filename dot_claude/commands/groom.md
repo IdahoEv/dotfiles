@@ -54,7 +54,8 @@ flagged, report one line — "Nothing upcoming is under-specified." — and stop
   `~/.claude/commands/discuss.md`: label `Groom <scope>`, `--about` carrying only the
   flagged ticket refs and "follow the Walk section of `~/.claude/commands/groom.md`".
   The sibling re-reads the tickets itself. Don't hold the walk here.
-- `$ARGUMENTS` of `inline` or `session` overrides the choice. Don't ask.
+- A bare `inline` or `session` token in `$ARGUMENTS` overrides the choice. Don't ask.
+  Strip it before reading the rest of `$ARGUMENTS` as the scope.
 
 ## Walk
 
