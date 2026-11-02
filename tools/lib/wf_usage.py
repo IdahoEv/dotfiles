@@ -63,6 +63,35 @@ def transcripts_for_session(session_id, root=None):
     return out
 
 
+def all_transcripts(root=None, since_ts=None):
+    """[(path, session_id, agent_type or None)] for every transcript under root.
+
+    Files last written before since_ts (a datetime) are skipped: they hold no newer messages.
+    """
+    root = root or projects_root()
+    found = [(p, os.path.basename(p)[: -len(".jsonl")], None)
+             for p in glob.glob(os.path.join(root, "*", "*.jsonl"))]
+    for p in glob.glob(os.path.join(root, "*", "*", "subagents", "agent-*.jsonl")):
+        agent_type = None
+        try:
+            with open(p[: -len(".jsonl")] + ".meta.json") as fh:
+                agent_type = json.load(fh).get("agentType")
+        except (OSError, ValueError):
+            pass
+        found.append((p, os.path.basename(os.path.dirname(os.path.dirname(p))), agent_type or "unknown"))
+    if since_ts is not None:
+        found = [f for f in found if os.path.getmtime(f[0]) >= since_ts.timestamp()]
+    return sorted(found)
+
+
+def session_cwd(path):
+    """The working directory a transcript recorded, or None. Nothing else is read from entries."""
+    for e in _entries(path):
+        if isinstance(e.get("cwd"), str) and e["cwd"]:
+            return e["cwd"]
+    return None
+
+
 def _entries(path):
     try:
         with open(path, errors="replace") as fh:
