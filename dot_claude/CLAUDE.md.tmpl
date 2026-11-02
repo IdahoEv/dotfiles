@@ -62,6 +62,10 @@ batching turns several free tool calls into a blocking prompt plus a second call
 `PreToolUse` hook denies that shape; the point is not to reach for it. This applies to
 subagents, which hit it most.
 
+**Env files:** Keep environment variables in a single `.env.example` / `.env` at the project
+root, not split into subdirectories by function, unless there's a strong architectural reason
+(e.g. a separately deployed service with its own environment).
+
 **Web searches:** Remember it's currently 2026 - use 2026 in search queries, not 2025 or 2024.
 
 **Approval checkpoints:** when a workflow or skill step calls for pausing on my approval
