@@ -617,7 +617,7 @@ def main(argv: list[str] | None = None) -> int:
             sys.stdout.write(HELP)
             return 0
         if arg in ("--branch", "--dir"):
-            if i + 1 >= len(argv):
+            if i + 1 >= len(argv) or argv[i + 1] == "":
                 _die(f"{arg} needs a value")
             if arg == "--branch":
                 branch = argv[i + 1]

@@ -146,6 +146,17 @@ class Scan(Base):
             + self.line("repoD", str(self.d7), "7-first-ticket", "ahead"),
         )
 
+    def test_hidden_dot_dirs_are_not_scanned(self):
+        # bash's "$root"/*/ glob skipped dotfiles; a hidden repo under the
+        # dev root must not gain a shipped session.
+        hidden = self.root / "dev" / ".hidden-repo"
+        self.run_git("init", "-q", "-b", "main", str(hidden))
+        self.git(hidden, "commit", "-q", "--allow-empty", "-m", "init")
+        self._worktree(hidden, "h7", "7-first-ticket")
+        r = self.run_sib("--ticket", "7")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertNotIn(".hidden-repo", r.stdout.decode())
+
 
 class TicketResolution(Base):
 
@@ -220,6 +231,14 @@ class Errors(Base):
         r = self.run_sib("--ticket", "abc")
         self.assertEqual(r.returncode, 1)
         self.assertIn("positive integer", r.stderr.decode())
+
+    def test_empty_flag_value_is_usage_error(self):
+        # bash's ${2:?} rejected an empty value like a missing one; falling
+        # through would silently parse the ticket from the current branch.
+        for flag in ("--ticket", "--branch", "--root", "--repos"):
+            r = self.run_sib(flag, "")
+            self.assertEqual(r.returncode, 1, flag)
+            self.assertIn(f"{flag} needs a value", r.stderr.decode())
 
 
 if __name__ == "__main__":

@@ -153,8 +153,11 @@ def candidate_repos(repos_csv: str, root: str, cwd: str) -> list[str]:
         root = os.path.dirname(os.path.dirname(toplevel))
     if not os.path.isdir(root):
         _die(f"root is not a directory: {root}")
+    # bash's "$root"/*/ glob skipped dot-directories; keep that so a hidden
+    # repo under the dev root never gains a shipped session.
     return _collated([os.path.join(root, n) for n in os.listdir(root)
-                      if os.path.isdir(os.path.join(root, n))])
+                      if not n.startswith(".")
+                      and os.path.isdir(os.path.join(root, n))])
 
 
 # ---- per-worktree state ------------------------------------------------------
@@ -239,7 +242,7 @@ def main(argv: list[str] | None = None) -> int:
             include_clean = True
             i += 1
         elif arg in ("--ticket", "--branch", "--root", "--repos"):
-            if i + 1 >= len(argv):
+            if i + 1 >= len(argv) or argv[i + 1] == "":
                 _die(f"{arg} needs a value")
             if arg == "--ticket":
                 ticket = argv[i + 1]

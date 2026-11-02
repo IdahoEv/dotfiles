@@ -466,6 +466,20 @@ class PreconditionsAndFacts(Base):
         self.assertEqual(checks[0]["branch"], "sc-5/foo")
         self.assertEqual(checks[0]["verdict"], "no-pr")
 
+    def test_empty_flag_value_is_usage_error(self):
+        # bash's ${2:?} rejected an empty value like a missing one; falling
+        # through would report on the current branch instead.
+        repo, wt = self.repo_with_wt()
+        r = self.run_check("--dir", str(wt), "--branch", "")
+        self.assertEqual(r.returncode, 1)
+        self.assertIn("--branch needs a value", r.stderr.decode())
+        self.assertEqual(r.stdout, b"")
+
+        r = self.run_check("--dir", "")
+        self.assertEqual(r.returncode, 1)
+        self.assertIn("--dir needs a value", r.stderr.decode())
+        self.assertEqual(r.stdout, b"")
+
     def test_exit_1_on_preconditions(self):
         repo, wt = self.repo_with_wt()
         notrepo = self.root / "notrepo"
