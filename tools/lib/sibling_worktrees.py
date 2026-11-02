@@ -19,14 +19,14 @@ empty output when nothing matches; 1 only on usage/precondition errors.
 
 from __future__ import annotations
 
-import locale
 import os
 import re
-import subprocess
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))  # wrapper runs -I
 import repo_facts
+from repo_facts import (collated as _collated, git as _git, git_ok as _git_ok,
+                        run_cmd as _run)
 
 HELP = """# sibling-worktrees.sh — find worktrees in OTHER repos that belong to the same ticket.
 #
@@ -68,37 +68,7 @@ HELP = """# sibling-worktrees.sh — find worktrees in OTHER repos that belong t
 """
 
 
-# ---- subprocess helpers ------------------------------------------------------
-
-def _run(cmd: list[str], cwd: str | None = None) -> subprocess.CompletedProcess[str]:
-    # surrogateescape: git emits raw bytes (ref names, config values) and the
-    # shell passed them through; a strict decode would crash instead.
-    return subprocess.run(cmd, cwd=cwd, capture_output=True, text=True,
-                          errors="surrogateescape", check=False)
-
-
-def _git(dir_: str, *args: str) -> str:
-    """git -C stdout, or "" when the command fails (the shell's `|| true`)."""
-    r = _run(["git", "-C", dir_, *args])
-    return r.stdout.strip() if r.returncode == 0 else ""
-
-
-def _git_ok(dir_: str, *args: str) -> bool:
-    return _run(["git", "-C", dir_, *args]).returncode == 0
-
-
-def _collated(names: list[str]) -> list[str]:
-    """Glob order: bash sorted each expansion with the caller's strcoll, and
-    the listing order is part of the byte-identical output."""
-    try:
-        prev = locale.setlocale(locale.LC_COLLATE, "")
-        try:
-            return sorted(names, key=locale.strxfrm)
-        finally:
-            locale.setlocale(locale.LC_COLLATE, prev)
-    except locale.Error:
-        return sorted(names)
-
+# ---- subprocess helpers: shared with repo_facts, imported above --------------
 
 def _common_dir(repo: str) -> str:
     """The repo's common git dir, resolved like cd -P from <repo>; "" when

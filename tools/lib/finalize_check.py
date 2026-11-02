@@ -26,11 +26,11 @@ import dataclasses
 import json
 import os
 import shutil
-import subprocess
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))  # wrapper runs -I
 import repo_facts
+from repo_facts import git as _git, git_ok as _git_ok, run_cmd as _run
 
 TOOLS_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -138,24 +138,7 @@ HELP = """# finalize-check.sh — read-only post-merge verification for a featur
 """
 
 
-# ---- subprocess helpers ------------------------------------------------------
-
-def _run(cmd: list[str], cwd: str | None = None) -> subprocess.CompletedProcess[str]:
-    # surrogateescape: git emits raw bytes (ref names, config values) and the
-    # shell passed them through; a strict decode would crash instead.
-    return subprocess.run(cmd, cwd=cwd, capture_output=True, text=True,
-                          errors="surrogateescape", check=False)
-
-
-def _git(dir_: str, *args: str) -> str:
-    """git -C stdout, or "" when the command fails (the shell's `|| true`)."""
-    r = _run(["git", "-C", dir_, *args])
-    return r.stdout.strip() if r.returncode == 0 else ""
-
-
-def _git_ok(dir_: str, *args: str) -> bool:
-    return _run(["git", "-C", dir_, *args]).returncode == 0
-
+# ---- subprocess helpers: shared with repo_facts, imported above --------------
 
 def _has_commit(worktree: str, sha: str) -> bool:
     return _git_ok(worktree, "cat-file", "-e", f"{sha}^{{commit}}")

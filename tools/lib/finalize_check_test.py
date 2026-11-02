@@ -11,6 +11,7 @@ import json
 import os
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -18,6 +19,9 @@ from pathlib import Path
 HERE = os.path.dirname(os.path.abspath(__file__))
 TOOLS = os.path.dirname(HERE)
 FINALIZE = os.path.join(TOOLS, "finalize-check.sh")
+
+sys.path.insert(0, HERE)
+import finalize_check  # noqa: E402
 
 KEYS = [
     "branch", "ticket_id", "chain_ids", "ticket_scheme", "base", "base_source",
@@ -131,6 +135,48 @@ class Base(unittest.TestCase):
         pairs = [line.split("=", 1) for line in lines]
         self.assertEqual([k for k, _ in pairs], KEYS)
         return {k: v for k, v in pairs}
+
+
+class VerdictLadder(unittest.TestCase):
+    """choose_verdict / agent_phase_for called directly on hand-built Facts,
+    the way a future importer will use them: no repo fixtures, no subprocess,
+    every ladder branch named."""
+
+    def facts(self, **overrides):
+        base = dict.fromkeys(KEYS, "")
+        base.update(head_oid="abc123", pr_number="7", pr_state="MERGED",
+                    merged="yes", head_matches="same", base_source="origin",
+                    base_fetch="ok", shallow="no")
+        base.update(overrides)
+        return finalize_check.Facts(**base)
+
+    def test_ladder(self):
+        cases = [
+            ({}, "ready", "MERGED"),
+            ({"head_oid": ""}, "unknown", ""),
+            ({"pr_number": "", "pr_state": "OPEN"}, "no-pr", ""),
+            ({"pr_state": "unknown"}, "unknown", ""),
+            ({"merged": "unknown"}, "unknown", ""),
+            ({"pr_state": "OPEN"}, "not-merged", "REVIEW"),
+            ({"pr_state": "CLOSED"}, "not-merged", "REVIEW"),
+            ({"head_matches": "ahead"}, "local-commits", ""),
+            ({"head_matches": "diverged"}, "local-commits", ""),
+            ({"head_matches": "unknown"}, "unknown", ""),
+            ({"pr_open_other": "9"}, "not-merged", "REVIEW"),
+            ({"merged": "no", "merge_commit_landed": "yes"}, "ready", "MERGED"),
+            ({"merged": "no", "merge_commit_landed": "no"}, "not-on-base", ""),
+            ({"merged": "no", "merge_commit_landed": "no", "base_fetch": ""},
+             "squash-merged", ""),
+            ({"merged": "no", "merge_commit_landed": "no", "shallow": "yes"},
+             "squash-merged", ""),
+            ({"merged": "no", "merge_commit_landed": "no",
+              "base_source": "default_pr_base_gone"}, "squash-merged", ""),
+        ]
+        for overrides, verdict, phase in cases:
+            with self.subTest(**overrides):
+                f = self.facts(**overrides)
+                self.assertEqual(finalize_check.choose_verdict(f), verdict)
+                self.assertEqual(finalize_check.agent_phase_for(verdict), phase)
 
 
 class PrQuery(Base):

@@ -319,6 +319,22 @@ class Overlays(Base):
         self.assertEqual(repo_facts.overlay_claude_files("agents", repo), expected[:2])
         self.assertEqual(repo_facts.overlay_claude_files("skills", repo), expected[3:])
 
+    def test_overlay_claude_files_skips_hidden_names(self):
+        # Bash globs never match a leading dot; pathlib globs do, so the port
+        # must filter the shell's rule back in or transient editor lockfiles
+        # and drafts leak into kickoff docs and `project-config list`.
+        os.environ["PROJECT_OVERLAYS_DIR"] = os.path.join(self.root, "overlays")
+        ov = "overlays/acme/widgets/claude"
+        for path in ("agents/.hidden-agent.md", "agents/.#lock.md",
+                     "commands/.draft.md", "skills/.hidden.md",
+                     "skills/.draft/SKILL.md"):
+            self.write(f"{ov}/{path}", "x\n")
+        self.write(f"{ov}/agents/alpha.md", "a\n")
+        repo = self.fake_remote_repo()
+        expected = [os.path.join(self.root, ov, "agents", "alpha.md")]
+        self.assertEqual(repo_facts.overlay_claude_files("", repo), expected)
+        self.assertEqual(repo_facts.overlay_claude_files("skills", repo), [])
+
     def test_overlay_claude_files_missing_dirs(self):
         os.environ["PROJECT_OVERLAYS_DIR"] = os.path.join(self.root, "none")
         repo = self.fake_remote_repo()

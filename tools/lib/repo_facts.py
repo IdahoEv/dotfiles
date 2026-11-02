@@ -54,32 +54,32 @@ DEFAULT_MAX_CHARS = 48
 
 # ---- subprocess helpers ------------------------------------------------------
 
-def _run(cmd: list[str], cwd: str | None = None) -> subprocess.CompletedProcess[str]:
+def run_cmd(cmd: list[str], cwd: str | None = None) -> subprocess.CompletedProcess[str]:
     # surrogateescape: git emits raw bytes (ref names, config values) and the
     # shell passed them through; a strict decode would crash instead.
     return subprocess.run(cmd, cwd=cwd, capture_output=True, text=True,
                           errors="surrogateescape", check=False)
 
 
-def _git(dir_: str, *args: str) -> str:
+def git(dir_: str, *args: str) -> str:
     """git -C stdout, or "" when the command fails (the shell's `|| true`)."""
-    r = _run(["git", "-C", dir_, *args])
+    r = run_cmd(["git", "-C", dir_, *args])
     return r.stdout.strip() if r.returncode == 0 else ""
 
 
-def _git_ok(dir_: str, *args: str) -> bool:
-    return _run(["git", "-C", dir_, *args]).returncode == 0
+def git_ok(dir_: str, *args: str) -> bool:
+    return run_cmd(["git", "-C", dir_, *args]).returncode == 0
 
 
 # ---- default branch ----------------------------------------------------------
 
 def _branch_from_origin_head(dir_: str) -> str:
-    b = _git(dir_, "symbolic-ref", "--short", "refs/remotes/origin/HEAD")
+    b = git(dir_, "symbolic-ref", "--short", "refs/remotes/origin/HEAD")
     return b.removeprefix("origin/")
 
 
 def _branch_from_remote_show(dir_: str) -> str:
-    r = _run(["git", "-C", dir_, "remote", "show", "origin"])
+    r = run_cmd(["git", "-C", dir_, "remote", "show", "origin"])
     if r.returncode != 0:
         return ""
     # Only the FIRST matching line counts (sed | head -1): if it says
@@ -96,9 +96,9 @@ def _branch_from_remote_show(dir_: str) -> str:
 def _branch_from_gh(dir_: str) -> str:
     if not shutil.which("gh"):
         return ""
-    if not _git_ok(dir_, "rev-parse", "--show-toplevel"):
+    if not git_ok(dir_, "rev-parse", "--show-toplevel"):
         return ""
-    r = _run(["gh", "repo", "view", "--json", "defaultBranchRef",
+    r = run_cmd(["gh", "repo", "view", "--json", "defaultBranchRef",
               "-q", ".defaultBranchRef.name"], cwd=dir_)
     return r.stdout.strip() if r.returncode == 0 else ""
 
@@ -124,10 +124,10 @@ def default_branch_ref(dir_: str = ".") -> str:
     this speculatively; staleness only ever over-reports work.
     """
     b = _branch_from_origin_head(dir_)
-    if b and _git_ok(dir_, "rev-parse", "--verify", "--quiet", f"origin/{b}"):
+    if b and git_ok(dir_, "rev-parse", "--verify", "--quiet", f"origin/{b}"):
         return f"origin/{b}"
     for name in ("development", "main", "master"):
-        if _git_ok(dir_, "rev-parse", "--verify", "--quiet", f"origin/{name}"):
+        if git_ok(dir_, "rev-parse", "--verify", "--quiet", f"origin/{name}"):
             return f"origin/{name}"
     return ""
 
@@ -333,7 +333,7 @@ def overlay_dir(dir_: str = ".") -> str:
     The directory itself may not exist yet — callers test for the files
     they want.
     """
-    url = _git(dir_, "remote", "get-url", "origin")
+    url = git(dir_, "remote", "get-url", "origin")
     key = repo_key(url) if url else ""
     return f"{overlays_root()}/{key}" if key else ""
 
@@ -344,7 +344,7 @@ def overlay_claude_dir(dir_: str = ".") -> str:
     return f"{ov}/claude" if ov else ""
 
 
-def _collated(paths: list[str]) -> list[str]:
+def collated(paths: list[str]) -> list[str]:
     """Glob order: bash sorted each expansion with the caller's strcoll, and
     the listing order is part of the byte-identical output."""
     try:
@@ -372,11 +372,13 @@ def overlay_claude_files(kind: str = "", dir_: str = ".") -> list[str]:
     root = Path(cd)
     out: list[str] = []
     for sub in subs:
-        out += _collated([str(p) for p in (root / sub).glob("*.md")
-                          if p.is_file()])
+        # pathlib globs match leading dots; the shell globs never did.
+        out += collated([str(p) for p in (root / sub).glob("*.md")
+                          if p.is_file() and not p.name.startswith(".")])
         if sub == "skills":
-            out += _collated([str(p) for p in (root / "skills").glob("*/SKILL.md")
-                              if p.is_file()])
+            out += collated(
+                [str(p) for p in (root / "skills").glob("*/SKILL.md")
+                 if p.is_file() and not p.parent.name.startswith(".")])
     return out
 
 
@@ -386,7 +388,7 @@ def main_root(dir_: str = ".") -> str:
     rev-parse --git-common-dir may be relative (to <dir>); canonicalize like
     cd -P so a symlinked path resolves to the real location.
     """
-    common = _git(dir_, "rev-parse", "--git-common-dir")
+    common = git(dir_, "rev-parse", "--git-common-dir")
     if not common:
         return ""
     p = Path(common) if common.startswith("/") else Path(dir_ or ".") / common
@@ -401,7 +403,7 @@ def conf_files(dir_: str = ".") -> list[str]:
     <toplevel>/.start-ticket.conf, <main-root>/.start-ticket.conf,
     <overlay>/start-ticket.conf, ~/.config/start-ticket/config."""
     files: list[str] = []
-    top = _git(dir_, "rev-parse", "--show-toplevel")
+    top = git(dir_, "rev-parse", "--show-toplevel")
     if top:
         files.append(f"{top}/.start-ticket.conf")
     main = main_root(dir_)
@@ -448,7 +450,7 @@ def find_doc(name: str, dir_: str = ".") -> tuple[str, str] | None:
     .claude/<name> if present, else the overlay's <name> (or claude/<name>).
     No merging — a committed file replaces the overlay's outright.
     Returns (path, "repo"|"overlay"), or None if neither exists."""
-    top = _git(dir_, "rev-parse", "--show-toplevel")
+    top = git(dir_, "rev-parse", "--show-toplevel")
     if top:
         p = Path(top) / ".claude" / name
         if p.is_file():
@@ -559,7 +561,7 @@ def main(argv: list[str] | None = None) -> int:
         # Only specs with positionals: a bare "--" is itself an unrecognized
         # argument for a subcommand that takes none (overlays-root).
         argv = [argv[0], "--", *argv[1:]]
-    # Facts may carry non-UTF-8 bytes from git (surrogateescape in _run);
+    # Facts may carry non-UTF-8 bytes from git (surrogateescape in run_cmd);
     # stdout must pass them back through as bytes, as printf did.
     sys.stdout.reconfigure(errors="surrogateescape")
     return run(build_parser().parse_args(argv))
