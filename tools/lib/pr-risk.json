@@ -2,6 +2,8 @@
   "high": [
     "dot_claude/hooks/*",
     "dot_claude/settings*",
+    "dot_claude/*",
+    "workflow/*",
     "tools/*",
     "package.json",
     "package-lock.json",
@@ -17,5 +19,14 @@
     "Cargo.toml",
     "Cargo.lock"
   ],
-  "low": ["docs/*", "*.md", "*test*", "*_test.*", "*.test.*"]
+  "low": [
+    "docs/*",
+    "*.md",
+    "*_test.*",
+    "*.test.*",
+    "test/*",
+    "tests/*",
+    "*/test/*",
+    "*/tests/*"
+  ]
 }

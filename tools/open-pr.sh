@@ -210,7 +210,7 @@ else
     body_tmp="$(mktemp "${TMPDIR:-/tmp}/open-pr-body.XXXXXX")"
     footer_args=()
     for _f in ${body_footers[@]+"${body_footers[@]}"}; do footer_args+=(--footer "$_f"); done
-    python3 "$SCRIPT_DIR/lib/pr_body.py" assemble --base "${_default:-main}" \
+    "$SCRIPT_DIR/pr-body.sh" assemble --base "${_default:-main}" \
       --summary-file "$summary_file" --judgment-file "$judgment_file" \
       ${test_result:+--test-result "$test_result"} ${footer_args[@]+"${footer_args[@]}"} \
       > "$body_tmp" || die "PR body sections rejected (see above)"

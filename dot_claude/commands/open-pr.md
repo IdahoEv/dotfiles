@@ -51,7 +51,7 @@ If this branch has no PR yet, also draft the PR title and body.
 result and repairs a double (including a cross-dialect one) itself.
 
 On a chained branch (`git rev-parse --absolute-git-dir`'s `chain` file lists several ids),
-the summary covers every ticket, one line each. If the chain stopped early, ship a draft
+the summary covers every ticket within the 3-bullet cap. If the chain stopped early, ship a draft
 (`--draft`) whose body names the completed tickets and a **Remaining** note listing the
 rest; pass only the completed ids as `--issue <a,b>` so unfinished tickets aren't closed. If no ticket completed, open no PR: report the
 stall and stop.
@@ -63,7 +63,7 @@ commits or the review. Write each to a temp file:
 - **Summary** — at most 3 one-line `- ` bullets: what changed and why.
 - **Needs your judgment** — at most 3 one-line `- ` items, or the single word `none`.
 
-The script rejects a section over its cap. Chained branches: one Summary bullet per ticket.
+The script rejects a section over its cap. Chained branches: one Summary bullet per ticket, merging tickets when there are more than 3.
 
 First try the early draft the review cycle saved:
 

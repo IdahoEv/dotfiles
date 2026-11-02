@@ -2,7 +2,7 @@
 """Assemble a PR body from two model-written sections plus mechanical ones.
 
     pr_body.py assemble --base <ref> --summary-file F --judgment-file F [--test-result S] [--footer LINE]…
-    pr_body.py draft save --base <ref> --summary-file F --judgment-file F
+    pr_body.py draft save --base <ref> --summary-file F --judgment-file F [--head SHA]
     pr_body.py draft load --base <ref> --summary-file OUT --judgment-file OUT
     pr_body.py review-write --rounds N --fixed N --dismissed N --deferred N
 
@@ -47,8 +47,8 @@ def resolve_base(root, base):
     return remote if r.returncode == 0 else base
 
 
-def touched_files(root, base):
-    out = git(root, "diff", "--name-only", f"{resolve_base(root, base)}...HEAD")
+def touched_files(root, base, head="HEAD"):
+    out = git(root, "diff", "--name-only", f"{resolve_base(root, base)}...{head}")
     return sorted(out.splitlines())
 
 
@@ -101,9 +101,9 @@ def classify(paths, table):
     return "medium"
 
 
-def fingerprint(root, base):
-    head = git(root, "rev-parse", "HEAD")
-    files = "\n".join(touched_files(root, base))
+def fingerprint(root, base, head=None):
+    head = git(root, "rev-parse", head or "HEAD")
+    files = "\n".join(touched_files(root, base, head))
     return hashlib.sha256(f"{head}\n{files}".encode()).hexdigest()
 
 
@@ -111,19 +111,31 @@ def state_path(root, name):
     return os.path.join(git_dir(root), name)
 
 
+def write_json(path, data):
+    tmp = f"{path}.{os.getpid()}.tmp"
+    with open(tmp, "w") as fh:
+        json.dump(data, fh)
+    os.replace(tmp, path)
+
+
+def read_json(path):
+    try:
+        with open(path) as fh:
+            return json.load(fh)
+    except (OSError, ValueError):
+        return None
+
+
 def write_review(root, rounds, fixed, dismissed, deferred):
     report = {"rounds": rounds, "fixed": fixed, "dismissed": dismissed,
               "deferred": deferred, "head": git(root, "rev-parse", "HEAD")}
-    with open(state_path(root, "review-report.json"), "w") as fh:
-        json.dump(report, fh)
+    write_json(state_path(root, "review-report.json"), report)
 
 
 def review_section(root):
-    path = state_path(root, "review-report.json")
-    if not os.path.isfile(path):
+    r = read_json(state_path(root, "review-report.json"))
+    if not isinstance(r, dict) or not {"rounds", "fixed", "dismissed", "deferred"} <= r.keys():
         return "Not run"
-    with open(path) as fh:
-        r = json.load(fh)
     noun = "round" if r["rounds"] == 1 else "rounds"
     line = f"{r['rounds']} {noun}: {r['fixed']} fixed, {r['dismissed']} dismissed, {r['deferred']} deferred"
     if r.get("head") != git(root, "rev-parse", "HEAD"):
@@ -155,21 +167,19 @@ def assemble(root, base, summary, judgment, test_result, footers=()):
     return body + "".join(f"\n{line}\n" for line in footers)
 
 
-def save_draft(root, base, summary, judgment):
+def save_draft(root, base, summary, judgment, head=None):
     parse_summary(summary)
     parse_judgment(judgment)
-    draft = {"summary": summary, "judgment": judgment, "fingerprint": fingerprint(root, base)}
-    with open(state_path(root, "pr-draft.json"), "w") as fh:
-        json.dump(draft, fh)
+    draft = {"summary": summary, "judgment": judgment,
+             "fingerprint": fingerprint(root, base, head)}
+    write_json(state_path(root, "pr-draft.json"), draft)
 
 
 def load_draft(root, base):
-    path = state_path(root, "pr-draft.json")
-    if not os.path.isfile(path):
+    draft = read_json(state_path(root, "pr-draft.json"))
+    if not isinstance(draft, dict) or not {"summary", "judgment"} <= draft.keys():
         return None
-    with open(path) as fh:
-        draft = json.load(fh)
-    if draft.get("fingerprint") != fingerprint(root, base):
+    if git(root, "status", "--porcelain") or draft.get("fingerprint") != fingerprint(root, base):
         return None
     return draft["summary"], draft["judgment"]
 
@@ -193,6 +203,7 @@ def build_parser():
     d.add_argument("--base", required=True)
     d.add_argument("--summary-file", required=True)
     d.add_argument("--judgment-file", required=True)
+    d.add_argument("--head", help="commit the draft was written against (save only); default HEAD")
     r = sub.add_parser("review-write")
     for name in ("rounds", "fixed", "dismissed", "deferred"):
         r.add_argument(f"--{name}", type=int, required=True)
@@ -206,7 +217,8 @@ def run(args, root):
     elif args.cmd == "review-write":
         write_review(root, args.rounds, args.fixed, args.dismissed, args.deferred)
     elif args.action == "save":
-        save_draft(root, args.base, read(args.summary_file), read(args.judgment_file))
+        save_draft(root, args.base, read(args.summary_file), read(args.judgment_file),
+                   args.head)
     else:
         draft = load_draft(root, args.base)
         if draft is None:

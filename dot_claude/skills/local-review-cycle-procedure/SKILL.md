@@ -78,7 +78,7 @@ Each round:
 
 If the first architecture review returns `DESIGN: unsound`, stop before changing code and ask the user whether to keep or rework the design. Include the concrete alternative and trade-offs. This gate applies only when the reviewer demonstrates a materially better alternative—not for style preferences.
 
-Once the first architecture review returns `DESIGN: sound` (or, when no architecture reviewer was selected, once round 1 starts), launch one background subagent to draft the PR body's two model sections: Summary (at most 3 one-line `- ` bullets) and Needs your judgment (at most 3 one-line items, or `none`), from the `BASE...HEAD` diff only. It writes them to temp files and runs `pr-body.sh draft save --base <BASE> --summary-file <f> --judgment-file <f>`. Don't wait for it. Later fix commits make the draft stale, and `/open-pr` then redrafts.
+Once the first architecture review returns `DESIGN: sound` (or, when no architecture reviewer was selected, once round 1 starts), launch one background subagent to draft the PR body's two model sections: Summary (at most 3 one-line `- ` bullets) and Needs your judgment (at most 3 one-line items, or `none`), from the `BASE...HEAD` diff only. State `git rev-parse HEAD` to it literally as `<sha>` and tell it to diff against that sha; it writes the sections to temp files and runs `pr-body.sh draft save --base <BASE> --head <sha> --summary-file <f> --judgment-file <f>`. Don't wait for it. Fix commits make the draft stale; in Finish, if HEAD moved, launch the same subagent once more at the final HEAD.
 
 If significant, well-supported findings remain after round 5, stop and ask the user. Summarize what remains and the likely structural cause; do not silently extend the cycle.
 

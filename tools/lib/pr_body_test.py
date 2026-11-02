@@ -42,6 +42,23 @@ class Classify(unittest.TestCase):
         self.assertEqual(pr_body.classify(["docs/x.md"], table), "low")
 
 
+class ShippedTable(unittest.TestCase):
+    def tier(self, path):
+        return pr_body.classify([path], pr_body.load_table(None))
+
+    def test_prompt_files_are_not_low(self):
+        self.assertNotEqual(self.tier("dot_claude/commands/open-pr.md"), "low")
+        self.assertNotEqual(self.tier("workflow/adapters/codex.md"), "low")
+
+    def test_test_pattern_does_not_match_unrelated_names(self):
+        self.assertNotEqual(self.tier("src/contest/payment.py"), "low")
+        self.assertNotEqual(self.tier("latest/app.py"), "low")
+
+    def test_test_files_are_low(self):
+        self.assertEqual(self.tier("src/app_test.py"), "low")
+        self.assertEqual(self.tier("tests/unit/a.py"), "low")
+
+
 class Caps(unittest.TestCase):
     def test_summary_accepts_three_bullets(self):
         self.assertEqual(pr_body.parse_summary("- a\n- b\n- c\n"), ["a", "b", "c"])
@@ -186,6 +203,28 @@ class Draft(RepoCase):
         self.write("docs/b.md", "new\n")
         self.commit("add")
         self.assertNotEqual(fp, pr_body.fingerprint(self.root, "main"))
+
+    def test_save_with_old_head_is_stale_after_new_commit(self):
+        old = self.git("rev-parse", "HEAD")
+        self.write("docs/b.md", "fix\n")
+        self.commit("fix")
+        pr_body.save_draft(self.root, "main", "- did x\n", "none\n", head=old)
+        self.assertIsNone(pr_body.load_draft(self.root, "main"))
+
+    def test_dirty_tree_makes_draft_stale(self):
+        pr_body.save_draft(self.root, "main", "- did x\n", "none\n")
+        self.write("docs/a.md", "uncommitted\n")
+        self.assertIsNone(pr_body.load_draft(self.root, "main"))
+
+    def test_corrupt_draft_is_treated_as_missing(self):
+        with open(pr_body.state_path(self.root, "pr-draft.json"), "w") as fh:
+            fh.write("{trunc")
+        self.assertIsNone(pr_body.load_draft(self.root, "main"))
+
+    def test_corrupt_review_report_says_not_run(self):
+        with open(pr_body.state_path(self.root, "review-report.json"), "w") as fh:
+            fh.write("{trunc")
+        self.assertEqual(pr_body.review_section(self.root), "Not run")
 
     def test_save_enforces_caps(self):
         with self.assertRaises(pr_body.CapError):
