@@ -85,6 +85,7 @@ If significant, well-supported findings remain after round 5, stop and ask the u
 ## 4. Finish
 
 - Run `agent-phase.sh --no-review`.
+- If `git rev-parse HEAD` differs from the sha the early draft was written against, relaunch the draft subagent (§3) at the final HEAD once the last fix is committed.
 - Run `FULL` once after final review fixes. Re-run only failing checks as needed and compare against the baseline.
 - Record the cycle totals with `wf-event.sh review.result round=<last round number> fixed=<n> dismissed=<n> deferred=<n> reviewers=<agent,agent>`, `round=` always, the other fields only when available; counts are triaged findings, so a finding raised by two reviewers counts once. A failure surfaced by `FULL` and fixed here still counts. `round=` also records the final local count on the statusline.
 - Report reviewers selected and why, rounds, findings fixed/dismissed/deferred (with validity), overlap count (findings raised by ≥2 reviewers), test status (including baseline failures), and commits added. Keep output terse: one line per round (`R<k>: N fixed / M dismissed or deferred`).
