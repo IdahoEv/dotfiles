@@ -102,6 +102,8 @@ When the user wants to discuss, research, or brainstorm a topic, open a separate
 for it by following `~/.claude/commands/discuss.md`, passing their description as
 `--about`. Don't hold the discussion in this session.
 
+When asked to groom upcoming tickets, follow `~/.claude/commands/groom.md`.
+
 ## Selecting what's next
 
 When asked what to work on, rank by: unblocks the most downstream work → has a decided

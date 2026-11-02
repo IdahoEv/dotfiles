@@ -44,6 +44,7 @@ flowchart TD
 | `commands/prompt-audit.md` + `skills/prompt-review/` | Command + skill | Corpus-level prompt rubric; runs through `prompt-reviewer`. |
 | `tools/wf-event.sh`, `tools/wf-report.sh`, `tools/lib/telemetry.sh` | Script | Telemetry: one event per triaged finding, one per cycle. `review.result round=N` also writes the statusline's `local-review-rounds` file. |
 | `commands/pick.md`, `commands/start.md`, `tools/start-ticket.sh` | Command + script | Chained sessions: `/pick` emits chains and a paste-ready `/start 12,13 14` line; `/start` launches one session per space-separated group; `start-ticket.sh 12,13` makes one worktree/branch/kickoff/label for the group and records the ids in `<git-dir>/chain`. |
+| `commands/groom.md` | Command | Finds upcoming under-specified tickets and walks them to implementation-ready; edits only after per-ticket confirmation. Walks 1–2 tickets inline, else opens a `[TALK]` sibling session via `start-ticket.sh --session` (as `/discuss`). |
 | `tools/open-pr.sh`, `tools/finalize-check.sh` | Script | Read `<git-dir>/chain`: `open-pr.sh` writes a `Closes` footer per ticket (and `--draft` for a stopped chain); `finalize-check.sh` reports `chain_ids` so `/finalize` verifies every ticket. |
 | `tools/agent-phase.sh`, `github-review-state.sh` | Script | Statusline bookkeeping (`[REVIEW]` etc.); no review logic. |
 | `tools/reviewer-model.sh` | Script | Ops toggle: flips the eight review-chain agents' `model:` between `sonnet` (committed default) and `auto` in the deploy clone, then applies; no review logic. |
@@ -66,6 +67,8 @@ flowchart TD
 | PR opened, bot comments arrived | `/github-review-comments` → Automatic (agent round), Quick (one agent turn), Slow (ask me per comment) |
 | Review of the prompt corpus itself | `/prompt-audit`, `/prompt-review` |
 | Several ready tickets to start | `/pick` (groups them into chains), then paste its `/start` line |
+| Upcoming tickets lack ACs, estimate, or decided design | `/groom` |
+| Topic to discuss with no ticket | `/discuss` (opens a `[TALK]` session) |
 | Merged | `/finalize` (every ticket in a chain) |
 
 ## Agent invocation sequence
