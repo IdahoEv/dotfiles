@@ -50,6 +50,9 @@ agy_commands=(
   "$repo/dot_claude/agents/local-review-cycle-manager.md"
   "$repo/dot_claude/skills/local-review-cycle-procedure/SKILL.md"
   "$repo/dot_claude/commands/open-pr.md"
+  "$repo/dot_claude/commands/github-review-comments.md"
+  "$repo/dot_claude/agents/github-review-repair-agent.md"
+  "$repo/dot_claude/skills/github-review-procedure/SKILL.md"
 )
 check "$repo/workflow/adapters/agy.md" "${agy_commands[@]}" || fail "agy adapter has drifted from the commands it covers"
 printf 'PASS agy adapter maps every Claude-only construct in its covered commands\n'
