@@ -2,7 +2,14 @@
 # open-pr.sh — push the current branch, open (or reuse) its PR, and trigger review bots.
 #
 #   open-pr.sh [--title "<short title>"] [--body-file <path>] [--issue <N>[,<N>…]] [--draft]
+#               [--summary-file <path> --judgment-file <path> [--test-result <text>] [--body-footer <line>]…]
 #               [--review none|copilot|copilot+claude] [--provider github|kardashev]
+#
+# Body: --summary-file/--judgment-file hand lib/pr_body.py the two model-written
+# sections (Summary <=3 bullets, Needs your judgment <=3 items or "none"); it adds
+# Risk, Review and Tests mechanically and rejects sections over the cap.
+# --body-file is the pre-assembled alternative. --body-footer lines are appended
+# verbatim (e.g. a cloud adapter's provenance lines).
 #
 # Provider: --provider, else `openpr_provider=` in .start-ticket.conf, else the
 # start-ticket `provider=` if an open-pr provider of that name exists, else
@@ -91,15 +98,20 @@ find_provider_file() {  # <name> → path, or empty
 
 # ---- args -------------------------------------------------------------------
 title="" body_file="" issue="" review="" provider="" draft=""
+summary_file="" judgment_file="" test_result="" body_footers=()
 while [ $# -gt 0 ]; do
   case "$1" in
     --title)          title="${2:?--title needs a value}"; shift 2 ;;
     --body-file)      body_file="${2:?--body-file needs a value}"; shift 2 ;;
+    --summary-file)   summary_file="${2:?--summary-file needs a value}"; shift 2 ;;
+    --judgment-file)  judgment_file="${2:?--judgment-file needs a value}"; shift 2 ;;
+    --test-result)    test_result="${2:?--test-result needs a value}"; shift 2 ;;
+    --body-footer)    body_footers+=("${2:?--body-footer needs a value}"); shift 2 ;;
     --issue)          issue="${2:?--issue needs a value}"; shift 2 ;;
     --draft)          draft=1; shift ;;
     --review)         review="${2:?--review needs a value}"; shift 2 ;;
     --provider|--env) provider="${2:?--provider needs a value}"; shift 2 ;;
-    -h|--help)        sed -n '2,32p' "$0"; exit 0 ;;
+    -h|--help)        sed -n '2,40p' "$0"; exit 0 ;;
     *)                die "unknown arg: $1" ;;
   esac
 done
@@ -192,6 +204,18 @@ if [ -n "$existing_pr" ]; then
 else
   create_pr=1
   [ -n "$title" ] || die "no existing PR for '$branch' and no --title given"
+  if [ -n "$summary_file$judgment_file" ]; then
+    [ -n "$summary_file" ] && [ -n "$judgment_file" ] || die "--summary-file and --judgment-file go together"
+    [ -z "$body_file" ] || die "--body-file can't be combined with --summary-file/--judgment-file"
+    body_tmp="$(mktemp "${TMPDIR:-/tmp}/open-pr-body.XXXXXX")"
+    footer_args=()
+    for _f in ${body_footers[@]+"${body_footers[@]}"}; do footer_args+=(--footer "$_f"); done
+    python3 "$SCRIPT_DIR/lib/pr_body.py" assemble --base "${_default:-main}" \
+      --summary-file "$summary_file" --judgment-file "$judgment_file" \
+      ${test_result:+--test-result "$test_result"} ${footer_args[@]+"${footer_args[@]}"} \
+      > "$body_tmp" || die "PR body sections rejected (see above)"
+    body_file="$body_tmp"
+  fi
   if [ -n "$body_file" ] && { [ ! -f "$body_file" ] || [ ! -r "$body_file" ]; }; then
     die "--body-file is not a readable file: $body_file"
   fi

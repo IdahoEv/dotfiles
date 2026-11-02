@@ -92,6 +92,26 @@ printf 'Summary\n\nCloses #42\n' > "$ROOT/b.md"
 run --title "Add foo" --body-file "$ROOT/b.md" --review none >/dev/null
 check "github: footer not duplicated" "1" "$(body | grep -c 'Closes #42')"
 
+# ---- assembled body ---------------------------------------------------------
+new_repo 42-foo
+mkdir tools && echo x > tools/t.sh && git add tools && git commit -q -m tool
+printf -- '- Adds foo\n' > "$ROOT/s.md"; printf 'none\n' > "$ROOT/j.md"
+run --title "Add foo" --summary-file "$ROOT/s.md" --judgment-file "$ROOT/j.md" \
+  --test-result "all green" --body-footer "Provenance: x" --review none >/dev/null
+check "assembled: sections in order" "## Summary ## Needs your judgment ## Risk ## Review ## Tests" \
+  "$(body | grep '^## ' | tr '\n' ' ' | sed 's/ $//')"
+check "assembled: risk from paths"   "1" "$(body | grep -c '\*\*high\*\*')"
+check "assembled: test line"         "all green" "$(body | grep -A1 '^## Tests' | tail -1)"
+check "assembled: body footer kept"  "1" "$(body | grep -c 'Provenance: x')"
+check "assembled: provider footer"   "Closes #42" "$(body | tail -1)"
+
+new_repo 42-foo
+printf -- '- a\n- b\n- c\n- d\n' > "$ROOT/s.md"
+out="$(run --title "Add foo" --summary-file "$ROOT/s.md" --judgment-file "$ROOT/j.md" --review none)"; rc=$?
+check "assembled: over-cap section refused" "1" "$rc"
+check "assembled: nothing created on refusal" "" "$(cat "$GH_LOG" 2>/dev/null)"
+check "assembled: refusal names the cap" "1" "$(grep -c 'at most 3' <<<"$out")"
+
 new_repo 42-foo
 run --title "Add foo" --review copilot >/dev/null
 check "github: no review triggers"    "created" "$(cat "$GH_LOG")"

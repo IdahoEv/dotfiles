@@ -46,6 +46,7 @@ flowchart TD
 | `commands/pick.md`, `commands/start.md`, `tools/start-ticket.sh` | Command + script | Chained sessions: `/pick` emits chains and a paste-ready `/start 12,13 14` line; `/start` launches one session per space-separated group; `start-ticket.sh 12,13` makes one worktree/branch/kickoff/label for the group and records the ids in `<git-dir>/chain`. |
 | `commands/groom.md` | Command | Finds upcoming under-specified tickets and walks them to implementation-ready; edits only after per-ticket confirmation. Walks 1–2 tickets inline, else opens a `[TALK]` sibling session via `start-ticket.sh --session` (as `/discuss`). |
 | `tools/open-pr.sh`, `tools/finalize-check.sh` | Script | Read `<git-dir>/chain`: `open-pr.sh` writes a `Closes` footer per ticket (and `--draft` for a stopped chain); `finalize-check.sh` reports `chain_ids` so `/finalize` verifies every ticket. |
+| `tools/pr-body.sh`, `tools/lib/pr_body.py`, `tools/lib/pr-risk.json` | Script | Mechanical PR body: `open-pr.sh` takes the model's Summary and Needs-your-judgment sections (capped at 3 items each, rejected over cap) and adds Risk (tier from the glob table; a repo's `.claude/pr-risk.json` replaces it), Review, Tests and footer. State in the git dir: `review-report.json` (manager, end of cycle) and `pr-draft.json` (background draft, fingerprinted by HEAD sha + touched files; stale means `/open-pr` redrafts inline). |
 | `tools/agent-phase.sh`, `github-review-state.sh` | Script | Statusline bookkeeping (`[REVIEW]` etc.); no review logic. |
 | `tools/reviewer-model.sh` | Script | Ops toggle: flips the eight review-chain agents' `model:` between `sonnet` (committed default) and `auto` in the deploy clone, then applies; no review logic. |
 
@@ -85,14 +86,17 @@ sequenceDiagram
     Note over Impl: implement + commit (FAST green, clean tree)
     Impl->>Mgr: /local-review-cycle launch<br/>(pinned BASE, ticket, flags)
     loop up to 5 rounds
+        opt first DESIGN: sound
+            Mgr--)Mgr: background subagent drafts PR Summary + judgment → pr-body.sh draft save
+        end
         Mgr->>R: launch selected reviewers in parallel<br/>(diff scope, ticket criteria, triaged list)
         R-->>Mgr: findings (one line each, DESIGN gate)
         Mgr->>Mgr: triage → wf-event review.finding per finding
         Mgr->>Mgr: fix + FAST + commit round
         Note over Mgr: round k+1 scope = round k fix commits only
     end
-    Mgr->>Mgr: FULL once → wf-event review.result
-    Mgr-->>Impl: report (unaltered → PR body's "Review cycle" note)
+    Mgr->>Mgr: FULL once → wf-event review.result + pr-body.sh review-write
+    Mgr-->>Impl: report (printed unaltered; PR Review line comes from review-report.json)
     Impl->>Cmd: /open-pr
     Cmd->>GH: open PR
     GH-->>Cmd: bot review comments
@@ -111,7 +115,7 @@ sequenceDiagram
 flowchart LR
     subgraph Parent[Implementer session]
         direction TB
-        C1[Owns: implementation edits and commits,<br/>PR body, GitHub writes, push]
+        C1[Owns: implementation edits and commits,<br/>PR body sections, GitHub writes, push]
     end
     subgraph CycleMgr[local-review-cycle-manager — sonnet]
         M1[Owns: cycle edits, round commits,<br/>telemetry events, statusline]

@@ -56,13 +56,23 @@ the summary covers every ticket, one line each. If the chain stopped early, ship
 rest; pass only the completed ids as `--issue <a,b>` so unfinished tickets aren't closed. If no ticket completed, open no PR: report the
 stall and stop.
 
-**Body: a real summary, and stop there** — no `Closes #<NNN>`, no Shortcut URL, no
-tracker-linking footer. `open-pr.sh` appends `provider::pr_body_footer` when the provider
-defines one. A hand-written footer either duplicates it or points into the wrong namespace
-(`Closes #74085` in a repo with no GitHub issues silently references an unrelated *PR*).
+**Body: write only two sections.** `open-pr.sh` assembles the rest (Risk, Review, Tests,
+tracker footer) from the diff and the review report, so don't restate the ticket, the
+commits or the review. Write each to a temp file:
 
-Write what a reviewer needs: what changed, why, what needs their judgment. Match the
-repo's existing PR bodies for depth.
+- **Summary** — at most 3 one-line `- ` bullets: what changed and why.
+- **Needs your judgment** — at most 3 one-line `- ` items, or the single word `none`.
+
+The script rejects a section over its cap. Chained branches: one Summary bullet per ticket.
+
+First try the early draft the review cycle saved:
+
+```bash
+pr-body.sh draft load --base <default-branch> --summary-file <summary-tmp> --judgment-file <judgment-tmp>
+```
+
+Exit 0 means it matches the current commit and touched files: use the files as written. Exit 1
+means missing or stale: draft both sections inline from the diff.
 
 Show the drafted artifacts in full, then proceed immediately — running `/open-pr` is
 itself the approval to commit, push, and open the PR. Don't wait for `execute`.
@@ -80,11 +90,14 @@ Append the Co-Authored-By trailer unless the approved message already has one.
 
 ```bash
 # first ship — pass the title BARE, exactly as drafted:
-open-pr.sh --title "<bare short title>" --body-file <tmp-file> --review <level> [--provider <name>] [--draft] [--issue <a,b>]
+open-pr.sh --title "<bare short title>" --summary-file <summary-tmp> --judgment-file <judgment-tmp> --test-result "<one line>" --review <level> [--provider <name>] [--draft] [--issue <a,b>]
 
 # existing PR — reuse its title/body:
 open-pr.sh --review <level> [--provider <name>]
 ```
+
+`--test-result` is the one-line outcome of the project's tests from this session ("42 passed",
+or "not run: <why>"). Never claim a pass that didn't run.
 
 Forward the user's `--provider`/`--env` verbatim if they gave one; omit otherwise.
 Capture from stdout: `pr_number`, `pr_url`, `pr_action`, `provider`, `trigger_mode`,
