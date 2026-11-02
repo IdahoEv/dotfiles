@@ -324,6 +324,21 @@ class Overlays(Base):
         repo = self.fake_remote_repo()
         self.assertEqual(repo_facts.overlay_claude_files("agents", repo), [])
 
+    def test_overlay_claude_files_matches_glob_collation(self):
+        # Bash sorts each glob expansion with the caller's strcoll, not by
+        # codepoint: under a UTF-8 locale "Beta" lands between the lowercase
+        # names. The listing order is part of the byte-identical contract.
+        os.environ["PROJECT_OVERLAYS_DIR"] = os.path.join(self.root, "overlays")
+        for name in ("alpha.md", "Beta.md", "gamma.md"):
+            self.write(f"overlays/acme/widgets/claude/agents/{name}", "x\n")
+        repo = self.fake_remote_repo()
+        agents = os.path.join(self.root, "overlays", "acme", "widgets",
+                              "claude", "agents")
+        script = f'for k in "{agents}"/*.md; do printf "%s\\n" "$k"; done'
+        r = subprocess.run(["bash", "-c", script], capture_output=True, text=True)
+        self.assertEqual(repo_facts.overlay_claude_files("agents", repo),
+                         r.stdout.splitlines())
+
 
 class GitFacts(Base):
     def test_main_root_from_worktree(self):
@@ -480,6 +495,82 @@ class Cli(Base):
         r = subprocess.run([CLI, "distill-title", B_TITLE], cwd=self.root,
                            env=env, capture_output=True, check=False)
         self.assertEqual(r.stdout, b"Billing Data Deletion Policy")
+
+    def test_dash_leading_value_is_a_value(self):
+        # The shell functions took "$1" verbatim, so a leading dash is data.
+        r = self.run_cli("sanitize-label", "--force")
+        self.assertEqual((r.returncode, r.stdout), (0, b"force"))
+        r = self.run_cli("ticket-scheme", "-h")
+        self.assertEqual((r.returncode, r.stdout), (0, b"unknown"))
+        r = self.run_cli("distill-title", "-Fix the thing")
+        self.assertEqual((r.returncode, r.stdout), (0, b"Thing"))
+
+    def test_crlf_conf_value_keeps_carriage_return(self):
+        # sed split on \n only, so the \r of a CRLF file stayed in the value.
+        repo = self.fake_remote_repo()
+        Path(os.path.join(repo, ".start-ticket.conf")).write_bytes(
+            b"color=green\r\n")
+        r = self.run_cli("conf-get", "color", cwd=repo)
+        self.assertEqual((r.returncode, r.stdout), (0, b"green\r"))
+
+    def test_non_utf8_remote_url_degrades_to_no_overlay(self):
+        # Old bash: =~ fails on invalid UTF-8, so repo_key printed nothing,
+        # rc 0. A traceback here would abort set -e callers.
+        repo = self.fake_remote_repo()
+        subprocess.run(["git", "-C", repo, "config", "remote.origin.url",
+                        b"git@host:acme/wi\xd0gets.git"],
+                       check=True, capture_output=True)
+        r = self.run_cli("overlay-dir", repo)
+        self.assertEqual((r.returncode, r.stdout), (0, b""))
+
+
+class Facade(Base):
+    """The compatibility surface bash consumers actually execute: the gt::
+    wrappers, the _gt env forwarding, and the native ticket functions
+    (project-config.test.sh already covers gt::repo_key)."""
+
+    LIB = os.path.join(HERE, "repo-facts.sh")
+
+    def gt(self, call):
+        r = subprocess.run(
+            ["bash", "-c", f'source "{self.LIB}"; printf "%s" "$({call})"'],
+            capture_output=True, text=True)
+        return r.returncode, r.stdout
+
+    def test_forwards_unexported_knobs(self):
+        # worktree-manager assigns GT_LABEL_NOISE without export; only the
+        # facade's forward list carries it to the CLI child process.
+        rc, out = self.gt(f'GT_LABEL_NOISE=retention gt::distill_title "{B_TITLE}"')
+        self.assertEqual((rc, out), (0, "Billing Data Deletion Policy"))
+
+    def test_forwards_label_override(self):
+        rc, out = self.gt('GT_LABEL_OVERRIDE="Rewards Structures" '
+                          'gt::label_from_title "Build the rewards thing"')
+        self.assertEqual((rc, out), (0, "Rewards Structures"))
+
+    def test_ticket_from_branch_matrix(self):
+        cases = {"7-first-ticket": "7", "2-sc-5/foo": "5", "sc-1/x-sc-2/y": "2",
+                 "release/2-fix": "", "main": ""}
+        for branch, expected in cases.items():
+            self.assertEqual(self.gt(f'gt::ticket_from_branch "{branch}"'),
+                             (0, expected), branch)
+
+    def test_ticket_scheme_matrix(self):
+        cases = {"sc-5/x": "shortcut", "7-foo": "github", "main": "unknown",
+                 "2-sc-5/foo": "shortcut", "release/7-foo": "unknown"}
+        for branch, expected in cases.items():
+            self.assertEqual(self.gt(f'gt::ticket_scheme "{branch}"'),
+                             (0, expected), branch)
+
+    def test_exit_code_propagation(self):
+        r = subprocess.run(
+            ["bash", "-c",
+             f'source "{self.LIB}"; gt::conf_get nosuchkey "{self.root}"; exit $?'],
+            capture_output=True, text=True)
+        self.assertEqual((r.returncode, r.stdout), (1, ""))
+
+    def test_dash_value_through_the_facade(self):
+        self.assertEqual(self.gt("gt::sanitize_label --force"), (0, "force"))
 
 
 if __name__ == "__main__":

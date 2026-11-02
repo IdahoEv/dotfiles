@@ -16,7 +16,8 @@
 # wf-event.sh --hook on session lifecycle hooks — the hot path where three
 # CLI forks per event would roughly triple the budget. They port together
 # with telemetry (spike step 6); repo_facts_test.py covers the same value
-# matrix for the Python implementations.
+# matrix for the Python implementations, and its Facade class exercises
+# this file: env forwarding, exit codes, and the native ticket functions.
 
 _GT_CLI="$(cd -P "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/repo-facts.sh"
 

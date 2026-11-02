@@ -26,7 +26,10 @@ conf-get, find-doc), 0 otherwise. Everything here is pure inspection: the only
 network is the host CLI fallback in default_branch; no writes, no side effects.
 """
 
+from __future__ import annotations
+
 import argparse
+import locale
 import os
 import re
 import shutil
@@ -52,7 +55,10 @@ DEFAULT_MAX_CHARS = 48
 # ---- subprocess helpers ------------------------------------------------------
 
 def _run(cmd: list[str], cwd: str | None = None) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, check=False)
+    # surrogateescape: git emits raw bytes (ref names, config values) and the
+    # shell passed them through; a strict decode would crash instead.
+    return subprocess.run(cmd, cwd=cwd, capture_output=True, text=True,
+                          errors="surrogateescape", check=False)
 
 
 def _git(dir_: str, *args: str) -> str:
@@ -310,6 +316,12 @@ def repo_key(url: str) -> str:
         return ""
     if not re.fullmatch(r"[^/]+(/[^/]+)+", path):  # two or more segments
         return ""
+    try:
+        path.encode("utf-8")
+    except UnicodeEncodeError:
+        # bash's =~ fails on invalid UTF-8, so the shell printed nothing for
+        # such a remote; a key that can't round-trip can't name a directory.
+        return ""
     if "." in path.split("/") or ".." in path.split("/"):
         return ""
     return path
@@ -332,6 +344,20 @@ def overlay_claude_dir(dir_: str = ".") -> str:
     return f"{ov}/claude" if ov else ""
 
 
+def _collated(paths: list[str]) -> list[str]:
+    """Glob order: bash sorted each expansion with the caller's strcoll, and
+    the listing order is part of the byte-identical output."""
+    try:
+        prev = locale.setlocale(locale.LC_COLLATE, "")
+        try:
+            return sorted(paths, key=locale.strxfrm)
+        finally:
+            locale.setlocale(locale.LC_COLLATE, prev)
+    except locale.Error:
+        # An un-settable locale falls back to codepoint order, as bash does.
+        return sorted(paths)
+
+
 def overlay_claude_files(kind: str = "", dir_: str = ".") -> list[str]:
     """Every Claude asset file under <overlay>/claude, one path per line.
 
@@ -346,10 +372,11 @@ def overlay_claude_files(kind: str = "", dir_: str = ".") -> list[str]:
     root = Path(cd)
     out: list[str] = []
     for sub in subs:
-        out += sorted(str(p) for p in (root / sub).glob("*.md") if p.is_file())
+        out += _collated([str(p) for p in (root / sub).glob("*.md")
+                          if p.is_file()])
         if sub == "skills":
-            out += sorted(str(p) for p in (root / "skills").glob("*/SKILL.md")
-                          if p.is_file())
+            out += _collated([str(p) for p in (root / "skills").glob("*/SKILL.md")
+                              if p.is_file()])
     return out
 
 
@@ -401,7 +428,10 @@ def conf_get(key: str, dir_: str = ".") -> str | None:
         if not p.is_file():
             continue
         try:
-            lines = p.read_text().splitlines()
+            # newline="" and split("\n"): sed split on \n only, so a \r from a
+            # CRLF file stays in the value, and read_text() would eat it.
+            with p.open(newline="", errors="surrogateescape") as f:
+                lines = f.read().split("\n")
         except OSError:
             continue
         for line in lines:
@@ -521,6 +551,15 @@ def run(args: argparse.Namespace) -> int:
 def main(argv: list[str] | None = None) -> int:
     if sys.version_info < (3, 13):
         sys.exit("repo_facts: Python 3.13+ required; install with: pyenv install 3.13")
+    if argv is None:
+        argv = sys.argv[1:]
+    if argv and argv[0] in {s.name for s in SPECS}:
+        # The shell functions took "$1" verbatim: a leading-dash value is
+        # data, not a flag ("--" ends option parsing for everything after).
+        argv = [argv[0], "--", *argv[1:]]
+    # Facts may carry non-UTF-8 bytes from git (surrogateescape in _run);
+    # stdout must pass them back through as bytes, as printf did.
+    sys.stdout.reconfigure(errors="surrogateescape")
     return run(build_parser().parse_args(argv))
 
 
