@@ -10,6 +10,7 @@ wf-report.sh --since 30d --detail     # plus per-run breakdowns
 wf-report.sh --run idahoev/dotfiles#40
 wf-report.sh --json                   # same data, machine-readable
 wf-report.sh --prune 90               # delete events older than 90 days
+wf-report.sh --usage --since 10d      # tokens across ALL sessions (see below)
 ```
 
 | Setting | Default |
@@ -21,6 +22,24 @@ wf-report.sh --prune 90               # delete events older than 90 days
 | Test-command pattern | `WF_TEST_RE` or `--test-re` (Python regex; see `wf_usage.DEFAULT_TEST_RE`) |
 
 Setup: merge, pull the deploy clone, then run `chezmoi apply ~/.claude/settings.json` to register the hooks.
+
+## Token usage across all sessions
+
+`wf-report.sh --usage` reads every transcript under the projects dir, not only ticket runs. Tokens (input, output, cache read, cache write) are measured and summed in full whatever the model or price table. `--by day|ticket|stage|agent|model|type|sessions` restricts the breakdowns (repeatable; default all); `--top N` sizes the session list; `--json` emits the same data.
+
+| View | Grouping |
+| --- | --- |
+| day | UTC date of the message |
+| ticket | Telemetry `run_id` for sessions seen in a run; else the worktree directory name for numbered worktrees; else `—` |
+| stage | The run's PLAN…DONE stage at the message time (`—` outside runs) |
+| agent | `main`, or the subagent type from `agent-*.meta.json` |
+| model | `message.model` |
+| type | `ticket` (session in a run, or cwd basename like `121-slug` / `sc-1-slug`), `governor/jobs` (cwd under `.claude/jobs/` or a `governor` worktree), else `other` |
+| sessions | Top N by output: session id, cwd, messages, tokens, span, top model by output. No prompt content is read |
+
+The **weighted** column applies the list-price table as a relative-weight proxy for quota burn. It is not billing. A model missing from the table adds tokens but no weight: a group with some such usage shows its weight with `*` (partial), one with only such usage shows `n/a`. Totals never depend on it.
+
+To weight a non-Anthropic model, add it to `model-pricing.json` `models` with `input`, `output`, `cache_read` (USD per 1M tokens) plus `source` and `as_of` supplied by the owner; no rates are committed by default. Messages are deduplicated by `message.id` across all files, so resumed sessions don't double count.
 
 ## Runs
 
@@ -73,7 +92,7 @@ Logs hold only identifiers, counts, and Claude Code enum values: no prompts, dif
 
 - Transcripts are Claude Code internals, not an API. `tools/lib/wf_usage.py` is the only reader, so a format change is fixed there.
 - Usage is counted only for sessions that emitted an event inside the run, between the run's first and last event. Launcher sessions (`/start`, the governor) are excluded.
-- Models missing from the price table (e.g. routed `glm-*`) leave the total cost `unknown`. Their tokens are still counted.
+- Models missing from the price table (e.g. routed `glm-*`) leave a run's cost `unknown`. Their tokens are still counted, and `--usage` shows them with weight `n/a` without blanking other totals.
 - Cost is at list price. It ignores plan billing and Bedrock/Vertex rates.
 - `review.result` and `review.finding` are the model-emitted events and a deliberate exception to "deterministic emits only": the fixed/dismissed/deferred triage exists nowhere but the model's context. If the model skips them, findings show as unknown. Round counts still come from `github-review-state.sh`.
 - `validity` is the triager's judgment, not ground truth, and is independent of the verdict — e.g. a `partial` finding (right concern, wrong location) may still be fixed. Pre-change events lack `validity`/`key` and count as `unreported`.

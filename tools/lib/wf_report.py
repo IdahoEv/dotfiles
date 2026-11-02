@@ -15,6 +15,7 @@ from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import wf_tokens  # noqa: E402
 import wf_usage  # noqa: E402
 
 STAGES = ["PLAN", "WIP", "REVIEW", "REVIEWED", "MERGED", "DONE"]
@@ -487,6 +488,26 @@ def parse_since(s, now):
     return ts
 
 
+def usage_report(a, now, events, pricing):
+    since = parse_since(a.since, now)
+    by_run = defaultdict(list)
+    for e in events:
+        by_run[e["run_id"]].append(e)
+    runs = {rid: Run(rid, evs, now, a.stale_hours, pricing, a.test_re)
+            for rid, evs in by_run.items() if evs[-1]["_ts"] >= since}
+    run_of = {sid: rid for rid, r in runs.items() for sid in r.sessions}
+    items = wf_tokens.collect(wf_usage.projects_root(), run_of, runs, since, now, pricing)
+    views = a.by or wf_tokens.VIEWS + ["sessions"]
+    result = wf_tokens.build(items, views, a.top)
+    if a.json:
+        json.dump({"since": since.isoformat(), "pricing_as_of": pricing.as_of if pricing else None, **result},
+                  sys.stdout, indent=2, default=str)
+        print()
+    else:
+        wf_tokens.render(result, sys.stdout)
+    return 0
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(prog="wf-report.sh", description=__doc__)
     ap.add_argument("--run", help="one run id, e.g. owner/repo#40 or sc-12345")
@@ -495,6 +516,11 @@ def main(argv=None):
     ap.add_argument("--detail", action="store_true", help="per-run detail after the aggregate table")
     ap.add_argument("--stale-hours", type=float, default=24)
     ap.add_argument("--prune", type=int, metavar="DAYS", help="delete events older than DAYS and exit")
+    ap.add_argument("--usage", action="store_true",
+                    help="tokens across all sessions under the projects dir, not just ticket runs")
+    ap.add_argument("--by", action="append", choices=wf_tokens.VIEWS + ["sessions"],
+                    help="with --usage: restrict to a breakdown (repeatable; default all)")
+    ap.add_argument("--top", type=int, default=10, help="with --usage: sessions in the top list (default 10)")
     ap.add_argument("--log", default=log_path())
     ap.add_argument("--pricing", default=os.path.join(os.path.dirname(os.path.abspath(__file__)), "model-pricing.json"))
     ap.add_argument("--test-re", default=os.environ.get("WF_TEST_RE", wf_usage.DEFAULT_TEST_RE))
@@ -512,6 +538,8 @@ def main(argv=None):
         print(f"wf-report: pricing table unreadable ({a.pricing}); costs unknown", file=sys.stderr)
 
     events, bad = load_events(a.log)
+    if a.usage:
+        return usage_report(a, now, events, pricing)
     by_run = defaultdict(list)
     for e in events:
         by_run[e["run_id"]].append(e)
