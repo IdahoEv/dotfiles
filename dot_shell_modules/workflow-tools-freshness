@@ -14,7 +14,9 @@ _git_tools_freshness() {
   # storm; worst case the warning lags reality by ~4h.
   local stamp="$d/.git/.freshness-fetch" now last=0
   now=$(date +%s)
-  [[ -f "$stamp" ]] && last=$(stat -f %m "$stamp" 2>/dev/null || stat -c %Y "$stamp" 2>/dev/null || echo 0)
+  # GNU stat (-c %Y) must run first: GNU stat treats -f as --file-system (no
+  # arg) and writes filesystem info for $stamp to stdout before exiting 1.
+  [[ -f "$stamp" ]] && last=$(stat -c %Y "$stamp" 2>/dev/null || stat -f %m "$stamp" 2>/dev/null || echo 0)
   if (( now - last > 14400 )); then
     { git -C "$d" fetch --quiet 2>/dev/null; touch "$stamp"; } &!
   fi
