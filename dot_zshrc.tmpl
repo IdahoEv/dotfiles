@@ -6,12 +6,18 @@ unset __brew
 export PATH="$HOME/bin:$HOME/.local/bin:$PATH"
 [[ -x /usr/libexec/path_helper ]] && eval "$(/usr/libexec/path_helper)" # might cause issues at work where I haven't installed latex
 
+__posh_ready=
 if (( $+commands[oh-my-posh] )); then
 {{ if .is_work }}    export POSH_HOST_ALIAS="work"
 {{ end }}    __posh_theme="$HOME/.config/oh-my-posh/theme.json"
-    [[ -f $__posh_theme ]] && eval "$(oh-my-posh init zsh --config $__posh_theme)"
-    unset __posh_theme
+    if [[ -f $__posh_theme ]] && __posh_init="$(oh-my-posh init zsh --config $__posh_theme 2>/dev/null)" && [[ -n $__posh_init ]]; then
+        eval "$__posh_init" && __posh_ready=1
+    fi
+    unset __posh_theme __posh_init
 fi
+# zsh inherits an exported bash PS1 as PROMPT, so an unset prompt can't be detected by emptiness.
+[[ -n $__posh_ready ]] || PROMPT='%F{green}%n@%m%f %F{cyan}%~%f %# '
+unset __posh_ready
 
 
 
