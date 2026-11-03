@@ -4,7 +4,7 @@
 #
 #   open-pr.test.sh
 #
-# Plain script, exits non-zero on failure (see lib/repo-facts.test.sh). `gh` is
+# Plain script, exits non-zero on failure (see finalize-check.test.sh). `gh` is
 # a stub that records `pr create` args; git talks to a throwaway bare origin,
 # and HOME is a temp dir so ~/.config can't leak in.
 

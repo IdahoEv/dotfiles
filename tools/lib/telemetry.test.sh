@@ -4,7 +4,7 @@
 #
 #   lib/telemetry.test.sh
 #
-# Plain script, exits non-zero on failure (see repo-facts.test.sh).
+# Plain script, exits non-zero on failure (see finalize-check.test.sh).
 
 set -uo pipefail
 LIB="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

@@ -6,8 +6,8 @@
 
 | Order | Script | Cost (points) | Why here |
 | --- | --- | --- | --- |
-| 1 | `lib/repo-facts.sh` → `lib/repo_facts.py` (+ CLI) | 3 | Every large script depends on it; porting it first lets each later port import instead of shell out |
-| 2 | `finalize-check.sh` | 3 | Read-only, 12 `gh`/`jq` call sites, mostly JSON shaping; lowest-risk large port, proves the contract |
+| 1 | `lib/repo-facts.sh` → `lib/repo_facts.py` (+ CLI) — **done** (#123) | 3 | Every large script depends on it; porting it first lets each later port import instead of shell out |
+| 2 | `finalize-check.sh` (+ `sibling-worktrees.sh`) — **done** (#124) | 3 | Read-only, 12 `gh`/`jq` call sites, mostly JSON shaping; lowest-risk large port, proves the contract |
 | 3 | `start-ticket.sh` | 3 | State machine plus provider plugins; `--print-title` is a cheap parity probe |
 | 4 | `worktree-manager.sh` | 5 | Largest; interactive (fzf), `--init` is destructive. Split into modules only if one file exceeds review size |
 | 5 | `open-pr.sh` (+ providers) | 2 | Same JSON/`gh` shape as step 2 |
