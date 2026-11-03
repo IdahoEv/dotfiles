@@ -3,3 +3,9 @@
 [data]
 email = {{ $email | quote }}
 is_work = {{ $isWork }}
+{{- /* Hand-added API tokens would be dropped when init regenerates this file. */}}
+{{- range $key := list "notion_api_token" "shortcut_api_token" }}
+{{- with index $ $key }}
+{{ $key }} = {{ . | quote }}
+{{- end }}
+{{- end }}
