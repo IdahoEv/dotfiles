@@ -109,4 +109,4 @@ install_release_binary oh-my-posh https://github.com/JanDeDobbeleer/oh-my-posh/r
 install_release_binary chezmoi https://github.com/twpayne/chezmoi/releases/latest/download chezmoi-linux-
 set_default_shell
 
-step "done. Next: exec zsh, then run: ~/.local/bin/chezmoi init --apply IdahoEv/dotfiles"
+step "done. Next: run ~/.local/bin/chezmoi init --apply IdahoEv/dotfiles, then exec zsh"
