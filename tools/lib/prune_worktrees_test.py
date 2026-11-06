@@ -297,6 +297,29 @@ class Removal(Base):
         self.assertEqual(r.returncode, 0, r.stderr.decode())
         self.assertTrue(wt.is_dir())
 
+    def test_delete_remote_keeps_branch_whose_remote_tip_moved(self):
+        wt = self.merged_branch("feature-a")
+        other = self.root / "other"
+        subprocess.run(["git", "clone", "-q", str(self.origin), str(other)],
+                       env=self.env, check=True, capture_output=True)
+        self.git(other, "checkout", "-q", "feature-a")
+        self.commit(other, "later-work")
+        self.git(other, "push", "-q", "origin", "feature-a")
+        c = pw.Candidate(path=str(wt), branch="feature-a", verdict="ready",
+                         remote_exists=True)
+        ok, msg = pw.remove_candidate(str(self.repo), c, True)
+        self.assertFalse(ok)
+        self.assertIn("remote delete failed", msg)
+        self.assertIn("feature-a", self.git(self.repo, "ls-remote", "--heads", "origin"))
+        self.assertNotIn("feature-a", self.branches())
+
+    def test_force_delete_only_when_branch_delete_refuses_as_unmerged(self):
+        self.merged_branch("feature-a")
+        c = pw.Candidate(path="", branch="feature-a", verdict="ready")
+        ok, _ = pw.remove_candidate(str(self.repo), c, False)
+        self.assertFalse(ok)
+        self.assertIn("feature-a", self.branches())
+
     def test_remove_candidate_refuses_without_proof(self):
         wt = self.worktree("feature-c")
         c = pw.Candidate(path=str(wt), branch="feature-c", verdict="not-merged")

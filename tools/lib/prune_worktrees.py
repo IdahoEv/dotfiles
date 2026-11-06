@@ -273,13 +273,17 @@ def remove_candidate(repo: str, c: Candidate, delete_remote: bool) -> tuple[bool
         r = _run(["git", "-C", repo, "worktree", "remove", c.path])
         if r.returncode != 0:
             return False, f"worktree remove failed: {r.stderr.strip()}"
+    tip = _git(repo, "rev-parse", "--verify", "--quiet", f"refs/heads/{c.branch}")
     r = _run(["git", "-C", repo, "branch", "-d", c.branch])
-    if r.returncode != 0:
+    if r.returncode != 0 and "not fully merged" in r.stderr:
         r = _run(["git", "-C", repo, "branch", "-D", c.branch])
     if r.returncode != 0:
         return False, f"branch delete failed: {r.stderr.strip()}"
     if delete_remote and c.remote_exists:
-        r = _run(["git", "-C", repo, "push", "origin", "--delete", c.branch])
+        # Lease on the tip we just deleted locally: follow-up work pushed since survives.
+        r = _run(["git", "-C", repo, "push", "origin",
+                  f"--force-with-lease=refs/heads/{c.branch}:{tip}",
+                  f":refs/heads/{c.branch}"])
         if r.returncode != 0:
             return False, f"remote delete failed: {r.stderr.strip()}"
     return True, "removed"
