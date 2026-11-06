@@ -313,12 +313,29 @@ class Removal(Base):
         self.assertIn("feature-a", self.git(self.repo, "ls-remote", "--heads", "origin"))
         self.assertNotIn("feature-a", self.branches())
 
-    def test_force_delete_only_when_branch_delete_refuses_as_unmerged(self):
-        self.merged_branch("feature-a")
-        c = pw.Candidate(path="", branch="feature-a", verdict="ready")
-        ok, _ = pw.remove_candidate(str(self.repo), c, False)
-        self.assertFalse(ok)
-        self.assertIn("feature-a", self.branches())
+    def _remove_with_d_failure(self, stderr):
+        calls = []
+
+        def fake_run(cmd, *a, **k):
+            calls.append(cmd)
+            rc = 1 if "-d" in cmd else 0
+            return subprocess.CompletedProcess(cmd, rc, "", stderr if rc else "")
+
+        real, pw._run = pw._run, fake_run
+        try:
+            c = pw.Candidate(path="", branch="feature-a", verdict="ready")
+            pw.remove_candidate(str(self.repo), c, False)
+        finally:
+            pw._run = real
+        return [cmd for cmd in calls if "-D" in cmd]
+
+    def test_force_delete_after_unmerged_refusal(self):
+        self.assertTrue(self._remove_with_d_failure(
+            "error: the branch 'feature-a' is not fully merged."))
+
+    def test_no_force_delete_when_branch_delete_fails_otherwise(self):
+        self.assertEqual(self._remove_with_d_failure(
+            "error: cannot delete branch 'feature-a' used by worktree"), [])
 
     def test_remove_candidate_refuses_without_proof(self):
         wt = self.worktree("feature-c")

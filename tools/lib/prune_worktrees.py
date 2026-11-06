@@ -274,9 +274,10 @@ def remove_candidate(repo: str, c: Candidate, delete_remote: bool) -> tuple[bool
         if r.returncode != 0:
             return False, f"worktree remove failed: {r.stderr.strip()}"
     tip = _git(repo, "rev-parse", "--verify", "--quiet", f"refs/heads/{c.branch}")
-    r = _run(["git", "-C", repo, "branch", "-d", c.branch])
+    # LC_ALL=C: the -D gate matches git's English refusal text.
+    r = _run(["env", "LC_ALL=C", "git", "-C", repo, "branch", "-d", c.branch])
     if r.returncode != 0 and "not fully merged" in r.stderr:
-        r = _run(["git", "-C", repo, "branch", "-D", c.branch])
+        r = _run(["env", "LC_ALL=C", "git", "-C", repo, "branch", "-D", c.branch])
     if r.returncode != 0:
         return False, f"branch delete failed: {r.stderr.strip()}"
     if delete_remote and c.remote_exists:
@@ -285,7 +286,7 @@ def remove_candidate(repo: str, c: Candidate, delete_remote: bool) -> tuple[bool
                   f"--force-with-lease=refs/heads/{c.branch}:{tip}",
                   f":refs/heads/{c.branch}"])
         if r.returncode != 0:
-            return False, f"remote delete failed: {r.stderr.strip()}"
+            return False, f"local branch removed; remote delete failed: {r.stderr.strip()}"
     return True, "removed"
 
 
