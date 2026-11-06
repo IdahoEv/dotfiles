@@ -27,6 +27,8 @@ On creation it auto-symlinks untracked config from the main worktree (`.env*`, u
 
 Requires `fzf` for interactive mode and the `short` CLI for `--sc`.
 
+**Cleanup.** `prune-worktrees.sh [--repo <dir>] [--yes] [--delete-remote]` sweeps stale worktrees and merged local branches. Default is a dry run listing each REMOVE candidate with its reason and each SKIP with why (dirty, unpushed, PR not merged, active Claude session, primary/deploy worktree). `--yes` removes via `git worktree remove` + `git branch -d`; remote branches go only with `--delete-remote`. `/finalize` remains the single-branch path.
+
 ## Per-project config (outside the project repo)
 
 For repos you don't own, or whose config must not reach a public remote. A per-machine overlay is keyed by the `origin` URL, so every worktree and fresh clone of a repo finds the same files and nothing is ever inside the checkout:
