@@ -21,7 +21,7 @@ readonly curl_opts=(--fail --silent --show-error --location --connect-timeout 10
 readonly bin_dir="$HOME/.local/bin"
 readonly gh_keyring=/etc/apt/keyrings/githubcli-archive-keyring.gpg
 readonly gh_list=/etc/apt/sources.list.d/github-cli.list
-readonly script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+readonly script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]:-$0}")" && pwd)"
 
 fail() {
   printf 'bootstrap-linux: ERROR: %s\n' "$*" >&2
@@ -167,7 +167,7 @@ link_renamed_binaries() {
     if [[ -n "$path" ]] && ! command -v "$upstream" >/dev/null 2>&1; then
       step "linking $upstream -> $debian in $bin_dir"
       mkdir -p "$bin_dir"
-      ln -s "$path" "$bin_dir/$upstream"
+      ln -sf "$path" "$bin_dir/$upstream"
     fi
   done
 }

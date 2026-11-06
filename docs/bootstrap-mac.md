@@ -20,7 +20,7 @@ macOS already defaults to zsh, so there is no login-shell step.
 | --- | --- |
 | Homebrew | The [brew.sh](https://brew.sh) installer, run with `NONINTERACTIVE=1` |
 | Formulae | `brew install` every manifest row whose `brew` column is a package and that is not already installed |
-| Casks | `brew install --cask` the `cask` tier rows not already installed |
+| Casks | `brew install --cask`, one at a time, the `cask` tier rows not already installed; a cask that fails (typically an app already in `/Applications`) is reported as a warning and does not stop the run |
 | Shell environment | `eval "$(brew shellenv)"` for the script's own session; `dot_zshrc.tmpl` does the same after apply |
 
 The Homebrew installer is fetched over HTTPS without checksum verification. Packages the OS ships (`zsh`, `unzip`) are skipped. Casks are Mac apps (iTerm2, a Nerd Font, Hammerspoon, 1Password CLI); machine-specific apps such as Cursor, Godot, and MacTeX are deliberately not in the manifest.

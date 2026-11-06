@@ -24,6 +24,7 @@ case "$1" in
   install) [[ -z "${MOCK_BREW_FAIL:-}" || ! "$*" =~ $MOCK_BREW_FAIL ]] ;;
 esac'
 mock bin uname 'echo "${MOCK_UNAME:-Darwin}"'
+mock bin sudo 'printf "sudo %s\n" "$*" >> "$MOCK_BREW_LOG"; [[ "${MOCK_NO_SUDO:-}" != 1 ]]'
 mock bin xcode-select '[[ "${MOCK_NO_CLT:-}" != 1 ]]'
 mock brewbin brew "$brew_body"
 mock bin curl '
@@ -73,7 +74,9 @@ run || fail "happy path should succeed"
 grep -qF 'install git curl jq gh fzf direnv tmux tree shellcheck wget oh-my-posh chezmoi python@3.13 uv fnm pyenv ripgrep fd bat eza the_silver_searcher git-delta' "$MOCK_BREW_LOG" || fail "formulae should come from the manifest's brew column"
 pass "installs the manifest's brew formulae"
 
-grep -qF 'install --cask iterm2 font-meslo-lg-nerd-font hammerspoon 1password-cli' "$MOCK_BREW_LOG" || fail "casks should be installed"
+for c in iterm2 font-meslo-lg-nerd-font hammerspoon 1password-cli; do
+  grep -qxF "install --cask $c" "$MOCK_BREW_LOG" || fail "cask $c should be installed on its own"
+done
 reset
 run -- --skip-casks || fail "--skip-casks should succeed"
 ! grep -q -- '--cask' "$MOCK_BREW_LOG" || fail "--skip-casks must not install casks"
@@ -87,7 +90,7 @@ run MOCK_BREW_INSTALLED='git jq fzf iterm2' || fail "partial install should succ
 formula_line="$(grep '^install ' "$MOCK_BREW_LOG" | grep -v -- '--cask')"
 ! grep -qE ' (git|jq|fzf)( |$)' <<<"$formula_line" || fail "installed formulae should not be reinstalled"
 grep -qE ' curl( |$)' <<<"$formula_line" || fail "missing formulae should still install"
-! grep -qE '^install --cask .* iterm2( |$)|^install --cask iterm2 ' "$MOCK_BREW_LOG" || fail "installed casks should not be reinstalled"
+! grep -qx 'install --cask iterm2' "$MOCK_BREW_LOG" || fail "installed casks should not be reinstalled"
 pass "installs only what's missing"
 
 reset
@@ -116,7 +119,25 @@ pass "installs Homebrew only when missing"
 expect_failure "non-macOS" 'macOS only' MOCK_UNAME=Linux
 expect_failure "missing CLT" 'xcode-select --install' MOCK_NO_CLT=1
 expect_failure "brew failure" 'brew install failed' 'MOCK_BREW_FAIL=^install git'
-expect_failure "cask failure" 'install --cask failed' 'MOCK_BREW_FAIL=--cask'
+BREW_ON_PATH=0 expect_failure "missing sudo" 'sudo access is required' MOCK_NO_SUDO=1
 expect_failure "unknown flag" 'unknown argument' -- --bogus
 BREW_ON_PATH=0 expect_failure "download failure" 'could not fetch' MOCK_CURL_FAIL=1
 pass "fails closed with a remediation message"
+
+reset
+run MOCK_BREW_FAIL='--cask iterm2' || fail "a conflicting cask must not fail the run"
+grep -qxF 'install --cask hammerspoon' "$MOCK_BREW_LOG" || fail "casks after a failed one should still install"
+grep -qF 'WARNING: casks not installed' "$tmp/run.out" || fail "failed casks should be reported"
+pass "a failing cask warns and does not block the others"
+
+reset
+BREW_ON_PATH=0 run || fail "Homebrew install"
+grep -qxF 'sudo -v' "$MOCK_BREW_LOG" || fail "sudo should be primed before the Homebrew installer"
+pass "primes sudo before the Homebrew installer"
+
+reset
+SCRIPT="$tmp/piped.sh"; cp "$bootstrap" "$SCRIPT"
+env PATH="$tmp/bin:$tmp/brewbin:/usr/bin:/bin" HOME="$tmp/home" TMPDIR="$tmp" BOOTSTRAP_BREW_PATHS="$tmp/prefix/bin/brew" bash < "$SCRIPT" > "$tmp/run.out" 2> "$tmp/run.err" || fail "piped run should succeed"
+! grep -q 'unbound' "$tmp/run.err" || fail "piped run must not hit an unbound BASH_SOURCE"
+unset SCRIPT
+pass "runs when piped to bash (no BASH_SOURCE)"

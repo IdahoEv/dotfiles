@@ -20,7 +20,7 @@
 set -euo pipefail
 
 readonly curl_opts=(--fail --silent --show-error --location --connect-timeout 10 --max-time 120 --retry 2)
-readonly script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+readonly script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]:-$0}")" && pwd)"
 
 fail() {
   printf 'bootstrap-mac: ERROR: %s\n' "$*" >&2
@@ -70,7 +70,8 @@ install_homebrew() {
     step "Homebrew already installed"
     return
   fi
-  step "installing Homebrew"
+  step "installing Homebrew (asks for your sudo password once; the installer itself runs non-interactively)"
+  sudo -v || fail "sudo access is required for the Homebrew installer."
   fetch https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh "$work_dir/homebrew-install.sh"
   NONINTERACTIVE=1 /bin/bash "$work_dir/homebrew-install.sh" \
     || fail "the Homebrew installer failed; see https://brew.sh for manual steps."
@@ -78,7 +79,7 @@ install_homebrew() {
 }
 
 install_packages() {
-  local brew tier name apt pkg formulae=() casks=() gaps=() missing_formulae=() missing_casks=()
+  local brew tier name apt pkg formulae=() casks=() gaps=() missing_formulae=() missing_casks=() failed_casks=()
   brew="$(find_brew)"
   eval "$("$brew" shellenv)"
 
@@ -107,10 +108,14 @@ install_packages() {
     for pkg in ${casks[@]+"${casks[@]}"}; do
       "$brew" list --cask "$pkg" >/dev/null 2>&1 || missing_casks+=("$pkg")
     done
-    if ((${#missing_casks[@]})); then
-      step "installing casks: ${missing_casks[*]}"
-      "$brew" install --cask "${missing_casks[@]}" || fail "brew install --cask failed; re-run to retry, or use --skip-casks."
-    else
+    # Apps copied to /Applications by hand are invisible to `brew list`; one conflict must not block the rest.
+    for pkg in ${missing_casks[@]+"${missing_casks[@]}"}; do
+      step "installing cask: $pkg"
+      "$brew" install --cask "$pkg" || failed_casks+=("$pkg")
+    done
+    if ((${#failed_casks[@]})); then
+      step "WARNING: casks not installed (often an app already in /Applications; install or adopt by hand): ${failed_casks[*]}"
+    elif ((${#missing_casks[@]} == 0)); then
       step "all casks already installed"
     fi
   fi

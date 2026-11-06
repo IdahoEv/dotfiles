@@ -110,6 +110,9 @@ reset
 mock fdfind 'exit 0'; mock batcat 'exit 0'
 run || fail "shim run"
 [[ -L "$tmp/home/.local/bin/fd" && -L "$tmp/home/.local/bin/bat" ]] || fail "fd and bat should link to Debian's fdfind and batcat"
+ln -sfn /nonexistent/fdfind "$tmp/home/.local/bin/fd"
+run || fail "a dangling fd symlink should be replaced, not abort the run"
+[[ -e "$tmp/home/.local/bin/fd" ]] || fail "the dangling fd link should now resolve"
 rm -f "$tmp/bin/fdfind" "$tmp/bin/batcat"
 pass "links fd and bat to Debian's renamed binaries"
 
