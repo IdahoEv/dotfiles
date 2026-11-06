@@ -136,8 +136,9 @@ grep -qxF 'sudo -v' "$MOCK_BREW_LOG" || fail "sudo should be primed before the H
 pass "primes sudo before the Homebrew installer"
 
 reset
-SCRIPT="$tmp/piped.sh"; cp "$bootstrap" "$SCRIPT"
-env PATH="$tmp/bin:$tmp/brewbin:/usr/bin:/bin" HOME="$tmp/home" TMPDIR="$tmp" BOOTSTRAP_BREW_PATHS="$tmp/prefix/bin/brew" bash < "$SCRIPT" > "$tmp/run.out" 2> "$tmp/run.err" || fail "piped run should succeed"
+mkdir -p "$tmp/decoy/lib"; printf 'core\tdecoy\tdecoy-pkg\tdecoy-pkg\n' > "$tmp/decoy/lib/packages.tsv"
+(cd "$tmp/decoy" && env PATH="$tmp/bin:$tmp/brewbin:/usr/bin:/bin" HOME="$tmp/home" TMPDIR="$tmp" BOOTSTRAP_BREW_PATHS="$tmp/prefix/bin/brew" bash < "$bootstrap" > "$tmp/run.out" 2> "$tmp/run.err") || fail "piped run should succeed"
 ! grep -q 'unbound' "$tmp/run.err" || fail "piped run must not hit an unbound BASH_SOURCE"
-unset SCRIPT
-pass "runs when piped to bash (no BASH_SOURCE)"
+grep -qF 'tools/lib/packages.tsv' "$MOCK_CURL_URLS" || fail "piped run must fetch the manifest, not read one from the cwd"
+! grep -qF decoy-pkg "$MOCK_BREW_LOG" || fail "a lib/packages.tsv in the cwd must be ignored"
+pass "piped to bash: ignores a manifest in the cwd and fetches it"

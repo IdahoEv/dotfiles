@@ -147,6 +147,14 @@ grep -qF 'raw.githubusercontent.com/IdahoEv/dotfiles/v9/tools/lib/packages.tsv' 
 grep -qF 'apt-get install -y git curl' "$MOCK_SUDO_LOG" || fail "fetched manifest should drive the install"
 pass "fetches the manifest when run standalone (curl one-liner flow)"
 
+reset
+mkdir -p "$tmp/decoy/lib"; printf 'core\tdecoy\tdecoy-pkg\tdecoy-pkg\n' > "$tmp/decoy/lib/packages.tsv"
+(cd "$tmp/decoy" && env PATH="$tmp/bin:/usr/bin:/bin" HOME="$tmp/home" TMPDIR="$tmp" bash < "$bootstrap" > "$tmp/run.out" 2> "$tmp/run.err") || fail "piped run should succeed"
+! grep -q 'unbound' "$tmp/run.err" || fail "piped run must not hit an unbound BASH_SOURCE"
+grep -qF 'tools/lib/packages.tsv' "$MOCK_CURL_URLS" || fail "piped run must fetch the manifest, not read one from the cwd"
+! grep -qF decoy-pkg "$MOCK_SUDO_LOG" || fail "a lib/packages.tsv in the cwd must be ignored"
+pass "piped to bash: ignores a manifest in the cwd and fetches it"
+
 expect_failure "non-Linux" 'Linux/WSL only' MOCK_UNAME=Darwin
 expect_failure "apt failure" 'apt-get install failed' 'MOCK_SUDO_FAIL=apt-get install -y git'
 expect_failure "gh failure" 'gh install failed' 'MOCK_SUDO_FAIL=apt-get install -y gh'

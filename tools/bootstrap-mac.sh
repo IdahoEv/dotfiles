@@ -20,7 +20,9 @@
 set -euo pipefail
 
 readonly curl_opts=(--fail --silent --show-error --location --connect-timeout 10 --max-time 120 --retry 2)
-readonly script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]:-$0}")" && pwd)"
+script_dir=""
+[[ -z "${BASH_SOURCE[0]:-}" ]] || script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+readonly script_dir
 
 fail() {
   printf 'bootstrap-mac: ERROR: %s\n' "$*" >&2
@@ -49,7 +51,7 @@ fetch() { # fetch <url> <dest>
 }
 
 manifest="$script_dir/lib/packages.tsv"
-if [[ ! -f "$manifest" ]]; then
+if [[ -z "$script_dir" || ! -f "$manifest" ]]; then
   manifest="$work_dir/packages.tsv"
   fetch "https://raw.githubusercontent.com/IdahoEv/dotfiles/${BOOTSTRAP_REF:-main}/tools/lib/packages.tsv" "$manifest"
 fi

@@ -21,7 +21,9 @@ readonly curl_opts=(--fail --silent --show-error --location --connect-timeout 10
 readonly bin_dir="$HOME/.local/bin"
 readonly gh_keyring=/etc/apt/keyrings/githubcli-archive-keyring.gpg
 readonly gh_list=/etc/apt/sources.list.d/github-cli.list
-readonly script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]:-$0}")" && pwd)"
+script_dir=""
+[[ -z "${BASH_SOURCE[0]:-}" ]] || script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+readonly script_dir
 
 fail() {
   printf 'bootstrap-linux: ERROR: %s\n' "$*" >&2
@@ -52,7 +54,7 @@ fetch() { # fetch <url> <dest>
 }
 
 manifest="$script_dir/lib/packages.tsv"
-if [[ ! -f "$manifest" ]]; then
+if [[ -z "$script_dir" || ! -f "$manifest" ]]; then
   manifest="$work_dir/packages.tsv"
   fetch "https://raw.githubusercontent.com/IdahoEv/dotfiles/${BOOTSTRAP_REF:-main}/tools/lib/packages.tsv" "$manifest"
 fi
