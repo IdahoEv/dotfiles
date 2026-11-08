@@ -4,7 +4,7 @@
 # Invoke with bash; no executable bit is required.
 #
 #   WORKFLOW_REF   branch, tag, or full commit SHA to use (default: main)
-#   GITHUB_TOKEN   optional; raises the API rate limit (sent to the API call only)
+#                  Needs outbound HTTPS to codeload.github.com only (no GitHub API call).
 #
 #   WORKFLOW_INSTALL  set to "claude" for a Claude Code cloud session: also install the
 #                     commands, agents and skills into ~/.claude (or $CLAUDE_CONFIG_DIR) and
@@ -55,39 +55,37 @@ if [[ ! "$ref" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ || "$ref" == *..* ]]; then
   fail "Invalid WORKFLOW_REF '$ref'; use a branch, tag, or full commit SHA."
 fi
 
-if [[ "$ref" =~ ^[0-9a-f]{40}$ ]]; then
-  commit_sha="$ref"
-else
-  command -v python3 >/dev/null 2>&1 || fail "python3 is required to validate the GitHub commit response."
-  api_url="https://api.github.com/repos/${repo}/commits/${ref}"
-  auth_header=()
-  [[ -z "${GITHUB_TOKEN:-}" ]] || auth_header=(-H "Authorization: Bearer $GITHUB_TOKEN")
-
-  commit_json="$(curl "${curl_opts[@]}" \
-    -H 'Accept: application/vnd.github+json' \
-    -H 'X-GitHub-Api-Version: 2022-11-28' \
-    ${auth_header[@]+"${auth_header[@]}"} \
-    "$api_url")" || fail "Could not read $api_url; check network access, GitHub availability, and the unauthenticated rate limit (60 requests/hour/IP; set GITHUB_TOKEN to raise it). No cached workflow was used."
-
-  commit_sha="$(printf '%s' "$commit_json" | python3 -c '
-import json, re, sys
-try:
-    value = json.load(sys.stdin)["sha"]
-except (ValueError, KeyError, TypeError):
-    sys.exit("response did not contain a commit SHA")
-if not isinstance(value, str) or re.fullmatch(r"[0-9a-f]{40}", value) is None:
-    sys.exit("response contained an invalid commit SHA")
-print(value)
-')" || fail "GitHub returned an invalid commit response. No cached workflow was used."
-fi
+command -v python3 >/dev/null 2>&1 || fail "python3 is required to read the commit id from the archive."
 
 work_dir="$(mktemp -d "${temp_root%/}/dotfiles-workflow.XXXXXX")" \
   || fail "Could not create a temporary directory."
 trap 'rm -rf "$work_dir"' EXIT
 
-archive_url="https://codeload.github.com/${repo}/tar.gz/${commit_sha}"
+# One download, no GitHub API: the archive for a branch or tag records the commit it was cut from
+# in its pax header, so the SHA comes from the bytes we actually unpack. (The API is rate-limited
+# per shared egress IP and some cloud proxies refuse it.)
+archive_url="https://codeload.github.com/${repo}/tar.gz/${ref}"
 curl "${curl_opts[@]}" "$archive_url" -o "$work_dir/repo.tar.gz" \
-  || fail "Could not fetch $archive_url; check network access and repository visibility. No cached workflow was used."
+  || fail "Could not fetch $archive_url; check that the environment allows codeload.github.com and that the ref exists. No cached workflow was used."
+
+commit_sha="$(python3 -I - "$work_dir/repo.tar.gz" <<'PY'
+import re, sys, tarfile
+try:
+    with tarfile.open(sys.argv[1], "r:gz") as tf:
+        value = tf.pax_headers.get("comment", "")
+except (tarfile.TarError, OSError) as exc:
+    sys.exit(f"could not read the archive: {exc}")
+if re.fullmatch(r"[0-9a-f]{40}", value) is None:
+    sys.exit("the archive does not record a commit id")
+print(value)
+PY
+)" || fail "Could not determine the commit of $archive_url. No cached workflow was used."
+
+if [[ "$ref" =~ ^[0-9a-f]{40}$ && "$ref" != "$commit_sha" ]]; then
+  fail "Pinned WORKFLOW_REF $ref but the archive is commit $commit_sha. No cached workflow was used."
+fi
+# Report the immutable form so a run can be reproduced exactly.
+archive_url="https://codeload.github.com/${repo}/tar.gz/${commit_sha}"
 
 root="$work_dir/repo"
 mkdir "$root"

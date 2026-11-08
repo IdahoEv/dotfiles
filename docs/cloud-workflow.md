@@ -4,7 +4,7 @@ Cloud agents (Claude Code cloud sessions, Codex Cloud, and Google Antigravity / 
 
 | Piece | Path | Role |
 | --- | --- | --- |
-| Bootstrap | `tools/cloud-workflow-bootstrap.sh` | Resolves `WORKFLOW_REF` (default `main`) to a commit SHA, fetches the repo as one tarball at that SHA, checks required files, exposes `tools/*.sh` on `workflow_bin`, prints `key=value`. Any failure exits non-zero; no cached copy is used. |
+| Bootstrap | `tools/cloud-workflow-bootstrap.sh` | Fetches the repo as one tarball for `WORKFLOW_REF` (default `main`) from `codeload.github.com` and reads the commit SHA from the archive's own header (no GitHub API call; a pinned SHA is verified against it), checks required files, exposes `tools/*.sh` on `workflow_bin`, prints `key=value`. Any failure exits non-zero; no cached copy is used. |
 | Adapter | `workflow/adapters/<host>.md` | Run protocol plus a Claude-construct → host-behavior map (`claude-cloud.md`, `codex.md`, `agy.md`). Mappings only. |
 | `gh` shim | `tools/cloud-gh-shim.py` | Installed as `gh` for Claude cloud sessions. Answers the GraphQL-backed `gh issue/pr/repo/auth` calls the workflow scripts make over REST; everything else (including `gh api`) reaches the real gh. Tested by `tools/cloud-gh-shim.test.sh`. |
 | Drift test | `tools/cloud-workflow-adapter.test.sh` | Fails when a covered command uses a Claude-only construct on the test's known list that an adapter doesn't map, or an adapter maps one no covered command uses. |
@@ -15,7 +15,7 @@ Give the cloud task: the adapter's run protocol (`workflow/adapters/codex.md` fo
 
 For local Antigravity sessions on the host machine where the dotfiles repo is already cloned, the adapter locates `workflow_root` and `workflow_bin` directly without downloading a remote tarball, and resolves `workflow_source_commit` from git.
 
-Requirements: Bash, curl, tar, Python 3 (when `WORKFLOW_REF` is not a full SHA, and always for `WORKFLOW_INSTALL=claude`, whose `gh` shim is Python), outbound HTTPS to `api.github.com` and `codeload.github.com`, plus project-appropriate GitHub credentials for issue reads, push, and PR creation. `GITHUB_TOKEN` is optional and raises the API rate limit (60 requests/hour/IP unauthenticated; cloud egress IPs may be shared). It is sent to the API call only.
+Requirements: Bash, curl, tar, Python 3, and outbound HTTPS to `raw.githubusercontent.com` (only to fetch the bootstrap script itself) and `codeload.github.com`. The bootstrap makes no GitHub API call and sends no credentials. The workflow's own commands additionally need `api.github.com` and project-appropriate GitHub credentials for issue reads, push, and PR creation.
 
 ## Claude Code cloud sessions
 

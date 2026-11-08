@@ -31,12 +31,6 @@ done
 printf '%s\n' "$url" >> "$MOCK_CURL_URLS"
 [[ "${MOCK_CURL_FAIL:-}" != 1 ]] || exit 22
 case "$url" in
-  https://api.github.com/repos/IdahoEv/dotfiles/commits/*)
-    if [[ -n "${MOCK_API_BODY:-}" ]]; then
-      printf '%s\n' "$MOCK_API_BODY"
-    else
-      printf '{"sha":"0123456789abcdef0123456789abcdef01234567"}\n'
-    fi ;;
   https://codeload.github.com/IdahoEv/dotfiles/tar.gz/*)
     [[ "${MOCK_ARCHIVE_FAIL:-}" != 1 ]] || exit 22
     [[ -n "$out" ]] || exit 2
@@ -45,6 +39,16 @@ case "$url" in
 esac
 MOCK_CURL
 chmod +x "$tmp/bin/curl"
+
+# pack <src-dir> <top-dir> <out.tar.gz> <commit>: a GitHub-style archive whose pax header names the commit.
+pack() {
+  python3 -I - "$@" <<'PY'
+import sys, tarfile
+src, top, out, commit = sys.argv[1:]
+with tarfile.open(out, "w:gz", format=tarfile.PAX_FORMAT, pax_headers={"comment": commit}) as tf:
+    tf.add(f"{src}/{top}", arcname=top)
+PY
+}
 
 # make_archive <name> [omit-path]: a repo snapshot shaped like the dotfiles checkout.
 make_archive() {
@@ -65,7 +69,7 @@ make_archive() {
   printf '#!/usr/bin/env bash\nexit 0\n' > "$root/tools/open-pr.test.sh"
   chmod +x "$root"/tools/*.sh
   [[ -z "$omit" ]] || rm -f "$root/$omit"
-  tar -czf "$tmp/$name.tar.gz" -C "$tmp/src-$name" "dotfiles-$sha"
+  pack "$tmp/src-$name" "dotfiles-$sha" "$tmp/$name.tar.gz" "$sha"
 }
 make_archive valid
 make_archive no-start dot_claude/commands/start.md
@@ -102,29 +106,30 @@ bin_dir="$(sed -n 's/^workflow_bin=//p' "$tmp/run.out")"
 [[ -x "$bin_dir/start-ticket.sh" && -x "$bin_dir/open-pr.sh" ]] || fail "tools should be exposed on workflow_bin"
 [[ ! -e "$bin_dir/open-pr.test.sh" ]] || fail "test scripts must not be exposed"
 [[ "$("$bin_dir/start-ticket.sh")" == start-ticket ]] || fail "exposed tool should run"
-grep -q 'IdahoEv/dotfiles/commits/main$' "$tmp/curl.urls" || fail "default ref should resolve main"
-grep -q "tar.gz/$sha\$" "$tmp/curl.urls" || fail "archive should be fetched by resolved SHA"
-pass "fetches the repo at one SHA, extracts it, exposes tools, reports the SHA"
+grep -q 'tar.gz/main$' "$tmp/curl.urls" || fail "default ref should fetch main"
+! grep -q 'api.github.com' "$tmp/curl.urls" || fail "the GitHub API must not be called"
+grep -q "workflow_source_url=.*tar.gz/$sha\$" "$tmp/run.out" || fail "the reported URL should be pinned to the commit"
+pass "fetches the repo once with no API call, reports the commit from the archive header"
 
+pack "$tmp/src-valid" "dotfiles-$sha" "$tmp/valid-pin.tar.gz" "$pin"
 : > "$MOCK_CURL_URLS"
-run valid WORKFLOW_REF="$pin" || fail "pinned SHA should load"
-! grep -q 'api.github.com' "$MOCK_CURL_URLS" || fail "a full SHA ref needs no API call"
+run valid-pin WORKFLOW_REF="$pin" || fail "pinned SHA should load"
 grep -q "tar.gz/$pin\$" "$MOCK_CURL_URLS" || fail "pinned SHA should be fetched verbatim"
 grep -q "workflow_source_commit=$pin" "$tmp/run.out" || fail "pinned SHA should be reported"
+expect_failure "pinned SHA mismatch" 'Pinned WORKFLOW_REF' valid "WORKFLOW_REF=$pin"
 : > "$MOCK_CURL_URLS"
 run valid WORKFLOW_REF=v1.2 || fail "tag ref should load"
-grep -q 'commits/v1.2$' "$MOCK_CURL_URLS" || fail "a tag ref should be resolved through the API"
+grep -q 'tar.gz/v1.2$' "$MOCK_CURL_URLS" || fail "a tag ref should be fetched by name"
 expect_failure "invalid ref" 'Invalid WORKFLOW_REF' valid 'WORKFLOW_REF=../etc'
-pass "WORKFLOW_REF pins a SHA or tag and rejects unsafe values"
+pass "WORKFLOW_REF pins a SHA (verified against the archive) or names a tag, and rejects unsafe values"
 
-expect_failure "API failure" 'Could not read' valid MOCK_CURL_FAIL=1
-expect_failure "malformed SHA" 'invalid commit response' valid 'MOCK_API_BODY={"sha":"abc"}'
-expect_failure "non-JSON body" 'invalid commit response' valid 'MOCK_API_BODY=not json'
-pass "fails closed when the ref cannot be resolved"
+tar -czf "$tmp/nopax.tar.gz" -C "$tmp/src-valid" "dotfiles-$sha"
+expect_failure "archive without a commit id" 'Could not determine the commit' nopax
+pass "fails closed when the archive does not name its commit"
 
 expect_failure "archive fetch failure" 'Could not fetch' valid MOCK_ARCHIVE_FAIL=1
-expect_failure "empty archive" 'Could not extract\|missing required' empty
-expect_failure "corrupt archive" 'Could not extract' corrupt
+expect_failure "empty archive" 'Could not determine the commit' empty
+expect_failure "corrupt archive" 'Could not determine the commit' corrupt
 pass "fails closed when the archive cannot be fetched or extracted"
 
 expect_failure "missing command" 'missing required' no-start
@@ -135,13 +140,10 @@ expect_failure "missing gh shim" 'missing required' no-shim WORKFLOW_INSTALL=cla
 expect_failure "missing tool" 'missing required' no-tool
 pass "rejects a snapshot missing a required command, adapter, or tool"
 
-! grep -q 'Authorization' "$MOCK_CURL_ARGS" || fail "no Authorization header expected without GITHUB_TOKEN"
 grep -q -- '--max-time' "$MOCK_CURL_ARGS" || fail "curl calls should set a total timeout"
 grep -q -- '--retry' "$MOCK_CURL_ARGS" || fail "curl calls should retry"
-: > "$MOCK_CURL_ARGS"
-run valid GITHUB_TOKEN=tok || fail "token run should succeed"
-[[ "$(grep -c 'Authorization: Bearer tok' "$MOCK_CURL_ARGS")" == 1 ]] || fail "token should be sent on the API call only"
-pass "sends timeouts/retry always and the token only on the API call when set"
+! grep -q 'Authorization' "$MOCK_CURL_ARGS" || fail "no credentials are sent"
+pass "sends timeouts/retry and no credentials"
 
 # Claude Code cloud install: commands/agents/skills land in the config dir, tools on PATH.
 home="$tmp/home"; mkdir -p "$home"
@@ -176,7 +178,7 @@ expect_failure "install without claude files" 'missing required' no-claude-adapt
 # Symlinked tools are not linked or chmodded; a real binary of the same name is not replaced.
 make_archive evil
 ln -sf /etc/hostname "$tmp/src-evil/dotfiles-$sha/tools/evil.sh"
-tar -czf "$tmp/evil.tar.gz" -C "$tmp/src-evil" "dotfiles-$sha"
+pack "$tmp/src-evil" "dotfiles-$sha" "$tmp/evil.tar.gz" "$sha"
 mkdir -p "$tmp/evilbin"; printf '#!/bin/sh\necho real\n' > "$tmp/evilbin/open-pr.sh"; chmod +x "$tmp/evilbin/open-pr.sh"
 run evil WORKFLOW_INSTALL=claude HOME="$home" WORKFLOW_BIN_DIR="$tmp/evilbin" || fail "evil archive should still install"
 [[ ! -e "$tmp/evilbin/evil.sh" ]] || fail "symlinked tools must not be linked"
