@@ -57,6 +57,20 @@ agy_commands=(
 check "$repo/workflow/adapters/agy.md" "${agy_commands[@]}" || fail "agy adapter has drifted from the commands it covers"
 printf 'PASS agy adapter maps every Claude-only construct in its covered commands\n'
 
+claude_commands=(
+  "$repo/dot_claude/commands/start.md"
+  "$repo/dot_claude/commands/open-pr.md"
+  "$repo/dot_claude/commands/finalize.md"
+  "$repo/dot_claude/commands/local-review-cycle.md"
+  "$repo/dot_claude/agents/local-review-cycle-manager.md"
+  "$repo/dot_claude/skills/local-review-cycle-procedure/SKILL.md"
+  "$repo/dot_claude/commands/github-review-comments.md"
+  "$repo/dot_claude/agents/github-review-repair-agent.md"
+  "$repo/dot_claude/skills/github-review-procedure/SKILL.md"
+)
+check "$repo/workflow/adapters/claude-cloud.md" "${claude_commands[@]}" || fail "claude-cloud adapter has drifted from the commands it covers"
+printf 'PASS claude-cloud adapter maps every Claude-only construct in its covered commands\n'
+
 commands=("${codex_commands[@]}")
 
 fixture="$(mktemp -d)"
@@ -79,7 +93,7 @@ fi
 grep -q 'TodoWrite' "$fixture/err" || fail "the stale row should be named"
 [[ "$pass_new" == 1 ]] && printf 'PASS detects unmapped constructs and stale rows\n'
 
-for adapter_name in codex agy; do
+for adapter_name in codex agy claude-cloud; do
   adapter="$repo/workflow/adapters/${adapter_name}.md"
   if grep -q 'bash <(' "$adapter"; then fail "$adapter_name adapter must not run the bootstrap via process substitution (hides download failure)"; fi
   for rule in 'workflow_source_commit=' 'Never imply a check passed' 'Workflow source:'; do

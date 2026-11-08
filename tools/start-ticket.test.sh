@@ -171,6 +171,29 @@ has "single id: session name unchanged" "[PLAN] Is7 Ticket 7" "$ROOT/claude.args
 (cd "$ROOT/widgets" && PATH="$ROOT/stubbin:$PATH" START_TICKET_PROVIDER_DIR="$CP" FAKE_WT="$ROOT/cwt4" "$ST" 7,8,9,10 --provider fake --launcher bg >/dev/null 2>&1)
 has "long chain: label collapses to first+last" "[PLAN] Is7+10 Ticket 7" "$ROOT/claude.args"
 
+# ---- --in-place (cloud sessions: one fixed checkout, no worktree) ---------------
+IP="$ROOT/inplaceproviders"; mkdir -p "$IP"
+cat > "$IP/fake.sh" <<'P'
+provider::available() { return 0; }
+provider::fetch() { ST_TITLE="Fake ticket"; ST_BODY="body"; ST_URL=""; ST_PARENT=""; ST_BRANCH="$1-fake-ticket"; }
+provider::create_worktree() { echo "create $1" >> "$FAKE_LOG"; echo "$ROOT/should-not-exist"; }
+provider::mark_in_progress() { echo "mark $1" >> "$FAKE_LOG"; }
+P
+git clone -q "$ROOT/widgets" "$ROOT/cloud"
+git -C "$ROOT/cloud" checkout -q -b ccr-session
+: > "$FAKE_LOG"
+out="$(cd "$ROOT/cloud" && START_TICKET_PROVIDER_DIR="$IP" "$ST" 5 --provider fake --in-place --no-tab 2>/dev/null)"
+check "in-place: worktree is the current checkout" "$ROOT/cloud" "$(get worktree <<<"$out")"
+check "in-place: ticket branch checked out" "5-fake-ticket" "$(git -C "$ROOT/cloud" branch --show-current)"
+check "in-place: no worktree created" "" "$(grep '^create' "$FAKE_LOG")"
+check "in-place: ticket marked in progress" "mark 5" "$(grep '^mark' "$FAKE_LOG")"
+has "in-place: kickoff written" "Fake ticket" "$(get kickoff <<<"$out")"
+(cd "$ROOT/cloud" && START_TICKET_PROVIDER_DIR="$IP" "$ST" 5 --provider fake --in-place --no-tab >/dev/null 2>&1); rc=$?
+check "in-place: re-run on the ticket branch succeeds" "0" "$rc"
+git -C "$ROOT/cloud" checkout -q ccr-session
+(cd "$ROOT/cloud" && START_TICKET_PROVIDER_DIR="$IP" "$ST" 5 --provider fake --in-place --no-tab >/dev/null 2>&1); rc=$?
+check "in-place: re-run re-checks-out the existing branch" "0 5-fake-ticket" "$rc $(git -C "$ROOT/cloud" branch --show-current)"
+
 # ---- clipboard fallback (open_tab via --tab-only, not in iTerm) ----------------
 CB="$ROOT/clip"; mkdir -p "$CB/bin" "$CB/sys"
 for t in git cat dirname basename sed tr wc mktemp rm date grep awk head cut sort uname env bash; do

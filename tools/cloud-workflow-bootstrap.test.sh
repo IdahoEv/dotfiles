@@ -6,6 +6,8 @@ bootstrap="$tools_dir/cloud-workflow-bootstrap.sh"
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
 
+unset GITHUB_TOKEN WORKFLOW_INSTALL WORKFLOW_HOME WORKFLOW_BIN_DIR CLAUDE_CONFIG_DIR CLAUDE_ENV_FILE
+
 sha=0123456789abcdef0123456789abcdef01234567
 pin=fedcba9876543210fedcba9876543210fedcba98
 
@@ -47,7 +49,13 @@ chmod +x "$tmp/bin/curl"
 # make_archive <name> [omit-path]: a repo snapshot shaped like the dotfiles checkout.
 make_archive() {
   local name="$1" omit="${2:-}" root="$tmp/src-$1/dotfiles-$sha"
-  mkdir -p "$root/dot_claude/commands" "$root/tools" "$root/workflow/adapters"
+  mkdir -p "$root/dot_claude/commands" "$root/dot_claude/agents" "$root/dot_claude/skills/proc" "$root/tools" "$root/workflow/adapters"
+  printf '# Agent\n' > "$root/dot_claude/agents/reviewer.md"
+  printf '# Skill\n' > "$root/dot_claude/skills/proc/SKILL.md"
+  printf '#!/usr/bin/env bash\necho poll\n' > "$root/dot_claude/skills/proc/executable_poll.sh"
+  printf '# Template\n' > "$root/dot_claude/CLAUDE.md.tmpl"
+  printf '#!/usr/bin/env python3\nprint("shim")\n' > "$root/tools/cloud-gh-shim.py"
+  printf '# Claude cloud adapter\n' > "$root/workflow/adapters/claude-cloud.md"
   printf '# Start\n' > "$root/dot_claude/commands/start.md"
   printf '# Open PR\n' > "$root/dot_claude/commands/open-pr.md"
   printf '# Codex adapter\n' > "$root/workflow/adapters/codex.md"
@@ -63,7 +71,9 @@ make_archive valid
 make_archive no-start dot_claude/commands/start.md
 make_archive no-adapter workflow/adapters/codex.md
 make_archive no-agy-adapter workflow/adapters/agy.md
+make_archive no-claude-adapter workflow/adapters/claude-cloud.md
 make_archive no-tool tools/open-pr.sh
+make_archive no-shim tools/cloud-gh-shim.py
 : > "$tmp/empty.tar.gz"
 printf 'not a tarball' > "$tmp/corrupt.tar.gz"
 
@@ -120,6 +130,8 @@ pass "fails closed when the archive cannot be fetched or extracted"
 expect_failure "missing command" 'missing required' no-start
 expect_failure "missing codex adapter" 'missing required' no-adapter
 expect_failure "missing agy adapter" 'missing required' no-agy-adapter
+expect_failure "missing claude-cloud adapter" 'missing required' no-claude-adapter
+expect_failure "missing gh shim" 'missing required' no-shim
 expect_failure "missing tool" 'missing required' no-tool
 pass "rejects a snapshot missing a required command, adapter, or tool"
 
@@ -130,3 +142,27 @@ grep -q -- '--retry' "$MOCK_CURL_ARGS" || fail "curl calls should retry"
 run valid GITHUB_TOKEN=tok || fail "token run should succeed"
 [[ "$(grep -c 'Authorization: Bearer tok' "$MOCK_CURL_ARGS")" == 1 ]] || fail "token should be sent on the API call only"
 pass "sends timeouts/retry always and the token only on the API call when set"
+
+# Claude Code cloud install: commands/agents/skills land in the config dir, tools on PATH.
+home="$tmp/home"; mkdir -p "$home"
+env_file="$tmp/claude-env"; : > "$env_file"
+run valid WORKFLOW_INSTALL=claude HOME="$home" WORKFLOW_BIN_DIR="$tmp/installbin" CLAUDE_ENV_FILE="$env_file" \
+  || fail "claude install should succeed"
+[[ -f "$home/.claude/commands/start.md" && -f "$home/.claude/agents/reviewer.md" ]] || fail "commands and agents should be installed"
+[[ -x "$home/.claude/skills/proc/poll.sh" ]] || fail "executable_ prefix should be stripped and the file made executable"
+[[ ! -e "$home/.claude/CLAUDE.md" && ! -e "$home/.claude/CLAUDE.md.tmpl" ]] || fail "the global CLAUDE.md template must not be installed"
+[[ "$("$tmp/installbin/start-ticket.sh")" == start-ticket ]] || fail "installed tool link should run"
+[[ ! -e "$tmp/installbin/open-pr.test.sh" ]] || fail "test scripts must not be linked"
+root="$(sed -n 's/^workflow_root=//p' "$tmp/run.out")"
+[[ "$root" == "$home/.cache/dotfiles-workflow/$sha" && -f "$root/workflow/adapters/claude-cloud.md" ]] || fail "install should keep the snapshot under WORKFLOW_HOME"
+grep -q 'export PATH=' "$env_file" || fail "PATH should be exported through CLAUDE_ENV_FILE"
+grep -q "workflow_claude_dir=$home/.claude" "$tmp/run.out" || fail "the config dir should be reported"
+[[ "$("$home/.cache/dotfiles-workflow/shim/gh")" == shim ]] || fail "the gh shim should be installed as gh"
+grep -q "workflow_shim=$home/.cache/dotfiles-workflow/shim" "$tmp/run.out" || fail "the shim dir should be reported"
+grep -q "shim:$tmp/installbin" "$env_file" || fail "the shim must precede the tool links on PATH"
+run valid WORKFLOW_INSTALL=claude HOME="$home" WORKFLOW_BIN_DIR="$tmp/installbin" || fail "no-hook install should succeed"
+grep -q "shim:$tmp/installbin" "$home/.bashrc" || fail "without CLAUDE_ENV_FILE, PATH should persist in ~/.bashrc"
+run valid WORKFLOW_INSTALL=claude HOME="$home" WORKFLOW_BIN_DIR="$tmp/installbin" || fail "re-running the install should succeed"
+[[ "$(grep -c 'shim:' "$home/.bashrc")" == 1 ]] || fail "~/.bashrc must not collect duplicate PATH lines"
+expect_failure "unknown install mode" 'Invalid WORKFLOW_INSTALL' valid WORKFLOW_INSTALL=bogus
+pass "WORKFLOW_INSTALL=claude installs commands, agents, skills and tool links, idempotently"
