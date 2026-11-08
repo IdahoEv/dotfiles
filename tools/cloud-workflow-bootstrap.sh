@@ -6,6 +6,10 @@
 #   WORKFLOW_REF   branch, tag, or full commit SHA to use (default: main)
 #                  Needs outbound HTTPS to codeload.github.com only (no GitHub API call).
 #
+#   WORKFLOW_SRC   a local clone to install from instead of downloading (committed tree at
+#                  WORKFLOW_REF, default HEAD). For sessions where GitHub access is scoped to
+#                  other repositories and codeload.github.com refuses this one.
+#
 #   WORKFLOW_INSTALL  set to "claude" for a Claude Code cloud session: also install the
 #                     commands, agents and skills into ~/.claude (or $CLAUDE_CONFIG_DIR) and
 #                     link tools/*.sh onto PATH. The snapshot is kept under
@@ -45,30 +49,9 @@ fail() {
   exit 1
 }
 
-[[ -z "$install_mode" || "$install_mode" == claude ]] \
-  || fail "Invalid WORKFLOW_INSTALL '$install_mode'; only 'claude' is supported."
-
-command -v curl >/dev/null 2>&1 || fail "curl is required to retrieve the committed workflow."
-command -v tar >/dev/null 2>&1 || fail "tar is required to unpack the committed workflow."
-
-if [[ ! "$ref" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ || "$ref" == *..* ]]; then
-  fail "Invalid WORKFLOW_REF '$ref'; use a branch, tag, or full commit SHA."
-fi
-
-command -v python3 >/dev/null 2>&1 || fail "python3 is required to read the commit id from the archive."
-
-work_dir="$(mktemp -d "${temp_root%/}/dotfiles-workflow.XXXXXX")" \
-  || fail "Could not create a temporary directory."
-trap 'rm -rf "$work_dir"' EXIT
-
-# One download, no GitHub API: the archive for a branch or tag records the commit it was cut from
-# in its pax header, so the SHA comes from the bytes we actually unpack. (The API is rate-limited
-# per shared egress IP and some cloud proxies refuse it.)
-archive_url="https://codeload.github.com/${repo}/tar.gz/${ref}"
-curl "${curl_opts[@]}" "$archive_url" -o "$work_dir/repo.tar.gz" \
-  || fail "Could not fetch $archive_url; check that the environment allows codeload.github.com and that the ref exists. No cached workflow was used."
-
-commit_sha="$(python3 -I - "$work_dir/repo.tar.gz" <<'PY'
+# Prints the commit an archive was cut from (GitHub records it in the pax global header).
+archive_commit() { # archive_commit <file.tar.gz>
+  python3 -I - "$1" <<'PY'
 import re, sys, tarfile
 try:
     with tarfile.open(sys.argv[1], "r:gz") as tf:
@@ -79,19 +62,59 @@ if re.fullmatch(r"[0-9a-f]{40}", value) is None:
     sys.exit("the archive does not record a commit id")
 print(value)
 PY
-)" || fail "Could not determine the commit of $archive_url. No cached workflow was used."
+}
 
-if [[ "$ref" =~ ^[0-9a-f]{40}$ && "$ref" != "$commit_sha" ]]; then
-  fail "Pinned WORKFLOW_REF $ref but the archive is commit $commit_sha. No cached workflow was used."
+[[ -z "$install_mode" || "$install_mode" == claude ]] \
+  || fail "Invalid WORKFLOW_INSTALL '$install_mode'; only 'claude' is supported."
+
+command -v curl >/dev/null 2>&1 || fail "curl is required to retrieve the committed workflow."
+command -v tar >/dev/null 2>&1 || fail "tar is required to unpack the committed workflow."
+
+if [[ ! "$ref" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ || "$ref" == *..* ]]; then
+  fail "Invalid WORKFLOW_REF '$ref'; use a branch, tag, or full commit SHA."
 fi
-# Report the immutable form so a run can be reproduced exactly.
-archive_url="https://codeload.github.com/${repo}/tar.gz/${commit_sha}"
 
-root="$work_dir/repo"
-mkdir "$root"
-tar -xzf "$work_dir/repo.tar.gz" -C "$root" --strip-components=1 \
-  || fail "Could not extract the archive from $archive_url. No cached workflow was used."
-rm -f "$work_dir/repo.tar.gz"
+work_dir="$(mktemp -d "${temp_root%/}/dotfiles-workflow.XXXXXX")" \
+  || fail "Could not create a temporary directory."
+trap 'rm -rf "$work_dir"' EXIT
+
+if [[ -n "${WORKFLOW_SRC:-}" ]]; then
+  # A local clone of the repo (e.g. one a cloud session attached and cloned itself). The
+  # committed tree at the ref is exported, so uncommitted edits in the clone are never installed.
+  command -v git >/dev/null 2>&1 || fail "git is required to read WORKFLOW_SRC."
+  src_ref="${WORKFLOW_REF:-HEAD}"
+  commit_sha="$(git -C "$WORKFLOW_SRC" rev-parse --verify --quiet "${src_ref}^{commit}")" \
+    || fail "WORKFLOW_SRC '$WORKFLOW_SRC' is not a git checkout with ref '$src_ref'. No cached workflow was used."
+  archive_url="https://github.com/${repo}/commit/${commit_sha}"
+  root="$work_dir/repo"
+  mkdir "$root"
+  git -C "$WORKFLOW_SRC" archive "$commit_sha" | tar -x -C "$root" \
+    || fail "Could not export $commit_sha from $WORKFLOW_SRC. No cached workflow was used."
+else
+  command -v python3 >/dev/null 2>&1 || fail "python3 is required to read the commit id from the archive."
+
+  # One download, no GitHub API: the archive for a branch or tag records the commit it was cut from
+  # in its pax header, so the SHA comes from the bytes we actually unpack. (The API is rate-limited
+  # per shared egress IP and some cloud proxies refuse it.)
+  archive_url="https://codeload.github.com/${repo}/tar.gz/${ref}"
+  curl "${curl_opts[@]}" "$archive_url" -o "$work_dir/repo.tar.gz" \
+    || fail "Could not fetch $archive_url; check that the ref exists and that the environment allows codeload.github.com. A 403 usually means this session's GitHub access is scoped to other repositories: attach ${repo} to the session, clone it, and rerun with WORKFLOW_SRC=<clone>. No cached workflow was used."
+
+  commit_sha="$(archive_commit "$work_dir/repo.tar.gz")" \
+    || fail "Could not determine the commit of $archive_url. No cached workflow was used."
+
+  if [[ "$ref" =~ ^[0-9a-f]{40}$ && "$ref" != "$commit_sha" ]]; then
+    fail "Pinned WORKFLOW_REF $ref but the archive is commit $commit_sha. No cached workflow was used."
+  fi
+  # Report the immutable form so a run can be reproduced exactly.
+  archive_url="https://codeload.github.com/${repo}/tar.gz/${commit_sha}"
+
+  root="$work_dir/repo"
+  mkdir "$root"
+  tar -xzf "$work_dir/repo.tar.gz" -C "$root" --strip-components=1 \
+    || fail "Could not extract the archive from $archive_url. No cached workflow was used."
+  rm -f "$work_dir/repo.tar.gz"
+fi
 
 missing=()
 wanted=("${required_files[@]}")

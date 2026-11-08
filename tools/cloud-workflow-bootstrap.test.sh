@@ -184,3 +184,23 @@ run evil WORKFLOW_INSTALL=claude HOME="$home" WORKFLOW_BIN_DIR="$tmp/evilbin" ||
 [[ ! -e "$tmp/evilbin/evil.sh" ]] || fail "symlinked tools must not be linked"
 [[ "$("$tmp/evilbin/open-pr.sh")" == real ]] || fail "an existing non-link binary must not be replaced"
 pass "install requires claude files only in install mode; skips symlinked tools; keeps existing binaries"
+
+# WORKFLOW_SRC: install from a local clone (a session whose GitHub scope refuses codeload for this repo).
+srcrepo="$tmp/clone"; mkdir -p "$srcrepo"
+cp -a "$tmp/src-valid/dotfiles-$sha/." "$srcrepo/"
+git -C "$srcrepo" init -q -b main && git -C "$srcrepo" add -A \
+  && git -C "$srcrepo" -c user.name=t -c user.email=t@t commit -q -m snapshot
+head_sha="$(git -C "$srcrepo" rev-parse HEAD)"
+echo "uncommitted" > "$srcrepo/dot_claude/commands/start.md"
+: > "$MOCK_CURL_URLS"
+home2="$tmp/home2"; mkdir -p "$home2"
+run valid WORKFLOW_SRC="$srcrepo" WORKFLOW_INSTALL=claude HOME="$home2" WORKFLOW_BIN_DIR="$tmp/srcbin" \
+  || fail "install from a local clone should succeed"
+[[ ! -s "$MOCK_CURL_URLS" ]] || fail "WORKFLOW_SRC must not download anything"
+grep -q "workflow_source_commit=$head_sha" "$tmp/run.out" || fail "the clone's HEAD should be reported"
+[[ "$(cat "$home2/.claude/commands/start.md")" == "# Start" ]] || fail "only the committed tree is installed, not uncommitted edits"
+[[ "$("$tmp/srcbin/start-ticket.sh")" == start-ticket ]] || fail "tools from the clone should run"
+git -C "$srcrepo" checkout -q -- .
+if run valid WORKFLOW_SRC="$tmp/not-a-repo"; then fail "a non-git WORKFLOW_SRC must fail closed"; fi
+grep -q 'not a git checkout' "$tmp/run.err" || fail "a bad WORKFLOW_SRC should be explained"
+pass "WORKFLOW_SRC installs the committed tree of a local clone without downloading"
