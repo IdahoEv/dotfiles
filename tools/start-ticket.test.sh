@@ -194,6 +194,25 @@ git -C "$ROOT/cloud" checkout -q ccr-session
 (cd "$ROOT/cloud" && START_TICKET_PROVIDER_DIR="$IP" "$ST" 5 --provider fake --in-place --no-tab >/dev/null 2>&1); rc=$?
 check "in-place: re-run re-checks-out the existing branch" "0 5-fake-ticket" "$rc $(git -C "$ROOT/cloud" branch --show-current)"
 
+# The ticket branch starts from the default branch, not from a session branch carrying other commits.
+git -C "$ROOT/cloud" checkout -q ccr-session
+git -C "$ROOT/cloud" branch -q -D 5-fake-ticket
+git -C "$ROOT/cloud" commit -q --allow-empty -m "unrelated session work"
+(cd "$ROOT/cloud" && START_TICKET_PROVIDER_DIR="$IP" "$ST" 5 --provider fake --in-place --no-tab >/dev/null 2>&1)
+check "in-place: new ticket branch starts at the default branch" "0" "$(git -C "$ROOT/cloud" rev-list origin/main..HEAD | wc -l | tr -d ' ')"
+# A branch that exists only on origin is continued, not forked.
+git -C "$ROOT/widgets" branch 6-fake-ticket
+git -C "$ROOT/widgets" checkout -q 6-fake-ticket && git -C "$ROOT/widgets" commit -q --allow-empty -m "remote ticket work" && git -C "$ROOT/widgets" checkout -q main
+(cd "$ROOT/cloud" && START_TICKET_PROVIDER_DIR="$IP" "$ST" 6 --provider fake --in-place --no-tab >/dev/null 2>&1)
+check "in-place: origin-only ticket branch is tracked" "origin/6-fake-ticket" "$(git -C "$ROOT/cloud" rev-parse --abbrev-ref 6-fake-ticket@{upstream})"
+# Uncommitted changes block the switch.
+git -C "$ROOT/cloud" checkout -q ccr-session
+echo dirty >> "$ROOT/cloud/.claude/kickoff-preamble.md"
+(cd "$ROOT/cloud" && START_TICKET_PROVIDER_DIR="$IP" "$ST" 7 --provider fake --in-place --no-tab >/dev/null 2>"$ROOT/dirty.err"); rc=$?
+check "in-place: dirty tree is refused" "1 ccr-session" "$rc $(git -C "$ROOT/cloud" branch --show-current)"
+has "in-place: dirty refusal is explained" "commit or stash" "$ROOT/dirty.err"
+git -C "$ROOT/cloud" checkout -q -- .
+
 # ---- clipboard fallback (open_tab via --tab-only, not in iTerm) ----------------
 CB="$ROOT/clip"; mkdir -p "$CB/bin" "$CB/sys"
 for t in git cat dirname basename sed tr wc mktemp rm date grep awk head cut sort uname env bash; do

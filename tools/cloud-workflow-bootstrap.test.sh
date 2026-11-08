@@ -130,8 +130,8 @@ pass "fails closed when the archive cannot be fetched or extracted"
 expect_failure "missing command" 'missing required' no-start
 expect_failure "missing codex adapter" 'missing required' no-adapter
 expect_failure "missing agy adapter" 'missing required' no-agy-adapter
-expect_failure "missing claude-cloud adapter" 'missing required' no-claude-adapter
-expect_failure "missing gh shim" 'missing required' no-shim
+expect_failure "missing claude-cloud adapter" 'missing required' no-claude-adapter WORKFLOW_INSTALL=claude HOME="$tmp/h0"
+expect_failure "missing gh shim" 'missing required' no-shim WORKFLOW_INSTALL=claude HOME="$tmp/h0"
 expect_failure "missing tool" 'missing required' no-tool
 pass "rejects a snapshot missing a required command, adapter, or tool"
 
@@ -146,6 +146,7 @@ pass "sends timeouts/retry always and the token only on the API call when set"
 # Claude Code cloud install: commands/agents/skills land in the config dir, tools on PATH.
 home="$tmp/home"; mkdir -p "$home"
 env_file="$tmp/claude-env"; : > "$env_file"
+rm -rf "$tmp"/dotfiles-workflow.*
 run valid WORKFLOW_INSTALL=claude HOME="$home" WORKFLOW_BIN_DIR="$tmp/installbin" CLAUDE_ENV_FILE="$env_file" \
   || fail "claude install should succeed"
 [[ -f "$home/.claude/commands/start.md" && -f "$home/.claude/agents/reviewer.md" ]] || fail "commands and agents should be installed"
@@ -163,6 +164,21 @@ grep -q "shim:$tmp/installbin" "$env_file" || fail "the shim must precede the to
 run valid WORKFLOW_INSTALL=claude HOME="$home" WORKFLOW_BIN_DIR="$tmp/installbin" || fail "no-hook install should succeed"
 grep -q "shim:$tmp/installbin" "$home/.bashrc" || fail "without CLAUDE_ENV_FILE, PATH should persist in ~/.bashrc"
 run valid WORKFLOW_INSTALL=claude HOME="$home" WORKFLOW_BIN_DIR="$tmp/installbin" || fail "re-running the install should succeed"
+[[ "$(grep -c 'shim:' "$env_file")" == 1 ]] || fail "CLAUDE_ENV_FILE must not collect duplicate PATH lines"
+no_leftovers || fail "a claude install should clean up its temp dir"
 [[ "$(grep -c 'shim:' "$home/.bashrc")" == 1 ]] || fail "~/.bashrc must not collect duplicate PATH lines"
 expect_failure "unknown install mode" 'Invalid WORKFLOW_INSTALL' valid WORKFLOW_INSTALL=bogus
 pass "WORKFLOW_INSTALL=claude installs commands, agents, skills and tool links, idempotently"
+
+# A pre-Claude-support snapshot still loads for the hosts that do not install; only the install needs the new files.
+run no-claude-adapter || fail "a snapshot without claude-cloud files should still load for non-install runs"
+expect_failure "install without claude files" 'missing required' no-claude-adapter WORKFLOW_INSTALL=claude HOME="$home"
+# Symlinked tools are not linked or chmodded; a real binary of the same name is not replaced.
+make_archive evil
+ln -sf /etc/hostname "$tmp/src-evil/dotfiles-$sha/tools/evil.sh"
+tar -czf "$tmp/evil.tar.gz" -C "$tmp/src-evil" "dotfiles-$sha"
+mkdir -p "$tmp/evilbin"; printf '#!/bin/sh\necho real\n' > "$tmp/evilbin/open-pr.sh"; chmod +x "$tmp/evilbin/open-pr.sh"
+run evil WORKFLOW_INSTALL=claude HOME="$home" WORKFLOW_BIN_DIR="$tmp/evilbin" || fail "evil archive should still install"
+[[ ! -e "$tmp/evilbin/evil.sh" ]] || fail "symlinked tools must not be linked"
+[[ "$("$tmp/evilbin/open-pr.sh")" == real ]] || fail "an existing non-link binary must not be replaced"
+pass "install requires claude files only in install mode; skips symlinked tools; keeps existing binaries"

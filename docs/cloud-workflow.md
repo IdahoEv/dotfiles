@@ -27,7 +27,7 @@ Use it either way:
 - **Per-repo SessionStart hook** in `.claude/settings.json`, running the same command with `WORKFLOW_INSTALL=claude`. Commands installed mid-session may need `/reload-skills`.
 - **Ad hoc**: give the session `workflow/adapters/claude-cloud.md` and run protocol step 1.
 
-Differences from a local session, all in `claude-cloud.md`: `/start` uses `start-ticket.sh --in-place` (ticket branch in the existing checkout, no worktree); `/open-pr` runs `--review none` (Copilot's request is GraphQL; use `mcp__github__request_copilot_review`); `/github-review-comments` reads review state through the GitHub MCP tools instead of `github-review-poll.sh` / `-state.sh`; `/finalize` stops at verify, close, and sync (no worktree, no deploy clone). GitHub tickets only: Shortcut needs `mcp__shortcut__`.
+Differences from a local session, all in `claude-cloud.md`: `/start` uses `start-ticket.sh --in-place` (ticket branch cut from the default branch in the existing checkout, or continuing the remote one; refuses a dirty tree; no worktree); `/open-pr` runs `--review none` (Copilot's request is GraphQL; use `mcp__github__request_copilot_review`); `/github-review-comments` reads review state through the GitHub MCP tools instead of `github-review-poll.sh` / `-state.sh`; `/finalize` stops at verify, close, and sync (no worktree, no deploy clone). GitHub tickets only: Shortcut needs `mcp__shortcut__`.
 
 Unverified from this repo: whether the cloud git proxy accepts a push of the ticket branch when the environment names a different assigned branch. The adapter stops and reports if it does not.
 

@@ -31,12 +31,18 @@ case "$method $path" in
   "GET repos/acme/widgets") echo '{"name":"widgets","owner":{"login":"acme"},"default_branch":"trunk","html_url":"https://github.com/acme/widgets"}' ;;
   "GET repos/acme/widgets/issues/7") echo '{"number":7,"title":"Fix it","body":"b","state":"open","html_url":"u7","assignees":[{"login":"me"}],"sub_issues_summary":{"total":2,"completed":1}}' ;;
   "GET repos/acme/widgets/issues/7/parent") echo '{"number":3,"title":"Epic"}' ;;
-  "GET repos/acme/widgets/issues/7/sub_issues") echo '[{"number":8,"title":"S","state":"open"}]' ;;
-  "GET repos/acme/widgets/pulls?head=acme:7-fix&state=all&per_page=100") echo '[{"number":12,"state":"closed","merged_at":"2026-01-01T00:00:00Z","merge_commit_sha":"abc","html_url":"pu","title":"T","node_id":"PR_x","head":{"ref":"7-fix","sha":"h1"},"base":{"ref":"trunk"}}]' ;;
-  "GET repos/acme/widgets/pulls?head=acme:7-fix&state=open&per_page=100") echo '[]' ;;
+  "GET repos/acme/widgets/issues/7/sub_issues?per_page=100") echo '[{"number":8,"title":"S","state":"open"}]' ;;
+  "GET repos/acme/widgets/pulls?head=acme%3A7-fix&state=all&per_page=100") echo '[{"number":12,"state":"closed","merged_at":"2026-01-01T00:00:00Z","merge_commit_sha":"abc","html_url":"pu","title":"T","node_id":"PR_x","head":{"ref":"7-fix","sha":"h1"},"base":{"ref":"trunk"}}]' ;;
+  "GET repos/acme/widgets/pulls?head=acme%3A7-fix&state=closed&per_page=100") echo '[{"number":12,"state":"closed","merged_at":"2026-01-01T00:00:00Z","merge_commit_sha":"abc","html_url":"pu","title":"T","node_id":"PR_x","head":{"ref":"7-fix","sha":"h1"},"base":{"ref":"trunk"}}]' ;;
+  "GET repos/acme/widgets/pulls?head=acme%3A7-fix&state=open&per_page=100") echo '[]' ;;
   "GET repos/acme/widgets/pulls/12") echo '{"number":12,"state":"closed","merged_at":"2026-01-01T00:00:00Z","merge_commit_sha":"abc","html_url":"pu","title":"T","node_id":"PR_x","head":{"ref":"7-fix","sha":"h1"},"base":{"ref":"trunk"}}' ;;
   "GET repos/acme/widgets/pulls/12/commits") echo '[{"sha":"c1","commit":{"committer":{"date":"2026-01-01T00:00:00Z"}}}]' ;;
   "POST repos/acme/widgets/pulls") echo '{"html_url":"https://github.com/acme/widgets/pull/13"}' ;;
+  "GET repos/acme/widgets/issues/9/parent") echo "HTTP 404: Not Found" >&2; exit 1 ;;
+  "GET repos/acme/widgets/issues/9") echo '{"number":9,"title":"T","body":"","state":"open","html_url":"u9","assignees":[]}' ;;
+  "GET repos/acme/widgets/issues/9/sub_issues?per_page=100") echo '[]' ;;
+  "GET repos/acme/widgets/issues/10") echo '{"number":10,"title":"T","body":"","state":"open","html_url":"u10","assignees":[]}' ;;
+  "GET repos/acme/widgets/issues/10/parent") echo "HTTP 502: Bad Gateway" >&2; exit 1 ;;
   POST*|PATCH*) echo '{}' ;;
   *) echo "unexpected: $method $path" >&2; exit 1 ;;
 esac
@@ -77,6 +83,16 @@ g pr create --title T --head 7-fix --draft --body-file <(echo b) >/dev/null
 g pr edit 12 --title New
 grep -q 'api -X PATCH repos/acme/widgets/pulls/12' "$FAKE_LOG" || fail "pr edit"
 pass "pr create/edit and no-argument pr view work over REST"
+
+[[ "$(g issue view 9 --json parent --jq '.parent')" == null ]] || fail "a 404 parent means no parent"
+if g issue view 10 --json parent >/dev/null 2>&1; then fail "a non-404 error must not read as 'no parent'"; fi
+if g issue view 7 --json bogusfield >/dev/null 2>&1; then fail "unknown --json fields must fail"; fi
+if g issue view '1/../x' >/dev/null 2>&1; then fail "non-numeric ids must be refused"; fi
+if g issue view 1 -R 'a/b/../c' >/dev/null 2>&1; then fail "odd repo slugs must be refused"; fi
+g pr comment 12 --body hello; grep -q 'api -X POST repos/acme/widgets/issues/12/comments' "$FAKE_LOG" || fail "pr comment"
+[[ "$(g pr list --head 7-fix --state all --json number --jq length)" == 1 ]] || fail "fixture sanity: merged PR is listed under all"
+[[ -z "$(g pr list --head 7-fix --state closed --json number --jq '.[0].number // empty')" ]] || fail "--state closed must exclude merged PRs"
+pass "404 means absent, other errors are fatal; unknown fields, odd ids and slugs fail; pr comment and closed-state work"
 
 g auth status | grep -q 'Logged in as me' || fail "auth status"
 [[ "$(g workflow view x)" == "REAL-GH workflow view x" ]] || fail "unknown commands pass through"

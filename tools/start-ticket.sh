@@ -586,10 +586,25 @@ if [ -n "$in_place" ]; then
   [ -n "$ST_BRANCH" ] || die "provider gave no branch name for --in-place"
   wt="$repo_root"
   if [ "$(git -C "$wt" branch --show-current)" != "$ST_BRANCH" ]; then
+    # Switching branches would carry uncommitted edits onto the ticket branch.
+    [ -z "$(git -C "$wt" status --porcelain --untracked-files=no)" ] \
+      || die "uncommitted changes in $wt; commit or stash them before --in-place switches to $ST_BRANCH"
+    git -C "$wt" fetch -q origin >&2 2>/dev/null || echo "start-ticket: WARN could not fetch origin; branching from local refs" >&2
     if git -C "$wt" show-ref --verify --quiet "refs/heads/$ST_BRANCH"; then
       git -C "$wt" checkout "$ST_BRANCH" >&2 || die "could not check out $ST_BRANCH"
+    elif git -C "$wt" show-ref --verify --quiet "refs/remotes/origin/$ST_BRANCH"; then
+      # A resumed ticket: continue the remote branch rather than forking a divergent one.
+      git -C "$wt" checkout -b "$ST_BRANCH" --track "origin/$ST_BRANCH" >&2 || die "could not check out origin/$ST_BRANCH"
     else
-      git -C "$wt" checkout -b "$ST_BRANCH" >&2 || die "could not create $ST_BRANCH"
+      # Same start point as the worktree path: the default branch, not whatever
+      # session branch the cloud harness left checked out.
+      base="$(cd "$wt" && gt::default_branch 2>/dev/null || true)"
+      if [ -n "$base" ] && git -C "$wt" rev-parse --verify --quiet "origin/$base" >/dev/null; then
+        git -C "$wt" checkout -b "$ST_BRANCH" "origin/$base" >&2 || die "could not create $ST_BRANCH"
+      else
+        echo "start-ticket: WARN no default branch resolved; branching $ST_BRANCH from HEAD" >&2
+        git -C "$wt" checkout -b "$ST_BRANCH" >&2 || die "could not create $ST_BRANCH"
+      fi
     fi
   fi
 else

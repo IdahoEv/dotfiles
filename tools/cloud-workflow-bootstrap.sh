@@ -31,9 +31,12 @@ readonly required_files=(
   dot_claude/commands/open-pr.md
   workflow/adapters/codex.md
   workflow/adapters/agy.md
-  workflow/adapters/claude-cloud.md
   tools/start-ticket.sh
   tools/open-pr.sh
+)
+# Only the Claude install needs these; Codex/AGY runs pinned to an older SHA must still load.
+readonly claude_required_files=(
+  workflow/adapters/claude-cloud.md
   tools/cloud-gh-shim.py
 )
 
@@ -93,7 +96,9 @@ tar -xzf "$work_dir/repo.tar.gz" -C "$root" --strip-components=1 \
 rm -f "$work_dir/repo.tar.gz"
 
 missing=()
-for file in "${required_files[@]}"; do
+wanted=("${required_files[@]}")
+[[ "$install_mode" != claude ]] || wanted+=("${claude_required_files[@]}")
+for file in "${wanted[@]}"; do
   [[ -s "$root/$file" ]] || missing+=("$file")
 done
 ((${#missing[@]} == 0)) \
@@ -104,19 +109,27 @@ link_tools() { # link_tools <dir>
   local tool
   mkdir -p "$1"
   for tool in "$root"/tools/*.sh; do
-    [[ "$tool" == *.test.sh ]] || ln -sf "$tool" "$1/$(basename "$tool")"
+    [[ "$tool" == *.test.sh || ! -f "$tool" || -L "$tool" ]] && continue
+    chmod +x "$tool"
+    dest="$1/$(basename "$tool")"
+    if [[ -e "$dest" && ! -L "$dest" ]]; then
+      printf 'cloud-workflow-bootstrap: WARN: %s exists and is not a link; not replacing it\n' "$dest" >&2
+      continue
+    fi
+    ln -sf "$tool" "$dest"
   done
 }
-
-chmod +x "$root"/tools/*.sh
 
 if [[ "$install_mode" == claude ]]; then
   # Keep the snapshot: installed links point into it. Replace any copy of the same commit.
   keep="${WORKFLOW_HOME:-$HOME/.cache/dotfiles-workflow}/$commit_sha"
   mkdir -p "$(dirname "$keep")"
+  rm -rf "$keep.new"
+  mv "$root" "$keep.new"
   rm -rf "$keep"
-  mv "$root" "$keep"
+  mv "$keep.new" "$keep"
   root="$keep"
+  rm -rf "$work_dir"
 
   claude_dir="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
   # Source names carry chezmoi prefixes (executable_); strip them the way chezmoi would.
@@ -144,7 +157,8 @@ if [[ "$install_mode" == claude ]]; then
   path_line="export PATH=\"$shim_dir:$bin_dir:\$PATH\""
   if [[ -n "${CLAUDE_ENV_FILE:-}" ]]; then
     # A SessionStart hook can export PATH for the whole session through this file.
-    printf '%s\n' "$path_line" >> "$CLAUDE_ENV_FILE"
+    touch "$CLAUDE_ENV_FILE"
+    grep -qxF "$path_line" "$CLAUDE_ENV_FILE" || printf '%s\n' "$path_line" >> "$CLAUDE_ENV_FILE"
   elif [[ -w "$HOME" ]]; then
     # No hook: persist it for the shells the session starts.
     touch "$HOME/.bashrc"

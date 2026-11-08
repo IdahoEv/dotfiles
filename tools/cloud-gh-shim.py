@@ -17,6 +17,7 @@ Covered, with the flags the workflow uses:
   pr list [--head B] [--state open|closed|merged|all] --json F
   pr view [N] --json number,url,title,id,headRefName,headRefOid,baseRefName,commits
   pr create --title T --head B [--base B] [--body T|--body-file F] [--draft]
+  pr comment [N] --body T|--body-file F
   pr edit N [--title T] [--body T|--body-file F]
 Anything else, including `gh api`, runs the real gh unchanged. Set GH_SHIM_REAL
 to the real binary; otherwise the first other `gh` on PATH is used.
@@ -24,7 +25,9 @@ to the real binary; otherwise the first other `gh` on PATH is used.
 import json
 import os
 import re
+import shutil
 import subprocess
+import urllib.parse
 import sys
 
 
@@ -34,6 +37,8 @@ def find_real():
         return real
     me = os.path.realpath(__file__)
     for d in os.environ.get("PATH", "").split(os.pathsep):
+        if not os.path.isabs(d):  # "" and "." would resolve against the cwd
+            continue
         cand = os.path.join(d, "gh")
         if os.path.isfile(cand) and os.access(cand, os.X_OK) and os.path.realpath(cand) != me:
             return cand
@@ -47,6 +52,10 @@ def passthrough(argv):
     os.execv(REAL, [REAL] + argv)
 
 
+class ApiError(Exception):
+    pass
+
+
 def api(path, method="GET", fields=None, paginate=False, quiet=False):
     cmd = [REAL, "api", "-X", method, path]
     if paginate:
@@ -55,8 +64,9 @@ def api(path, method="GET", fields=None, paginate=False, quiet=False):
         cmd += ["-f" if isinstance(v, str) else "-F", f"{k}={v if isinstance(v, str) else json.dumps(v).strip(chr(34))}"]
     r = subprocess.run(cmd, capture_output=True, text=True)
     if r.returncode != 0:
-        if not quiet:
-            sys.stderr.write(r.stderr or r.stdout)
+        if quiet:
+            raise ApiError(r.stderr or r.stdout)
+        sys.stderr.write(r.stderr or r.stdout)
         sys.exit(r.returncode)
     if paginate:
         # --paginate prints one JSON document per page; merge arrays.
@@ -72,11 +82,14 @@ def api(path, method="GET", fields=None, paginate=False, quiet=False):
     return json.loads(r.stdout) if r.stdout.strip() else {}
 
 
-def try_api(path):
+def try_api(path, paginate=False):
+    """The resource, or None when it does not exist (404); any other failure is fatal."""
     try:
-        return api(path, quiet=True)
-    except SystemExit:
-        return None
+        return api(path, paginate=paginate, quiet=True)
+    except ApiError as e:
+        if "404" in str(e):
+            return None
+        sys.exit(f"gh shim: {path}: {e}")
 
 
 def split_repo(args):
@@ -89,7 +102,20 @@ def split_repo(args):
         else:
             rest.append(args[i])
             i += 1
-    return (slug or default_slug()), rest
+    slug = slug or default_slug()
+    if not re.fullmatch(r"[\w.-]+/[\w.-]+", slug):
+        sys.exit(f"gh shim: invalid repository '{slug}'")
+    return slug, rest
+
+
+def num0(pos):
+    return number(pos[0] if pos else "")
+
+
+def number(value):
+    if not re.fullmatch(r"\d+", value or ""):
+        sys.exit(f"gh shim: expected a number, got '{value}'")
+    return value
 
 
 def default_slug():
@@ -127,11 +153,17 @@ def emit(obj, vals):
     fields = vals.get("--json")
     if fields:
         want = [f for f in fields.split(",") if f]
+        sample = obj if isinstance(obj, dict) else (obj[0] if obj else None)
+        unknown = [f for f in want if sample is not None and f not in sample]
+        if unknown:
+            sys.exit("gh shim: unsupported --json field(s): " + ", ".join(unknown))
         obj = {k: obj.get(k) for k in want if k in obj} if isinstance(obj, dict) else [
             {k: o.get(k) for k in want if k in o} for o in obj]
     expr = vals.get("--jq") or vals.get("-q")
     text = json.dumps(obj)
     if expr:
+        if not shutil.which("jq"):
+            sys.exit("gh shim: jq is required for --jq and was not found on PATH")
         r = subprocess.run(["jq", "-r", expr], input=text, capture_output=True, text=True)
         sys.stdout.write(r.stdout)
         sys.stderr.write(r.stderr)
@@ -163,7 +195,7 @@ def issue_json(slug, n):
     }
     parent = try_api(f"repos/{slug}/issues/{n}/parent")
     out["parent"] = {"number": parent["number"], "title": parent["title"]} if parent and "number" in parent else None
-    subs = try_api(f"repos/{slug}/issues/{n}/sub_issues") or []
+    subs = try_api(f"repos/{slug}/issues/{n}/sub_issues?per_page=100", paginate=True) or []
     out["subIssues"] = {"nodes": [{"number": s["number"], "title": s["title"], "state": s["state"].upper()}
                                   for s in subs]}
     return out
@@ -198,23 +230,23 @@ def cmd_issue(args):
     slug, rest = split_repo(args[1:])
     if sub == ["view"]:
         pos, vals, _ = opts(rest, {"--json", "--jq", "-q"})
-        emit(issue_json(slug, pos[0]), vals)
+        emit(issue_json(slug, num0(pos)), vals)
     elif sub == ["edit"]:
         pos, vals, _ = opts(rest, {"--add-assignee"})
         if set(vals) != {"--add-assignee"}:
             sys.exit("gh shim: issue edit only supports --add-assignee")
         who = whoami() if vals["--add-assignee"] == "@me" else vals["--add-assignee"]
-        api(f"repos/{slug}/issues/{pos[0]}/assignees", "POST", {"assignees[]": who})
+        api(f"repos/{slug}/issues/{num0(pos)}/assignees", "POST", {"assignees[]": who})
     elif sub == ["comment"]:
         pos, vals, _ = opts(rest, {"--body", "--body-file"})
-        api(f"repos/{slug}/issues/{pos[0]}/comments", "POST", {"body": body_arg(vals) or ""})
+        api(f"repos/{slug}/issues/{num0(pos)}/comments", "POST", {"body": body_arg(vals) or ""})
     elif sub == ["close"]:
         pos, vals, _ = opts(rest, {"--comment", "-c", "--reason", "-r"})
         text = vals.get("--comment") or vals.get("-c")
         if text:
-            api(f"repos/{slug}/issues/{pos[0]}/comments", "POST", {"body": text})
+            api(f"repos/{slug}/issues/{num0(pos)}/comments", "POST", {"body": text})
         reason = (vals.get("--reason") or vals.get("-r") or "completed").replace(" ", "_")
-        api(f"repos/{slug}/issues/{pos[0]}", "PATCH", {"state": "closed", "state_reason": reason})
+        api(f"repos/{slug}/issues/{num0(pos)}", "PATCH", {"state": "closed", "state_reason": reason})
     else:
         passthrough(["issue"] + args)
 
@@ -222,9 +254,14 @@ def cmd_issue(args):
 def find_prs(slug, head, state):
     q = "all" if state in ("all", "merged") else state
     owner = slug.split("/")[0]
-    prs = api(f"repos/{slug}/pulls?head={owner}:{head}&state={q}&per_page=100", paginate=True)
+    prs = api(f"repos/{slug}/pulls?head={urllib.parse.quote(owner + ':' + head, safe='')}&state={q}&per_page=100",
+              paginate=True)
     out = [pr_json(slug, p) for p in prs]
-    return [p for p in out if p["state"] == "MERGED"] if state == "merged" else out
+    if state == "merged":
+        return [p for p in out if p["state"] == "MERGED"]
+    if state == "closed":  # REST "closed" includes merged; gh's does not
+        return [p for p in out if p["state"] == "CLOSED"]
+    return out
 
 
 def current_branch():
@@ -248,6 +285,8 @@ def cmd_pr(args):
             d = api(f"repos/{slug}/pulls/{pos[0]}")
         else:
             branch = pos[0] if pos else current_branch()
+            if not branch:
+                sys.exit("gh shim: no branch checked out; pass a PR number")
             found = find_prs(slug, branch, "open") or find_prs(slug, branch, "all")
             if not found:
                 sys.exit(f'no pull requests found for branch "{branch}"')
@@ -276,7 +315,19 @@ def cmd_pr(args):
         body = body_arg(vals) if ("--body" in vals or "--body-file" in vals) else vals.get("-b")
         if body is not None:
             fields["body"] = body
-        api(f"repos/{slug}/pulls/{pos[0]}", "PATCH", fields)
+        api(f"repos/{slug}/pulls/{num0(pos)}", "PATCH", fields)
+    elif sub == ["comment"]:
+        pos, vals, _ = opts(rest, {"--body", "-b", "--body-file", "-F"})
+        body = body_arg(vals) if ("--body" in vals or "--body-file" in vals) else vals.get("-b")
+        if pos:
+            n = number(pos[0])
+        else:
+            branch = current_branch()
+            found = find_prs(slug, branch, "open") if branch else []
+            if not found:
+                sys.exit("gh shim: no open PR for the current branch; pass a PR number")
+            n = found[0]["number"]
+        api(f"repos/{slug}/issues/{n}/comments", "POST", {"body": body or ""})
     else:
         passthrough(["pr"] + args)
 
