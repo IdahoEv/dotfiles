@@ -44,11 +44,11 @@ The source is a weekly review (here generalized to a periodic one) written for o
 | Aspect | Design |
 | --- | --- |
 | Lens file | Agent-format file; `use_when: periodic project review` key above `description:` (see below), plus a `Lens: collect \| triage` tag. Read-only. Own contract skill, `review-lens-contract` (snapshot path in, findings out, file:line evidence, `lens` tag, word cap), because `reviewer-contract` is diff-scoped |
-| Discovery | Same tiers and name-dedup as `/local-review-cycle`: repo `.claude/agents/` → overlay `claude/agents/` (`project-config.sh list agents`) → global `dot_claude/agents/`. A project lens with a global lens's name overrides it |
-| Selection | All discovered lenses run unless named in `review.md` `Skip:`. No `use_when:` matching: unlike diff review, there is no diff to match against |
+| Discovery | Same tiers and name-dedup as `/local-review-cycle`: repo `.claude/agents/` → personal `docs/local/reviewers/*.md` and overlay `claude/agents/` (`project-config.sh list agents`) → global `dot_claude/agents/`. A project lens with a global lens's name overrides it. Personal and overlay files are not registered agent types, so they launch the way the cycle launches them (read the file, run its body as a `general-purpose` brief) |
+| Selection | Discovered files are first filtered to those declaring `Lens: collect | triage`, so ordinary agents (`local-review-cycle-manager`, `correctness-reviewer`) never launch as lenses. Every remaining lens runs unless named in `review.md` `Skip:`. No `use_when:` matching: unlike diff review, there is no diff to match against |
 | Global defaults | `review-architecture`, `review-quality`, `review-docs`, `review-plan`, `review-triage`. They read `review.md` for scope, probes, and doc roles; they hold no project text |
 | Per-project lenses | Overlay agents for domain checks the globals can't express (e.g. a module-boundary specialist) |
-| Tracker access | Triage and apply go through the provider seam, not hard-coded `gh` |
+| Tracker access | Triage and apply go through the provider seam, not hard-coded `gh`. The seam today (`tools/start-ticket-providers/*.sh`) covers only ticket fetch, worktree, and in-progress; #135 and #137 extend it with list/search, create issue, comment, and label/state update. A provider that lacks them falls back to report-only: triage reports, `--apply` refuses to file or edit |
 
 ## `use_when:` placement (both review kinds)
 
@@ -71,17 +71,17 @@ The source is a weekly review (here generalized to a periodic one) written for o
 | Public repo | No project names, paths, ticket text, or probes in lenses, templates, or docs; the template uses placeholders only. `dotfiles-safety-reviewer` runs on every follow-up |
 | Machine-specific | A scheduled run needs authenticated tracker access and a delivery channel on the executing host. Email delivery needs a mail connector; absent, fall back to `file:` or `inline`. Overlay content (and so work-specific config) exists only where that overlay is synced. Snapshot uses a repo-local scratch dir, which must be gitignored |
 | Safety invariants carried over | Abort if the tracker pull fails or truncates; never mutate an existing ticket; idempotent pending-actions rows keyed `(issue, action)`; clean up the snapshot on every exit |
-| Telemetry | New `wf-event.sh` events per lens finding and run result, following `review.finding`/`review.result` |
+| Telemetry | New `wf-event.sh` events per lens finding and run result, following `review.finding`/`review.result`. `wf::emit` writes nothing outside a ticket branch unless `ticket=`/`scheme=` are passed, and a scheduled default-branch run has neither. #138 defines a stable run identity (e.g. `ticket=project-review-<date>`) passed explicitly, and how `wf-report` shows these non-diff runs, before telemetry is claimed |
 | Adapters | `workflow/adapters/*` and `tools/cloud-workflow-adapter.test.sh` need a decision on whether the command is covered |
 
 ## Follow-up tickets
 
-Ordered; each is one reviewable unit.
+Ordered; each is one reviewable unit. **#140 lands first and alone**: it changes live selection for every existing reviewer, so nothing else merges until it does.
 
 | Issue | Ticket | Depends on |
 | --- | --- | --- |
-| #132 | `review.md` overlay template; `project-config` init/find coverage and tests; `workflow-tools-usage.md` entry | — |
 | #140 | Move `Use when:` to its own `use_when:` frontmatter key for all reviewers (local and periodic); update contract, procedure, architecture doc | — |
+| #132 | `review.md` overlay template with sections Planning docs, Review state, Cadence (`Window:`, path globs), Scope, Invariants, Lenses, Delivery; `project-config` init/find coverage and tests; `workflow-tools-usage.md` entry | #140 |
 | #133 | `review-lens-contract` skill and lens discovery rules (tiers, override, `Skip:`), using `use_when:` | #132, #140 |
 | #134 | Global lenses: architecture, quality, docs, plan; driven by `review.md` | #133 |
 | #135 | Triage lens plus pending-actions file protocol; tracker via provider seam | #133 |
