@@ -27,7 +27,7 @@ The source is a weekly review (here generalized to a periodic one) written for o
 | --- | --- | --- |
 | Repo coordinates, default branch | `repo_facts` (origin remote) | Nothing to configure |
 | Tracker and provider | `governor.md` (tracker) + `start-ticket.conf` `provider` | Existing keys; GitHub first, others via the provider pattern in `tools/start-ticket-providers` |
-| Planning docs (roadmap, milestones, todo) | `review.md` § Planning docs | Roles, not names: `roadmap`, `capacity-targets`, `current-focus` |
+| Planning docs (roadmap, milestones, todo) | `review.md` § Planning docs | Roles, not names: `roadmap`, `capacity-targets`, `current-focus`. **Ownership:** `review.md` owns the paths the review reads. `governor.md` § Key documents stays the governor's reading list and is the fallback when a role is absent from `review.md`; a path is never maintained in both |
 | Backlog, archive, pending-actions docs | `review.md` § Review state | Paths the apply step may edit; absent = report-only |
 | Cadence and activity gate | `review.md` § Cadence | `Window:` in days (default 7) and path globs; the gate skips a run with no significant activity in the window. The schedule itself lives in the routine, so each project sets its own |
 | Subsystem map | `review.md` § Scope | Name → paths, feeds the architecture lens |
@@ -68,7 +68,7 @@ The source is a weekly review (here generalized to a periodic one) written for o
 
 | Concern | Handling |
 | --- | --- |
-| Public repo | No project names, paths, ticket text, or probes in lenses, templates, or docs; the template uses placeholders only. `dotfiles-safety-reviewer` runs on every follow-up |
+| Public repo | No project names, paths, ticket text, or probes in lenses, templates, or docs; the template uses placeholders only. `dotfiles-safety-reviewer` (a diff reviewer for this repo, not a periodic lens) runs on every follow-up PR. No generic safety lens ships; a project wanting a periodic safety check supplies one as an overlay lens |
 | Machine-specific | A scheduled run needs authenticated tracker access and a delivery channel on the executing host. Email delivery needs a mail connector; absent, fall back to `file:` or `inline`. Overlay content (and so work-specific config) exists only where that overlay is synced. Snapshot uses a repo-local scratch dir, which must be gitignored |
 | Safety invariants carried over | Abort if the tracker pull fails or truncates; never mutate an existing ticket; idempotent pending-actions rows keyed `(issue, action)`; clean up the snapshot on every exit |
 | Telemetry | New `wf-event.sh` events per lens finding and run result, following `review.finding`/`review.result`. `wf::emit` writes nothing outside a ticket branch unless `ticket=`/`scheme=` are passed, and a scheduled default-branch run has neither. #138 defines a stable run identity (e.g. `ticket=project-review-<date>`) passed explicitly, and how `wf-report` shows these non-diff runs, before telemetry is claimed |
