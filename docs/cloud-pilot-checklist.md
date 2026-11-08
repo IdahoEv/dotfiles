@@ -5,7 +5,7 @@ Results from the real phone-launched pilot required by issue #74. Fill in each r
 | Check | Result | Evidence |
 | --- | --- | --- |
 | Mobile launch | Not run | |
-| Outbound HTTPS to `raw.githubusercontent.com` and `codeload.github.com` in the agent phase (the bootstrap makes no API call) | Not run | If blocked, move the fetch to a setup script and update the bootstrap docs. |
+| Outbound HTTPS to `raw.githubusercontent.com` (required) and `codeload.github.com` (preferred) in the agent phase (the bootstrap makes no API call) | Not run | If blocked, move the fetch to a setup script and update the bootstrap docs. |
 | Repository access and push/PR credentials | Not run | |
 | Tarball retrieval at a recorded SHA | Not run | |
 | `/start` and `/open-pr` executed from the fetched command files | Not run | Note any step the adapter had to stop on. |

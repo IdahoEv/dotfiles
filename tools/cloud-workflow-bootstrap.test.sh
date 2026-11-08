@@ -6,7 +6,8 @@ bootstrap="$tools_dir/cloud-workflow-bootstrap.sh"
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
 
-unset GITHUB_TOKEN WORKFLOW_INSTALL WORKFLOW_HOME WORKFLOW_BIN_DIR CLAUDE_CONFIG_DIR CLAUDE_ENV_FILE
+export WORKFLOW_FETCH=archive   # the default tries archive then raw; most cases pin the archive path
+unset GITHUB_TOKEN WORKFLOW_SRC WORKFLOW_INSTALL WORKFLOW_HOME WORKFLOW_BIN_DIR CLAUDE_CONFIG_DIR CLAUDE_ENV_FILE
 
 sha=0123456789abcdef0123456789abcdef01234567
 pin=fedcba9876543210fedcba9876543210fedcba98
@@ -31,6 +32,12 @@ done
 printf '%s\n' "$url" >> "$MOCK_CURL_URLS"
 [[ "${MOCK_CURL_FAIL:-}" != 1 ]] || exit 22
 case "$url" in
+  https://raw.githubusercontent.com/IdahoEv/dotfiles/*/*)
+    rel="${url#https://raw.githubusercontent.com/IdahoEv/dotfiles/}"; rel="${rel#*/}"
+    [[ "$rel" != "${MOCK_RAW_FAIL:-}" ]] || exit 22
+    [[ -n "$out" ]] || exit 2
+    mkdir -p "$(dirname "$out")"
+    cp "$MOCK_RAW_DIR/$rel" "$out" ;;
   https://codeload.github.com/IdahoEv/dotfiles/tar.gz/*)
     [[ "${MOCK_ARCHIVE_FAIL:-}" != 1 ]] || exit 22
     [[ -n "$out" ]] || exit 2
@@ -204,3 +211,59 @@ git -C "$srcrepo" checkout -q -- .
 if run valid WORKFLOW_SRC="$tmp/not-a-repo"; then fail "a non-git WORKFLOW_SRC must fail closed"; fi
 grep -q 'not a git checkout' "$tmp/run.err" || fail "a bad WORKFLOW_SRC should be explained"
 pass "WORKFLOW_SRC installs the committed tree of a local clone without downloading"
+
+# Raw fetch: the archive is refused (a session scoped to other repos), so files come from
+# raw.githubusercontent.com, verified against workflow/manifest.txt.
+raw="$tmp/raw"; rm -rf "$raw"; mkdir -p "$raw"
+cp -a "$tmp/src-valid/dotfiles-$sha/." "$raw/"
+python3 -I - "$raw" <<'PY'
+import hashlib, os, sys
+root = sys.argv[1]
+lines = []
+for d, _, files in os.walk(root):
+    for f in files:
+        full = os.path.join(d, f)
+        rel = os.path.relpath(full, root)
+        if rel == "workflow/manifest.txt":
+            continue
+        mode = "755" if os.access(full, os.X_OK) else "644"
+        lines.append(f"{hashlib.sha256(open(full, 'rb').read()).hexdigest()}  {mode}  {rel}\n")
+os.makedirs(os.path.join(root, "workflow"), exist_ok=True)
+open(os.path.join(root, "workflow", "manifest.txt"), "w").write("".join(sorted(lines, key=lambda l: l.split("  ", 2)[2])))
+PY
+export MOCK_RAW_DIR="$raw"
+rawrun() { run valid MOCK_ARCHIVE_FAIL=1 WORKFLOW_FETCH= "$@"; }   # default mode: archive refused, raw fallback
+
+: > "$MOCK_CURL_URLS"
+rawrun || fail "raw fallback should install when the archive is refused"
+grep -q 'archive download refused' "$tmp/run.err" || fail "the fallback should be announced"
+grep -q 'workflow_source_commit=manifest-[0-9a-f]\{12\}$' "$tmp/run.out" || fail "a branch ref is stamped with the manifest digest"
+grep -q 'workflow_source_ref=main' "$tmp/run.out" || fail "the ref should be reported"
+root="$(sed -n 's/^workflow_root=//p' "$tmp/run.out")"
+[[ -f "$root/dot_claude/commands/start.md" && -x "$root/tools/open-pr.sh" ]] || fail "files and modes should come from the manifest"
+! grep -q 'api.github.com' "$MOCK_CURL_URLS" || fail "raw mode must not call the API"
+pass "falls back to raw.githubusercontent.com files verified against the manifest"
+
+: > "$MOCK_CURL_URLS"
+run valid WORKFLOW_FETCH=raw || fail "WORKFLOW_FETCH=raw should install"
+! grep -q 'codeload' "$MOCK_CURL_URLS" || fail "WORKFLOW_FETCH=raw must not touch codeload"
+run valid WORKFLOW_FETCH=raw WORKFLOW_REF="$pin" || fail "a pinned SHA should load via raw"
+grep -q "workflow_source_commit=$pin" "$tmp/run.out" || fail "a pinned SHA is its own commit stamp"
+expect_failure "invalid fetch mode" 'Invalid WORKFLOW_FETCH' valid WORKFLOW_FETCH=bogus
+pass "WORKFLOW_FETCH forces raw-only; a pinned SHA keeps its exact stamp"
+
+cp "$raw/tools/open-pr.sh" "$tmp/open-pr.sh.orig"
+printf '# tampered\n' >> "$raw/tools/open-pr.sh"
+expect_failure "tampered file" 'does not match workflow/manifest.txt' valid WORKFLOW_FETCH=raw
+cp "$tmp/open-pr.sh.orig" "$raw/tools/open-pr.sh"
+expect_failure "missing file" 'Could not fetch every file' valid WORKFLOW_FETCH=raw MOCK_RAW_FAIL=tools/open-pr.sh
+cp "$raw/workflow/manifest.txt" "$tmp/manifest.orig"
+printf '%s  644  ../escape.txt\n' "$(printf x | sha256sum | cut -d' ' -f1)" >> "$raw/workflow/manifest.txt"
+expect_failure "traversal in manifest" 'manifest.txt is malformed' valid WORKFLOW_FETCH=raw
+cp "$tmp/manifest.orig" "$raw/workflow/manifest.txt"
+pass "raw mode fails closed on tampered files, missing files, and a manifest with unsafe paths"
+
+home3="$tmp/home3"; mkdir -p "$home3"
+rawrun WORKFLOW_INSTALL=claude HOME="$home3" WORKFLOW_BIN_DIR="$tmp/rawbin" || fail "claude install should work from raw files"
+[[ -f "$home3/.claude/commands/start.md" && "$("$tmp/rawbin/start-ticket.sh")" == start-ticket ]] || fail "raw-fetched snapshot should install like an archive"
+pass "WORKFLOW_INSTALL=claude installs from a raw-fetched snapshot"

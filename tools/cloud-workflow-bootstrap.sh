@@ -6,6 +6,8 @@
 #   WORKFLOW_REF   branch, tag, or full commit SHA to use (default: main)
 #                  Needs outbound HTTPS to codeload.github.com only (no GitHub API call).
 #
+#   WORKFLOW_FETCH "archive" (codeload tarball only) or "raw" (raw.githubusercontent.com files only);
+#                  default tries the archive, then falls back to raw.
 #   WORKFLOW_SRC   a local clone to install from instead of downloading (committed tree at
 #                  WORKFLOW_REF, default HEAD). For sessions where GitHub access is scoped to
 #                  other repositories and codeload.github.com refuses this one.
@@ -91,29 +93,81 @@ if [[ -n "${WORKFLOW_SRC:-}" ]]; then
   git -C "$WORKFLOW_SRC" archive "$commit_sha" | tar -x -C "$root" \
     || fail "Could not export $commit_sha from $WORKFLOW_SRC. No cached workflow was used."
 else
-  command -v python3 >/dev/null 2>&1 || fail "python3 is required to read the commit id from the archive."
-
-  # One download, no GitHub API: the archive for a branch or tag records the commit it was cut from
-  # in its pax header, so the SHA comes from the bytes we actually unpack. (The API is rate-limited
-  # per shared egress IP and some cloud proxies refuse it.)
-  archive_url="https://codeload.github.com/${repo}/tar.gz/${ref}"
-  curl "${curl_opts[@]}" "$archive_url" -o "$work_dir/repo.tar.gz" \
-    || fail "Could not fetch $archive_url; check that the ref exists and that the environment allows codeload.github.com. A 403 usually means this session's GitHub access is scoped to other repositories: attach ${repo} to the session, clone it, and rerun with WORKFLOW_SRC=<clone>. No cached workflow was used."
-
-  commit_sha="$(archive_commit "$work_dir/repo.tar.gz")" \
-    || fail "Could not determine the commit of $archive_url. No cached workflow was used."
-
-  if [[ "$ref" =~ ^[0-9a-f]{40}$ && "$ref" != "$commit_sha" ]]; then
-    fail "Pinned WORKFLOW_REF $ref but the archive is commit $commit_sha. No cached workflow was used."
-  fi
-  # Report the immutable form so a run can be reproduced exactly.
-  archive_url="https://codeload.github.com/${repo}/tar.gz/${commit_sha}"
-
+  command -v python3 >/dev/null 2>&1 || fail "python3 is required (commit id and manifest checks)."
+  readonly fetch_mode="${WORKFLOW_FETCH:-}"
+  [[ -z "$fetch_mode" || "$fetch_mode" == archive || "$fetch_mode" == raw ]] \
+    || fail "Invalid WORKFLOW_FETCH '$fetch_mode'; use 'archive' or 'raw'."
   root="$work_dir/repo"
-  mkdir "$root"
-  tar -xzf "$work_dir/repo.tar.gz" -C "$root" --strip-components=1 \
-    || fail "Could not extract the archive from $archive_url. No cached workflow was used."
-  rm -f "$work_dir/repo.tar.gz"
+  have_archive=""
+
+  if [[ "$fetch_mode" != raw ]]; then
+    # One download, no GitHub API: the archive for a branch or tag records the commit it was cut from
+    # in its pax header, so the SHA comes from the bytes we actually unpack.
+    archive_url="https://codeload.github.com/${repo}/tar.gz/${ref}"
+    if curl "${curl_opts[@]}" "$archive_url" -o "$work_dir/repo.tar.gz"; then
+      have_archive=1
+    elif [[ "$fetch_mode" == archive ]]; then
+      fail "Could not fetch $archive_url; check that the ref exists and that the environment allows codeload.github.com. No cached workflow was used."
+    else
+      printf 'cloud-workflow-bootstrap: archive download refused; fetching files from raw.githubusercontent.com instead\n' >&2
+    fi
+  fi
+
+  if [[ -n "$have_archive" ]]; then
+    commit_sha="$(archive_commit "$work_dir/repo.tar.gz")" \
+      || fail "Could not determine the commit of $archive_url. No cached workflow was used."
+    if [[ "$ref" =~ ^[0-9a-f]{40}$ && "$ref" != "$commit_sha" ]]; then
+      fail "Pinned WORKFLOW_REF $ref but the archive is commit $commit_sha. No cached workflow was used."
+    fi
+    # Report the immutable form so a run can be reproduced exactly.
+    archive_url="https://codeload.github.com/${repo}/tar.gz/${commit_sha}"
+    mkdir "$root"
+    tar -xzf "$work_dir/repo.tar.gz" -C "$root" --strip-components=1 \
+      || fail "Could not extract the archive from $archive_url. No cached workflow was used."
+    rm -f "$work_dir/repo.tar.gz"
+  else
+    # Sessions whose GitHub access is scoped to other repositories get 403 from the API and
+    # codeload for this one, but raw.githubusercontent.com serves public files. workflow/manifest.txt
+    # lists every file with its sha256; each is fetched and verified, so a push landing mid-download
+    # (or a stale CDN copy) fails closed instead of installing a mixed snapshot.
+    raw_base="https://raw.githubusercontent.com/${repo}/${ref}"
+    archive_url="$raw_base/workflow/manifest.txt"
+    curl "${curl_opts[@]}" "$archive_url" -o "$work_dir/manifest.txt" \
+      || fail "Could not fetch $archive_url; check that the ref exists and that the environment allows raw.githubusercontent.com. No cached workflow was used."
+    python3 -I - "$work_dir/manifest.txt" > "$work_dir/files.txt" <<'PY' || fail "workflow/manifest.txt is malformed. No cached workflow was used."
+import re, sys
+line_re = re.compile(r"^([0-9a-f]{64})  (644|755)  ([A-Za-z0-9._/-]+)$")
+seen = set()
+for raw in open(sys.argv[1], encoding="utf-8").read().splitlines():
+    m = line_re.match(raw)
+    if not m or m.group(3).startswith("/") or ".." in m.group(3).split("/") or m.group(3) in seen:
+        sys.exit(f"bad manifest line: {raw!r}")
+    seen.add(m.group(3))
+    print(m.group(3))
+if not seen:
+    sys.exit("empty manifest")
+PY
+    mkdir "$root"
+    xargs -P 8 -I{} curl "${curl_opts[@]}" --create-dirs "$raw_base/{}" -o "$root/{}" < "$work_dir/files.txt" \
+      || fail "Could not fetch every file listed in $archive_url. No cached workflow was used."
+    python3 -I - "$work_dir/manifest.txt" "$root" <<'PY' || fail "A fetched file does not match workflow/manifest.txt (a push may have landed mid-download, or the CDN is stale; retry in a few minutes or pin WORKFLOW_REF to a full SHA). No cached workflow was used."
+import hashlib, os, sys
+manifest, root = sys.argv[1:]
+for raw in open(manifest, encoding="utf-8").read().splitlines():
+    digest, mode, path = raw.split("  ", 2)
+    full = os.path.join(root, path)
+    with open(full, "rb") as fh:
+        if hashlib.sha256(fh.read()).hexdigest() != digest:
+            sys.exit(f"hash mismatch: {path}")
+    os.chmod(full, int(mode, 8))
+PY
+    if [[ "$ref" =~ ^[0-9a-f]{40}$ ]]; then
+      commit_sha="$ref"
+    else
+      # raw has no commit id for a branch; stamp the manifest digest instead (pin a SHA for an exact one).
+      commit_sha="manifest-$(python3 -I -c 'import hashlib,sys; print(hashlib.sha256(open(sys.argv[1],"rb").read()).hexdigest()[:12])' "$work_dir/manifest.txt")"
+    fi
+  fi
 fi
 
 missing=()
@@ -196,6 +250,7 @@ trap - EXIT
 
 printf 'workflow_source_repo=%s\n' "$repo"
 printf 'workflow_source_commit=%s\n' "$commit_sha"
+printf 'workflow_source_ref=%s\n' "${WORKFLOW_SRC:+local:}${ref}"
 printf 'workflow_source_url=%s\n' "$archive_url"
 printf 'workflow_root=%s\n' "$root"
 printf 'workflow_bin=%s\n' "$bin_dir"
