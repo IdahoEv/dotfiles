@@ -82,10 +82,10 @@ Ordered; each is one reviewable unit. **#140 lands first and alone**: it changes
 | --- | --- | --- |
 | #140 | Move `Use when:` to its own `use_when:` frontmatter key for all reviewers (local and periodic); update contract, procedure, architecture doc | — |
 | #132 | `review.md` overlay template with sections Planning docs, Review state, Cadence (`Window:`, path globs), Scope, Invariants, Lenses, Delivery; `project-config` init/find coverage and tests; `workflow-tools-usage.md` entry | #140 |
-| #133 | `review-lens-contract` skill and lens discovery rules (tiers, override, `Skip:`), using `use_when:` | #132, #140 |
+| #133 | `review-lens-contract` skill and lens discovery rules (tiers, override, `Lens:` filter, `Skip:`). `use_when:` is required metadata on each lens, not a selection filter | #132, #140 |
 | #134 | Global lenses: architecture, quality, docs, plan; driven by `review.md` | #133 |
 | #135 | Triage lens plus pending-actions file protocol; tracker via provider seam | #133 |
-| #136 | `/project-review` command, manager agent, procedure skill: gate, snapshot, fan-out, synthesis, inline report | #134 |
+| #136 | `/project-review` command, manager agent, procedure skill: gate, snapshot, fan-out, synthesis, inline report | #134, #135 |
 | #137 | `--apply` mode: P0 filing, backlog and pending-actions updates, single PR; delivery channels | #135, #136 |
 | #138 | Telemetry events and `wf-report` section; `docs/workflow-architecture.md`; adapter decision | #136 |
 | #139 | Scheduling guide: routine setup, per-project cadence, home/work flags, overlay seeding | #137 |
