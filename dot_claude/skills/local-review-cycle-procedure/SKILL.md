@@ -22,16 +22,20 @@ Use the project's documented test commands. `FAST` is the quick suite; `FULL` is
 
 ## 2. Discover and select reviewers
 
-Selection is driven by the reviewers' own `description` fields, not by rules here: every reviewer's `description` ends with a `Use when:` clause (the `reviewer-contract` skill holds the convention).
+Selection is driven by the reviewers' own `use_when:` frontmatter keys, not by rules here (the `reviewer-contract` skill holds the convention). The agent catalog shows only `description`, so read the keys from the files, every tier at once:
+
+```bash
+rg -H --no-messages '^use_when:' .claude/agents dot_claude/agents docs/local/reviewers ~/.claude/agents $(project-config.sh list agents 2>/dev/null)
+```
 
 - Read the project's `CLAUDE.md` and any referenced review/workflow documentation first.
 - Enumerate candidate reviewers in tier order, deduping by `name` (an earlier tier's candidate wins when names collide):
   1. Project-local agents under `.claude/agents/` (and the corresponding `dot_claude/agents/` source layout in a chezmoi dotfiles repository) — committed reviewers shared by everyone working in the repo.
   2. Personal reviewers under `docs/local/reviewers/*.md` and the project overlay's `claude/agents/*.md` (`project-config.sh list agents`) — uncommitted and personal; format in the `reviewer-contract` skill.
   3. Global agents (`dot_claude/agents/`, deployed to `~/.claude/agents/`).
-- Candidates from `docs/local/reviewers/` and the overlay's `claude/agents/` are not registered agent types. To launch a selected one, read its file, honor its `model` frontmatter when launching, and run it as a `general-purpose` agent whose prompt is the file's body as its brief, prefixed with the same context given to registered reviewers: `BASE`, exact diff scope, ticket criteria, already-triaged findings, and an instruction to follow the `reviewer-contract` skill. `tools` frontmatter is not enforced on these launches — the contract's read-only rule is the guard. Its `description`'s `Use when:` clause participates in selection exactly like a registered agent's.
-- Match each candidate's `Use when:` clause against the changed-file set (`git diff --name-only BASE...HEAD`) and the diff's risk signals — concurrency, persistence, external services, API or data-flow changes, prompt files, multiple modules touched. A reviewer is selected when its clause matches; a reviewer whose description has no `Use when:` clause is not auto-selected — its project docs must state the trigger.
-- Choose the smallest set whose clauses cover the actual risks. Risk, coupling, and behavior matter more than raw line count. Do not run every available reviewer by default.
+- Candidates from `docs/local/reviewers/` and the overlay's `claude/agents/` are not registered agent types. To launch a selected one, read its file, honor its `model` frontmatter when launching, and run it as a `general-purpose` agent whose prompt is the file's body as its brief, prefixed with the same context given to registered reviewers: `BASE`, exact diff scope, ticket criteria, already-triaged findings, and an instruction to follow the `reviewer-contract` skill. `tools` frontmatter is not enforced on these launches — the contract's read-only rule is the guard. Its `use_when:` participates in selection exactly like a registered agent's.
+- Match each candidate's `use_when:` against the changed-file set (`git diff --name-only BASE...HEAD`) and the diff's risk signals — concurrency, persistence, external services, API or data-flow changes, prompt files, multiple modules touched. A reviewer is selected when its `use_when:` matches; a reviewer without the key is not auto-selected — its project docs must state the trigger. Legacy exception: a file with no `use_when:` whose single-line `description` ends in a `Use when:` clause is selected from that clause, and its path is recorded for the report (see Report).
+- Choose the smallest set whose `use_when:` conditions cover the actual risks. Risk, coupling, and behavior matter more than raw line count. Do not run every available reviewer by default.
 - Do not send code reviewers a prompt-only diff: their failing-input bar finds nothing in prose. Code files in the same diff still go to the code reviewers.
 - Do not add a syntax reviewer. Use the project's formatter, compiler/type checker, linter, and tests for deterministic issues.
 - If adding a new project-specific reviewer is part of the task, follow the `reviewer-contract` authoring convention, and reference the reviewer from the project's `CLAUDE.md` or review instructions. Do not invent or register new reviewers during an ordinary review cycle.
@@ -91,6 +95,7 @@ If significant, well-supported findings remain after round 5, stop and ask the u
 - Report reviewers selected and why, rounds, findings fixed/dismissed/deferred (with validity), overlap count (findings raised by ≥2 reviewers), test status (including baseline failures), and commits added. Keep output terse: one line per round (`R<k>: N fixed / M dismissed or deferred`).
 - List dismissed findings with the reason for each, and deferred findings with the issue filed for each; do not implement them. Dismissed-with-reasons is mandatory — no report or PR note without it.
 - Run `pr-body.sh review-write --rounds <n> --fixed <n> --dismissed <n> --deferred <n>`; `/open-pr` renders it as the PR body's Review line.
+- If any selected reviewer was legacy-format (§2), add a line `Legacy reviewers: run migrate-use-when.sh <paths>` listing their files.
 - End by stating `/open-pr` is the next step. The report stays in this session; the PR body carries only the one-line Review summary written above.
 
 ## Guardrails
