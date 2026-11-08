@@ -210,8 +210,12 @@ git -C "$ROOT/cloud" checkout -q ccr-session
 echo dirty >> "$ROOT/cloud/.claude/kickoff-preamble.md"
 (cd "$ROOT/cloud" && START_TICKET_PROVIDER_DIR="$IP" "$ST" 7 --provider fake --in-place --no-tab >/dev/null 2>"$ROOT/dirty.err"); rc=$?
 check "in-place: dirty tree is refused" "1 ccr-session" "$rc $(git -C "$ROOT/cloud" branch --show-current)"
-has "in-place: dirty refusal is explained" "commit or stash" "$ROOT/dirty.err"
+has "in-place: dirty refusal is explained" "commit, stash or remove" "$ROOT/dirty.err"
 git -C "$ROOT/cloud" checkout -q -- .
+echo stray > "$ROOT/cloud/stray.txt"
+(cd "$ROOT/cloud" && START_TICKET_PROVIDER_DIR="$IP" "$ST" 7 --provider fake --in-place --no-tab >/dev/null 2>&1); rc=$?
+check "in-place: untracked files are refused too" "1 ccr-session" "$rc $(git -C "$ROOT/cloud" branch --show-current)"
+rm -f "$ROOT/cloud/stray.txt"
 
 # ---- clipboard fallback (open_tab via --tab-only, not in iTerm) ----------------
 CB="$ROOT/clip"; mkdir -p "$CB/bin" "$CB/sys"

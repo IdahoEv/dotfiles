@@ -586,9 +586,10 @@ if [ -n "$in_place" ]; then
   [ -n "$ST_BRANCH" ] || die "provider gave no branch name for --in-place"
   wt="$repo_root"
   if [ "$(git -C "$wt" branch --show-current)" != "$ST_BRANCH" ]; then
-    # Switching branches would carry uncommitted edits onto the ticket branch.
-    [ -z "$(git -C "$wt" status --porcelain --untracked-files=no)" ] \
-      || die "uncommitted changes in $wt; commit or stash them before --in-place switches to $ST_BRANCH"
+    # Switching branches would carry uncommitted edits, and untracked files a
+    # later `git add -A` would sweep in, onto the ticket branch. Ignored files don't count.
+    [ -z "$(git -C "$wt" status --porcelain)" ] \
+      || die "uncommitted or untracked files in $wt; commit, stash or remove them before --in-place switches to $ST_BRANCH"
     git -C "$wt" fetch -q origin >&2 2>/dev/null || echo "start-ticket: WARN could not fetch origin; branching from local refs" >&2
     if git -C "$wt" show-ref --verify --quiet "refs/heads/$ST_BRANCH"; then
       git -C "$wt" checkout "$ST_BRANCH" >&2 || die "could not check out $ST_BRANCH"

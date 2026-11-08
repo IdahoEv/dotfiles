@@ -50,6 +50,7 @@ Maintained against the covered commands by `tools/cloud-workflow-adapter.test.sh
 | `github-review-repair-agent` | Run as a subagent (protocol 3). |
 | `github-review-poll.sh` | Do not run: it queries GraphQL. If a review wait is wanted, subscribe with `subscribe_pr_activity` and end the turn; otherwise report that no review wait was done. |
 | `github-review-state.sh` | Do not run: it queries GraphQL. Read review state from `mcp__github__pull_request_read` (`get_reviews`, `get_review_comments`, `get_status`). |
+| `request-review.sh` | Do not run: it requests the review through GraphQL. For a Copilot re-review call `mcp__github__request_copilot_review`; for the `claude.yml` smoke test, `gh workflow run claude.yml -f pr_number=<N>` is REST and works. |
 | `mcp__github__` | Available. Use `pull_request_read` for reviews and threads, `resolve_review_thread` / `add_reply_to_pull_request_comment` for threads; REST `gh api` calls for reactions and replies work as written. Where the skill names `get_pull_request_review_comments`, use `pull_request_read` with method `get_review_comments`. |
 | `mcp__shortcut__` | Not available. Stop and report (protocol 10). |
 | `Co-Authored-By` | Use the attribution lines the session's own system reminder gives for commits and PRs in place of the global trailer. |
