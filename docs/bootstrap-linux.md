@@ -9,7 +9,7 @@
 | 0 | `sudo apt update && sudo apt install -y curl git` | Needed to fetch the script and for chezmoi itself |
 | 1 | `curl -fsSL https://raw.githubusercontent.com/IdahoEv/dotfiles/main/tools/bootstrap-linux.sh -o /tmp/bootstrap-linux.sh` | Runs before chezmoi, so it can't come from the deploy clone; it fetches `tools/lib/packages.tsv` itself |
 | 2 | `bash /tmp/bootstrap-linux.sh` | Installs the manifest's packages, `gh`, `oh-my-posh`, `chezmoi`, `uv`, `fnm`; sets zsh as login shell |
-| 3 | `~/.local/bin/chezmoi init --apply IdahoEv/dotfiles` | Prompts for git email and work-machine flag, then applies |
+| 3 | `~/.local/bin/chezmoi init --apply IdahoEv/dotfiles` | Prompts for git email, work-machine flag, and 1Password shell-plugin flag, then applies |
 | 4 | `exec zsh` | Start the managed shell; run after step 3 so zsh does not open its first-run setup menu (a full WSL restart makes `chsh` take effect for new terminals) |
 
 Step 3 writes `~/.config/chezmoi/chezmoi.toml` from `.chezmoi.toml.tmpl`. Machines that already have that file are not re-prompted; `notion_api_token` and `shortcut_api_token` already in it are carried over.

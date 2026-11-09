@@ -61,7 +61,7 @@ OS key: **L** = Linux, **W** = WSL, **PS** = native PowerShell. "L" without W me
 | No `.chezmoi.os` usage anywhere | Templates assume macOS target implicitly | L, W, PS | Introduce `.chezmoi.os`/`.chezmoi.arch` branching; per-OS `.chezmoiignore` |
 | Exec bits on `tools/*.sh`, `executable_*` | POSIX exec-bit delivery | PS | On Windows chezmoi can't set exec bits; needs the shim strategy + `.ps1` naming |
 | `.chezmoiignore` | No OS logic; target-path patterns only | — | Add per-OS ignores (iterm2 config, iTerm DynamicProfiles, shell modules) |
-| No `.chezmoi.toml.tmpl` in repo | Config template lives outside (unmanaged) | — | **Fixed (#83)** — `.chezmoi.toml.tmpl` prompts for `email` and `is_work`; OS vars still read from `.chezmoi.os` |
+| No `.chezmoi.toml.tmpl` in repo | Config template lives outside (unmanaged) | — | **Fixed (#83)** — `.chezmoi.toml.tmpl` prompts for `email`, `is_work`, and `op_shell_plugins`; OS vars still read from `.chezmoi.os` |
 
 Confirmed absences (don't re-investigate): no `sed -i ''`, `date -j`, or `stat -f` unguarded in tools/; no `open` (Finder) calls; no `osascript` outside `start-ticket.sh`; agents/*.md prompts shell out to nothing.
 
