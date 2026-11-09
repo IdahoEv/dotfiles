@@ -146,6 +146,9 @@ class Base(unittest.TestCase):
         self.assertEqual(r.returncode, 0, r.stderr.decode())
         return r.stdout.decode()
 
+    def out_from(self, cwd):
+        return self.run_prune(cwd=cwd).stdout.decode()
+
     def branches(self):
         return self.git(self.repo, "branch", "--format=%(refname:short)").split()
 
@@ -227,6 +230,29 @@ class Report(Base):
         self.merged_branch("feature-i")
         (self.bin / "claude").unlink()
         self.assertRegex(self.out(), r"SKIP .*feature-i.*session check unavailable")
+
+    def test_other_repo_arg_does_not_remove_invocation_worktree(self):
+        wt = self.merged_branch("feature-a")
+        for flag in ([], ["--yes"]):
+            r = subprocess.run([PRUNE, "--repo", str(self.repo), *flag], cwd=str(wt),
+                               env=self.env, capture_output=True, check=False)
+            self.assertEqual(r.returncode, 0, r.stderr.decode())
+            self.assertTrue(wt.is_dir())
+        self.assertRegex(self.out_from(wt),
+                         r"SKIP .*feature-a.*worktree the tool is running from")
+
+    def test_prunable_worktree_is_reported(self):
+        wt = self.merged_branch("feature-p")
+        shutil.rmtree(wt)
+        self.assertRegex(self.out(), r"SKIP .*feature-p.*stale registration")
+
+    def test_malformed_session_list_skips_everything(self):
+        self.merged_branch("feature-m")
+        for payload in ('{"cwd": "/x"}', '["x"]', '[{"cwd": 5}]'):
+            with self.subTest(payload):
+                self.agents_json.write_text(payload)
+                out = self.out()
+                self.assertRegex(out, r"SKIP .*feature-m.*session check unavailable")
 
     def test_locked_worktree_is_skipped(self):
         wt = self.merged_branch("feature-j")
@@ -312,6 +338,23 @@ class Removal(Base):
         self.assertIn("remote delete failed", msg)
         self.assertIn("feature-a", self.git(self.repo, "ls-remote", "--heads", "origin"))
         self.assertNotIn("feature-a", self.branches())
+
+    def test_delete_remote_with_unknown_remote_state_removes_nothing(self):
+        wt = self.merged_branch("feature-a")
+        c = pw.Candidate(path=str(wt), branch="feature-a", verdict="ready",
+                         remote_exists=None)
+        ok, msg = pw.remove_candidate(str(self.repo), c, True)
+        self.assertFalse(ok)
+        self.assertIn("lookup failed", msg)
+        self.assertTrue(wt.is_dir())
+        self.assertIn("feature-a", self.branches())
+
+    def test_remote_lookup_distinguishes_missing_from_failure(self):
+        self.merged_branch("feature-a")
+        self.assertIs(pw.remote_branch_exists(str(self.repo), "feature-a"), True)
+        self.assertIs(pw.remote_branch_exists(str(self.repo), "nope"), False)
+        self.git(self.repo, "remote", "set-url", "origin", str(self.root / "gone.git"))
+        self.assertIsNone(pw.remote_branch_exists(str(self.repo), "feature-a"))
 
     def _remove_with_d_failure(self, stderr):
         calls = []

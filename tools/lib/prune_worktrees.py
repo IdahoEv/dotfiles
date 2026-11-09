@@ -94,7 +94,7 @@ class Candidate:
     verdict: str = "unknown"
     how: str = ""  # how the merge was proven, for the report
     pr_number: str = ""
-    remote_exists: bool = False
+    remote_exists: bool | None = False  # None: lookup failed, state unknown
 
 
 @dataclasses.dataclass
@@ -102,6 +102,7 @@ class Context:
     repo: str
     base_branch: str
     session_dirs: list[str] | None
+    cwd: str = ""
 
 
 # ---- pure core -------------------------------------------------------------------
@@ -163,9 +164,13 @@ def active_session_dirs() -> list[str] | None:
         return None
     try:
         sessions = json.loads(r.stdout)
-        return [os.path.realpath(s["cwd"]) for s in sessions if s.get("cwd")]
-    except (ValueError, TypeError, KeyError):
+    except ValueError:
         return None
+    if not isinstance(sessions, list) or not all(isinstance(s, dict) for s in sessions):
+        return None
+    if any(s.get("cwd") is not None and not isinstance(s["cwd"], str) for s in sessions):
+        return None
+    return [os.path.realpath(s["cwd"]) for s in sessions if s.get("cwd")]
 
 
 def session_state(path: str, session_dirs: list[str] | None) -> str:
@@ -208,7 +213,8 @@ def ahead_of_upstream(wt: str, branch: str) -> int:
 def protected_reason(w: Worktree, ctx: Context) -> str:
     if w.primary:
         return "primary worktree"
-    if os.path.realpath(w.path) == ctx.repo:
+    real = os.path.realpath(w.path)
+    if real == ctx.repo or ctx.cwd == real or ctx.cwd.startswith(real + os.sep):
         return "worktree the tool is running from"
     if w.branch == ctx.base_branch:
         return f"base branch ({ctx.base_branch})"
@@ -217,9 +223,11 @@ def protected_reason(w: Worktree, ctx: Context) -> str:
     return ""
 
 
-def remote_branch_exists(repo: str, branch: str) -> bool:
-    return _run(["git", "-C", repo, "ls-remote", "--exit-code", "--heads",
-                 "origin", f"refs/heads/{branch}"]).returncode == 0
+def remote_branch_exists(repo: str, branch: str) -> bool | None:
+    """--exit-code gives 2 for 'no matching ref'; any other failure is unknown."""
+    rc = _run(["git", "-C", repo, "ls-remote", "--exit-code", "--heads",
+               "origin", f"refs/heads/{branch}"]).returncode
+    return {0: True, 2: False}.get(rc)
 
 
 def worktree_candidate(w: Worktree, ctx: Context) -> Candidate:
@@ -235,6 +243,12 @@ def worktree_candidate(w: Worktree, ctx: Context) -> Candidate:
     return c
 
 
+def stale_registration(w: Worktree) -> Candidate:
+    return Candidate(path=w.path, branch=w.branch,
+                     protected="stale registration, directory missing; "
+                               "run `git worktree prune`")
+
+
 def branch_candidate(branch: str, ctx: Context) -> Candidate:
     c = Candidate(path="", branch=branch)
     c.ahead_of_upstream = ahead_of_upstream(ctx.repo, branch)
@@ -244,13 +258,15 @@ def branch_candidate(branch: str, ctx: Context) -> Candidate:
 
 def build_context(repo: str) -> Context:
     return Context(repo=repo, base_branch=repo_facts.default_branch(repo),
-                   session_dirs=active_session_dirs())
+                   session_dirs=active_session_dirs(),
+                   cwd=os.path.realpath(os.getcwd()))
 
 
 def find_candidates(repo: str) -> list[Candidate]:
     worktrees = [w for w in list_worktrees(repo) if not w.bare]
     ctx = build_context(repo)
-    out = [worktree_candidate(w, ctx) for w in worktrees if not w.prunable]
+    out = [stale_registration(w) if w.prunable else worktree_candidate(w, ctx)
+           for w in worktrees]
     checked_out = {w.branch for w in worktrees}
     refs = _git(repo, "for-each-ref", "--format=%(refname:short)", "refs/heads")
     for b in refs.splitlines():
@@ -269,6 +285,8 @@ def remove_candidate(repo: str, c: Candidate, delete_remote: bool) -> tuple[bool
     (c.verdict == "ready") and only when -d refuses a squash/rebase merge."""
     if c.verdict != "ready":
         return False, "no merge proof"
+    if delete_remote and c.remote_exists is None:
+        return False, "origin lookup failed; nothing removed"
     if c.path:
         r = _run(["git", "-C", repo, "worktree", "remove", c.path])
         if r.returncode != 0:
@@ -321,6 +339,8 @@ def render_report(cands: list[Candidate], delete_remote: bool) -> list[str]:
         if action == "remove":
             removable += 1
             note = f"; origin/{c.branch} exists" if c.remote_exists else ""
+            if c.remote_exists is None:
+                note = f"; origin/{c.branch} state unknown (lookup failed)"
             lines.append(render_line("REMOVE", c, reason + note))
         else:
             lines.append(render_line("SKIP", c, reason))
