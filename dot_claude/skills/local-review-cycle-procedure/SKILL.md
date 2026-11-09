@@ -22,10 +22,10 @@ Use the project's documented test commands. `FAST` is the quick suite; `FULL` is
 
 ## 2. Discover and select reviewers
 
-Selection is driven by the reviewers' own `use_when:` frontmatter keys, not by rules here (the `reviewer-contract` skill holds the convention). The agent catalog shows only `description`, so read the keys from the files, every tier at once:
+Selection is driven by the reviewers' own `use_when:` frontmatter keys, not by rules here (the `reviewer-contract` skill holds the convention). The agent catalog shows only `description`, so read the keys from the files, every tier at once. The output gives each file's `name`, its `use_when:`, and any legacy `description:` carrying a `Use when:` clause; take the tier from the path prefix:
 
 ```bash
-rg -H --no-messages '^use_when:' .claude/agents dot_claude/agents docs/local/reviewers ~/.claude/agents $(project-config.sh list agents 2>/dev/null)
+rg -H --no-messages '^(name|use_when):|^description:.*Use when:' .claude/agents dot_claude/agents docs/local/reviewers ~/.claude/agents $(project-config.sh list agents 2>/dev/null)
 ```
 
 - Read the project's `CLAUDE.md` and any referenced review/workflow documentation first.

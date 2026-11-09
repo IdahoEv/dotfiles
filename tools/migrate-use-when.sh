@@ -28,7 +28,7 @@ migrate() {  # <file> → prints status, rewrites when migrating
   awk '
     NR == 1 && $0 == "---" { fm = 1; print; next }
     fm && $0 == "---" { fm = 0 }
-    fm && !done && /^description: .* Use when: / {
+    fm && !done && /^description: [^"\047]/ && /^description: .* Use when: / {
       i = index($0, " Use when: ")
       desc = substr($0, 1, i - 1)
       clause = substr($0, i + length(" Use when: "))

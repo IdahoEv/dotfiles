@@ -50,6 +50,13 @@ out="$("$MIG" "$multi")"
 contains "multi-line description is skipped" "skip (no single-line" "$out"
 check "multi-line file unchanged" "$before" "$(cat "$multi")"
 
+quoted="$ROOT/quoted.md"
+printf -- '---\nname: q\ndescription: "Reviews q. Use when: w."\n---\nbody\n' > "$quoted"
+before="$(cat "$quoted")"
+out="$("$MIG" "$quoted")"
+contains "quoted description is skipped" "skip (no single-line" "$out"
+check "quoted file unchanged" "$before" "$(cat "$quoted")"
+
 none="$ROOT/none.md"
 printf -- '---\nname: n\ndescription: Reviews n.\n---\nbody\n' > "$none"
 out="$("$MIG" "$none")"
