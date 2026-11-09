@@ -25,6 +25,7 @@ printf '%s\n' "$*" >> "$MOCK_CURL_ARGS"
 while (($#)); do
   case "$1" in
     -o) out="$2"; shift 2 ;;
+    --proto|--proto-redir) shift 2 ;;
     -*) shift ;;
     *) url="$1"; shift ;;
   esac
@@ -209,7 +210,7 @@ grep -q "workflow_source_commit=$head_sha" "$tmp/run.out" || fail "the clone's H
 [[ "$("$tmp/srcbin/start-ticket.sh")" == start-ticket ]] || fail "tools from the clone should run"
 git -C "$srcrepo" checkout -q -- .
 if run valid WORKFLOW_SRC="$tmp/not-a-repo"; then fail "a non-git WORKFLOW_SRC must fail closed"; fi
-grep -q 'not a git checkout' "$tmp/run.err" || fail "a bad WORKFLOW_SRC should be explained"
+grep -q 'not found in WORKFLOW_SRC' "$tmp/run.err" || fail "a bad WORKFLOW_SRC should be explained"
 pass "WORKFLOW_SRC installs the committed tree of a local clone without downloading"
 
 # Raw fetch: the archive is refused (a session scoped to other repos), so files come from
@@ -236,7 +237,7 @@ rawrun() { run valid MOCK_ARCHIVE_FAIL=1 WORKFLOW_FETCH= "$@"; }   # default mod
 
 : > "$MOCK_CURL_URLS"
 rawrun || fail "raw fallback should install when the archive is refused"
-grep -q 'archive download refused' "$tmp/run.err" || fail "the fallback should be announced"
+grep -q 'archive download failed' "$tmp/run.err" || fail "the fallback should be announced"
 grep -q 'workflow_source_commit=manifest-[0-9a-f]\{12\}$' "$tmp/run.out" || fail "a branch ref is stamped with the manifest digest"
 grep -q 'workflow_source_ref=main' "$tmp/run.out" || fail "the ref should be reported"
 root="$(sed -n 's/^workflow_root=//p' "$tmp/run.out")"
@@ -267,3 +268,20 @@ home3="$tmp/home3"; mkdir -p "$home3"
 rawrun WORKFLOW_INSTALL=claude HOME="$home3" WORKFLOW_BIN_DIR="$tmp/rawbin" || fail "claude install should work from raw files"
 [[ -f "$home3/.claude/commands/start.md" && "$("$tmp/rawbin/start-ticket.sh")" == start-ticket ]] || fail "raw-fetched snapshot should install like an archive"
 pass "WORKFLOW_INSTALL=claude installs from a raw-fetched snapshot"
+
+# Local-clone provenance and ref handling.
+run valid WORKFLOW_SRC="$srcrepo" || fail "WORKFLOW_SRC with no ref should install HEAD"
+grep -q 'workflow_source_ref=local:HEAD$' "$tmp/run.out" || fail "the local ref should say HEAD, not main"
+grep -q 'does not have origin' "$tmp/run.err" || fail "a clone whose origin is not the repo should be warned about"
+git -C "$srcrepo" checkout -q -b feature/x
+run valid WORKFLOW_SRC="$srcrepo" WORKFLOW_REF=feature/x || fail "a slash ref should work against a local clone"
+grep -q 'workflow_source_ref=local:feature/x$' "$tmp/run.out" || fail "the requested local ref should be reported"
+expect_failure "option-like local ref" 'Invalid WORKFLOW_REF' valid WORKFLOW_SRC="$srcrepo" WORKFLOW_REF=--output=/tmp/x
+expect_failure "unknown local ref" 'not found in WORKFLOW_SRC' valid WORKFLOW_SRC="$srcrepo" WORKFLOW_REF=nope
+grep -q -- '--proto =https' "$MOCK_CURL_ARGS" || run valid || true
+run valid || fail "plain run"
+grep -q -- '--proto =https' "$MOCK_CURL_ARGS" || fail "curl must be limited to https, including redirects"
+grep -q -- '--proto-redir =https' "$MOCK_CURL_ARGS" || fail "curl redirects must stay on https"
+rawrun MOCK_RAW_FAIL=workflow/manifest.txt && fail "a missing manifest must fail"
+grep -q 'older than workflow/manifest.txt' "$tmp/run.err" || fail "a missing manifest should explain old refs"
+pass "local provenance names the real ref, slash refs work locally, curl is https-only, old refs are explained"

@@ -23,6 +23,11 @@
 #   WORKFLOW_BIN_DIR  where to link the tools when installing (default /usr/local/bin if
 #                     writable, else ~/.local/bin)
 #
+# Trust: in raw mode the manifest and the files come from the same ref over TLS, so the sha256 check
+# proves a consistent snapshot, not authenticity. A pinned full SHA proves the bytes are fixed (and,
+# via the archive, that they are that commit), not that the commit was reviewed or is on this repo's
+# branches (raw serves any commit in the fork network).
+#
 # Prints key=value lines on stdout; exits non-zero and uses no cached copy on any failure.
 
 set -euo pipefail
@@ -31,7 +36,7 @@ readonly repo="IdahoEv/dotfiles"
 readonly ref="${WORKFLOW_REF:-main}"
 readonly temp_root="${TMPDIR:-/tmp}"
 readonly install_mode="${WORKFLOW_INSTALL:-}"
-readonly curl_opts=(--fail --silent --show-error --location --connect-timeout 10 --max-time 60 --retry 2)
+readonly curl_opts=(--fail --silent --show-error --location --connect-timeout 10 --max-time 60 --retry 2 --proto =https --proto-redir =https)
 readonly required_files=(
   dot_claude/commands/start.md
   dot_claude/commands/open-pr.md
@@ -72,7 +77,10 @@ PY
 command -v curl >/dev/null 2>&1 || fail "curl is required to retrieve the committed workflow."
 command -v tar >/dev/null 2>&1 || fail "tar is required to unpack the committed workflow."
 
-if [[ ! "$ref" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ || "$ref" == *..* ]]; then
+if [[ -n "${WORKFLOW_SRC:-}" ]]; then
+  # git validates the ref against the clone; only keep it from reading as an option.
+  [[ "${WORKFLOW_REF:-HEAD}" != -* ]] || fail "Invalid WORKFLOW_REF '${WORKFLOW_REF}'."
+elif [[ ! "$ref" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ || "$ref" == *..* ]]; then
   fail "Invalid WORKFLOW_REF '$ref'; use a branch, tag, or full commit SHA."
 fi
 
@@ -86,7 +94,11 @@ if [[ -n "${WORKFLOW_SRC:-}" ]]; then
   command -v git >/dev/null 2>&1 || fail "git is required to read WORKFLOW_SRC."
   src_ref="${WORKFLOW_REF:-HEAD}"
   commit_sha="$(git -C "$WORKFLOW_SRC" rev-parse --verify --quiet "${src_ref}^{commit}")" \
-    || fail "WORKFLOW_SRC '$WORKFLOW_SRC' is not a git checkout with ref '$src_ref'. No cached workflow was used."
+    || fail "Ref '$src_ref' not found in WORKFLOW_SRC '$WORKFLOW_SRC' (is it a git checkout? shallow or single-branch clones only have the refs they fetched; see git's message above). No cached workflow was used."
+  case "$(git -C "$WORKFLOW_SRC" remote get-url origin 2>/dev/null || true)" in
+    *"${repo}"*) ;;
+    *) printf 'cloud-workflow-bootstrap: WARN: %s does not have origin %s; commit %s may not exist upstream\n' "$WORKFLOW_SRC" "$repo" "$commit_sha" >&2 ;;
+  esac
   archive_url="https://github.com/${repo}/commit/${commit_sha}"
   root="$work_dir/repo"
   mkdir "$root"
@@ -109,7 +121,7 @@ else
     elif [[ "$fetch_mode" == archive ]]; then
       fail "Could not fetch $archive_url; check that the ref exists and that the environment allows codeload.github.com. No cached workflow was used."
     else
-      printf 'cloud-workflow-bootstrap: archive download refused; fetching files from raw.githubusercontent.com instead\n' >&2
+      printf 'cloud-workflow-bootstrap: archive download failed (a 403 means this session cannot read the repo through codeload); fetching files from raw.githubusercontent.com instead\n' >&2
     fi
   fi
 
@@ -133,7 +145,7 @@ else
     raw_base="https://raw.githubusercontent.com/${repo}/${ref}"
     archive_url="$raw_base/workflow/manifest.txt"
     curl "${curl_opts[@]}" "$archive_url" -o "$work_dir/manifest.txt" \
-      || fail "Could not fetch $archive_url; check that the ref exists and that the environment allows raw.githubusercontent.com. No cached workflow was used."
+      || fail "Could not fetch $archive_url; check that the ref exists (refs older than workflow/manifest.txt cannot use the raw fallback) and that the environment allows raw.githubusercontent.com. No cached workflow was used."
     python3 -I - "$work_dir/manifest.txt" > "$work_dir/files.txt" <<'PY' || fail "workflow/manifest.txt is malformed. No cached workflow was used."
 import re, sys
 line_re = re.compile(r"^([0-9a-f]{64})  (644|755)  ([A-Za-z0-9._/-]+)$")
@@ -150,7 +162,7 @@ PY
     mkdir "$root"
     xargs -P 8 -I{} curl "${curl_opts[@]}" --create-dirs "$raw_base/{}" -o "$root/{}" < "$work_dir/files.txt" \
       || fail "Could not fetch every file listed in $archive_url. No cached workflow was used."
-    python3 -I - "$work_dir/manifest.txt" "$root" <<'PY' || fail "A fetched file does not match workflow/manifest.txt (a push may have landed mid-download, or the CDN is stale; retry in a few minutes or pin WORKFLOW_REF to a full SHA). No cached workflow was used."
+    python3 -I - "$work_dir/manifest.txt" "$root" <<'PY' || fail "A fetched file does not match workflow/manifest.txt (a push may have landed mid-download or the CDN is stale: retry in a few minutes or pin WORKFLOW_REF to a full SHA; if it persists, workflow/manifest.txt is stale on this ref and needs tools/workflow-manifest.sh --write). No cached workflow was used."
 import hashlib, os, sys
 manifest, root = sys.argv[1:]
 for raw in open(manifest, encoding="utf-8").read().splitlines():
@@ -250,7 +262,8 @@ trap - EXIT
 
 printf 'workflow_source_repo=%s\n' "$repo"
 printf 'workflow_source_commit=%s\n' "$commit_sha"
-printf 'workflow_source_ref=%s\n' "${WORKFLOW_SRC:+local:}${ref}"
+if [[ -n "${WORKFLOW_SRC:-}" ]]; then source_ref="local:$src_ref"; else source_ref="$ref"; fi
+printf 'workflow_source_ref=%s\n' "$source_ref"
 printf 'workflow_source_url=%s\n' "$archive_url"
 printf 'workflow_root=%s\n' "$root"
 printf 'workflow_bin=%s\n' "$bin_dir"
