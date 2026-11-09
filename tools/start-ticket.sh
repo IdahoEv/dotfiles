@@ -3,6 +3,7 @@
 #
 #   start-ticket.sh <id>[,<id>…] [--provider github|shortcut] [--no-tab] [--launcher iterm|bg|none]
 #   start-ticket.sh <id> --print-title            # read-only: title + proposed label
+#   start-ticket.sh <id> --in-place --no-tab      # no worktree: check out the ticket branch here
 #   start-ticket.sh --tab-only <worktree> <kickoff> [--launcher iterm|bg|none]
 #   start-ticket.sh --session [<topic>] [--about <text>] [--launcher iterm|bg|none]
 #
@@ -434,12 +435,13 @@ CHAIN
 }
 
 # ---- args ------------------------------------------------------------------
-id="" provider="" mode="full" launcher_flag="" tab_wt="" tab_kf="" about=""
+id="" provider="" mode="full" launcher_flag="" tab_wt="" tab_kf="" about="" in_place=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --provider) provider="${2:?--provider needs a value}"; shift 2 ;;
     --no-tab)   mode="no-tab"; shift ;;
     --print-title) mode="print-title"; shift ;;
+    --in-place) in_place=1; shift ;;
     --session)  mode="session"; shift ;;
     --about)    about="${2:?--about needs a value}"; shift 2 ;;
     --tab-only) mode="tab-only"
@@ -578,7 +580,37 @@ if [ "$mode" = "print-title" ]; then
   exit 0
 fi
 
-wt="$(provider::create_worktree "$id" | tail -1)"
+if [ -n "$in_place" ]; then
+  # Cloud sessions are one fixed checkout: no worktree. Put the deterministic
+  # ticket branch (what open-pr/finalize parse the ticket from) on this checkout.
+  [ -n "$ST_BRANCH" ] || die "provider gave no branch name for --in-place"
+  wt="$repo_root"
+  if [ "$(git -C "$wt" branch --show-current)" != "$ST_BRANCH" ]; then
+    # Switching branches would carry uncommitted edits, and untracked files a
+    # later `git add -A` would sweep in, onto the ticket branch. Ignored files don't count.
+    [ -z "$(git -C "$wt" status --porcelain)" ] \
+      || die "uncommitted or untracked files in $wt; commit, stash or remove them before --in-place switches to $ST_BRANCH"
+    git -C "$wt" fetch -q origin >&2 2>/dev/null || echo "start-ticket: WARN could not fetch origin; branching from local refs" >&2
+    if git -C "$wt" show-ref --verify --quiet "refs/heads/$ST_BRANCH"; then
+      git -C "$wt" checkout "$ST_BRANCH" >&2 || die "could not check out $ST_BRANCH"
+    elif git -C "$wt" show-ref --verify --quiet "refs/remotes/origin/$ST_BRANCH"; then
+      # A resumed ticket: continue the remote branch rather than forking a divergent one.
+      git -C "$wt" checkout -b "$ST_BRANCH" --track "origin/$ST_BRANCH" >&2 || die "could not check out origin/$ST_BRANCH"
+    else
+      # Same start point as the worktree path: the default branch, not whatever
+      # session branch the cloud harness left checked out.
+      base="$(cd "$wt" && gt::default_branch 2>/dev/null || true)"
+      if [ -n "$base" ] && git -C "$wt" rev-parse --verify --quiet "origin/$base" >/dev/null; then
+        git -C "$wt" checkout -b "$ST_BRANCH" "origin/$base" >&2 || die "could not create $ST_BRANCH"
+      else
+        echo "start-ticket: WARN no default branch resolved; branching $ST_BRANCH from HEAD" >&2
+        git -C "$wt" checkout -b "$ST_BRANCH" >&2 || die "could not create $ST_BRANCH"
+      fi
+    fi
+  fi
+else
+  wt="$(provider::create_worktree "$id" | tail -1)"
+fi
 [ -d "$wt" ] || die "worktree not created (got '$wt')"
 branch="$(git -C "$wt" branch --show-current)"
 wf_dir="$wt"
