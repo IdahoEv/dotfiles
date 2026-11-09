@@ -37,7 +37,6 @@ MANAGED = json.loads(r"""
     "CLAUDE_CODE_DISABLE_ADAPTIVE_THINKING": "1",
     "CLAUDE_CODE_PACKAGE_MANAGER_AUTO_UPDATE": "0",
     "DO_NOT_TRACK": "1",
-    "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
     "ENABLE_TOOL_SEARCH": "true",
     "CLAUDE_CODE_ENABLE_AUTO_MODE": "1"
   },
@@ -309,23 +308,23 @@ MANAGED = json.loads(r"""
   },
   "alwaysThinkingEnabled": true,
   "skipWorkflowUsageWarning": true,
-  "theme": "dark-daltonized"{{ if or .notion_api_token .shortcut_api_token }},
+  "theme": "dark-daltonized"{{ $notion := index . "notion_api_token" }}{{ $shortcut := index . "shortcut_api_token" }}{{ if or $notion $shortcut }},
   "mcpServers": {
-{{- if .notion_api_token }}
+{{- if $notion }}
     "notion": {
       "command": "npx",
       "args": ["-y", "@notionhq/notion-mcp-server"],
       "env": {
-        "OPENAPI_MCP_HEADERS": "{\"Authorization\": \"Bearer {{ .notion_api_token }}\", \"Notion-Version\": \"2022-06-28\"}"
+        "OPENAPI_MCP_HEADERS": "{\"Authorization\": \"Bearer {{ $notion }}\", \"Notion-Version\": \"2022-06-28\"}"
       }
     }{{ end }}
-{{- if and .notion_api_token .shortcut_api_token }},{{ end }}
-{{- if .shortcut_api_token }}
+{{- if and $notion $shortcut }},{{ end }}
+{{- if $shortcut }}
     "shortcut": {
       "command": "npx",
       "args": ["-y", "@shortcut/mcp@latest"],
       "env": {
-        "SHORTCUT_API_TOKEN": "{{ .shortcut_api_token }}"
+        "SHORTCUT_API_TOKEN": "{{ $shortcut }}"
       }
     }
 {{- end }}
