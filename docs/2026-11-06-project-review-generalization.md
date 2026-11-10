@@ -37,7 +37,7 @@ The source is a weekly review (here generalized to a periodic one) written for o
 | Delivery | `project-review.md` § Delivery | `inline` (default) \| `file:<path>` \| `email:<address>` |
 | Scheduling | Outside the repo | Routine/cron definition holding one pointer sentence to `/project-review` |
 
-**Why a new doc, not more `governor.md`:** `governor.md` is loaded into every governor session as prose context. Probes and subsystem maps would bloat every load for a periodic job. `project-review.md` uses the same repo-else-overlay resolution (`project-config.sh find review.md`; `find-doc` is name-generic) and ships as one more file in `tools/project-config-templates/`, which `init` already copies. Work-specific content lives only in the private overlay.
+**Why a new doc, not more `governor.md`:** `governor.md` is loaded into every governor session as prose context. Probes and subsystem maps would bloat every load for a periodic job. `project-review.md` uses the same repo-else-overlay resolution (`project-config.sh find project-review.md`; `find-doc` is name-generic) and ships as one more file in `tools/project-config-templates/`, which `init` already copies. Work-specific content lives only in the private overlay.
 
 ## Plug-in design
 
