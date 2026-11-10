@@ -23,9 +23,3 @@ _bgin() {
   fi
 }
 (( $+functions[compdef] )) && compdef _bgin bgin
-
-
-{{ if (index . "anthropic_api_key") }}
-export ANTHROPIC_API_KEY="{{- index . "anthropic_api_key" }}"
-{{ end }}
-
