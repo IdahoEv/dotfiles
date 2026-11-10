@@ -208,7 +208,8 @@ class Run:
                "fixed": None, "dismissed": None, "deferred": None, "reviewers": set(),
                "by_reviewer": defaultdict(lambda: defaultdict(int)),
                "dismissed_findings": [], "validity_totals": defaultdict(int),
-               "keys": defaultdict(set), "has_validity": False}
+               "keys": defaultdict(set), "has_validity": False,
+               "local_findings": defaultdict(int), "local_reviewers": set()}
         bad_verdicts = bad_validity = bad_keys = missing_keys = 0
         for e in self.of("review.finding"):
             rv, verdict = e.get("reviewer", "unknown"), e.get("verdict", "unknown")
@@ -220,6 +221,9 @@ class Run:
                       "valid", "rejected", "partial", "validity_unreported"):
                 counts.setdefault(k, 0)
             counts[verdict] += 1
+            if e.get("source") != "bot":
+                out["local_findings"][verdict] += 1
+                out["local_reviewers"].add(rv)
             validity = e.get("validity")
             if validity in ("valid", "rejected", "partial"):
                 counts[validity] = counts.get(validity, 0) + 1
@@ -230,13 +234,15 @@ class Run:
                 out["validity_totals"]["validity_unreported"] += 1
                 if validity is not None:
                     bad_validity += 1
-            key = e.get("key")
-            if key is not None:
+            fid, key = e.get("finding_id"), e.get("key")
+            if fid is not None and str(fid):
+                out["keys"][str(fid)].add(rv)
+            elif key is not None:
                 if re.fullmatch(r"[0-9a-f]{16,64}", str(key)):
                     out["keys"][key].add(rv)
                 else:
                     bad_keys += 1
-            elif validity in ("valid", "partial"):
+            elif validity in ("valid", "partial") and e.get("source") != "bot":
                 missing_keys += 1
             if verdict == "dismissed":
                 out["dismissed_findings"].append((rv, e.get("round"), e.get("reason")))
@@ -247,20 +253,25 @@ class Run:
         if bad_keys:
             self.gaps.append(f"{bad_keys} review.finding event(s) with malformed key skipped from overlap")
         if missing_keys:
-            self.gaps.append(f"{missing_keys} valid/partial review.finding event(s) without key excluded from overlap")
-        if results:
+            self.gaps.append(f"{missing_keys} valid/partial review.finding event(s) without finding_id or key excluded from overlap")
+        local_results = [e for e in results if e.get("source") != "bot"]
+        if local_results:
+            # Bot batches add to the totals only alongside a local cycle result.
             for k in ("fixed", "dismissed", "deferred"):
                 vals = [e[k] for e in results if isinstance(e.get(k), int)]
                 out[k] = sum(vals) if vals else None
             for e in results:
                 out["reviewers"].update(r for r in str(e.get("reviewers", "")).split(",") if r)
-            local_rounds = [e["round"] for e in results if isinstance(e.get("round"), int)]
+            local_rounds = [e["round"] for e in local_results if isinstance(e.get("round"), int)]
             out["rounds"] = max([out["rounds"]] + local_rounds)
-        elif out["by_reviewer"]:
+        elif out["local_reviewers"]:
             # No review.result line, but per-finding events carry the same triage.
+            # Bot findings are per-comment detail of a bot batch, not local totals.
             for k in ("fixed", "dismissed", "deferred"):
-                out[k] = sum(c[k] for c in out["by_reviewer"].values())
-            out["reviewers"].update(out["by_reviewer"])
+                out[k] = out["local_findings"][k]
+            out["reviewers"].update(out["local_reviewers"])
+            for e in results:
+                out["reviewers"].update(r for r in str(e.get("reviewers", "")).split(",") if r)
         elif rounds:
             self.gaps.append("review rounds ran but no review.result: findings unknown")
         if out["dismissed_findings"] and any(rsn is None for _, _, rsn in out["dismissed_findings"]):
@@ -314,7 +325,8 @@ class Run:
             "reviews": {
                 **{k: v for k, v in self.reviews.items()
                    if k not in ("keys", "has_validity", "by_reviewer", "reviewers", "overlap",
-                                "validity_totals", "dismissed_findings")},
+                                "validity_totals", "dismissed_findings",
+                                "local_findings", "local_reviewers")},
                 "reviewers": sorted(self.reviews["reviewers"]),
                 "by_reviewer": {r: dict(v) for r, v in self.reviews["by_reviewer"].items()},
                 "validity": dict(self.reviews["validity_totals"]),
@@ -373,7 +385,7 @@ def print_run(r, out):
         ov = r.reviews["overlap"]
         if ov["keys_total"]:
             pairs = ", ".join(f"{p}: {n}" for p, n in sorted(ov["pairs"].items())) or "none"
-            w(f"  overlap: {ov['keys_raised_by_2plus']} of {ov['keys_total']} hashed finding(s) raised by ≥2 reviewers ({pairs})\n")
+            w(f"  overlap: {ov['keys_raised_by_2plus']} of {ov['keys_total']} identified finding(s) raised by ≥2 reviewers ({pairs})\n")
         if r.reviews["dismissed_findings"]:
             w("  dismissed:\n")
             for rv_name, rnd, reason in r.reviews["dismissed_findings"]:
@@ -429,7 +441,7 @@ def print_aggregate(runs, out, min_n=3):
             for p, n in d["reviews"]["overlap"]["pairs"].items():
                 pair_totals[p] += n
         pairs = ", ".join(f"{p}: {n}" for p, n in sorted(pair_totals.items())) or "none"
-        w(f"reviewer overlap: {overlapped} of {keys_total} hashed finding(s) raised by ≥2 reviewers ({pairs})\n")
+        w(f"reviewer overlap: {overlapped} of {keys_total} identified finding(s) raised by ≥2 reviewers ({pairs})\n")
     mixes = defaultdict(list)
     for d in finished:
         if d["reviews"]["reviewers"]:

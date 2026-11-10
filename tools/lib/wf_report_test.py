@@ -247,7 +247,7 @@ class Report(Base):
         self.assertIn("unparseable", out)
         self.assertIn("findings by reviewer", out)
         self.assertIn("2 valid / 1 rejected / 0 partial / 0 unreported", out)
-        self.assertIn("overlap: 1 of 4 hashed finding(s) raised by ≥2 reviewers "
+        self.assertIn("overlap: 1 of 4 identified finding(s) raised by ≥2 reviewers "
                       "(correctness-reviewer↔robustness-reviewer: 1)", out)
         self.assertIn("hypothetical risk (correctness-reviewer, R1)", out)
 
@@ -347,6 +347,82 @@ class Report(Base):
         self.assertTrue(any("unrecognized validity" in g for g in r["gaps"]))
         self.assertTrue(any("malformed key" in g for g in r["gaps"]))
 
+    def review_run(self, events):
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            wf_report.main(["--log", self.write_log(events), "--now", NOW, "--json"])
+        return json.loads(buf.getvalue())["runs"][0]
+
+    def test_events_with_new_capture_fields_aggregate_like_old_ones(self):
+        key = "a" * 32
+        r = self.review_run([
+            {"v": 1, "ts": "2026-10-20T08:59:00Z", "run_id": "acme/w#5", "event": "review.launch",
+             "reviewer": "correctness-reviewer", "round": 1, "model": "sonnet", "effort": "high"},
+            {"v": 1, "ts": "2026-10-20T09:00:00Z", "run_id": "acme/w#5", "event": "review.round",
+             "round": 1, "state": "end", "sha": "d" * 40},
+            self.finding("2026-10-20T09:00:00Z", "acme/w#5", round=1, validity="valid", key=key,
+                         path="src/a.ts", line=42, claim="src/a.ts - leaks handle", source="local")])
+        self.assertEqual(r["reviews"]["by_reviewer"]["correctness-reviewer"]["valid"], 1)
+        self.assertEqual(r["reviews"]["overlap"]["keys_total"], 1)
+        self.assertFalse(any("review" in g for g in r["gaps"]))
+
+    def test_finding_id_shared_by_two_reviewers_is_overlap(self):
+        r = self.review_run([
+            self.finding("2026-10-20T09:00:00Z", "acme/w#5", round=1, validity="valid", finding_id="r1-1"),
+            self.finding("2026-10-20T09:00:01Z", "acme/w#5", reviewer="robustness-reviewer", round=1,
+                         validity="valid", finding_id="r1-1"),
+            self.finding("2026-10-20T09:00:02Z", "acme/w#5", round=2, validity="valid", finding_id="r1-1")])
+        ov = r["reviews"]["overlap"]
+        self.assertEqual((ov["keys_total"], ov["keys_raised_by_2plus"]), (1, 1))
+        self.assertFalse(any("finding_id" in g for g in r["gaps"]))
+
+    def test_bot_finding_without_identity_is_not_a_gap(self):
+        r = self.review_run([self.finding("2026-10-20T09:00:00Z", "acme/w#5", reviewer="copilot",
+                                          source="bot", validity="valid", sha="c" * 40)])
+        self.assertFalse(any("without finding_id" in g for g in r["gaps"]))
+
+    def test_bot_findings_join_overlap_but_not_local_fallback_totals(self):
+        key = "b" * 32
+        r = self.review_run([
+            self.finding("2026-10-20T09:00:00Z", "acme/w#5", round=1, validity="valid", key=key),
+            self.finding("2026-10-20T09:30:00Z", "acme/w#5", reviewer="copilot", source="bot",
+                         validity="valid", key=key),
+            self.finding("2026-10-20T09:31:00Z", "acme/w#5", reviewer="copilot", source="bot",
+                         verdict="dismissed", validity="rejected", reason="not-a-bug")])
+        rv = r["reviews"]
+        self.assertEqual((rv["fixed"], rv["dismissed"], rv["deferred"]), (1, 0, 0))
+        self.assertEqual(rv["overlap"]["keys_raised_by_2plus"], 1)
+        self.assertEqual(rv["by_reviewer"]["copilot"]["dismissed"], 1)
+
+    def test_bot_only_findings_without_result_keep_totals_unknown(self):
+        r = self.review_run([
+            self.finding("2026-10-20T09:30:00Z", "acme/w#5", reviewer="copilot", source="bot",
+                         validity="valid", key="c" * 32)])
+        rv = r["reviews"]
+        self.assertEqual((rv["fixed"], rv["dismissed"], rv["deferred"]), (None, None, None))
+
+    def test_bot_result_and_findings_without_local_result_keep_totals_unknown(self):
+        events = [self.finding("2026-10-20T09:30:00Z", "acme/w#5", reviewer="copilot", source="bot",
+                               validity="valid", key="c" * 32),
+                  {"v": 1, "ts": "2026-10-20T09:40:00Z", "run_id": "acme/w#5", "event": "review.result",
+                   "source": "bot", "fixed": 1, "dismissed": 2, "deferred": 0, "reviewers": "copilot"}]
+        rv = self.review_run(events)["reviews"]
+        self.assertEqual((rv["fixed"], rv["dismissed"], rv["deferred"]), (None, None, None))
+
+    def test_local_fallback_keeps_bot_result_reviewer_names(self):
+        events = [self.finding("2026-10-20T09:00:00Z", "acme/w#5", round=1, validity="valid", key="b" * 32),
+                  {"v": 1, "ts": "2026-10-20T09:40:00Z", "run_id": "acme/w#5", "event": "review.result",
+                   "source": "bot", "fixed": 1, "dismissed": 2, "deferred": 0, "reviewers": "copilot"}]
+        rv = self.review_run(events)["reviews"]
+        self.assertEqual((rv["fixed"], rv["dismissed"], rv["deferred"]), (1, 0, 0))
+        self.assertIn("copilot", rv["reviewers"])
+
+    def test_json_reviews_omit_internal_local_state(self):
+        rv = self.review_run([
+            self.finding("2026-10-20T09:00:00Z", "acme/w#5", round=1, validity="valid", key="b" * 32)])["reviews"]
+        self.assertNotIn("local_reviewers", rv)
+        self.assertNotIn("local_findings", rv)
+
     def test_valid_finding_without_key_is_gapped(self):
         path = self.write_log([
             self.finding("2026-10-20T09:00:00Z", "acme/w#5", round=1, validity="valid"),
@@ -356,7 +432,7 @@ class Report(Base):
         with redirect_stdout(buf):
             wf_report.main(["--log", path, "--now", NOW, "--json"])
         r = json.loads(buf.getvalue())["runs"][0]
-        self.assertIn("2 valid/partial review.finding event(s) without key excluded from overlap", r["gaps"])
+        self.assertIn("2 valid/partial review.finding event(s) without finding_id or key excluded from overlap", r["gaps"])
 
     def test_same_reviewer_re_raising_is_not_overlap(self):
         key = "a" * 64
