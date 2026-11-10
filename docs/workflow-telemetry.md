@@ -77,6 +77,20 @@ Logs hold only identifiers, counts, and Claude Code enum values: no prompts, dif
 
 `key` on `review.finding` is `sha256(path + "\n" + bucket + "\n" + claim)`, where path is the repo-relative file exactly as `git diff --name-only` prints it, bucket is the 10-line decade of the finding's primary line (`L41-L50`; `L0` for file-level), and claim is one normalized sentence stating only the file and what is wrong. The exact normalization recipe lives in `local-review-cycle-procedure`; `path`, `line` and the normalized `claim` are logged next to the hash, so a hash miss between two phrasings can be re-judged by reading the claims. A finding overlaps when the same key is raised by ≥2 *distinct* reviewers — the same reviewer re-raising it across rounds is not overlap. Phrasing drift means two reviewers wording the same bug differently produce different hashes, so overlap is a lower bound.
 
+## Backfill
+
+`wf-backfill.sh --pr N [--pr M] [--branch B] [--repo owner/repo] [--git-dir DIR] [--dry-run]` recovers finding text, round SHAs and reviewer model for PRs that finished `/local-review-cycle` before those fields were logged. It is time-boxed by transcript retention: run it before the session is finalized and pruned. It reads only the log, the reviewer subagent transcripts and git history, and names no project, so it works for any repo in the log.
+
+| Recovered | Source |
+| --- | --- |
+| `review.round sha` | Last first-parent commit at or before the existing round event's `ts` |
+| `review.launch` model, `tokens_in`, `tokens_out` | Reviewer subagent transcript, one per launch |
+| `review.finding` `path`, `line`, `claim`, `key` | The reviewer's final report, parsed from the `SEVERITY \| file:line \| defect` lines. The claim is rebuilt from path + first sentence of the defect, not the triager's wording, so overlap on backfilled keys is weaker than on live ones |
+
+Every appended event carries `backfill=1`. Backfilled `review.finding` events carry no verdict; `matched_ts` points at the original triage event, paired by reviewer, round, severity and order. `wf-report.sh` counts them toward overlap only, never toward verdict or validity totals. Re-running appends nothing: an event is skipped when its (event, branch, reviewer, round, agent) identity already exists with `backfill=1`. Existing lines are never rewritten.
+
+A reviewer re-launched within a round (an aborted attempt) keeps a launch event for its real cost, but only the latest attempt's findings are backfilled. Sessions without local transcripts (cloud) get round SHAs only; the per-PR summary lists the rest, plus reviewer effort (never in transcripts), as `unknown`. The PR's `## Review` line is shown for reference.
+
 ## Measured vs. estimated
 
 | Number | Source | Kind |

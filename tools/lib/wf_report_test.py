@@ -366,6 +366,21 @@ class Report(Base):
         self.assertEqual(r["reviews"]["overlap"]["keys_total"], 1)
         self.assertFalse(any("review" in g for g in r["gaps"]))
 
+    def test_backfilled_findings_feed_overlap_but_not_verdict_totals(self):
+        key = "e" * 32
+        events = [self.finding("2026-10-20T09:00:00Z", "acme/w#5", round=1),
+                  {"v": 1, "ts": "2026-10-20T09:00:01Z", "run_id": "acme/w#5", "event": "review.finding",
+                   "reviewer": "correctness-reviewer", "round": 1, "severity": "High", "key": key,
+                   "path": "a.sh", "claim": "a.sh drops a line", "backfill": 1, "matched_ts": "2026-10-20T09:00:00Z"},
+                  {"v": 1, "ts": "2026-10-20T09:00:02Z", "run_id": "acme/w#5", "event": "review.finding",
+                   "reviewer": "robustness-reviewer", "round": 1, "severity": "High", "key": key, "backfill": 1}]
+        r = self.review_run(events)
+        rv = r["reviews"]
+        self.assertEqual(rv["by_reviewer"]["correctness-reviewer"]["fixed"], 1)
+        self.assertNotIn("robustness-reviewer", rv["by_reviewer"])
+        self.assertEqual(rv["overlap"]["keys_raised_by_2plus"], 1)
+        self.assertFalse(any("verdict" in g for g in r["gaps"]))
+
     def test_bot_findings_join_overlap_but_not_local_fallback_totals(self):
         key = "b" * 32
         r = self.review_run([

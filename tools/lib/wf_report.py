@@ -213,6 +213,11 @@ class Run:
         bad_verdicts = bad_validity = bad_keys = missing_keys = 0
         for e in self.of("review.finding"):
             rv, verdict = e.get("reviewer", "unknown"), e.get("verdict", "unknown")
+            if e.get("backfill") == 1:
+                # Backfilled text/key for a finding already triaged in an earlier event: overlap only.
+                if re.fullmatch(r"[0-9a-f]{16,64}", str(e.get("key"))):
+                    out["keys"][e["key"]].add(rv)
+                continue
             if verdict not in ("fixed", "dismissed", "deferred"):
                 bad_verdicts += 1
                 continue
