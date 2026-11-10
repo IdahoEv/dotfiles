@@ -23,13 +23,21 @@ SEVERITIES = ("Critical", "High", "Medium", "Low")
 _FINDING_RE = re.compile(
     r"^[\s>*\-\d.)]*(?P<sev>Critical|High|Medium|Low)\**\s*\|\s*(?P<loc>[^|]+?)\s*\|\s*(?P<defect>[^|]+?)\s*(?:\|.*)?$",
     re.I)
-_LOC_RE = re.compile(r"^`?(?P<path>[^:`]+?)`?(?::(?P<line>\d+)(?:[-,]\d+)*)?$")
+_LOC_RE = re.compile(r"^`?(?P<path>[^:`\s]+?)`?(?::(?P<line>\d+)(?:\s*[-,]\s*\d+)*)?(?:\s*\(.*\))?$")
 _REVIEW_LINE_RE = re.compile(r"(\d+)\s+rounds?:\s*(\d+)\s+fixed,\s*(\d+)\s+dismissed,\s*(\d+)\s+deferred")
 EVENT_FIELD_CAP = 200
 
 
 def clean_claim(text):
     return re.sub(r"\s+", " ", text).strip()
+
+
+def relative_path(path, roots):
+    for root in filter(None, roots):
+        prefix = root.rstrip("/") + "/"
+        if path.startswith(prefix):
+            return path[len(prefix):]
+    return path
 
 
 def parse_report(text):
@@ -184,6 +192,8 @@ def plan_branch(branch, events, projects, git_dir, pr_body=None):
         return [], summary
     template = {k: evs[0].get(k) for k in ("v", "run_id", "repo", "ticket", "branch")}
     ref = resolve_ref(git_dir, branch)
+    top = subprocess.run(["git", "-C", git_dir, "rev-parse", "--show-toplevel"], capture_output=True, text=True)
+    toplevel = top.stdout.strip()
     if ref is None:
         summary["notes"].append("branch not found in git: round SHAs unknown")
 
@@ -265,7 +275,11 @@ def plan_branch(branch, events, projects, git_dir, pr_body=None):
             if superseded:
                 summary["notes"].append(f"{agent} round {rnd}: launch from an aborted attempt, findings not backfilled")
                 continue
-            pairs = pair_findings(parse_report(t["report"]), list(existing_findings[(agent, rnd)]))
+            roots = [toplevel, wf_usage.session_cwd(path)]
+            parsed = parse_report(t["report"])
+            for p in parsed:
+                p["path"] = relative_path(p["path"], roots)
+            pairs = pair_findings(parsed, list(existing_findings[(agent, rnd)]))
             for i, (p, match) in enumerate(pairs):
                 summary["findings"] += 1
                 summary["findings_text"] += 1

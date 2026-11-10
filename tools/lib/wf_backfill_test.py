@@ -68,6 +68,18 @@ class Pure(unittest.TestCase):
                          [("High", "tools/a.sh", 42), ("Low", "docs/x.md", None)])
         self.assertEqual(got[0]["claim"], "tools/a.sh: Drops the last line.")
 
+    def test_parse_tolerates_observed_location_shapes(self):
+        text = ("MEDIUM | /w/repo/tools/a.sh:110-122 (head_sha_at) | Drops SHAs. | x | y | z\n"
+                "Medium | tools/b.sh:330, 281-282 | Prints a partial total. | x | y | z\n"
+                "**High** | `c.md` (line 5) | Wrong heading. | x | y | z")
+        got = bf.parse_report(text)
+        self.assertEqual([(f["severity"], f["path"], f["line"]) for f in got],
+                         [("Medium", "/w/repo/tools/a.sh", 110), ("Medium", "tools/b.sh", 330), ("High", "c.md", None)])
+
+    def test_relative_path_strips_known_roots(self):
+        self.assertEqual(bf.relative_path("/w/repo/tools/a.sh", ["/w/repo"]), "tools/a.sh")
+        self.assertEqual(bf.relative_path("tools/a.sh", ["/w/repo"]), "tools/a.sh")
+
     def test_no_findings_parses_empty(self):
         self.assertEqual(bf.parse_report("no findings. all tests pass"), [])
 
