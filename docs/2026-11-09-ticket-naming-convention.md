@@ -120,14 +120,10 @@ The key is the join between surfaces; for iteration work the description is best
 
 Each is one reviewable unit. #155 (PR titles on the GitHub provider) is already merged and is the first.
 
-| # | Ticket | Depends on |
+| Ticket | Scope | Depends on |
 | --- | --- | --- |
-| 1 | Name resolver: `(key, desc)` → surface strings from templates, with built-in defaults; persist `<git-dir>/name` | - |
-| 2 | Settings layering (user, machine, project) for templates and key parts | 1 |
-| 3 | Branch and worktree creation use the resolver; one slug rule for both providers; drop `<user>/` and slash forms; `{type}` token from provider labels | 1 |
-| 4 | Parsers accept the new key and legacy forms (`Is<N>-`, `sc-<id>/`); fixes cloud-branch ticketless PRs | 1 |
-| 5 | Agent row from the resolver; delete the hand-composed path in `session-kickoff.md`; fix the `--tab-only` label loss | 1 |
-| 6 | PR title from the resolver; Shortcut provider; drop integer-only `--issue` | 1, 4 |
-| 7 | Statusline shows the key | 1 |
-| 8 | Ticketless keys (`tk`, `it`) and `[TALK]` as a recognised tag; hook for the planned `/iterate` command | 1, 5, 6 |
-| 9 | Move project prose rules into providers/templates; update `workflow-architecture.md` | 3, 6 |
+| #160 | Resolver and settings layering: `(key, desc)` → surface strings from templates, persisted `<git-dir>/name`, user/machine/project overrides | - |
+| #161 | Branch, worktree and parsers: creation via the resolver, one slug rule, `{type}`; parsers accept new and legacy forms (fixes cloud-branch ticketless PRs) | #160 |
+| #162 | Agent row and statusline: row from the resolver, remove the hand-composed path, fix the `--tab-only` label loss, statusline shows the key | #160 |
+| #163 | PR title and providers: PR title from the resolver, Shortcut provider, project prose rules into providers, update `workflow-architecture.md` | #160, #161 |
+| #164 | Ticketless work: `tk`/`it` keys, `[TALK]` tag, hook for `/iterate` | #160, #162, #163 |
