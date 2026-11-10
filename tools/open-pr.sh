@@ -13,9 +13,9 @@
 #
 # Provider: --provider, else `openpr_provider=` in .start-ticket.conf, else the
 # start-ticket `provider=` if an open-pr provider of that name exists, else
-# github. github: `<NNN>-slug` branch → issue NNN, title as given, `Closes #NNN`
-# footer, no review triggers (--review is ignored). kardashev: `Is<NNN>:` titles
-# plus Copilot/claude.yml triggers.
+# github. github: `<NNN>-slug` branch → issue NNN, `Is<NNN>:` title, `Closes #NNN`
+# footer, no review triggers (--review is ignored). kardashev: same title and
+# footer plus Copilot/claude.yml triggers.
 #
 # Chains: --issue takes a comma list, and a branch with <git-dir>/chain (written by
 # start-ticket.sh 12,13) closes every ticket in it. The head issue (first) prefixes
@@ -323,8 +323,8 @@ if [ -n "$create_pr" ] && [ -n "${issue:-}" ]; then
     while :; do
       if [ "${rest#"$expected"}" != "$rest" ]; then
         rest="${rest#"$expected"}"
-      elif [[ "$rest" =~ ^(Is[0-9]+|sc-[0-9]+):[[:space:]] ]]; then
-        rest="${rest#"${BASH_REMATCH[1]}":}"
+      elif [[ "$rest" =~ ^(Is[0-9]+|sc-[0-9]+)(:?)[[:space:]] ]]; then
+        rest="${rest#"${BASH_REMATCH[1]}${BASH_REMATCH[2]}"}"
       else
         break
       fi
