@@ -260,7 +260,7 @@ class Run:
                 out["reviewers"].update(r for r in str(e.get("reviewers", "")).split(",") if r)
             local_rounds = [e["round"] for e in results if isinstance(e.get("round"), int)]
             out["rounds"] = max([out["rounds"]] + local_rounds)
-        elif out["by_reviewer"]:
+        elif out["local_reviewers"]:
             # No review.result line, but per-finding events carry the same triage.
             # Bot findings are per-comment detail of a bot batch, not local totals.
             for k in ("fixed", "dismissed", "deferred"):
