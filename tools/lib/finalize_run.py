@@ -225,6 +225,7 @@ def hand_off(f: fc.Facts, dir_: str, reason: str, detail: str, done: list[str]) 
 
 def run(dir_: str, branch: str, ticket_closed: bool) -> int:
     f = fc.collect_facts(branch, dir_)
+    fc.emit_telemetry(dir_, f)
     if f.agent_phase:
         stamp_phase(f.agent_phase)
     if f.verdict in STOP_VERDICTS:
@@ -240,18 +241,22 @@ def run(dir_: str, branch: str, ticket_closed: bool) -> int:
     done: list[str] = []
     parts: list[str] = []
     try:
-        if not ticket_closed:
-            if f.ticket_scheme == "shortcut":
+        if f.ticket_scheme == "shortcut":
+            if not ticket_closed:
                 raise Handoff("shortcut", f"close sc-{f.ticket_id} via the Shortcut MCP tools")
-            if f.ticket_scheme == "github" and f.ticket_id:
+            if f.ticket_id:
                 parts.append("ticket closed")
-                closed: list[str] = []
-                try:
-                    close_github_tickets(f, closed)
-                finally:
-                    done.extend(closed)
-                done.append("ticket")
-        elif f.ticket_id:
+        elif f.ticket_scheme == "github" and f.ticket_id:
+            # Runs even with --ticket-closed: already-closed issues are skipped,
+            # so the flag can't leave a still-open GitHub ticket behind.
+            parts.append("ticket closed")
+            closed: list[str] = []
+            try:
+                close_github_tickets(f, closed)
+            finally:
+                done.extend(closed)
+            done.append("ticket")
+        elif ticket_closed and f.ticket_id:
             parts.append("ticket closed")
 
         base_state = pull_base(f)
@@ -304,9 +309,15 @@ def main(argv: list[str] | None = None) -> int:
     if not git_ok(dir_, "rev-parse", "--is-inside-work-tree"):
         print(f"finalize-run: not inside a git repo: {dir_}", file=sys.stderr)
         return EXIT_USAGE
-    branch = branch or git(dir_, "branch", "--show-current")
+    current = git(dir_, "branch", "--show-current")
+    branch = branch or current
     if not branch:
         print("finalize-run: not on a branch (detached HEAD) — pass --branch", file=sys.stderr)
+        return EXIT_USAGE
+    # The worktree is removed along with the branch, so --dir must be that branch's checkout.
+    if current != branch and (
+            current or git(dir_, "rev-parse", "HEAD") != git(dir_, "rev-parse", f"refs/heads/{branch}")):
+        print(f"finalize-run: {dir_} is not the checkout of '{branch}'", file=sys.stderr)
         return EXIT_USAGE
     return run(dir_, branch, ticket_closed)
 

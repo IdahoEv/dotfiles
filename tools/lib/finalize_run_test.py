@@ -159,6 +159,20 @@ class Run(Base):
         self.assertIn("Finalized sc-123", r.stdout)
         self.assertFalse(wt.exists())
 
+    def test_ticket_closed_flag_still_closes_open_github_ticket(self):
+        wt = self.merged_branch("7-feature")
+        r = self.finalize(wt, "--ticket-closed")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn("issue close 7 --comment Landed in", self.gh_calls())
+
+    def test_branch_that_is_not_the_dir_checkout_is_refused(self):
+        wt = self.merged_branch("7-feature")
+        other = self.merged_branch("8-other")
+        r = self.finalize(wt, "--branch", "8-other")
+        self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+        self.assertTrue(wt.exists())
+        self.assertTrue(other.exists())
+
     def test_locked_worktree_outside_own_session_hands_back(self):
         wt = self.merged_branch("7-feature")
         self.git(self.repo, "worktree", "lock", str(wt))
