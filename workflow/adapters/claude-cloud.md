@@ -14,7 +14,7 @@ Covered: `/start`, `/open-pr`, `/local-review-cycle`, `/github-review-comments`,
 6. The PR body, final report, and any ticket comment include `Workflow source: IdahoEv/dotfiles@<workflow_source_commit>`. When `/local-review-cycle` ran, carry its verbatim report summary into the PR body's "Review cycle" note; otherwise include `Independent review: not performed`. Pass each footer line to `open-pr.sh` as `--body-footer "<line>"`. When `open-pr.sh` reports a reused PR, add the lines with `gh pr edit --body` if missing.
 7. Report each project check (tests, lint, build) as passed, failed, or not run with the reason, in the PR body and final report. Never imply a check passed unless it ran.
 8. Ask the user with `AskUserQuestion` only when the session is attended (`CLAUDE_CODE_SESSION_ATTENDED` is set and not `0`/`false`). Unattended, where a command would ask a question or wait for approval, stop and report the decision needed, unless the command itself says to proceed.
-9. After `/open-pr`, stop. Run `/finalize` only when the user says the PR merged. In a cloud session `/finalize` verifies the merge and closes the ticket (steps 1–2), then in place of steps 3–5: `git fetch origin <base>`, check out `<base>` and `git pull --ff-only`, then `git branch -D <branch>` once step 1 reported `ready`. There is no worktree to remove and no deploy clone: skip step 4.
+9. After `/open-pr`, stop. Run `/finalize` only when the user says the PR merged. In a cloud session do not run `finalize-run.sh`: it needs a base worktree and a worktree to remove. Run `finalize-check.sh` and stop unless `verdict=ready`; close the ticket (GitHub: `gh issue close <id> --comment "Landed in <pr_merge_commit> (PR #<n>)"` if still open; Shortcut: the `shortcut` handoff text in `finalize.md`); then `git fetch origin <base>`, check out `<base>`, `git pull --ff-only`, and `git branch -D <branch>`. There is no worktree to remove and no deploy clone.
 10. GitHub ticket tracking only. A Shortcut ticket needs `mcp__shortcut__`, which cloud sessions do not have: stop and report.
 
 ## Construct map
@@ -32,6 +32,7 @@ Maintained against the covered commands by `tools/cloud-workflow-adapter.test.sh
 | `/board` | Not available. Skip any mention. |
 | `--tab-only` | Skip the step that opens a session. |
 | `--launcher` | Never pass it. No launcher exists here (equivalent to `none`). |
+| `--no-watch` | Always pass it: the watcher polls GraphQL, which is blocked here, and there is no desktop to notify. See the `github-review-poll.sh` row for review waits. |
 | `--no-multi` | Always in effect. Skip the fan-out step to sibling repos. |
 | `sibling-worktrees.sh` | Do not run (fan-out is skipped). |
 | `GT_LABEL_OVERRIDE` | Do not set. Session labels do not exist here. |
@@ -39,13 +40,10 @@ Maintained against the covered commands by `tools/cloud-workflow-adapter.test.sh
 | `agent-phase.sh` | Skip direct calls; scripts that call it already no-op. |
 | `session-label.sh` | Skip. |
 | `claude agents` | Ignore; there is no agent view. |
-| `git push --no-verify` | Skip the no-op push; it only registers a push in the agent view. |
 | `--review` | Always `--review none`: the Copilot request goes through GraphQL, which is blocked. To get a Copilot review, call `mcp__github__request_copilot_review` after the PR exists. |
 | `~/.config/local-review-only` | Treat as absent. |
 | `--confirm-commits` | Honor it; the question follows protocol 8. |
 | `AskUserQuestion` | Native when attended; otherwise protocol 8. |
-| `EnterWorktree` | Never used here; `/start --in-place` creates no worktree. |
-| `ExitWorktree` | Not applicable; skip. |
 | `local-review-cycle-manager` | Run as a subagent (protocol 3). |
 | `github-review-repair-agent` | Run as a subagent (protocol 3). |
 | `github-review-poll.sh` | Do not run: it queries GraphQL. If a review wait is wanted, subscribe with `subscribe_pr_activity` and end the turn; otherwise report that no review wait was done. |

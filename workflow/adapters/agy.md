@@ -39,6 +39,7 @@ Maintained against the covered commands by `tools/cloud-workflow-adapter.test.sh
 | `/discuss` | Not available. |
 | `/board` | Not available. |
 | `--tab-only` | Skip the step that opens a session. The AGY task is already the session. |
+| `--no-watch` | Always pass it. The detached watcher and its macOS notification are local-Claude machinery; follow the `github-review-poll.sh` row for review waits. |
 | `--no-multi` | Always in effect. Skip the fan-out step to sibling repos. |
 | `--confirm-commits` | Honour as written; pass through in the `local-review-cycle-manager` kickoff. |
 | `sibling-worktrees.sh` | Do not run (fan-out is skipped). |
@@ -49,7 +50,6 @@ Maintained against the covered commands by `tools/cloud-workflow-adapter.test.sh
 | `session-label.sh` | Skip. |
 | `AskUserQuestion` | Follow protocol 9: in interactive sessions use `ask_question` with self-contained context; in headless/Telegram sessions print the self-contained question and options at the end of the turn and wait. |
 | `claude agents` | Ignore; there is no Claude agent view. |
-| `git push --no-verify` | Skip the no-op push; it only registers a push in the Claude agent view. |
 | `github-review-poll.sh` | In interactive CLI sessions, run in the background via `run_command` and re-invoke `/github-review-comments` on exit 0; in single-turn headless/Telegram or remote runs, skip the poll step and report that review polling is manual. |
 | `mcp__shortcut__` | Not available. Shortcut tickets: stop and report. GitHub tickets need no MCP. |
 | `mcp__github__` | Not required; use the `gh` CLI (`gh api ...`) via `run_command` as preferred by `github-review-procedure`. |

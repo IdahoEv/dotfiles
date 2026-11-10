@@ -3,9 +3,9 @@
 Push the current branch, open (or reuse) its PR, and trigger reviews — the middle leg of
 the `/start` → `/open-pr` → `/finalize` cycle.
 
-`open-pr.sh` handles every mechanical step (push, PR create-or-reuse, title prefixing and
-repair, review-bot triggering). It **never commits** — drafting the commit message and PR
-title/body is this command's job.
+`open-pr.sh` handles every mechanical step (commit, push, PR create-or-reuse, title
+prefixing and repair, review-bot triggering, the phase stamp, and a detached review watch).
+This command's only job is drafting its inputs: commit message, PR title, and body sections.
 
 ## Usage
 
@@ -15,6 +15,7 @@ title/body is this command's job.
 /open-pr --provider <name>         # --env is an alias; normally resolved from config
 /open-pr --draft --issue <a,b>     # chain stopped early: draft PR naming only the completed tickets
 /open-pr --no-multi                # ship only this repo; skip the sibling fan-out
+/open-pr --no-watch                # skip the detached review watch (and its notification)
 /open-pr --repos <dir>[,<dir>...]  # ship these sibling repos instead of auto-detecting
 ```
 
@@ -78,50 +79,38 @@ means missing or stale: draft both sections inline from the diff.
 Show the drafted artifacts in full, then proceed immediately — running `/open-pr` is
 itself the approval to commit, push, and open the PR. Don't wait for `execute`.
 
-### 3. Commit (if dirty)
+### 3. Ship
 
-```bash
-git add -A
-git commit -m "<drafted message>"
-```
-
-Append the Co-Authored-By trailer unless the approved message already has one.
-
-### 4. Ship
+Write the commit message (if the tree is dirty) to a temp file, with the Co-Authored-By
+trailer unless the drafted message already has one. Then one call:
 
 ```bash
 # first ship — pass the title BARE, exactly as drafted:
-open-pr.sh --title "<bare short title>" --summary-file <summary-tmp> --judgment-file <judgment-tmp> --test-result "<one line>" --review <level> [--provider <name>] [--draft] [--issue <a,b>]
+open-pr.sh --title "<bare short title>" --summary-file <summary-tmp> --judgment-file <judgment-tmp> --test-result "<one line>" [--commit-message-file <msg-tmp>] --review <level> [--provider <name>] [--draft] [--issue <a,b>]
 
 # existing PR — reuse its title/body:
-open-pr.sh --review <level> [--provider <name>]
+open-pr.sh [--commit-message-file <msg-tmp>] --review <level> [--provider <name>]
 ```
 
 `--test-result` is the one-line outcome of the project's tests from this session ("42 passed",
 or "not run: <why>"). Never claim a pass that didn't run.
 
 Forward the user's `--provider`/`--env` verbatim if they gave one; omit otherwise.
-Capture from stdout: `pr_number`, `pr_url`, `pr_action`, `provider`, `trigger_mode`,
-`pr_title`, and `pr_title_repaired_from` (present only if the script fixed a doubled
-prefix — mention it in the report). No need to read the title back yourself.
+The script commits, pushes, opens or reuses the PR, triggers reviews, stamps the agent-view
+row (`[REVIEW][PR]` / `[REVIEWED][PR]` / `[PR]`), and starts the detached review watch. Don't
+repeat any of that by hand. It prints `pr_number`, `pr_url`, `pr_action`, `provider`,
+`trigger_mode`, `pr_title`, `pr_title_repaired_from` (only if it fixed a doubled prefix —
+mention it), `watch=started|skipped`, then a `Shipped … / PR … / Reviews …` block.
 
-The script also stamps the agent-view row `[REVIEW][PR]` (or `[REVIEWED][PR]` / `[PR]` when no bot will
-review; see global CLAUDE.md). Don't set it by hand or report it as a separate action.
+The watch polls for review comments in the background; when it ends it sends a macOS
+notification and a `pr.watch` event. On "comments arrived", run `/github-review-comments`.
+The session can be left once this step returns. Poll **only this session's PR**: each sibling
+runs its own `/open-pr`.
 
-Then, directly in this session, run:
-
-```bash
-git push --no-verify origin "$(git branch --show-current)"
-```
-
-A no-op ("Everything up-to-date") that lets an agent-view session see a push and link the
-PR on its row; `open-pr.sh`'s own push happens in a subprocess and may not register.
-`--no-verify` because the real push already ran the hooks.
-
-### 4a. Fan out to the ticket's other repos
+### 4. Fan out to the ticket's other repos
 
 A ticket is often implemented across several repos, each with its own worktree on a branch
-carrying the same ticket id. Steps 1–4 shipped **only the repo you're standing in**.
+carrying the same ticket id. Steps 1–3 shipped **only the repo you're standing in**.
 
 Skip entirely if `--no-multi`. Otherwise:
 
@@ -169,37 +158,16 @@ failures are per-sibling and **non-fatal** — report with the manual fallback a
 going. Never `cd` into a sibling worktree to ship it yourself: that pulls two codebases
 into one context.
 
-### 5. Poll
+### 5. Relay
 
-```bash
-~/.claude/skills/github-review-procedure/github-review-poll.sh <pr_number>
-```
-
-Run in the background. Exit 0 → re-invoke `/github-review-comments`, which runs each round in a
-fresh `github-review-repair-agent` so implementation context never reaches the review; 3 → signed off, ready to
-merge; 1 → timeout; 2 → no PR found; 4 → a reviewer said it couldn't run (e.g. Copilot
-billing): report that, run `agent-phase.sh --no-review`, and don't poll again.
-
-Skip **only** when `--review none` was passed *and* `trigger_mode=manual` — the one case
-where no bot will ever comment. Under `trigger_mode=auto` the bots fire on PR open
-regardless of `--review`. When in doubt, poll.
-
-Poll **only this session's PR**. Each sibling runs its own `/open-pr` and polls its own —
-one session per PR. Polling a sibling's from here would race it.
-
-### 6. Report
+Print the script's `Shipped … / PR … / Reviews …` block as the report. Add, when step 4
+found siblings:
 
 ```
-Shipped <ticket-ref> — <title>
-PR #<n>: <url>  (created | reused)
-Reviews: <requested: copilot|copilot+claude  |  automatic on PR open  |  none>
 Also on this ticket: <sibling-repo> (<branch>) — session dispatched, will open its own PR
                      <sibling-repo> (<branch>) — dispatch FAILED: <why>; run `cd <wt> && claude`
 ```
 
-Omit the "Also on this ticket" lines when step 4a found no siblings. Report dispatched
-siblings as *sessions started*, not PRs opened — you don't know their PR numbers and must
-not guess. Take `<ticket-ref>` from the `pr_title` the script reported rather than
-inventing a format. Under `trigger_mode=auto`, say reviews fire automatically; don't claim
-to have requested them.
-
+Report dispatched siblings as *sessions started*, not PRs opened — you don't know their PR
+numbers and must not guess. Under `trigger_mode=auto`, the script's Reviews line says reviews
+fire automatically; don't claim to have requested them.

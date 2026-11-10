@@ -63,6 +63,12 @@ esac
 STUB
 chmod +x "$ROOT/bin/gh"
 export PATH="$ROOT/bin:$PATH"
+cat > "$ROOT/bin/watch-stub" <<'STUB'
+#!/usr/bin/env bash
+echo "$*" > "$WATCH_ARGS"
+STUB
+chmod +x "$ROOT/bin/watch-stub"
+export OPEN_PR_WATCH="$ROOT/bin/watch-stub" WATCH_ARGS="$ROOT/watch.args"
 
 # Fresh repo + origin on <branch>; leaves cwd inside it.
 new_repo() {  # <branch> [conf-contents]
@@ -205,6 +211,42 @@ check "start-ticket provider=github"   "github" "$(resolved 42-foo 'provider=git
 check "start-ticket provider=shortcut" "github" "$(resolved 42-foo 'provider=shortcut')"
 check "openpr_provider beats provider" "kardashev" "$(resolved 42-foo $'provider=github\nopenpr_provider=kardashev')"
 check "--provider beats conf"          "github" "$(resolved 42-foo 'openpr_provider=kardashev' --provider github)"
+
+# ---- commit, watch, report ------------------------------------------------------
+new_repo 42-foo
+echo x > f.txt
+printf 'Add f\n\nCo-Authored-By: T <t@t>\n' > "$ROOT/m.txt"
+run --title "Add foo" --commit-message-file "$ROOT/m.txt" --review none >/dev/null
+check "commit: dirty tree committed with the message" "Add f" "$(git log -1 --format=%s)"
+check "commit: trailer kept verbatim"   "1" "$(git log -1 --format=%B | grep -c '^Co-Authored-By')"
+check "commit: tree clean afterwards"   "" "$(git status --porcelain)"
+check "commit: pushed"                  "$(git rev-parse HEAD)" "$(git --git-dir="$ROOT/origin.git" rev-parse 42-foo)"
+new_repo 42-foo
+echo x > f.txt
+out="$(run --title "Add foo" --review none)"
+check "no message file: change left uncommitted" "?? f.txt" "$(git status --porcelain)"
+check "no message file: warned"         "1" "$(grep -c 'uncommitted changes' <<<"$out")"
+new_repo 42-foo
+echo x > f.txt
+run --title "Add foo" --commit-message-file "$ROOT/nope" --review none >/dev/null 2>&1; rc=$?
+check "unreadable message file refused" "1" "$rc"
+
+watch_args() { for _ in $(seq 30); do [ -s "$WATCH_ARGS" ] && break; sleep 0.1; done; cat "$WATCH_ARGS" 2>/dev/null; }
+new_repo 42-foo; rm -f "$WATCH_ARGS"
+out="$(run --title "Add foo" --review copilot)"
+check "watch: started with the PR number" "1" "$(watch_args)"
+check "watch: reported"                 "watch=started" "$(grep '^watch=' <<<"$out")"
+check "report: Shipped line"            "Shipped Is42: Add foo" "$(grep '^Shipped ' <<<"$out")"
+check "report: PR line"                 "PR #1: https://example.test/pr/1  (created)" "$(grep '^PR #' <<<"$out")"
+check "report: Reviews line"            "1" "$(grep -c '^Reviews: requested: copilot; watching' <<<"$out")"
+new_repo 42-foo; rm -f "$WATCH_ARGS"
+out="$(run --title "Add foo" --review none)"
+check "watch: skipped for review none"  "watch=skipped" "$(grep '^watch=' <<<"$out")"
+check "watch: not launched"             "absent" "$([ -e "$WATCH_ARGS" ] && echo present || echo absent)"
+check "report: Reviews none"            "Reviews: none" "$(grep '^Reviews:' <<<"$out")"
+new_repo 42-foo; rm -f "$WATCH_ARGS"
+out="$(run --title "Add foo" --review copilot --no-watch)"
+check "--no-watch skips the watcher"    "watch=skipped" "$(grep '^watch=' <<<"$out")"
 
 # ---- telemetry --------------------------------------------------------------
 export WF_TELEMETRY_LOG="$ROOT/events.jsonl"

@@ -28,6 +28,7 @@ Maintained against the covered commands by `tools/cloud-workflow-adapter.test.sh
 | `/discuss` | Not available. |
 | `/board` | Not available. |
 | `--tab-only` | Skip the step that opens a session. The task is already the session. |
+| `--no-watch` | Always pass it. There is no review wait and no desktop to notify. |
 | `--no-multi` | Always in effect. Skip the fan-out step to sibling repos. |
 | `sibling-worktrees.sh` | Do not run (fan-out is skipped). |
 | `GT_LABEL_OVERRIDE` | Do not set. Session labels do not exist here. |
@@ -35,12 +36,8 @@ Maintained against the covered commands by `tools/cloud-workflow-adapter.test.sh
 | `agent-phase.sh` | Skip direct calls; scripts that call it already no-op. |
 | `session-label.sh` | Skip. |
 | `claude agents` | Ignore; there is no agent view. |
-| `git push --no-verify` | Skip the no-op push; it only registers a push in the agent view. |
-| `github-review-poll.sh` | Skip the poll step; report that no review wait was done. |
 | `mcp__shortcut__` | Not available. Shortcut tickets: stop and report. GitHub tickets need no MCP. |
 | `--review` | Always `--review none`; independent review is not performed. |
 | `--launcher` | Never pass it. No session is launched. |
 | `~/.config/local-review-only` | Ignore; `--review none` already applies. |
-| `github-review-repair-agent` | Not available. Skip; report that review follow-up is manual. |
 | `Co-Authored-By` | Use the attribution line the host/project instructs; if none, omit the trailer. |
-| `~/.claude/` | Paths under the home `.claude` do not exist here. Use the same file under `<workflow_root>/dot_claude/` (names carry chezmoi prefixes such as `executable_`). |
