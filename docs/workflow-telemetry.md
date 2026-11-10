@@ -77,6 +77,20 @@ Logs hold only identifiers, counts, and Claude Code enum values: no prompts, dif
 
 `finding_id` on local `review.finding` events is assigned by the cycle manager when it dedupes reviewers' findings: reviewers that raised the same triaged finding share one id. A finding overlaps when the same id is raised by ≥2 *distinct* reviewers; a reviewer re-raising it across rounds is not overlap. Bot findings carry no `finding_id`; matching them to local findings ("why didn't we find that?") is an offline pass over `path`, `line`, `claim` and `sha` (map lines between SHAs with `git diff`), comparing only findings in the same file and one representative per id group. Legacy events carry a `key` hash of path + 10-line bucket + normalized claim; `wf-report.sh` still counts overlap on it, and exact-wording matching makes it a lower bound.
 
+## Backfill
+
+`wf-backfill.sh --pr N [--pr M] [--branch B] [--repo owner/repo] [--git-dir DIR] [--dry-run]` recovers finding text, round SHAs and reviewer model for PRs that finished `/local-review-cycle` before those fields were logged. It is time-boxed by transcript retention: run it before the session is finalized and pruned. It reads only the log, the reviewer subagent transcripts and git history, and names no project, so it works for any repo in the log.
+
+| Recovered | Source |
+| --- | --- |
+| `review.round sha` | Last first-parent commit at or before the existing round event's `ts` |
+| `review.launch` model, `tokens_in`, `tokens_out` | Reviewer subagent transcript, one per launch |
+| `review.finding` `path`, `line`, `claim` | The reviewer's final report, parsed from the `SEVERITY \| file:line \| defect` lines. The claim is path + first sentence of the defect, not the triager's wording. No `finding_id` is assigned: that is the cycle manager's cross-reviewer judgment and is not recoverable, so backfilled findings add no overlap |
+
+Every appended event carries `backfill=1`. Backfilled `review.finding` events carry no verdict; `matched_ts` points at the original triage event, paired by reviewer, round, severity and order. `wf-report.sh` ignores them: they carry text for the offline comparison, not verdict, validity or overlap. Re-running appends nothing: an event is skipped when its (event, branch, reviewer, round, agent) identity already exists with `backfill=1`. Existing lines are never rewritten.
+
+A reviewer re-launched within a round (an aborted attempt) keeps a launch event for its real cost, but only the latest attempt's findings are backfilled. Sessions without local transcripts (cloud) get round SHAs only; the per-PR summary lists the rest, plus reviewer effort (never in transcripts), as `unknown`. The PR's `## Review` line is shown for reference.
+
 ## Measured vs. estimated
 
 | Number | Source | Kind |
@@ -98,7 +112,7 @@ Logs hold only identifiers, counts, and Claude Code enum values: no prompts, dif
 - Models missing from the price table (e.g. routed `glm-*`) leave a run's cost `unknown`. Their tokens are still counted, and `--usage` shows them with weight `n/a` without blanking other totals.
 - Cost is at list price. It ignores plan billing and Bedrock/Vertex rates.
 - `review.result` and `review.finding` are the model-emitted events and a deliberate exception to "deterministic emits only": the fixed/dismissed/deferred triage exists nowhere but the model's context. If the model skips them, findings show as unknown. Round counts still come from `github-review-state.sh`.
-- `validity` is the triager's judgment, not ground truth, and is independent of the verdict — e.g. a `partial` finding (right concern, wrong location) may still be fixed. Pre-change events lack `validity`/`finding_id`/`key` and count as `unreported`; events before this schema also lack `path`/`line`/`claim`/`source`/`sha` and `review.launch`, and none of those can be backfilled.
+- `validity` is the triager's judgment, not ground truth, and is independent of the verdict — e.g. a `partial` finding (right concern, wrong location) may still be fixed. Pre-change events lack `validity`/`finding_id`/`key` and count as `unreported`; events before this schema also lack `path`/`line`/`claim`/`source`/`sha` and `review.launch`, and those can be recovered only by `wf-backfill.sh`, from local transcripts (see Backfill).
 - Overlap rests on the cycle manager's judgment that two reviewers' findings are the same; it covers local reviewers within one run only. Legacy hash keys under-count: they require identical wording and the same 10-line bucket. The aggregate "reviewer mix vs rounds" table is a description of small samples, not a causal claim.
 - `--prune` can lose an event appended in the instant between its final copy and the file swap. Prune when no sessions are active. A `kill -9` mid-prune leaves `events.jsonl.lock` behind; remove it by hand.
 - The test pattern is a heuristic. A command that merely mentions a runner inside quotes can match.
