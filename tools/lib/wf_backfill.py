@@ -115,7 +115,9 @@ def head_sha_at(git_dir, ref, ts):
     """
     cmd = ["git", "-C", git_dir, "rev-list", "-1", "--first-parent", f"--before={ts.isoformat()}", ref]
     base = default_base(git_dir, ref)
-    if base:
+    merged = base and subprocess.run(["git", "-C", git_dir, "merge-base", "--is-ancestor", ref, base],
+                                     capture_output=True).returncode == 0
+    if base and not merged:
         cmd.append(f"^{base}")
     r = subprocess.run(cmd, capture_output=True, text=True)
     sha = r.stdout.strip()

@@ -229,6 +229,18 @@ class Pipeline(unittest.TestCase):
         _, s = bf.plan_branch(BRANCH, self.lines(), self.projects, repo)
         self.assertEqual(s["rounds_sha"], 0)
 
+    def test_branch_merged_into_main_still_recovers_shas(self):
+        repo = os.path.join(self.tmp, "merged")
+        os.makedirs(repo)
+        git(repo, "init", "-q", "-b", "main")
+        commit(repo, "m", "2026-09-01T10:00:00Z")
+        git(repo, "checkout", "-q", "-b", BRANCH)
+        commit(repo, "r", "2026-10-01T10:00:00Z")
+        git(repo, "checkout", "-q", "main")
+        git(repo, "merge", "-q", "--ff-only", BRANCH)
+        _, s = bf.plan_branch(BRANCH, self.lines(), self.projects, repo)
+        self.assertEqual(s["rounds_sha"], s["rounds"])
+
     def test_bold_severity_parses(self):
         got = bf.parse_report("**High** | a.sh:3 | breaks | x | y | z")
         self.assertEqual([f["severity"] for f in got], ["High"])
