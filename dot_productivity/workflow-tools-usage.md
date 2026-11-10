@@ -27,6 +27,8 @@ On creation it auto-symlinks untracked config from the main worktree (`.env*`, u
 
 Requires `fzf` for interactive mode and the `short` CLI for `--sc`.
 
+**Cleanup.** `prune-worktrees.sh [--repo <dir>] [--yes] [--delete-remote] [--force-delete]` sweeps stale worktrees and merged local branches. Default is a dry run listing each REMOVE candidate with its reason and each SKIP with why (dirty, unpushed, PR not merged, active Claude session, primary/deploy worktree). `--yes` removes via `git worktree remove` + `git branch -d`; remote branches go only with `--delete-remote`. A branch `git branch -d` refuses (squash/rebase merges, or the remote copy already auto-deleted) is kept with a `git branch -D` hint; `--force-delete`, or `prune_force_delete=true` in `start-ticket.conf`, deletes it after the PR proof instead. `/finalize` remains the single-branch path.
+
 ## Per-project config (outside the project repo)
 
 For repos you don't own, or whose config must not reach a public remote. A per-machine overlay is keyed by the `origin` URL, so every worktree and fresh clone of a repo finds the same files and nothing is ever inside the checkout:
@@ -43,7 +45,7 @@ $PROJECT_OVERLAYS_DIR (default ~/.config/project-overlays)/<owner>/<repo>/
 | File | Lookup order (first hit wins) |
 |---|---|
 | `governor.md`, `kickoff-preamble.md` | `<repo>/.claude/<name>` → overlay. Whole file; no merging, so a committed file fully replaces the overlay's |
-| `start-ticket.conf` keys (`provider`, `label_noise`, `launcher`, `openpr_provider`, `color`, …) | per key: `<worktree>/.start-ticket.conf` → `<main repo>/.start-ticket.conf` → overlay `start-ticket.conf` → `~/.config/start-ticket/config` |
+| `start-ticket.conf` keys (`provider`, `label_noise`, `launcher`, `openpr_provider`, `color`, `prune_force_delete`, …) | per key: `<worktree>/.start-ticket.conf` → `<main repo>/.start-ticket.conf` → overlay `start-ticket.conf` → `~/.config/start-ticket/config` |
 | `claude/` agents, commands, skills | Claude Code registers these only from the repo's `.claude/` and `~/.claude`, so overlay assets are injected by instruction instead: `start-ticket.sh` appends a "Personal project Claude assets" section to every kickoff listing them, and `/governor` announces them at startup. Agents are launched as `general-purpose` with the file body as brief (same pattern as `docs/local/reviewers/`); commands and skills are read and followed inline. A repo-defined same-named asset wins. |
 
 Used by `/governor` (says which file it loaded), `start-ticket.sh`, `open-pr.sh`, `worktree-manager.sh`.

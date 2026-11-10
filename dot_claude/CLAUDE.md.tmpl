@@ -122,8 +122,10 @@ particular needs manual permission approval every time.
 
 **Worktree Manager (`wm`):** run from any worktree dir; `wm --help` for flags. New
 worktrees get symlinked `.env*`, `.claude/`, and `docs/local/`; extra paths via a
-`.worktree-sync` manifest in the repo root (`link`/`copy` directives). Removal is manual:
-`git worktree remove <path>` then `git branch -d <branch>`.
+`.worktree-sync` manifest in the repo root (`link`/`copy` directives). Remove one merged
+branch with `/finalize`; sweep stale ones with `prune-worktrees.sh` (dry run by
+default, `--yes` to remove; skips dirty, unpushed, unmerged, active-session and
+primary/deploy worktrees).
 
 **Already-started ticket sessions:** `/start` opens a fresh session in a dedicated worktree
 whose first user message begins `Working on <ref> in this worktree. Branch `<branch>` is

@@ -180,6 +180,9 @@ You cannot remove the worktree you're standing in.
   agents`, or `claude stop <id>`), then run `git worktree unlock <worktree>` before the
   remove + branch delete themselves.
 
+To sweep every stale worktree and merged branch at once instead, run
+`prune-worktrees.sh` (dry run; `--yes` to remove, `--delete-remote` for remote branches).
+
 ### 6. Mark the session done
 
 ```bash
