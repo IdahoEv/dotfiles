@@ -247,7 +247,7 @@ class Report(Base):
         self.assertIn("unparseable", out)
         self.assertIn("findings by reviewer", out)
         self.assertIn("2 valid / 1 rejected / 0 partial / 0 unreported", out)
-        self.assertIn("overlap: 1 of 4 hashed finding(s) raised by ≥2 reviewers "
+        self.assertIn("overlap: 1 of 4 identified finding(s) raised by ≥2 reviewers "
                       "(correctness-reviewer↔robustness-reviewer: 1)", out)
         self.assertIn("hypothetical risk (correctness-reviewer, R1)", out)
 
@@ -366,6 +366,21 @@ class Report(Base):
         self.assertEqual(r["reviews"]["overlap"]["keys_total"], 1)
         self.assertFalse(any("review" in g for g in r["gaps"]))
 
+    def test_finding_id_shared_by_two_reviewers_is_overlap(self):
+        r = self.review_run([
+            self.finding("2026-10-20T09:00:00Z", "acme/w#5", round=1, validity="valid", finding_id="r1-1"),
+            self.finding("2026-10-20T09:00:01Z", "acme/w#5", reviewer="robustness-reviewer", round=1,
+                         validity="valid", finding_id="r1-1"),
+            self.finding("2026-10-20T09:00:02Z", "acme/w#5", round=2, validity="valid", finding_id="r1-1")])
+        ov = r["reviews"]["overlap"]
+        self.assertEqual((ov["keys_total"], ov["keys_raised_by_2plus"]), (1, 1))
+        self.assertFalse(any("finding_id" in g for g in r["gaps"]))
+
+    def test_bot_finding_without_identity_is_not_a_gap(self):
+        r = self.review_run([self.finding("2026-10-20T09:00:00Z", "acme/w#5", reviewer="copilot",
+                                          source="bot", validity="valid", sha="c" * 40)])
+        self.assertFalse(any("without finding_id" in g for g in r["gaps"]))
+
     def test_bot_findings_join_overlap_but_not_local_fallback_totals(self):
         key = "b" * 32
         r = self.review_run([
@@ -409,7 +424,7 @@ class Report(Base):
         with redirect_stdout(buf):
             wf_report.main(["--log", path, "--now", NOW, "--json"])
         r = json.loads(buf.getvalue())["runs"][0]
-        self.assertIn("2 valid/partial review.finding event(s) without key excluded from overlap", r["gaps"])
+        self.assertIn("2 valid/partial review.finding event(s) without finding_id or key excluded from overlap", r["gaps"])
 
     def test_same_reviewer_re_raising_is_not_overlap(self):
         key = "a" * 64

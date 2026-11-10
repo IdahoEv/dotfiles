@@ -234,13 +234,15 @@ class Run:
                 out["validity_totals"]["validity_unreported"] += 1
                 if validity is not None:
                     bad_validity += 1
-            key = e.get("key")
-            if key is not None:
+            fid, key = e.get("finding_id"), e.get("key")
+            if fid is not None and str(fid):
+                out["keys"][str(fid)].add(rv)
+            elif key is not None:
                 if re.fullmatch(r"[0-9a-f]{16,64}", str(key)):
                     out["keys"][key].add(rv)
                 else:
                     bad_keys += 1
-            elif validity in ("valid", "partial"):
+            elif validity in ("valid", "partial") and e.get("source") != "bot":
                 missing_keys += 1
             if verdict == "dismissed":
                 out["dismissed_findings"].append((rv, e.get("round"), e.get("reason")))
@@ -251,7 +253,7 @@ class Run:
         if bad_keys:
             self.gaps.append(f"{bad_keys} review.finding event(s) with malformed key skipped from overlap")
         if missing_keys:
-            self.gaps.append(f"{missing_keys} valid/partial review.finding event(s) without key excluded from overlap")
+            self.gaps.append(f"{missing_keys} valid/partial review.finding event(s) without finding_id or key excluded from overlap")
         local_results = [e for e in results if e.get("source") != "bot"]
         if local_results:
             # Bot batches add to the totals only alongside a local cycle result.
@@ -381,7 +383,7 @@ def print_run(r, out):
         ov = r.reviews["overlap"]
         if ov["keys_total"]:
             pairs = ", ".join(f"{p}: {n}" for p, n in sorted(ov["pairs"].items())) or "none"
-            w(f"  overlap: {ov['keys_raised_by_2plus']} of {ov['keys_total']} hashed finding(s) raised by ≥2 reviewers ({pairs})\n")
+            w(f"  overlap: {ov['keys_raised_by_2plus']} of {ov['keys_total']} identified finding(s) raised by ≥2 reviewers ({pairs})\n")
         if r.reviews["dismissed_findings"]:
             w("  dismissed:\n")
             for rv_name, rnd, reason in r.reviews["dismissed_findings"]:
@@ -437,7 +439,7 @@ def print_aggregate(runs, out, min_n=3):
             for p, n in d["reviews"]["overlap"]["pairs"].items():
                 pair_totals[p] += n
         pairs = ", ".join(f"{p}: {n}" for p, n in sorted(pair_totals.items())) or "none"
-        w(f"reviewer overlap: {overlapped} of {keys_total} hashed finding(s) raised by ≥2 reviewers ({pairs})\n")
+        w(f"reviewer overlap: {overlapped} of {keys_total} identified finding(s) raised by ≥2 reviewers ({pairs})\n")
     mixes = defaultdict(list)
     for d in finished:
         if d["reviews"]["reviewers"]:
