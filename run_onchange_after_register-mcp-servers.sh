@@ -17,9 +17,15 @@ add() { # add <name> <json>
 
 has_item() { op read "$1" >/dev/null 2>&1; }
 
+# Runs only when this file changes; to retry after op signin or creating the
+# item: chezmoi state delete-bucket --bucket=scriptState
 if has_item "$notion_ref"; then
   add notion "{\"command\": \"$HOME/.local/bin/mcp-notion.sh\"}"
+else
+  echo "register-mcp: cannot read $notion_ref; skipping notion" >&2
 fi
 if has_item "$shortcut_ref"; then
   add shortcut "{\"command\": \"op\", \"args\": [\"run\", \"--\", \"npx\", \"-y\", \"@shortcut/mcp@latest\"], \"env\": {\"SHORTCUT_API_TOKEN\": \"$shortcut_ref\"}}"
+else
+  echo "register-mcp: cannot read $shortcut_ref; skipping shortcut" >&2
 fi

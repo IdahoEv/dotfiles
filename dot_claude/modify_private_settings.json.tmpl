@@ -321,8 +321,18 @@ def merge(base, over):
             base[key] = value
 
 
+# Claude Code reads MCP servers from ~/.claude.json; these entries once
+# carried literal tokens, so scrub them from machines deployed earlier.
+RETIRED_MCP_SERVERS = ("notion", "shortcut")
+
 raw = sys.stdin.read()
 current = json.loads(raw) if raw.strip() else {}
+servers = current.get("mcpServers")
+if isinstance(servers, dict):
+    for name in RETIRED_MCP_SERVERS:
+        servers.pop(name, None)
+    if not servers:
+        del current["mcpServers"]
 merge(current, MANAGED)
 json.dump(current, sys.stdout, indent=2, ensure_ascii=False)
 sys.stdout.write("\n")
