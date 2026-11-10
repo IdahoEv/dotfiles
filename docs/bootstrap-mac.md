@@ -9,7 +9,7 @@
 | 0 | `xcode-select --install` | Provides `git`, `curl`, and the compilers Homebrew needs; the script refuses to run without it |
 | 1 | `curl -fsSL https://raw.githubusercontent.com/IdahoEv/dotfiles/main/tools/bootstrap-mac.sh -o /tmp/bootstrap-mac.sh` | Runs before chezmoi, so it can't come from the deploy clone; it fetches `tools/lib/packages.tsv` itself |
 | 2 | `bash /tmp/bootstrap-mac.sh` | Installs Homebrew if missing, then the manifest's formulae and casks (`--skip-casks` for formulae only) |
-| 3 | `chezmoi init --apply IdahoEv/dotfiles` | Prompts for git email and work-machine flag, then applies |
+| 3 | `chezmoi init --apply IdahoEv/dotfiles` | Prompts for git email, work-machine flag, and 1Password shell-plugin flag, then applies |
 | 4 | `exec zsh` | Start the managed shell |
 
 macOS already defaults to zsh, so there is no login-shell step.

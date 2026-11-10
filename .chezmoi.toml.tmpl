@@ -1,8 +1,10 @@
 {{- $email := promptStringOnce . "email" "Git email" -}}
 {{- $isWork := promptBoolOnce . "is_work" "Is this a work machine" false -}}
+{{- $opShellPlugins := promptBoolOnce . "op_shell_plugins" "Enable 1Password CLI shell plugins" false -}}
 [data]
 email = {{ $email | quote }}
 is_work = {{ $isWork }}
+op_shell_plugins = {{ $opShellPlugins }}
 {{- /* Hand-added API tokens would be dropped when init regenerates this file. */}}
 {{- range $key := list "notion_api_token" "shortcut_api_token" }}
 {{- with index $ $key }}
