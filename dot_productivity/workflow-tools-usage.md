@@ -35,7 +35,7 @@ For repos you don't own, or whose config must not reach a public remote. A per-m
 
 ```
 $PROJECT_OVERLAYS_DIR (default ~/.config/project-overlays)/<owner>/<repo>/
-  governor.md  kickoff-preamble.md  start-ticket.conf   (init scaffolds governor.md and start-ticket.conf; create the preamble when you have one)
+  governor.md  project-review.md  kickoff-preamble.md  start-ticket.conf   (init scaffolds governor.md, project-review.md and start-ticket.conf; create the preamble when you have one)
   claude/                     personal, project-scoped Claude assets
     agents/*.md               agent files (name/description/model frontmatter + brief)
     commands/*.md             command markdown
@@ -44,15 +44,18 @@ $PROJECT_OVERLAYS_DIR (default ~/.config/project-overlays)/<owner>/<repo>/
 
 | File | Lookup order (first hit wins) |
 |---|---|
-| `governor.md`, `kickoff-preamble.md` | `<repo>/.claude/<name>` → overlay. Whole file; no merging, so a committed file fully replaces the overlay's |
+| `governor.md`, `project-review.md`, `kickoff-preamble.md` | `<repo>/.claude/<name>` → overlay. Whole file; no merging, so a committed file fully replaces the overlay's |
 | `start-ticket.conf` keys (`provider`, `label_noise`, `launcher`, `openpr_provider`, `color`, `prune_force_delete`, …) | per key: `<worktree>/.start-ticket.conf` → `<main repo>/.start-ticket.conf` → overlay `start-ticket.conf` → `~/.config/start-ticket/config` |
 | `claude/` agents, commands, skills | Claude Code registers these only from the repo's `.claude/` and `~/.claude`, so overlay assets are injected by instruction instead: `start-ticket.sh` appends a "Personal project Claude assets" section to every kickoff listing them, and `/governor` announces them at startup. Agents are launched as `general-purpose` with the file body as brief (same pattern as `docs/local/reviewers/`); commands and skills are read and followed inline. A repo-defined same-named asset wins. |
+
+`project-review.md` holds the inputs to the periodic whole-project review (planning docs, review state, cadence, scope, invariants, lenses, delivery); it is unrelated to PR or diff review. Placeholders only in the template; real values stay in the overlay.
 
 Used by `/governor` (says which file it loaded), `start-ticket.sh`, `open-pr.sh`, `worktree-manager.sh`.
 
 ```
 project-config.sh init                 # scaffold the overlay for the current repo (never overwrites)
 project-config.sh find governor.md     # which file would load, and from where
+project-config.sh find project-review.md  # same for the periodic project-review config
 project-config.sh dir                  # overlay path
 project-config.sh claude-dir           # overlay claude/ dir
 project-config.sh list [agents|commands|skills]   # overlay claude/ asset paths

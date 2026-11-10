@@ -2,7 +2,7 @@
 
 ## Recommendation
 
-**Build `/project-review` as a thin command that launches a fresh orchestrator agent, which fans out read-only "lens" agents, synthesizes centrally, and (optionally) applies doc-level changes in one PR.** Mirror `/local-review-cycle`: command → manager agent → procedure skill, with lens agents discovered through the same three tiers. Project inputs go in one new overlay doc, `review.md`, resolved by the existing `project-config.sh find`; tracker and key documents stay in `governor.md`. Nine follow-up tickets (below), each one reviewable unit.
+**Build `/project-review` as a thin command that launches a fresh orchestrator agent, which fans out read-only "lens" agents, synthesizes centrally, and (optionally) applies doc-level changes in one PR.** Mirror `/local-review-cycle`: command → manager agent → procedure skill, with lens agents discovered through the same three tiers. Project inputs go in one new overlay doc, `project-review.md`, resolved by the existing `project-config.sh find`; tracker and key documents stay in `governor.md`. Nine follow-up tickets (below), each one reviewable unit.
 
 The source is a weekly review (here generalized to a periodic one) written for one private project: one orchestrator brief, five subtask briefs, a manual entry point. Most of it is generic choreography and review method; the project-specific part is repo coordinates, doc names, grep probes, and worked examples.
 
@@ -27,17 +27,17 @@ The source is a weekly review (here generalized to a periodic one) written for o
 | --- | --- | --- |
 | Repo coordinates, default branch | `repo_facts` (origin remote) | Nothing to configure |
 | Tracker and provider | `governor.md` (tracker) + `start-ticket.conf` `provider` | Existing keys; GitHub first, others via the provider pattern in `tools/start-ticket-providers` |
-| Planning docs (roadmap, milestones, todo) | `review.md` § Planning docs | Roles, not names: `roadmap`, `capacity-targets`, `current-focus`. **Ownership:** `review.md` owns the paths the review reads. `governor.md` § Key documents stays the governor's reading list and is the fallback when a role is absent from `review.md`; a path is never maintained in both |
-| Backlog, archive, pending-actions docs | `review.md` § Review state | Paths the apply step may edit; absent = report-only |
-| Cadence and activity gate | `review.md` § Cadence | `Window:` in days (default 7) and path globs; the gate skips a run with no significant activity in the window. The schedule itself lives in the routine, so each project sets its own |
-| Subsystem map | `review.md` § Scope | Name → paths, feeds the architecture lens |
-| Invariants and probes | `review.md` § Invariants | Deterministic commands with expected result; lenses run them instead of embedding greps |
-| Conventions docs | `review.md` § Invariants | Style guide, contributor doc |
-| Extra or skipped lenses | `review.md` § Lenses | `Skip:` list; extra lenses are agent files, not config |
-| Delivery | `review.md` § Delivery | `inline` (default) \| `file:<path>` \| `email:<address>` |
+| Planning docs (roadmap, milestones, todo) | `project-review.md` § Planning docs | Roles, not names: `roadmap`, `capacity-targets`, `current-focus`. **Ownership:** `project-review.md` owns the paths the review reads. `governor.md` § Key documents stays the governor's reading list and is the fallback when a role is absent from `project-review.md`; a path is never maintained in both |
+| Backlog, archive, pending-actions docs | `project-review.md` § Review state | Paths the apply step may edit; absent = report-only |
+| Cadence and activity gate | `project-review.md` § Cadence | `Window:` in days (default 7) and path globs; the gate skips a run with no significant activity in the window. The schedule itself lives in the routine, so each project sets its own |
+| Subsystem map | `project-review.md` § Scope | Name → paths, feeds the architecture lens |
+| Invariants and probes | `project-review.md` § Invariants | Deterministic commands with expected result; lenses run them instead of embedding greps |
+| Conventions docs | `project-review.md` § Invariants | Style guide, contributor doc |
+| Extra or skipped lenses | `project-review.md` § Lenses | `Skip:` list; extra lenses are agent files, not config |
+| Delivery | `project-review.md` § Delivery | `inline` (default) \| `file:<path>` \| `email:<address>` |
 | Scheduling | Outside the repo | Routine/cron definition holding one pointer sentence to `/project-review` |
 
-**Why a new doc, not more `governor.md`:** `governor.md` is loaded into every governor session as prose context. Probes and subsystem maps would bloat every load for a periodic job. `review.md` uses the same repo-else-overlay resolution (`project-config.sh find review.md`; `find-doc` is name-generic) and ships as one more file in `tools/project-config-templates/`, which `init` already copies. Work-specific content lives only in the private overlay.
+**Why a new doc, not more `governor.md`:** `governor.md` is loaded into every governor session as prose context. Probes and subsystem maps would bloat every load for a periodic job. `project-review.md` uses the same repo-else-overlay resolution (`project-config.sh find review.md`; `find-doc` is name-generic) and ships as one more file in `tools/project-config-templates/`, which `init` already copies. Work-specific content lives only in the private overlay.
 
 ## Plug-in design
 
@@ -45,8 +45,8 @@ The source is a weekly review (here generalized to a periodic one) written for o
 | --- | --- |
 | Lens file | Agent-format file; `use_when: periodic project review` key above `description:` (see below), plus a `Lens: collect \| triage` tag. Read-only. Own contract skill, `review-lens-contract` (snapshot path in, findings out, file:line evidence, `lens` tag, word cap), because `reviewer-contract` is diff-scoped |
 | Discovery | Same tiers and name-dedup as `/local-review-cycle`: repo `.claude/agents/` → personal `docs/local/reviewers/*.md` and overlay `claude/agents/` (`project-config.sh list agents`) → global `dot_claude/agents/`. A project lens with a global lens's name overrides it. Personal and overlay files are not registered agent types, so they launch the way the cycle launches them (read the file, run its body as a `general-purpose` brief) |
-| Selection | Discovered files are first filtered to those declaring `Lens: collect | triage`, so ordinary agents (`local-review-cycle-manager`, `correctness-reviewer`) never launch as lenses. Every remaining lens runs unless named in `review.md` `Skip:`. No `use_when:` matching: unlike diff review, there is no diff to match against |
-| Global defaults | `review-architecture`, `review-quality`, `review-docs`, `review-plan`, `review-triage`. They read `review.md` for scope, probes, and doc roles; they hold no project text |
+| Selection | Discovered files are first filtered to those declaring `Lens: collect | triage`, so ordinary agents (`local-review-cycle-manager`, `correctness-reviewer`) never launch as lenses. Every remaining lens runs unless named in `project-review.md` `Skip:`. No `use_when:` matching: unlike diff review, there is no diff to match against |
+| Global defaults | `review-architecture`, `review-quality`, `review-docs`, `review-plan`, `review-triage`. They read `project-review.md` for scope, probes, and doc roles; they hold no project text |
 | Per-project lenses | Overlay agents for domain checks the globals can't express (e.g. a module-boundary specialist) |
 | Tracker access | Triage and apply go through the provider seam, not hard-coded `gh`. The seam today (`tools/start-ticket-providers/*.sh`) covers only ticket fetch, worktree, and in-progress; #135 and #137 extend it with list/search, create issue, comment, and label/state update. A provider that lacks them falls back to report-only: triage reports, `--apply` refuses to file or edit |
 
@@ -62,7 +62,7 @@ The source is a weekly review (here generalized to a periodic one) written for o
 | Where it runs | Fresh manager agent, launched from any session, scheduled or manual. Not a sibling session | A governor session's history would bias the lenses (same reason `/local-review-cycle` never reads the diff). The governor consumes the report afterwards, e.g. to feed `/groom` |
 | Modes | Default read-only, inline report. `--apply` adds P0 filing, pending-actions and backlog updates, one PR | The source's manual path was already read-only; mutation belongs only to the scheduled run |
 | Scheduling | A `/schedule` routine at any cadence the project picks; its stored prompt is one pointer sentence | The source found any extra text in a stored prompt is drift; keep the logic in the repo |
-| Prompts | Lens briefs state method and output only; probes and names come from `review.md`. Target under 60 lines per lens | Terse, minimal-token, and nothing project-specific in the public repo |
+| Prompts | Lens briefs state method and output only; probes and names come from `project-review.md`. Target under 60 lines per lens | Terse, minimal-token, and nothing project-specific in the public repo |
 
 ## Constraints and flags
 
@@ -81,9 +81,9 @@ Ordered; each is one reviewable unit. **#140 lands first and alone**: it changes
 | Issue | Ticket | Depends on |
 | --- | --- | --- |
 | #140 | Move `Use when:` to its own `use_when:` frontmatter key for all reviewers (local and periodic); update contract, procedure, architecture doc | — |
-| #132 | `review.md` overlay template with sections Planning docs, Review state, Cadence (`Window:`, path globs), Scope, Invariants, Lenses, Delivery; `project-config` init/find coverage and tests; `workflow-tools-usage.md` entry | #140 |
+| #132 | `project-review.md` overlay template with sections Planning docs, Review state, Cadence (`Window:`, path globs), Scope, Invariants, Lenses, Delivery; `project-config` init/find coverage and tests; `workflow-tools-usage.md` entry | #140 |
 | #133 | `review-lens-contract` skill and lens discovery rules (tiers, override, `Lens:` filter, `Skip:`). `use_when:` is required metadata on each lens, not a selection filter | #132, #140 |
-| #134 | Global lenses: architecture, quality, docs, plan; driven by `review.md` | #133 |
+| #134 | Global lenses: architecture, quality, docs, plan; driven by `project-review.md` | #133 |
 | #135 | Triage lens plus pending-actions file protocol; tracker via provider seam | #133 |
 | #136 | `/project-review` command, manager agent, procedure skill: gate, snapshot, fan-out, synthesis, inline report | #134, #135 |
 | #137 | `--apply` mode: P0 filing, backlog and pending-actions updates, single PR; delivery channels | #135, #136 |
