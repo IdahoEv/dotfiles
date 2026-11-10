@@ -11,13 +11,13 @@ Spike for #156. Today a ticket is spelled four ways (`sc-7`, `Sc7`, `Is7`, `#7`)
 | Branch, GitHub | `<N>-<first 6 title words>` | `start-ticket-providers/github.sh` | Det |
 | Branch, Shortcut | `sc-<id>/<last 5 title words>` (user segment stripped) | `worktree-manager.sh` (419-500) | Det |
 | Branch, cloud sessions | `Is<N>-<slug>` | project prose | Model |
-| Worktree dir | branch with `/` → `-` | `worktree-manager.sh` (672) | Det |
+| Worktree dir | branch with `/` → `-` | `worktree-manager.sh` (677) | Det |
 | Agent row | `[PHASE][PR] Is<N>\|Sc<id> <3-4 words>`; chain `Is7+8` | `start-ticket.sh` `make_label`, `agent-phase.sh` | Det prefix, Model words |
 | Agent row, session-kickoff path | same, hand-composed | `tools/session-kickoff.md` | Model |
 | PR title | `Is<N>: <bare title>`; none for Shortcut | `open-pr-providers/*.sh` `pr_title`, repair in `open-pr.sh` (310-340) | Det prefix, Model title |
 | Commit subject | unspecified; `Closes` footer only | `commands/open-pr.md` | Model |
-| Kickoff first line | `Working on GitHub issue #N …` / `Shortcut story N …` | `start-ticket.sh` (~605) | Det |
-| Statusline | `project \| branch(40) \| [PHASE] \| PR`; no id or label | `executable_statusline.sh` (66-77) | Det |
+| Kickoff first line | `Working on GitHub issue #N …` / `Shortcut story N …` | `start-ticket.sh` (644) | Det |
+| Statusline | Ticket role: `project \| branch(40) \| [PHASE] \| PR`, no id or label; plain role: session title | `executable_statusline.sh` (66-77) | Det |
 | Telemetry / finalize ref | `owner/repo#N`, `sc-<id>`, `#42` | `lib/telemetry.sh`, `commands/finalize.md` | Det |
 | Id parsers | `^[1-9][0-9]*-`, `.*sc-([0-9]+)` | `lib/repo-facts.sh`, `lib/repo_facts.py` | Det |
 
@@ -32,7 +32,7 @@ Spike for #156. Today a ticket is spelled four ways (`sc-7`, `Sc7`, `Is7`, `#7`)
 7. **Model label may never reach the row** (unverified): `start.md` says the label is applied during `--no-tab`, but the session opens in a later `--tab-only` call that recomputes from the branch.
 8. **Model wording diverges from the slug** on the same ticket (by design today), so only the number ties the surfaces together.
 9. **Chain tag only on the row** (`Is7+8`); branch and title carry the head ticket.
-10. **`[TALK]`** is outside `PHASES` and the statusline regex.
+10. **`[TALK]`** is outside `PHASES` and the statusline regex, so it renders as a plain-title session.
 11. **Project prose duplicates provider logic** (PR-title prefix, `Closes` footer), once per cloud and local path.
 12. **Commit subjects and the statusline** carry no ticket key.
 
@@ -58,17 +58,17 @@ Derived names (branch, worktree, row, PR title) are computed from the inputs, no
 
 `name = (key, desc)`.
 
-- **key**: deterministic. Ticket work: `{provider}{chain}` (`Is312-313-315`, `sc-7435`). Talk and iteration: `tk<MMDD>[-n]` and `it<MMDD>[-n]`.
+- **key**: deterministic. Ticket work: `{provider}{chain}` (`Is312+313+315`, `sc-7435`). Talk and iteration: `tk<MMDD>[-n]` and `it<MMDD>[-n]`.
 - **desc**: 2-4 words, mostly nouns, no filler verbs (*implement*, *build*, *add*). Model-written from the ticket title, or from the starting prompt for talk and iteration. Stored in the record.
 
 Every surface derives from one base template, `{key} {desc}`, and differs only by a **form** (case and separator) and a **wrapper** (prefix, suffix, tag):
 
 | Surface | Form | Wrapper | Example |
 | --- | --- | --- | --- |
-| Branch | kebab | none | `Is312-313-315-invoice-totals` |
+| Branch | kebab | none | `Is312+313+315-invoice-totals` |
 | Worktree dir | kebab, `/` → `-` | none | same |
-| Agent row | words | tags prefix | `[WIP] Is312-313-315 invoice totals` |
-| PR title | words | `:` after the key | `Is312-313-315: invoice totals` |
+| Agent row | words | tags prefix | `[WIP] Is312+313+315 invoice totals` |
+| PR title | words | `:` after the key | `Is312+313+315: invoice totals` |
 | Commit subject | words | optional `{key}: ` prefix | `Is312: fix rounding` |
 | Statusline | n/a | line 1 is generated from the record | see below |
 
@@ -77,7 +77,7 @@ Rules that make the surfaces match:
 - Only the form and wrapper vary per surface, so the same words appear in the same order everywhere.
 - The branch drops the `<user>/` segment and the `sc-<id>/slug` slash form, so branch and worktree dir are identical.
 - The long ticket title moves to the PR body; the PR title is the name.
-- Parsers read the record first, then match the key prefix (`^(Is|sc-)[0-9]+(-[0-9]+)*`) and the legacy forms until old branches drain.
+- Parsers read the record first, then match the key prefix (`^(Is|sc-)[0-9]+(\+[0-9]+)*`; `+` keeps a numeric description such as `Is7-404-pages` from reading as a chain) and the legacy forms until old branches drain.
 
 ### Statusline
 
@@ -113,7 +113,7 @@ The resolver takes a template string from day one; user-facing DSL documentation
 ### Lifecycle
 
 - **Ticket**: `/start` creates the worktree and record from the ticket(s).
-- **Talk and iteration**: `/talk <topic>` and `/iterate <topic>` create the worktree, branch and record immediately, named from the topic (`it1109-ui-hud-alignment`). A worktree guards `main` from accidental changes and is cheap to create. Unused ones are swept later: clean, no commits, old, no live session.
+- **Talk and iteration**: `/discuss <topic>` (today a main-checkout session with no worktree) and a new `/iterate <topic>` create the worktree, branch and record immediately, named from the topic (`it1109-ui-hud-alignment`). A worktree guards `main` from accidental changes and is cheap to create. Unused ones are swept later: clean, no commits, old, no live session.
 - **Mid-stream ticket**: filing a ticket attaches it to the workstream and renames it.
 - **Rename**: `rename-workstream.sh "<slug>"` runs `git branch -m` and `git worktree move`, updates the record and row, and asks the user to `/cd`. Once a PR exists it fails closed; `--force` renames anyway and leaves the PR name behind, `--force-with-pr` opens a new PR and loses the old one's comments.
 - **Resume**: for an orphaned worktree, a script prints the record so the agent starts from it instead of from a hand-written prompt.
