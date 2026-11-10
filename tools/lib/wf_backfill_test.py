@@ -190,6 +190,49 @@ class Pipeline(unittest.TestCase):
         self.assertFalse(any(e.get("reviewer") == "security-reviewer" for e in new))
         self.assertTrue(any("ends after no logged round" in n for n in s["notes"]))
 
+    def test_aborted_attempt_gets_launch_but_no_findings(self):
+        write_agent(self.projects, "abc0", "correctness-reviewer", "2026-10-01T10:04:30Z", "2026-10-01T10:04:50Z",
+                    "Medium | old.md:1 | aborted attempt finding | x | y | z")
+        new, s = bf.plan_branch(BRANCH, self.lines(), self.projects, self.repo)
+        launches = [e for e in new if e["event"] == "review.launch" and e["reviewer"] == "correctness-reviewer"]
+        self.assertEqual(len(launches), 2)
+        self.assertFalse(any(e.get("path") == "old.md" for e in new))
+        self.assertTrue(any("aborted attempt" in n for n in s["notes"]))
+
+    def test_transcript_before_first_round_is_skipped(self):
+        write_agent(self.projects, "abc4", "plan-reviewer", "2026-10-01T09:00:00Z", "2026-10-01T09:02:00Z", "no findings")
+        new, _ = bf.plan_branch(BRANCH, self.lines(), self.projects, self.repo)
+        self.assertFalse(any(e.get("reviewer") == "plan-reviewer" for e in new))
+
+    def test_live_launch_is_not_duplicated(self):
+        events = self.lines() + [ev("review.launch", "2026-10-01T10:05:00.000Z", reviewer="correctness-reviewer",
+                                    round=1, source="local", model="sonnet")]
+        new, _ = bf.plan_branch(BRANCH, events, self.projects, self.repo)
+        self.assertFalse(any(e.get("reviewer") == "correctness-reviewer" for e in new))
+        self.assertTrue(any(e.get("reviewer") == "robustness-reviewer" for e in new))
+
+    def test_mixed_local_and_cloud_session_is_flagged(self):
+        events = self.lines() + [ev("review.finding", "2026-10-01T10:21:00.000Z", reviewer="x-reviewer",
+                                    severity="Low", verdict="fixed", round=1, session_id="22222222-bbbb")]
+        _, s = bf.plan_branch(BRANCH, events, self.projects, self.repo)
+        self.assertEqual(s["sessions_no_transcripts"], 1)
+        self.assertEqual((s["findings_text"], s["findings"]), (2, 3))
+        self.assertTrue(any("for 1 of 2 sessions" in u for u in s["unknown"]))
+
+    def test_branch_commits_dated_after_round_do_not_fall_back_to_main(self):
+        repo = os.path.join(self.tmp, "rebased")
+        os.makedirs(repo)
+        git(repo, "init", "-q", "-b", "main")
+        commit(repo, "m", "2026-09-01T10:00:00Z")
+        git(repo, "checkout", "-q", "-b", BRANCH)
+        commit(repo, "r", "2026-11-01T10:00:00Z")
+        _, s = bf.plan_branch(BRANCH, self.lines(), self.projects, repo)
+        self.assertEqual(s["rounds_sha"], 0)
+
+    def test_bold_severity_parses(self):
+        got = bf.parse_report("**High** | a.sh:3 | breaks | x | y | z")
+        self.assertEqual([f["severity"] for f in got], ["High"])
+
 
 if __name__ == "__main__":
     unittest.main()

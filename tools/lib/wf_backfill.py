@@ -22,7 +22,7 @@ import wf_usage  # noqa: E402
 
 SEVERITIES = ("Critical", "High", "Medium", "Low")
 _FINDING_RE = re.compile(
-    r"^[\s>*\-\d.)]*(?P<sev>Critical|High|Medium|Low)\s*\|\s*(?P<loc>[^|]+?)\s*\|\s*(?P<defect>[^|]+?)\s*(?:\|.*)?$",
+    r"^[\s>*\-\d.)]*(?P<sev>Critical|High|Medium|Low)\**\s*\|\s*(?P<loc>[^|]+?)\s*\|\s*(?P<defect>[^|]+?)\s*(?:\|.*)?$",
     re.I)
 _LOC_RE = re.compile(r"^`?(?P<path>[^:`]+?)`?(?::(?P<line>\d+)(?:[-,]\d+)*)?$")
 _REVIEW_LINE_RE = re.compile(r"(\d+)\s+rounds?:\s*(\d+)\s+fixed,\s*(\d+)\s+dismissed,\s*(\d+)\s+deferred")
@@ -99,10 +99,25 @@ def read_transcript(path):
     return info
 
 
+def default_base(git_dir, ref):
+    for cand in ("origin/HEAD", "origin/main", "main", "origin/master", "master"):
+        if cand != ref and subprocess.run(["git", "-C", git_dir, "rev-parse", "--verify", "-q", cand],
+                                          capture_output=True).returncode == 0:
+            return cand
+    return None
+
+
 def head_sha_at(git_dir, ref, ts):
-    """Newest commit on ref's first-parent chain committed at or before ts."""
-    r = subprocess.run(["git", "-C", git_dir, "rev-list", "-1", "--first-parent",
-                        f"--before={ts.isoformat()}", ref], capture_output=True, text=True)
+    """Newest commit exclusive to ref's first-parent chain committed at or before ts.
+
+    Commits already on the default branch are excluded so a rebase or amend that
+    post-dates the round reads as unknown rather than as a main-branch commit.
+    """
+    cmd = ["git", "-C", git_dir, "rev-list", "-1", "--first-parent", f"--before={ts.isoformat()}", ref]
+    base = default_base(git_dir, ref)
+    if base:
+        cmd.append(f"^{base}")
+    r = subprocess.run(cmd, capture_output=True, text=True)
     sha = r.stdout.strip()
     return sha if r.returncode == 0 and sha else None
 
@@ -211,6 +226,10 @@ def plan_branch(branch, events, projects, git_dir, pr_body=None):
         ts = wf_usage.parse_ts(e.get("ts"))
         if e.get("state") == "end" and isinstance(e.get("round"), int) and ts:
             ends[e["round"]] = max(ends.get(e["round"], ts), ts)
+    starts = [t for t in (wf_usage.parse_ts(e.get("ts")) for e in round_evs if e.get("state") == "start") if t]
+    first_start = min(starts) if starts else None
+    live_launch = {(e.get("reviewer"), e.get("round")) for e in evs
+                   if e["event"] == "review.launch" and not e.get("backfill")}
     sessions = sorted({e["session_id"] for e in evs if e.get("session_id")})
     summary["sessions"] = len(sessions)
     existing_findings = defaultdict(list)
@@ -228,11 +247,17 @@ def plan_branch(branch, events, projects, git_dir, pr_body=None):
             if agent not in reviewers and not str(agent).endswith("-reviewer"):
                 continue
             t = read_transcript(path)
+            if first_start and t["first_ts"] and t["first_ts"] < first_start:
+                summary["notes"].append(f"{agent} transcript {os.path.basename(path)} starts before the first round: skipped")
+                continue
             # A round's reviewers finish before its end event, and an aborted attempt
             # finishes earlier than the same round's retry.
             rnd = next((r for r, end in sorted(ends.items()) if t["last_ts"] and t["last_ts"] <= end), None)
             if rnd is None:
                 summary["notes"].append(f"{agent} transcript {os.path.basename(path)} ends after no logged round: skipped")
+                continue
+            if (agent, rnd) in live_launch:
+                summary["notes"].append(f"{agent} round {rnd}: launch already logged live, not backfilled")
                 continue
             cands.append((agent, rnd, path, t))
         latest = {}
@@ -272,14 +297,16 @@ def plan_branch(branch, events, projects, git_dir, pr_body=None):
             summary["findings_unmatched"] += sum(1 for e in existing_findings[(agent, rnd)] if id(e) not in paired)
 
     n_existing = sum(len(v) for v in existing_findings.values())
-    if summary["findings_text"] == 0 and n_existing:
-        summary["findings"] = n_existing
+    summary["findings"] = max(summary["findings"], n_existing)
     status = "full"
     if summary["sessions_no_transcripts"] or not summary["launches"] or summary["rounds_sha"] < summary["rounds"]:
         status = "partial" if (summary["rounds_sha"] or summary["launches"]) else "none"
     summary["status"] = status
     if not summary["launches"]:
         summary["unknown"] += ["reviewer model", "finding text", "reviewer tokens"]
+    if summary["launches"] and summary["sessions_no_transcripts"]:
+        summary["unknown"].append(f"reviewer model, finding text and tokens for "
+                                  f"{summary['sessions_no_transcripts']} of {summary['sessions']} sessions")
     summary["unknown"].append("reviewer effort (not in transcripts)")
     if summary["rounds_sha"] < summary["rounds"]:
         summary["unknown"].append(f"round SHA for {summary['rounds'] - summary['rounds_sha']} of {summary['rounds']} round events")
