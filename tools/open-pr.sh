@@ -3,7 +3,16 @@
 #
 #   open-pr.sh [--title "<short title>"] [--body-file <path>] [--issue <N>[,<N>…]] [--draft]
 #               [--summary-file <path> --judgment-file <path> [--test-result <text>] [--body-footer <line>]…]
-#               [--review none|copilot|copilot+claude] [--provider github|kardashev]
+#               [--commit-message-file <path>] [--review none|copilot|copilot+claude]
+#               [--provider github|kardashev] [--no-watch]
+#
+# Commit: with --commit-message-file, a dirty tree is committed (`git add -A`,
+# message verbatim — include any Co-Authored-By trailer in the file) before the
+# push; without it, uncommitted changes are warned about and left out.
+#
+# Watch: unless --no-watch (or --review none with a manual-trigger provider), a
+# detached open-pr-watch.sh polls for review comments and, on exit, sends a macOS
+# notification and a pr.watch event. $OPEN_PR_WATCH overrides the script path.
 #
 # Body: --summary-file/--judgment-file hand lib/pr_body.py the two model-written
 # sections (Summary <=3 bullets, Needs your judgment <=3 items or "none"); it adds
@@ -28,17 +37,18 @@
 # exists (this machine's Copilot quota is out; delete the file to restore it).
 # Review then happens before this script, via /local-review-cycle.
 #
-# Assumes the working tree is already committed — this script never commits.
-# It handles the mechanical, judgment-free parts of `/open-pr`: push, PR
-# create-or-reuse, and review-bot triggering. Commit-message drafting, PR
-# title/body drafting, and the "wait for explicit approval before doing
-# anything" rule all stay in the calling command (.claude/commands/open-pr.md),
-# same division of labor as start-ticket.sh vs. /start's kickoff enrichment.
+# It handles the mechanical, judgment-free parts of `/open-pr`: commit, push, PR
+# create-or-reuse, review-bot triggering, the review watch and the phase stamp.
+# Commit-message and PR title/body drafting stay in the calling command
+# (.claude/commands/open-pr.md), same division of labor as start-ticket.sh vs.
+# /start's kickoff enrichment.
 #
 # On success, prints (stdout, parseable):
 #   pr_number=<n>
 #   pr_url=<url>
 #   pr_action=created|reused
+#   ... then provider/trigger_mode/pr_title/watch keys and a human-readable
+#   report block (Shipped / PR / Reviews) for the caller to relay verbatim.
 #
 # Exit codes: 0 success; 1 usage/precondition error (die); otherwise the
 # underlying git/gh command's exit status propagates via set -e.
@@ -99,6 +109,7 @@ find_provider_file() {  # <name> → path, or empty
 # ---- args -------------------------------------------------------------------
 title="" body_file="" issue="" review="" provider="" draft=""
 summary_file="" judgment_file="" test_result="" body_footers=()
+commit_msg_file="" no_watch=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --title)          title="${2:?--title needs a value}"; shift 2 ;;
@@ -109,9 +120,11 @@ while [ $# -gt 0 ]; do
     --body-footer)    body_footers+=("${2:?--body-footer needs a value}"); shift 2 ;;
     --issue)          issue="${2:?--issue needs a value}"; shift 2 ;;
     --draft)          draft=1; shift ;;
+    --commit-message-file) commit_msg_file="${2:?--commit-message-file needs a value}"; shift 2 ;;
+    --no-watch)       no_watch=1; shift ;;
     --review)         review="${2:?--review needs a value}"; shift 2 ;;
     --provider|--env) provider="${2:?--provider needs a value}"; shift 2 ;;
-    -h|--help)        sed -n '2,40p' "$0"; exit 0 ;;
+    -h|--help)        sed -n '2,/^set -/p' "$0" | sed '$d'; exit 0 ;;
     *)                die "unknown arg: $1" ;;
   esac
 done
@@ -153,6 +166,14 @@ else
   case "$branch" in
     main|master|development) die "refusing to open a PR from $branch" ;;
   esac
+fi
+
+if [ -n "$commit_msg_file" ] && [ ! -r "$commit_msg_file" ]; then
+  die "--commit-message-file is not a readable file: $commit_msg_file"
+fi
+dirty="$(git status --porcelain)"
+if [ -n "$dirty" ] && [ -z "$commit_msg_file" ]; then
+  printf 'open-pr: warning: uncommitted changes are not in this PR (pass --commit-message-file to commit them)\n' >&2
 fi
 
 # ---- provider ---------------------------------------------------------------
@@ -198,12 +219,20 @@ provider::available || die "provider '$provider' unavailable (CLI missing or not
 # validation) via set -e instead of being swallowed like a || true.
 existing_pr="$(gh pr list --head "$branch" --json number --jq '.[0].number // empty')"
 create_pr=""
+if [ -z "$existing_pr" ]; then
+  [ -n "$title" ] || die "no existing PR for '$branch' and no --title given"
+fi
+# Committed before the body is assembled: the body's Risk and diff stat read HEAD.
+# A later usage error leaves a local commit, never a published one.
+if [ -n "$dirty" ] && [ -n "$commit_msg_file" ]; then
+  git add -A
+  git commit -q -F "$commit_msg_file"
+fi
 if [ -n "$existing_pr" ]; then
   pr_number="$existing_pr"
   pr_action="reused"
 else
   create_pr=1
-  [ -n "$title" ] || die "no existing PR for '$branch' and no --title given"
   if [ -n "$summary_file$judgment_file" ]; then
     [ -n "$summary_file" ] && [ -n "$judgment_file" ] || die "--summary-file and --judgment-file go together"
     [ -z "$body_file" ] || die "--body-file can't be combined with --summary-file/--judgment-file"
@@ -283,7 +312,7 @@ else
   fi
 fi
 
-# ---- push --------------------------------------------------------------------
+# ---- push -------------------------------------------------------------------
 # stdout (the ref-update summary) is suppressed to keep this script's stdout
 # limited to the documented key=value fields; progress/errors go to stderr.
 git push -u origin "$branch" >/dev/null
@@ -298,6 +327,10 @@ if [ -n "$create_pr" ]; then
   pr_number="$(gh pr view --json number --jq '.number')"
   pr_action="created"
 fi
+
+# A no-op push from this process lets an agent-view session see a push and link
+# the PR on its row. --no-verify: the real push above already ran the hooks.
+git push --no-verify origin "$branch" >/dev/null 2>&1 || true
 
 pr_url="$(gh pr view "$pr_number" --json url --jq '.url')"
 
@@ -370,4 +403,25 @@ printf 'pr_number=%s\npr_url=%s\npr_action=%s\n' "$pr_number" "$pr_url" "$pr_act
 printf 'provider=%s\ntrigger_mode=%s\npr_title=%s\n' \
   "$provider" "${PROVIDER_TRIGGER_MODE:-manual}" "$pr_title_now"
 [ -n "$pr_title_fixed" ] && printf 'pr_title_repaired_from=%s\n' "$pr_title_fixed"
+
+# ---- review watch -------------------------------------------------------------
+# Skipped only when no bot will ever comment: --review none on a manual-trigger
+# provider. Detached so the session can be left; the watcher notifies on exit.
+watch="started"
+if [ -n "$no_watch" ] || { [ "$review" = "none" ] && [ "${PROVIDER_TRIGGER_MODE:-manual}" = "manual" ]; }; then
+  watch="skipped"
+else
+  watch_log="$(git rev-parse --absolute-git-dir)/open-pr-watch.log"
+  nohup "${OPEN_PR_WATCH:-$SCRIPT_DIR/open-pr-watch.sh}" "$pr_number" >"$watch_log" 2>&1 </dev/null &
+  disown 2>/dev/null || true
+fi
+printf 'watch=%s\n' "$watch"
+
+if [ "${PROVIDER_TRIGGER_MODE:-manual}" = "auto" ]; then reviews_line="automatic on PR open"
+elif [ "$review" = "none" ]; then reviews_line="none"
+else reviews_line="requested: $review"
+fi
+printf '\nShipped %s\nPR #%s: %s  (%s)\nReviews: %s%s\n' \
+  "$pr_title_now" "$pr_number" "$pr_url" "$pr_action" "$reviews_line" \
+  "$([ "$watch" = started ] && echo '; watching in the background, will notify on exit')"
 exit 0

@@ -1,212 +1,75 @@
 # Finalize & Clean Up a Merged Branch
 
-Post-merge housekeeping for a feature branch: verify the PR merged, confirm the ticket
-closed, sync the base branch, remove the worktree + branch. Run from the worktree of the
-branch you just merged. Makes **no code changes**.
+Post-merge housekeeping for a feature branch: verify the PR merged, close the ticket,
+sync the base branch, remove the worktree + branch. Run from the worktree of the branch
+you just merged. Makes **no code changes**.
 
 ## Steps
 
-### 1. Check
+### 1. Run
 
 ```bash
-finalize-check.sh
+finalize-run.sh
 ```
 
-One read-only call answers every mechanical question. It prints:
+It does the whole clean path without a model turn: the `finalize-check.sh` verdict, phase
+stamps, GitHub ticket close, base pull, dotfiles deploy, worktree + branch removal, and
+disposal of this session. Act on the exit code:
+
+- **0** — done. Relay the printed line (and the reload table, if any) and stop. Write
+  no report.
+- **2** — `stopped=<verdict>`: nothing was touched. Relay why (`no-pr`/`not-merged`:
+  nothing to finalize yet, naming `pr_open_other` if set; `local-commits`: work the PR
+  never contained, show `git log <pr_head_oid>..HEAD`; `not-on-base`: the base was
+  rewritten or the merge reverted, report `pr_merge_commit` and `base`). Delete nothing.
+- **3** — `handoff=<reason>`: the script printed `detail=`, `done=` (steps already
+  complete — don't redo them) and the `finalize-check.sh` facts. Resolve just that reason
+  (step 2), then re-run `finalize-run.sh` (add `--ticket-closed` after a Shortcut close).
+- **1** — usage or precondition error: relay stderr and stop. Delete nothing.
+
+Also relay health signals: on exit 2/3, `base_fetch=failed` in the facts (ancestry
+answers came from a possibly-stale ref); on any exit, a `finalize-check: WARNING` stderr
+line such as `tracking_refspec=missing` (it carries the repair command).
+
+### 2. Handoff reasons
+
+- **`shortcut`** — close `sc-<ticket_id>` with the **MCP tools**, never the CLI (`short
+  story update --state` prints `Error fetching story NaN` and still exits 0). Read with
+  `mcp__shortcut__stories-get-by-id`; if not done-type, `mcp__shortcut__workflows-get-default`
+  lists states with a `type`. Several may be done-type ("Merged to Development", "On Release
+  Candidate (Staging)", "Completed"); merging to the base usually means the **first**. If
+  more than one is plausible and the repo config doesn't say, **ask** — overshooting
+  misreports release status. Apply with `mcp__shortcut__stories-update`
+  (`workflow_state_id`), read it back, then `finalize-run.sh --ticket-closed`. Without the
+  MCP tools, say so and name the state to set by hand.
+- **`squash-merged`** / **`unknown`** — the merge isn't proven: the PR says merged but a
+  check didn't complete (`merge_commit_landed`, `base_fetch`, `shallow`), or gh/the base
+  couldn't be resolved. Say which signal was missing and check the host by branch name if
+  you can. The script cannot finish this case: report and stop, deleting nothing. If the
+  user confirms the merge, they remove the worktree and branch by hand.
+- **`unclaimed-ticket`** — an open ticket the PR never closed (a draft PR from a stopped
+  chain). Leave it open and report it as unfinished; finish the rest by hand.
+- **`needs-pull`** — `git pull --ff-only` failed in the base worktree, so the base is
+  behind the merge. Nothing after the ticket close was done. Report `detail=`; once the
+  user has brought the base up to date, re-run `finalize-run.sh`.
+- **`ticket-unreadable`** — `gh` failed on the issue or PR. Report the error.
+- **`dirty`** — list what's dirty and **stop**; don't discard uncommitted work. If the
+  repo has `.claude/finalize-notes.md`, read it first — it may name regenerable files safe
+  to discard, and when. Apply only what it states.
+- **`locked`** — a background agent-view session holds the worktree. Don't force with
+  `-f -f`: stopping the session doesn't clear the lock. The user must stop that session
+  (`Ctrl+X` on its row in `claude agents`, or `claude stop <id>`), run `git worktree unlock
+  <worktree>`, then remove the worktree and branch (`prune-worktrees.sh` sweeps stale ones).
+- **`no-base-worktree`** / **`remove-failed`** — report `detail=`; the user finishes by hand.
+
+### 3. Report (handoff or failure only)
 
 ```
-branch= ticket_id= chain_ids= ticket_scheme= base= base_source= pr_number= pr_state=
-pr_merge_commit= pr_head_oid= pr_count= pr_open_other= head_oid= head_matches=
-merged= merge_commit_landed= base_fetch= shallow= tracking_refspec=
-base_worktree= worktree= verdict= agent_phase=
-dotfiles_repo= deploy_root= deploy_branch= deploy_dirty_files= deploy_pull_rebase=
-```
-
-Outside the dotfiles repo, `dotfiles_repo=no` and the four `deploy_*` keys are
-empty.
-
-`base` is the branch **the PR targets** (`base_source=pr`), falling back to the repo
-default when there's no PR to ask (`base_source=default`). On a stacked or
-release-branch PR those differ — report the one the script used.
-`base_source=default_pr_base_gone` means the PR's base no longer exists on origin (the
-normal end state for a merged stacked PR), so the repo default was used instead; the
-verdict then describes reaching *that* branch, not the one the PR targeted.
-
-A branch can carry several PRs. The script reports `pr_count`, prefers a
-`MERGED` one when choosing which to describe, and lists any **other** open PR in
-`pr_open_other` — which forces `not-merged` regardless of what the chosen PR
-proves. Name the open PR when you report that stop.
-
-Two of those are health signals rather than facts about the PR, and both are worth
-relaying in the report even when the verdict is `ready`:
-
-- **`base_fetch=failed`** — `origin/<base>` could not be refreshed, so every ancestry
-  answer above came from a possibly-stale ref. Say so; don't silently treat the verdict
-  as freshly-proven.
-- **`tracking_refspec=missing`** — the repo has no `remote.origin.fetch`, so
-  `refs/remotes/origin/*` never advance on fetch. `finalize-check.sh` compensates
-  internally with explicit refspecs, but nothing else does — including the
-  `git -C <base_worktree> pull` in step 3 and any `git log origin/<base>` the user runs
-  next. Relay the repair command the script printed on stderr.
-
-If `agent_phase` is non-empty, stamp it before the slower steps run so the agent-view row
-matches reality: `agent-phase.sh "$agent_phase"`. Empty means the verdict was "stop and
-look" — leave the label alone rather than relabelling a branch that needs attention.
-
-Act on `verdict`:
-
-- **`ready`** — PR merged, branch is an ancestor of `origin/<base>`, local tip matches the
-  PR head. Continue to step 2.
-- **`no-pr`** / **`not-merged`** — **stop.** Report that there's nothing to finalize yet.
-- **`local-commits`** — **stop.** The local tip is ahead of the merged PR head: there's
-  work here the PR never contained. Report it (`git log <pr_head_oid>..HEAD`) and delete
-  nothing.
-- **`squash-merged`** — the PR says merged, the branch isn't an ancestor, and the merge
-  commit **couldn't be checked** (not fetchable, or the base ref couldn't be refreshed).
-  Evidence is missing, not negative. An ordinary squash/rebase merge whose commit *is*
-  reachable now reports `ready` on its own, so reaching this verdict means a check did
-  not complete — don't wave it through as "normal for squash merges". Say which signal
-  was unavailable (`merge_commit_landed`, `base_fetch`, `shallow`) and confirm before
-  deleting. It leaves `agent_phase` empty for the same reason — don't stamp `MERGED` by
-  hand to compensate.
-- **`not-on-base`** — **stop.** The PR's merge commit is present locally and provably
-  **not** reachable from a freshly-fetched `origin/<base>` — and `<base>` here is the
-  branch the PR itself targets (`base_source=pr`; the verdict is suppressed when the
-  base had to be substituted), so this is not a stacked-PR false alarm. The base was
-  rewritten, or the merge was reverted. This branch may hold the only local ref to work
-  that never reached `<base>`. Report `pr_merge_commit` and `base`; delete nothing.
-- **`unknown`** — couldn't determine (no `gh`, non-GitHub host, no resolvable base, or
-  the PR's head object isn't fetchable so `head_matches` is itself unknown).
-  Check that host by branch name yourself; if you still can't confirm the merge, stop.
-
-### 2. Confirm the ticket is closed
-
-Use `ticket_id` and `ticket_scheme` from step 1. `chain_ids` lists every ticket the branch
-closed (a chained session; equal to `ticket_id` otherwise): run the check below for
-**each** id. If a ticket is still `OPEN` and the PR listed it under `Closes`, close it as below.
-If the PR never claimed it (a draft PR from a stopped chain), leave it open and report
-it as unfinished.
-
-**GitHub** (`ticket_scheme=github`):
-```bash
-gh issue view <ticket_id> --json state,title,parent
-```
-If `OPEN`, the `Closes #N` link didn't fire — close it pointing at the merge:
-`gh issue close <ticket_id> --comment "Landed in <pr_merge_commit> (PR #<n>)."`
-Note any `parent` epic's sub-issue progress for the report.
-
-**Shortcut** (`ticket_scheme=shortcut`): reads are fine either way, but use the **MCP
-tools** for anything that writes — `short story update --state` prints `Error fetching
-story NaN` and still exits 0, so a scripted change reports success having done nothing.
-
-- Read with `mcp__shortcut__stories-get-by-id`.
-- If not already done-type, `mcp__shortcut__workflows-get-default` (story's team id)
-  returns states with a `type`. Several may be done-type ("Merged to Development", "On
-  Release Candidate (Staging)", "Completed") — merging to the base branch usually means
-  the **first** of those, not "Completed". If more than one is plausible and the repo
-  config doesn't say, **ask** — overshooting misreports release status.
-- Apply with `mcp__shortcut__stories-update` (`workflow_state_id`), then read it back.
-
-If the MCP tools aren't available, say so and tell the user which state to set by hand —
-don't fall back to the CLI, which would silently no-op.
-
-### 3. Sync the base worktree
-
-```bash
-git -C <base_worktree> pull --ff-only
-```
-
-If `base_worktree` was empty, or this session is worktree-isolated and refuses to run git
-against another worktree: skip it and tell the user to run it themselves. Don't force it.
-
-### 4. Ship to the machine (dotfiles repo only)
-
-Skip this step entirely unless `dotfiles_repo=dev` (`deploy` or `no` → skip; in
-every other repo nothing deploys on merge).
-
-**Preflight** — from the step-1 keys, in this order: `deploy_root` empty;
-`deploy_branch` isn't `main`; `deploy_dirty_files` non-zero. Any failure: skip
-the rest of this step, record `skipped — <reason>` for the report, and continue
-to step 5. Don't fall back to `chezmoi apply` from the dev worktree — that
-deploys unmerged state and the next update reverts it. If `deploy_pull_rebase`
-is `false`, the internal pull makes merge commits: offer
-`git -C <deploy_root> config pull.rebase true` (per clone), then skip the same
-way.
-
-**Run**:
-
-```bash
-before=$(git -C <deploy_root> rev-parse HEAD)
-chezmoi -S <deploy_root> update
-git -C <deploy_root> diff --name-only ${before}..HEAD
-```
-
-If `chezmoi update` exits non-zero, report its output, skip the reload report,
-and record `skipped — update failed` for the report. Otherwise report the
-changed-file list, or "already up to date" when `before` equals the new HEAD.
-
-**Reload report** — from the changed-file list, list each artifact with its
-action. Name files, not categories:
-
-- `dot_claude/skills|commands|agents|hooks/*`, or any `dot_claude/*settings*`
-  source (e.g. `modify_private_settings.json.tmpl`) → run `/reload-skills`
-- `dot_claude/CLAUDE.md*` → stop and restart sessions — loaded once at session
-  start, not reloadable
-- `tools/*` → new shells pick them up; PATH is set at shell init
-- shell configs (other `dot_*` / `*.tmpl`, i.e. non-`dot_claude`) → restart
-  open shells
-- anything else → list it as unmapped, no action
-
-### 5. Remove this worktree and branch
-
-You cannot remove the worktree you're standing in.
-
-- If the session entered via `EnterWorktree`, call `ExitWorktree` with `action: "remove"`.
-  It only deletes the branch under the name it was *created* with — if renamed since, run
-  `git branch -D <current-branch>` afterwards.
-- Otherwise:
-  ```bash
-  cd <base_worktree>            # or any other worktree; never the bare root
-  git worktree remove <worktree>
-  git branch -D <branch>        # -D is safe: step 1 proved it's merged
-  ```
-- **Dirty tree** → list what's dirty and **stop**; don't discard uncommitted work. The one
-  exception: if the repo has `.claude/finalize-notes.md`, read it first — it may name
-  regenerable files (e.g. generated caches) that are safe to discard, and the conditions
-  under which to do so. Apply only what it states; anything it doesn't cover still stops.
-- **Locked** (a background agent-view session holds a lock on its worktree) → don't force
-  with `-f -f`. Stopping the session doesn't clear the lock, so the retry fails the same
-  way. Report that the user must stop this session (`Ctrl+X` on its row in `claude
-  agents`, or `claude stop <id>`), then run `git worktree unlock <worktree>` before the
-  remove + branch delete themselves.
-
-To sweep every stale worktree and merged branch at once instead, run
-`prune-worktrees.sh` (dry run; `--yes` to remove, `--delete-remote` for remote branches).
-
-### 6. Mark the session done
-
-```bash
-agent-phase.sh DONE
-```
-
-Last, and only if step 5 actually completed — `DONE` tells the user nothing remains in
-this session. If cleanup was skipped or blocked (dirty, locked, worktree-isolated), leave
-the phase at `MERGED` and say what's outstanding.
-
-### 7. Report
-
-```
-Finalized <ticket-ref> — <title>
-- PR #<n> merged as <pr_merge_commit>
+Not finalized <ticket-ref>: <handoff reason or stop>
+- Done: <the script's done= steps>
+- Outstanding: <what remains and who does it>
 - Ticket state: <closed | just set to "<state>" | was already "<state>">
-- Worktree removed: <path>
-- Branch deleted: <branch>
-- <base> worktree: synced / needs `git -C <path> pull --ff-only`
-- Deploy clone: updated (<n> files) / already up to date / skipped — <reason>   (dotfiles only)
-- Reload: <file> → /reload-skills; <file> → restart sessions; <file> → restart shells   (dotfiles only)
-- Epic <parent-ref>: <x>/<y> sub-issues done; remaining: <...>   (GitHub, if parented)
-- Follow-ups: <anything noticed>
 ```
 
 `<ticket-ref>` uses the scheme's dialect (`#42`, `sc-74085`). Report the ticket state you
-**read back** after writing, not the one you intended to set.
+**read back** after writing. Leave the phase at `MERGED`.

@@ -18,7 +18,7 @@ adapter, commands = sys.argv[1], sys.argv[2:]
 construct = re.compile(
     r"mcp__[a-z_]+__|\b(?:AskUserQuestion|EnterWorktree|ExitWorktree|TodoWrite|EnterPlanMode|ExitPlanMode)\b"
     r"|\b(?:agent-phase|session-label|sibling-worktrees|github-review-poll|github-review-state|request-review)\.sh\b"
-    r"|\bGT_LABEL_[A-Z_]+\b|--tab-only|--no-multi|--review|--launcher|--confirm-commits|github-review-repair-agent|local-review-cycle-manager|~/\.config/local-review-only|claude agents|Co-Authored-By|git push --no-verify"
+    r"|\bGT_LABEL_[A-Z_]+\b|--tab-only|--no-multi|--no-watch|--review|--launcher|--confirm-commits|github-review-repair-agent|local-review-cycle-manager|~/\.config/local-review-only|claude agents|Co-Authored-By|git push --no-verify"
     r"|~/\.claude/"
     r"|(?<![\w/.-])/(?:start|open-pr|finalize|discuss|board|github-review-comments|local-review-cycle)\b"
 )
