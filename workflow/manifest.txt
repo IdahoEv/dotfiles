@@ -15,7 +15,7 @@ da26866e8e7df3397cd6dd540c668f345b68ab6695657957f880f5f8891534f7  644  dot_claud
 ba2e0f31de188900a843753131126fc1cfa9ed22a9982ab284440d79be4c6854  644  dot_claude/agents/test-generator.md
 c3c02fec04bfb82a8070f0da0dc957ae81a3ef0727bd2329a8129678a660ece6  644  dot_claude/agents/web-search-researcher.md
 92a5a8af85fb042c621cbd142156c5cc976cc1e449b7a93b3a8e3f0b01462a3c  644  dot_claude/commands/discuss.md
-f1512bddd3c2c9b94f303184ee2e1872ccaec0b914cee0e3da5538d39b8acc95  644  dot_claude/commands/finalize.md
+8998b38bc79c43a9a0ed46b71cd239544d630001837e917275a7da64231f51c2  644  dot_claude/commands/finalize.md
 30f03e48c2f2bc6cc60d74195f3da6af3d7f868160a11f43daf759611194b83c  644  dot_claude/commands/generate_prd.md
 88735274dc70e25a6da0d34c4509580752520706cbb0a2cdeedbbecd9aa61755  644  dot_claude/commands/github-review-comments.md
 d980ad1c2a292434faccbe8f1d76c2db32f08694a09ff1474b85ed82620baef3  644  dot_claude/commands/governor.md
@@ -23,7 +23,7 @@ ee447a7392a65c8de415ed450a6ed9492b2f119a89918b182722e507b1a023a4  644  dot_claud
 1ad7374ab13385f8487312affce31905d6c01af1256fd6e6c4a6168d168039f8  644  dot_claude/commands/implement.md
 aea92a98bed9188f79b921df6337530b891f045989d5db6494bcda4814d7fd09  644  dot_claude/commands/literal_create_plan.md
 a9688e7c6f0c8079a183b2327c4de0364245a3cda23f2cdd4ac94c8a0c64e07d  644  dot_claude/commands/local-review-cycle.md
-30c40d56f2639507358362217785672bf01b3da9a18128db85c4de2cdc35eb06  644  dot_claude/commands/open-pr.md
+033a10a2c908fc064dee726b6a570b41dba97a72c962c10eed664283407169aa  644  dot_claude/commands/open-pr.md
 5f0a2dcfa1486e787e03283466d1e5345daab5fdbfb6f45aa72fea1cd22b6a9f  644  dot_claude/commands/pick.md
 d28421c38f12d9a255bfdc6dbd1e5abc42ffde49f8d682f84fc1b0c13d363ce6  644  dot_claude/commands/prompt-audit.md
 51367b2883763ed4354e9f51f596d3ed865982d0f57e2c1a8502c96b645b97de  644  dot_claude/commands/remind.md
@@ -52,7 +52,9 @@ bddf25616fa63f0ca8ac5b4930003b30deab97b5058a623c8a88320938a8d6a7  644  dot_claud
 2005d23e14e09fec069d999bc58813745b711e65c14c50d22787e9f769f801b2  644  tools/cloud-gh-shim.py
 60a99a97d37a74b7198c608731c56dab7afd893af18bbe93a4faad173a5735db  644  tools/cloud-workflow-bootstrap.sh
 aba2b3934bec4b85ba04e090631da2057c981cac6059dec8ace4a8a3bd0fac9b  755  tools/finalize-check.sh
-e31fd1335fa105781de5e8e59240f3140981f5cb7e4a33730179b963c6aca873  644  tools/lib/finalize_check.py
+2b0879df07b0123f330bd67e06e860453e229f422385f0c6da19e88277d855c9  755  tools/finalize-run.sh
+bd7c8224bbfda753dfd2345e11f87df9571e238bba122df02377e69589fe5657  644  tools/lib/finalize_check.py
+f9a438f73d29326358262339d533f645052072c6740ce5724cc29ff9902273a2  644  tools/lib/finalize_run.py
 f2a76fa675abd9ec93f935a0a9673ea6bbfac857b3ff2db535140c32a166db1e  644  tools/lib/model-pricing.json
 136e5d15665f21c2b8dd43900955182dd6bd3528e666553f8dddfca081a151cb  644  tools/lib/packages.tsv
 c35d14e612032aeb02db2a06ba9770e4b193f42c0c1570a96c0907613d0d959f  644  tools/lib/pr-risk.json
@@ -70,7 +72,8 @@ f6d369e82e99df2b899a4e53f1418bced2ab931851ae6e9ea7603c2460975cbc  755  tools/mcp
 c8ce372b7286fdec6d59dc1cc586f65cffd3ad95cdeebdd089631832c46e1b09  755  tools/migrate-use-when.sh
 ecd5995144d9111762dd751bd341d08a81b8a96b29410830aaa28cdf36cfec55  644  tools/open-pr-providers/github.sh
 ac6967653eba726326ac7a154d3f7472d2c928bef24c40e3bce5c8fc13973f28  644  tools/open-pr-providers/kardashev.sh
-32fe45663707ae563ef4d605e9597e54a78d060b1c65c1cdc7a3ff302ae0cad4  755  tools/open-pr.sh
+20e1ba6f76351bfc20a2c77acbac4195426e5dd7e2122a60229b0e27c02438b0  755  tools/open-pr-watch.sh
+b0d046f46bcb38a3015b1506d1d23765345a8d6f3f1b0ffa384141e185816e65  755  tools/open-pr.sh
 924937befc2fa9b642c8cdd3407ec9958a32ca8cc05259bc2b31a1be387849fb  755  tools/pr-body.sh
 f6ec970038d77efb2159bd5818cb7fc4cbd72ceddfe0bcbc353d3a6f51061850  644  tools/project-colors
 b127c521bc0b7fd59034739990ec1010f5e929f1584a5fe5ff39746ccb390361  644  tools/project-config-templates/governor.md
@@ -93,6 +96,6 @@ c1ab6c8c8f800a23622ec35d2b13d9e9bc25f252b67ba785490d23c661e2e34b  755  tools/wf-
 f15dd098841d7963da09693fafbb3bf3f713952434c4c4b8a40dec6cb7cb0fcd  755  tools/workflow-manifest.sh
 8b3c4fad15997740068b84ced54bf8395749d2b33b6700dd9af651b5047d0057  755  tools/workflow-session.sh
 db476f8bde6afdc9933afe7c94e45e76224d7832bd063f6c7dad9fb54fdf61d3  755  tools/worktree-manager.sh
-d73f557e7c12f8b2ba6756311451be7b51112595e2de455f4d61cbb741d6a686  644  workflow/adapters/agy.md
-c2703a268dd02cf098b244c50b9d44ad7dc54d969f65375ce2dc4e7157004581  644  workflow/adapters/claude-cloud.md
-b97bdb3d72d2a0f6d0f2bea182b7064a25a1131f840d90d03592c4688b689c0e  644  workflow/adapters/codex.md
+56e4643aeaafae027d7f42ea8d23351ab18a2dd812880f507ce3a4d48f74cc01  644  workflow/adapters/agy.md
+1785fc462099f774129f36d10ae607d46e5af9adc16323ca73228d690bac2b43  644  workflow/adapters/claude-cloud.md
+6e2d521b322e10ab7eebdc54c0557decc8415de6274da60d6890ac368f732324  644  workflow/adapters/codex.md

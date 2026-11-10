@@ -16,8 +16,8 @@ usage/precondition errors. Makes NO changes: no pushes, no deletes, no
 ticket writes — the judgment calls stay in the command. The one exception
 is the finalize.check telemetry event, which never affects the exit status.
 
-choose_verdict() and agent_phase_for() are pure so a later port (#119) can
-import the verdict ladder without the fact collection.
+choose_verdict() and agent_phase_for() are pure so finalize_run can reuse the
+verdict ladder without the fact collection.
 """
 
 from __future__ import annotations
