@@ -68,6 +68,7 @@ fc3c8ddad937e52ea3760c6e28e18ecb67632e7d3db33b257ec2d0b53e0fb46b  644  tools/lib
 8b380209965a1e2c19bd8770a9e3cd037ee8cfc28a5d7c0c0edf21087b7345d2  644  tools/lib/wf_report.py
 3c46a31599092ceabb336ccd81b8e9a03631dbd0e8942152e8bbc420a74180fc  644  tools/lib/wf_tokens.py
 3b1a0716083c8f92ab94a60d59ecee59a1716e54cca16dd6cf25f77e2abfe41f  644  tools/lib/wf_usage.py
+f6d369e82e99df2b899a4e53f1418bced2ab931851ae6e9ea7603c2460975cbc  755  tools/mcp-notion.sh
 c8ce372b7286fdec6d59dc1cc586f65cffd3ad95cdeebdd089631832c46e1b09  755  tools/migrate-use-when.sh
 ecd5995144d9111762dd751bd341d08a81b8a96b29410830aaa28cdf36cfec55  644  tools/open-pr-providers/github.sh
 ac6967653eba726326ac7a154d3f7472d2c928bef24c40e3bce5c8fc13973f28  644  tools/open-pr-providers/kardashev.sh
