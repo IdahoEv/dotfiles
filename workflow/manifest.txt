@@ -74,6 +74,7 @@ ac6967653eba726326ac7a154d3f7472d2c928bef24c40e3bce5c8fc13973f28  644  tools/ope
 924937befc2fa9b642c8cdd3407ec9958a32ca8cc05259bc2b31a1be387849fb  755  tools/pr-body.sh
 f6ec970038d77efb2159bd5818cb7fc4cbd72ceddfe0bcbc353d3a6f51061850  644  tools/project-colors
 b127c521bc0b7fd59034739990ec1010f5e929f1584a5fe5ff39746ccb390361  644  tools/project-config-templates/governor.md
+060962b774ffcf83bc0c402a196f72df15a8e618b8e4a351a8745c22517548ba  644  tools/project-config-templates/project-review.md
 341266856237f6929897b9e2b717d341b3c602d8bb5be01996ad97ff4c750da3  644  tools/project-config-templates/start-ticket.conf
 9a5f4342274b648ff05f5f4c4505a62e8118968ab4f9890dfed2701d3c2f86b0  755  tools/project-config.sh
 897f3d03a1e760f56fdab55a0d787184e25e1bb265e71cf413c7e1259d747c13  755  tools/prune-worktrees.sh
