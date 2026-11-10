@@ -15,7 +15,7 @@ da26866e8e7df3397cd6dd540c668f345b68ab6695657957f880f5f8891534f7  644  dot_claud
 ba2e0f31de188900a843753131126fc1cfa9ed22a9982ab284440d79be4c6854  644  dot_claude/agents/test-generator.md
 c3c02fec04bfb82a8070f0da0dc957ae81a3ef0727bd2329a8129678a660ece6  644  dot_claude/agents/web-search-researcher.md
 92a5a8af85fb042c621cbd142156c5cc976cc1e449b7a93b3a8e3f0b01462a3c  644  dot_claude/commands/discuss.md
-0fbe1ac46a39c027d16b964c649c38fa68daba0ea6980a06b0efb2b1cd196c6b  644  dot_claude/commands/finalize.md
+cabe7544983e97e991fa8544eca65fc2d42b0e1fe58d83074f0c4a5c5891566b  644  dot_claude/commands/finalize.md
 30f03e48c2f2bc6cc60d74195f3da6af3d7f868160a11f43daf759611194b83c  644  dot_claude/commands/generate_prd.md
 88735274dc70e25a6da0d34c4509580752520706cbb0a2cdeedbbecd9aa61755  644  dot_claude/commands/github-review-comments.md
 d980ad1c2a292434faccbe8f1d76c2db32f08694a09ff1474b85ed82620baef3  644  dot_claude/commands/governor.md
@@ -54,7 +54,7 @@ bddf25616fa63f0ca8ac5b4930003b30deab97b5058a623c8a88320938a8d6a7  644  dot_claud
 aba2b3934bec4b85ba04e090631da2057c981cac6059dec8ace4a8a3bd0fac9b  755  tools/finalize-check.sh
 2b0879df07b0123f330bd67e06e860453e229f422385f0c6da19e88277d855c9  755  tools/finalize-run.sh
 bd7c8224bbfda753dfd2345e11f87df9571e238bba122df02377e69589fe5657  644  tools/lib/finalize_check.py
-b821e74ac25e0781e51332b8143c3cc2814ad26185f54d8578b79ded7f5f8f45  644  tools/lib/finalize_run.py
+73a104ea4a9961bf3937c0dafd29499a54f12b6300d56f6ecd6ec13a80bb28af  644  tools/lib/finalize_run.py
 f2a76fa675abd9ec93f935a0a9673ea6bbfac857b3ff2db535140c32a166db1e  644  tools/lib/model-pricing.json
 136e5d15665f21c2b8dd43900955182dd6bd3528e666553f8dddfca081a151cb  644  tools/lib/packages.tsv
 c35d14e612032aeb02db2a06ba9770e4b193f42c0c1570a96c0907613d0d959f  644  tools/lib/pr-risk.json
@@ -72,7 +72,7 @@ c8ce372b7286fdec6d59dc1cc586f65cffd3ad95cdeebdd089631832c46e1b09  755  tools/mig
 ecd5995144d9111762dd751bd341d08a81b8a96b29410830aaa28cdf36cfec55  644  tools/open-pr-providers/github.sh
 ac6967653eba726326ac7a154d3f7472d2c928bef24c40e3bce5c8fc13973f28  644  tools/open-pr-providers/kardashev.sh
 c7ccfcd32e5026ec6d31949645452514daa259bea150df6b7b8bb390103a076f  755  tools/open-pr-watch.sh
-b7ca0473ff9c8c7ff5757402f4b514802bdaf3fcb8091be139d759873dde4cdd  755  tools/open-pr.sh
+0681a603324cb36dcbe819428fec31c6f5c8652e6f3f3e01c4b8e33f5719491c  755  tools/open-pr.sh
 924937befc2fa9b642c8cdd3407ec9958a32ca8cc05259bc2b31a1be387849fb  755  tools/pr-body.sh
 f6ec970038d77efb2159bd5818cb7fc4cbd72ceddfe0bcbc353d3a6f51061850  644  tools/project-colors
 b127c521bc0b7fd59034739990ec1010f5e929f1584a5fe5ff39746ccb390361  644  tools/project-config-templates/governor.md
