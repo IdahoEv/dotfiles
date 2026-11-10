@@ -1,6 +1,7 @@
 ---
 name: architecture-reviewer
-description: Reviews branch changes for architectural fit, boundaries, abstractions, coupling, and design alternatives. Read-only. Use when: the diff changes module boundaries, public interfaces, data flow, or multiple modules, or makes a consequential design choice.
+use_when: the diff changes module boundaries, public interfaces, data flow, or multiple modules, or makes a consequential design choice.
+description: Reviews branch changes for architectural fit, boundaries, abstractions, coupling, and design alternatives. Read-only.
 tools: Read, Glob, Grep, Bash
 model: sonnet
 skills:

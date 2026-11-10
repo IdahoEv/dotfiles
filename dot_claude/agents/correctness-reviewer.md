@@ -1,6 +1,7 @@
 ---
 name: correctness-reviewer
-description: Reviews a branch diff for ticket compliance, behavioral correctness, edge cases, and test adequacy. Read-only. Use when: the diff changes non-trivial behavior, logic, or tests.
+use_when: the diff changes non-trivial behavior, logic, or tests.
+description: Reviews a branch diff for ticket compliance, behavioral correctness, edge cases, and test adequacy. Read-only.
 tools: Read, Glob, Grep, Bash
 model: sonnet
 skills:

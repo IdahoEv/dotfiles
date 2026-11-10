@@ -1,6 +1,7 @@
 ---
 name: dotfiles-safety-reviewer
-description: Reviews dotfiles branch diffs for references to private, closed-source repos — work or personal — that must not appear in this public repo. Use when: the diff touches dot_claude/, dot_shell_modules/, dot_productivity/, gitconfig templates, tools/, .gitignore, or any other file that is committed or deployed, and may carry project names, ticket titles, internal identifiers, hostnames, or stack details.
+use_when: the diff touches dot_claude/, dot_shell_modules/, dot_productivity/, gitconfig templates, tools/, .gitignore, or any other file that is committed or deployed, and may carry project names, ticket titles, internal identifiers, hostnames, or stack details.
+description: Reviews dotfiles branch diffs for references to private, closed-source repos — work or personal — that must not appear in this public repo.
 model: sonnet
 tools: Read, Glob, Grep, Bash
 skills:
