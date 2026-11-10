@@ -86,16 +86,16 @@ trailer unless the drafted message already has one. Then one call:
 
 ```bash
 # first ship — pass the title BARE, exactly as drafted:
-open-pr.sh --title "<bare short title>" --summary-file <summary-tmp> --judgment-file <judgment-tmp> --test-result "<one line>" [--commit-message-file <msg-tmp>] --review <level> [--provider <name>] [--draft] [--issue <a,b>]
+open-pr.sh --title "<bare short title>" --summary-file <summary-tmp> --judgment-file <judgment-tmp> --test-result "<one line>" [--commit-message-file <msg-tmp>] --review <level> [--provider <name>] [--draft] [--issue <a,b>] [--no-watch]
 
 # existing PR — reuse its title/body:
-open-pr.sh [--commit-message-file <msg-tmp>] --review <level> [--provider <name>]
+open-pr.sh [--commit-message-file <msg-tmp>] --review <level> [--provider <name>] [--no-watch]
 ```
 
 `--test-result` is the one-line outcome of the project's tests from this session ("42 passed",
 or "not run: <why>"). Never claim a pass that didn't run.
 
-Forward the user's `--provider`/`--env` verbatim if they gave one; omit otherwise.
+Forward the user's `--provider`/`--env` and `--no-watch` verbatim if they gave them; omit otherwise.
 The script commits, pushes, opens or reuses the PR, triggers reviews, stamps the agent-view
 row (`[REVIEW][PR]` / `[REVIEWED][PR]` / `[PR]`), and starts the detached review watch. Don't
 repeat any of that by hand. It prints `pr_number`, `pr_url`, `pr_action`, `provider`,
@@ -104,8 +104,7 @@ mention it), `watch=started|skipped`, then a `Shipped … / PR … / Reviews …
 
 The watch polls for review comments in the background; when it ends it sends a macOS
 notification and a `pr.watch` event. On "comments arrived", run `/github-review-comments`.
-The session can be left once this step returns. Poll **only this session's PR**: each sibling
-runs its own `/open-pr`.
+The session can be left once this step returns.
 
 ### 4. Fan out to the ticket's other repos
 

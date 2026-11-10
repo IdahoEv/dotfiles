@@ -26,9 +26,9 @@ disposal of this session. Act on the exit code:
   complete — don't redo them) and the `finalize-check.sh` facts. Resolve just that reason
   (step 2), then re-run `finalize-run.sh` (add `--ticket-closed` after a Shortcut close).
 
-Also relay health signals from the facts, even on exit 0 paths that print them:
-`base_fetch=failed` (ancestry answers came from a possibly-stale ref) and
-`tracking_refspec=missing` (the repair command is on stderr).
+Also relay health signals: on exit 2/3, `base_fetch=failed` in the facts (ancestry
+answers came from a possibly-stale ref); on any exit, a `finalize-check: WARNING` stderr
+line such as `tracking_refspec=missing` (it carries the repair command).
 
 ### 2. Handoff reasons
 
@@ -43,8 +43,9 @@ Also relay health signals from the facts, even on exit 0 paths that print them:
   MCP tools, say so and name the state to set by hand.
 - **`squash-merged`** / **`unknown`** — the merge isn't proven: the PR says merged but a
   check didn't complete (`merge_commit_landed`, `base_fetch`, `shallow`), or gh/the base
-  couldn't be resolved. Say which signal was missing and confirm with the user before
-  deleting anything; check the host by branch name if you can.
+  couldn't be resolved. Say which signal was missing and check the host by branch name if
+  you can. The script cannot finish this case: report and stop, deleting nothing. If the
+  user confirms the merge, they remove the worktree and branch by hand.
 - **`unclaimed-ticket`** — an open ticket the PR never closed (a draft PR from a stopped
   chain). Leave it open and report it as unfinished; finish the rest by hand.
 - **`ticket-unreadable`** — `gh` failed on the issue or PR. Report the error.
@@ -60,15 +61,11 @@ Also relay health signals from the facts, even on exit 0 paths that print them:
 ### 3. Report (handoff or failure only)
 
 ```
-Finalized <ticket-ref> — <title>
-- PR #<n> merged as <pr_merge_commit>
+Not finalized <ticket-ref>: <handoff reason or stop>
+- Done: <the script's done= steps>
+- Outstanding: <what remains and who does it>
 - Ticket state: <closed | just set to "<state>" | was already "<state>">
-- Worktree removed: <path>
-- Branch deleted: <branch>
-- <base> worktree: synced / needs `git -C <path> pull --ff-only`
-- Follow-ups: <anything noticed>
 ```
 
 `<ticket-ref>` uses the scheme's dialect (`#42`, `sc-74085`). Report the ticket state you
-**read back** after writing. If cleanup was blocked, leave the phase at `MERGED` and say
-what's outstanding.
+**read back** after writing. Leave the phase at `MERGED`.

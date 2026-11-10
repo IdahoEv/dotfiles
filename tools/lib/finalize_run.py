@@ -89,19 +89,18 @@ def claims_ticket(pr_body: str, ticket: str) -> bool:
                           pr_body))
 
 
-def close_github_tickets(f: fc.Facts) -> list[str]:
-    """Close every id in chain_ids the PR claimed; returns per-id notes.
+def close_github_tickets(f: fc.Facts, closed: list[str]) -> None:
+    """Close every id in chain_ids the PR claimed, appending "#id closed" to
+    `closed` as each lands so a mid-chain Handoff can still report them.
     Raises Handoff when state can't be read or a still-open ticket was never
     claimed by the PR (a draft PR from a stopped chain: unfinished, not ours
     to close)."""
     body = None
-    notes = []
     for tid in filter(None, f.chain_ids.split(",")):
         r = run_cmd(["gh", "issue", "view", tid, "--json", "state"], cwd=f.worktree)
         if r.returncode != 0 or '"state"' not in r.stdout:
             raise Handoff("ticket-unreadable", f"gh issue view {tid} failed")
         if '"OPEN"' not in r.stdout:
-            notes.append(f"#{tid} already closed")
             continue
         if body is None:
             pr = run_cmd(["gh", "pr", "view", f.pr_number, "--json", "body",
@@ -117,8 +116,7 @@ def close_github_tickets(f: fc.Facts) -> list[str]:
                     cwd=f.worktree)
         if c.returncode != 0:
             raise Handoff("ticket-unreadable", f"gh issue close {tid} failed")
-        notes.append(f"#{tid} closed")
-    return notes
+        closed.append(f"#{tid} closed")
 
 
 def pull_base(f: fc.Facts) -> str:
@@ -240,7 +238,11 @@ def run(dir_: str, branch: str, ticket_closed: bool) -> int:
                 raise Handoff("shortcut", f"close sc-{f.ticket_id} via the Shortcut MCP tools")
             if f.ticket_scheme == "github" and f.ticket_id:
                 parts.append("ticket closed")
-                close_github_tickets(f)
+                closed: list[str] = []
+                try:
+                    close_github_tickets(f, closed)
+                finally:
+                    done.extend(closed)
                 done.append("ticket")
         elif f.ticket_id:
             parts.append("ticket closed")

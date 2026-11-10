@@ -180,6 +180,43 @@ class Run(Base):
         self.assertEqual(self.claude_log.read_text().strip(), "rm abc123")
         self.assertNotIn("7-feature", self.branches())
 
+    def wait_for_claude_log(self):
+        for _ in range(50):
+            if self.claude_log.exists():
+                break
+            time.sleep(0.1)
+        return self.claude_log.read_text().strip() if self.claude_log.exists() else ""
+
+    def test_unlocked_own_session_removes_checkout_then_disposes(self):
+        wt = self.merged_branch("7-feature")
+        job = self.root / "jobs" / "abc123"
+        job.mkdir(parents=True)
+        r = self.finalize(wt, env={"CLAUDE_JOB_DIR": str(job)})
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertFalse(wt.exists())
+        self.assertNotIn("7-feature", self.branches())
+        self.assertEqual(self.wait_for_claude_log(), "rm abc123")
+
+    def test_without_job_dir_claude_rm_is_not_called(self):
+        wt = self.merged_branch("7-feature")
+        r = self.finalize(wt)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        time.sleep(0.5)
+        self.assertFalse(self.claude_log.exists())
+
+    def test_chain_handoff_reports_tickets_already_closed(self):
+        wt = self.merged_branch("7-feature")
+        git_dir = self.git(wt, "rev-parse", "--absolute-git-dir")
+        Path(git_dir, "chain").write_text("7\n8\n")
+        (self.pr_dir / "body.txt").write_text("Closes #7\n")
+        self.set_issue(8, "OPEN")
+        r = self.finalize(wt)
+        self.assertEqual(r.returncode, 3, r.stdout + r.stderr)
+        self.assertIn("handoff=unclaimed-ticket", r.stdout)
+        self.assertIn("done=#7 closed", r.stdout)
+        self.assertIn("issue close 7", self.gh_calls())
+        self.assertNotIn("issue close 8", self.gh_calls())
+
 
 if __name__ == "__main__":
     unittest.main()
