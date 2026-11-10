@@ -1,6 +1,7 @@
 ---
 name: supply-chain-reviewer
-description: Reviews a branch diff for build and configuration security — vulnerable or unmaintained dependencies, CI workflow integrity, deploy/container misconfiguration, and secrets in config. Read-only. Use when: the diff touches dependency manifests or lockfiles, CI/CD workflow definitions, container/deploy/IaC configuration, or files that store, transmit, or provision secrets.
+use_when: the diff touches dependency manifests or lockfiles, CI/CD workflow definitions, container/deploy/IaC configuration, or files that store, transmit, or provision secrets.
+description: Reviews a branch diff for build and configuration security — vulnerable or unmaintained dependencies, CI workflow integrity, deploy/container misconfiguration, and secrets in config. Read-only.
 tools: Read, Glob, Grep, Bash
 model: sonnet
 skills:

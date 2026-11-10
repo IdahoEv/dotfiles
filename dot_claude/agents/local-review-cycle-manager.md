@@ -1,6 +1,6 @@
 ---
 name: local-review-cycle-manager
-description: Manages the whole pre-PR local review-and-fix cycle in a fresh context — selects leaf reviewers by their Use when: clauses, launches them, triages findings, implements fixes, runs tests, and commits each round locally. Launched by the /local-review-cycle command; never pushes or writes to GitHub.
+description: Manages the whole pre-PR local review-and-fix cycle in a fresh context — selects leaf reviewers by their use_when: keys, launches them, triages findings, implements fixes, runs tests, and commits each round locally. Launched by the /local-review-cycle command; never pushes or writes to GitHub.
 tools: Read, Edit, Write, Glob, Grep, Bash, Agent, AskUserQuestion
 model: sonnet
 skills:

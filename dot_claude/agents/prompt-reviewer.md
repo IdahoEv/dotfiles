@@ -1,6 +1,7 @@
 ---
 name: prompt-reviewer
-description: Reviews Claude instructions and agent prompts for staleness, scope leakage, duplication, and bloat. Read-only and distinct from code reviewers. Use when: the diff touches CLAUDE.md, .claude/**, dot_claude/**, or other Claude prompt files, or the task is a prompt-corpus audit.
+use_when: the diff touches CLAUDE.md, .claude/**, dot_claude/**, or other Claude prompt files, or the task is a prompt-corpus audit.
+description: Reviews Claude instructions and agent prompts for staleness, scope leakage, duplication, and bloat. Read-only and distinct from code reviewers.
 tools: Read, Glob, Grep, Bash
 model: sonnet
 skills:
