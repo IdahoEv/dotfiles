@@ -122,7 +122,8 @@ class Context:
 # ---- pure core -------------------------------------------------------------------
 
 def parse_worktrees(porcelain: str) -> list[Worktree]:
-    """Stanzas of `git worktree list --porcelain`; the first is the primary."""
+    """Stanzas of `git worktree list --porcelain`; the first non-bare is the
+    primary (a `wm --init` container lists its bare stanza first)."""
     out: list[Worktree] = []
     cur: Worktree | None = None
     for line in porcelain.splitlines() + [""]:
@@ -136,7 +137,7 @@ def parse_worktrees(porcelain: str) -> list[Worktree]:
         elif key in ("bare", "detached", "locked", "prunable"):
             setattr(cur, key, True)
         elif line == "":
-            cur.primary = not out
+            cur.primary = not cur.bare and not any(not w.bare for w in out)
             out.append(cur)
             cur = None
     return out
@@ -282,6 +283,8 @@ def find_candidates(repo: str) -> list[Candidate]:
     out = [stale_registration(w) if w.prunable else worktree_candidate(w, ctx)
            for w in worktrees]
     checked_out = {w.branch for w in worktrees}
+    if fc.dotfiles_facts(repo)[0] == "deploy":
+        return out
     refs = _git(repo, "for-each-ref", "--format=%(refname:short)", "refs/heads")
     for b in refs.splitlines():
         if b and b not in checked_out and b != ctx.base_branch:
@@ -353,6 +356,8 @@ def recheck(repo: str, c: Candidate) -> Candidate:
     ctx = build_context(repo)
     for w in worktrees:
         if w.path == c.path and c.path:
+            if w.branch != c.branch:
+                return dataclasses.replace(c, verdict="unknown")
             fresh = worktree_candidate(w, ctx)
             fresh.remote_exists = c.remote_exists
             return fresh

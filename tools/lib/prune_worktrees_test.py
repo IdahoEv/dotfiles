@@ -264,6 +264,12 @@ class Report(Base):
         self.git(self.repo, "worktree", "remove", str(wt))
         self.assertRegex(self.out(), r"REMOVE .*feature-k\t\(no worktree\)")
 
+    def test_deploy_clone_repo_lists_no_branch_candidates(self):
+        wt = self.merged_branch("feature-m")
+        self.git(self.repo, "worktree", "remove", str(wt))
+        self.env["CHEZMOI_SOURCE_DIR"] = str(self.repo)
+        self.assertNotIn("feature-m", self.out())
+
     def test_remote_branch_listed_not_deleted_without_flag(self):
         self.merged_branch("feature-l")
         out = self.out()
@@ -472,6 +478,24 @@ class Classify(unittest.TestCase):
         self.assertTrue(wts[1].locked)
         self.assertEqual(wts[1].branch, "feat")
         self.assertTrue(wts[2].detached)
+
+    def test_parse_worktrees_skips_bare_container_for_primary(self):
+        text = ("worktree /c\nbare\n\n"
+                "worktree /c/main\nHEAD a\nbranch refs/heads/main\n\n"
+                "worktree /c/feat\nHEAD b\nbranch refs/heads/feat\n\n")
+        wts = pw.parse_worktrees(text)
+        self.assertEqual([w.primary for w in wts], [False, True, False])
+
+    def test_recheck_rejects_worktree_whose_branch_changed(self):
+        c = pw.Candidate(path="/p", branch="old", verdict="ready")
+        wt = pw.Worktree(path="/p", branch="new")
+        orig = pw.list_worktrees
+        pw.list_worktrees = lambda repo: [wt]
+        try:
+            fresh = pw.recheck("/r", c)
+        finally:
+            pw.list_worktrees = orig
+        self.assertEqual(pw.classify(fresh)[0], "skip")
 
 
 if __name__ == "__main__":
