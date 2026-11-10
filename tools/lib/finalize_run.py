@@ -72,10 +72,17 @@ def stamp_phase(phase: str) -> None:
     run_cmd([os.path.join(TOOLS_DIR, "agent-phase.sh"), phase])
 
 
-def emit(dir_: str, outcome: str, reason: str = "") -> None:
+def emit(f: fc.Facts, dir_: str, outcome: str, reason: str = "") -> None:
+    # An event's run comes from the checkout's branch; once the checkout is
+    # gone, read the repo from the base worktree and name the ticket outright.
+    target, extra, cwd = dir_, [], None
+    if not os.path.isdir(dir_) and f.base_worktree:
+        target, cwd = f.base_worktree, f.base_worktree
+        if f.ticket_id:
+            extra = [f"ticket={f.ticket_id}", f"scheme={f.ticket_scheme}"]
     try:
-        run_cmd([os.path.join(TOOLS_DIR, "wf-event.sh"), "--dir", dir_, "finalize.run",
-                 f"outcome={outcome}", f"reason={reason}"])
+        run_cmd([os.path.join(TOOLS_DIR, "wf-event.sh"), "--dir", target, "finalize.run",
+                 f"outcome={outcome}", f"reason={reason}", *extra], cwd=cwd)
     except OSError:
         pass
 
@@ -212,7 +219,7 @@ def hand_off(f: fc.Facts, dir_: str, reason: str, detail: str, done: list[str]) 
     print(f"detail={detail.replace(chr(10), '; ')}")
     print(f"done={','.join(done)}")
     print_facts(f)
-    emit(dir_, "handoff", reason)
+    emit(f, dir_, "handoff", reason)
     return EXIT_HANDOFF
 
 
@@ -223,7 +230,7 @@ def run(dir_: str, branch: str, ticket_closed: bool) -> int:
     if f.verdict in STOP_VERDICTS:
         print(f"stopped={f.verdict}")
         print_facts(f)
-        emit(dir_, "stopped", f.verdict)
+        emit(f, dir_, "stopped", f.verdict)
         return EXIT_STOP
     if f.verdict != "ready":
         return hand_off(f, dir_, f.verdict, "merge not proven", [])
@@ -268,7 +275,7 @@ def run(dir_: str, branch: str, ticket_closed: bool) -> int:
           f"(PR #{f.pr_number}, merged as {f.pr_merge_commit[:7]}): {', '.join(parts)}")
     for line in table:
         print(line)
-    emit(dir_, "ok")
+    emit(f, dir_, "ok")
     return EXIT_OK
 
 

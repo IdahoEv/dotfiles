@@ -25,6 +25,7 @@ disposal of this session. Act on the exit code:
 - **3** — `handoff=<reason>`: the script printed `detail=`, `done=` (steps already
   complete — don't redo them) and the `finalize-check.sh` facts. Resolve just that reason
   (step 2), then re-run `finalize-run.sh` (add `--ticket-closed` after a Shortcut close).
+- **1** — usage or precondition error: relay stderr and stop. Delete nothing.
 
 Also relay health signals: on exit 2/3, `base_fetch=failed` in the facts (ancestry
 answers came from a possibly-stale ref); on any exit, a `finalize-check: WARNING` stderr

@@ -4,6 +4,7 @@ Fixtures reuse prune_worktrees_test's throwaway repos with a bare local
 origin; `gh` and `claude` are PATH stubs whose answers come from files.
 """
 
+import json
 import os
 import shutil
 import subprocess
@@ -196,6 +197,17 @@ class Run(Base):
         self.assertFalse(wt.exists())
         self.assertNotIn("7-feature", self.branches())
         self.assertEqual(self.wait_for_claude_log(), "rm abc123")
+
+    def test_ok_event_survives_removal_of_the_checkout(self):
+        wt = self.merged_branch("7-feature")
+        self.git(wt, "remote", "set-url", "origin", "https://github.com/o/r.git")
+        log = self.root / "events.jsonl"
+        r = self.finalize(wt, env={"WF_TELEMETRY_LOG": str(log)})
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertFalse(wt.exists())
+        events = [json.loads(line) for line in log.read_text().splitlines()]
+        done = [e for e in events if e["event"] == "finalize.run"]
+        self.assertEqual([(e["outcome"], e["ticket"]) for e in done], [("ok", "7")])
 
     def test_without_job_dir_claude_rm_is_not_called(self):
         wt = self.merged_branch("7-feature")

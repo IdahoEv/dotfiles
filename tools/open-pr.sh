@@ -124,7 +124,7 @@ while [ $# -gt 0 ]; do
     --no-watch)       no_watch=1; shift ;;
     --review)         review="${2:?--review needs a value}"; shift 2 ;;
     --provider|--env) provider="${2:?--provider needs a value}"; shift 2 ;;
-    -h|--help)        sed -n '2,40p' "$0"; exit 0 ;;
+    -h|--help)        sed -n '2,/^set -/p' "$0" | sed '$d'; exit 0 ;;
     *)                die "unknown arg: $1" ;;
   esac
 done
