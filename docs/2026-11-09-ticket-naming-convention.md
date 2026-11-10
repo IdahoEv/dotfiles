@@ -49,19 +49,20 @@ One **name** per unit of work: `key` + `description`.
 
 key = `<provider><numbers>`: provider `Is` (GitHub issue) or `sc-` (Shortcut); numbers = all chain tickets, hyphen-joined.
 
-| Surface | Template | Example |
-| --- | --- | --- |
-| key | `{provider}{chain}` | `Is312-313-315`, `sc-7435` |
-| Branch | `{key}-{desc:kebab}` | `Is312-313-315-invoice-totals` |
-| Worktree dir | `{branch}` | same |
-| Agent row | `{phase} {key} {desc:words}` | `[WIP] Is312-313-315 invoice totals` |
-| PR title | `{key}: {desc:words}` | `Is312-313-315: invoice totals` |
-| Commit subject | `{key}: <message>`, optional | `Is312: fix rounding` |
-| Statusline | `{key}` replaces the branch column | `Is312-313-315` |
+Every surface derives from one **base** template, `{key} {desc}` (key `{provider}{chain}`: `Is312-313-315`, `sc-7435`). A surface differs from the base only by a **form** (case and word separator) and a **wrapper** (prefix, suffix, phase tag). Both are overridable per surface.
+
+| Surface | Form | Wrapper | Example |
+| --- | --- | --- | --- |
+| Branch | kebab | none | `Is312-313-315-invoice-totals` |
+| Worktree dir | kebab, `/` → `-` | none | same |
+| Agent row | words | `{phase} ` prefix | `[WIP] Is312-313-315 invoice totals` |
+| PR title | words | `:` after the key | `Is312-313-315: invoice totals` |
+| Commit subject | words | optional `{key}: ` prefix | `Is312: fix rounding` |
+| Statusline | n/a | `{key}` replaces the branch column | `Is312-313-315` |
 
 Rules that make the surfaces match:
 
-- Case and separators are fixed per template, so the same words appear in the same order everywhere.
+- Only the form and wrapper vary per surface, so the same words appear in the same order everywhere. A user who wants spaces everywhere sets the branch form to `words`; one who wants kebab everywhere sets it for the row and PR title.
 - The branch drops the `<user>/` segment and the `sc-<id>/slug` slash form, so branch and worktree dir are identical.
 - The long ticket title moves to the PR body; the PR title is the name, not a second summary.
 - Parsers match the key prefix (`^(Is|sc-)[0-9]+(-[0-9]+)*`) and keep the legacy forms until old branches drain. A description that starts with digits is ambiguous, so `<git-dir>/chain` stays authoritative for the ticket list.
@@ -70,6 +71,16 @@ Rules that make the surfaces match:
 
 Every template, plus the key's parts, is a setting. Resolution order, most specific wins: project `.start-ticket.conf` > per-machine config > user config > built-in default. This extends the existing `setting` helper in `start-ticket.sh`, which already resolves env, machine, then default.
 
+Overrides, narrowest wins: a surface setting replaces the base for that surface only.
+
+| Setting | Effect | Use |
+| --- | --- | --- |
+| `base` | Replaces `{key} {desc}` everywhere | Change the shape for all surfaces |
+| `<surface>.form` | `kebab`, `words`, `Title`, `snake` | Kebab branch and worktree (no spaces in paths), readable row and PR title |
+| `<surface>.template` | Full template for one surface | `branch.template = {type}/{base}` and `pr.template = {type}: {base}`, with the row left at the base so it omits the type |
+
+`{base}` in a surface template means the base rendered in that surface's form, so overriding one surface never forks the wording. Defaults leave every override empty.
+
 Conceptual token library (the DSL; a `{token:option}` substitution is the cheapest implementation and is enough):
 
 | Token | Options |
@@ -77,8 +88,8 @@ Conceptual token library (the DSL; a `{token:option}` substitution is the cheape
 | `{provider}` | `full` (`Issue`, `shortcut`), `brief` (`Is`, `sc-`) |
 | `{chain}` | `all`, `first`, `last`; separator configurable |
 | `{desc}` | source: `model`, `title` (verbatim), `ask` (prompt the user); form: `kebab`, `words`, `Title` |
-| `{type}` | `bug`, `feature`, `chore`, … from the ticket's label or type; `none` when unlabelled; empty by default. Example branch template: `{type}/{key}-{desc:kebab}`; the worktree dir then needs `/` → `-`, as today |
-| `{phase}`, `{branch}`, `{key}` | derived |
+| `{type}` | `bug`, `feature`, `chore`, … from the ticket's label or type; `none` when unlabelled; empty by default. Example branch template: `{type}/{base}`; the worktree dir then needs `/` → `-`, as today |
+| `{base}`, `{phase}`, `{key}` | derived |
 | literals | any separators or symbols |
 
 Ship the defaults above and the single resolver; the user-facing DSL documentation can come later, but the resolver takes a template string from day one so nothing needs reworking.
