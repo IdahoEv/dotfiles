@@ -394,6 +394,12 @@ class Report(Base):
         rv = self.review_run(events)["reviews"]
         self.assertEqual((rv["fixed"], rv["dismissed"], rv["deferred"]), (None, None, None))
 
+    def test_json_reviews_omit_internal_local_state(self):
+        rv = self.review_run([
+            self.finding("2026-10-20T09:00:00Z", "acme/w#5", round=1, validity="valid", key="b" * 32)])["reviews"]
+        self.assertNotIn("local_reviewers", rv)
+        self.assertNotIn("local_findings", rv)
+
     def test_valid_finding_without_key_is_gapped(self):
         path = self.write_log([
             self.finding("2026-10-20T09:00:00Z", "acme/w#5", round=1, validity="valid"),

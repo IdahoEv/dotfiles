@@ -321,7 +321,8 @@ class Run:
             "reviews": {
                 **{k: v for k, v in self.reviews.items()
                    if k not in ("keys", "has_validity", "by_reviewer", "reviewers", "overlap",
-                                "validity_totals", "dismissed_findings")},
+                                "validity_totals", "dismissed_findings",
+                                "local_findings", "local_reviewers")},
                 "reviewers": sorted(self.reviews["reviewers"]),
                 "by_reviewer": {r: dict(v) for r, v in self.reviews["by_reviewer"].items()},
                 "validity": dict(self.reviews["validity_totals"]),
