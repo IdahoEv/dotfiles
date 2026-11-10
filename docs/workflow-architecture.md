@@ -35,7 +35,7 @@ flowchart TD
 | `agents/local-review-cycle-manager.md` | Agent | Fresh context that orchestrates the whole cycle — selects reviewers, triages, fixes, commits each round locally; never pushes. |
 | `skills/local-review-cycle-procedure/SKILL.md` | Skill | The cycle procedure (preflight, selection, triage, telemetry, report); loaded by the command and manager; not user-invocable. |
 | `agents/{correctness,architecture,robustness,prompt}-reviewer.md` | Agent | Fresh, isolated context; read-only leaf reviewers. |
-| `agents/{security,supply-chain}-reviewer.md` | Agent | Read-only security leaf reviewers — code-level vulnerabilities and build/config risk, selected by `Use when:` like the rest. |
+| `agents/{security,supply-chain}-reviewer.md` | Agent | Read-only security leaf reviewers — code-level vulnerabilities and build/config risk, selected by `use_when:` like the rest. |
 | `skills/security-review-rubric/SKILL.md` | Skill | OWASP-anchored rubric preloaded into both security reviewers; usable directly for interactive checks. Separate from the built-in `/security-review`, which stays as the interactive whole-branch pass. |
 | `agents/github-review-repair-agent.md` | Agent | Fresh context with edit tools; never commits/pushes/writes to GitHub. |
 | `skills/reviewer-contract/SKILL.md` | Skill | Shared contract loaded into every reviewer; avoids per-agent duplication. |
@@ -52,11 +52,12 @@ flowchart TD
 | `tools/lib/prune_worktrees.py`, `tools/prune-worktrees.sh` | Script | Project-wide sweep of stale worktrees and merged local branches; dry run by default, `--yes` removes. A candidate needs a PR verdict of `ready` from `finalize_check` (same ladder as `/finalize`), a clean tree, nothing unpushed, no live `claude agents --json` session in it, and is not primary, base-branch, locked, detached or the deploy clone; an unreadable session list skips everything. Removal is `git worktree remove` then `git branch -d`. `-d` accepts only a branch contained in its upstream (or HEAD with none), so it refuses squash/rebase merges and branches whose remote copy was auto-deleted; those branches are kept with a `git branch -D` hint unless `--force-delete` or `prune_force_delete=true` (`start-ticket.conf`, per project or global) is set, which deletes via `git update-ref -d` pinned to the PR-verified tip. Remote branches are deleted only with `--delete-remote`. `remove_candidate()` is the removal step a single-ticket `finalize-run` (#119) can import. |
 | `tools/lib/sibling_worktrees.py`, `tools/sibling-worktrees.sh` | Script | Finds worktrees in sibling repos on the same ticket so `/open-pr` can fan a session out to each repo. `sibling_worktrees.py` is the implementation, importing `repo_facts` directly; `sibling-worktrees.sh` is a thin wrapper emitting the same TAB records `<repo>/<worktree>/<branch>/<state>`. |
 | `tools/agent-phase.sh`, `github-review-state.sh` | Script | Statusline bookkeeping (`[REVIEW]` etc.); no review logic. |
+| `tools/migrate-use-when.sh` | Script | One-shot migration of a legacy reviewer's trailing `Use when:` clause into a `use_when:` key; the cycle report names legacy files still selected via the fallback. |
 | `tools/reviewer-model.sh` | Script | Ops toggle: flips the eight review-chain agents' `model:` between `sonnet` (committed default) and `auto` in the deploy clone, then applies; no review logic. |
 
 ## Patterns
 
-1. **Risk-based selection.** Each reviewer's `description` ends with a `Use when:` clause; the orchestrator matches clauses against `git diff --name-only BASE...HEAD` and risk signals. Smallest set that covers the risks; no code reviewer on prompt-only diffs; deterministic issues go to formatter/linter/tests.
+1. **Risk-based selection.** Each reviewer carries a `use_when:` frontmatter key above `description:`; the orchestrator reads it from the agent files (the catalog shows only `description`) and matches it against `git diff --name-only BASE...HEAD` and risk signals. Smallest set that covers the risks; no code reviewer on prompt-only diffs; deterministic issues go to formatter/linter/tests.
 2. **Shrinking rounds.** Round 1 reviews `BASE...HEAD`; round k+1 reviews only round k's fix commits plus a correctness pass on touched files.
 3. **Evidence bar + triage.** Findings need a credible failure path, test gap, or material design cost. Already-triaged findings pass forward; nothing is resurrected without new evidence.
 4. **Gates and caps.** `DESIGN: unsound` halts before code changes; max 5 rounds; `FAST` per round, `FULL` once at finish; `--confirm-commits` is opt-in hold-for-review — by default the manager commits every round and human review happens on the PR.
@@ -151,7 +152,7 @@ Key invariant: outputs always flow **up**; the parent session owns every push an
 ## Machine- and project-specific extensions
 
 - **Machine:** machine behavior lives in templates and `is_*` data, never in agent bodies. The cycle command itself is machine-independent — `--confirm-commits` is opt-in per invocation on every machine.
-- **Project reviewers:** agent-format file ending in a `Use when:` clause, in the repo's `.claude/agents/` (precedence over global); reference it from the project's `CLAUDE.md`.
+- **Project reviewers:** agent-format file with a `use_when:` key, in the repo's `.claude/agents/` (precedence over global); reference it from the project's `CLAUDE.md`.
 - **Personal, work-machine reviewers for shared repos:** `docs/local/reviewers/*.md` — globally gitignored, symlinked into every worktree by `wm`. No work content in dotfiles. New personal agents default to the per-project overlay (`~/.config/project-overlays/<owner>/<repo>/claude/`, keyed by the origin remote), which also holds governor.md, kickoff preambles, and conf keys; `docs/local/` stays for content tied to this checkout's tree — scratch notes, temporary docs, throwaway experiments. Rule of thumb: a fresh clone needs it → overlay; only this checkout → `docs/local/`.
 - **New reviewer:** follow `reviewer-contract`'s authoring convention and cite it from project docs; the orchestrator must never invent reviewers mid-cycle.
 
