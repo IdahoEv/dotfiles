@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Find and remove stale worktrees and merged local branches.
 
-    prune-worktrees.sh [--repo <dir>] [--yes] [--delete-remote]
+    prune-worktrees.sh [--repo <dir>] [--yes] [--delete-remote] [--force-delete]
 
 A worktree is stale when its branch's PR is verified MERGED (via the same
 verdict ladder /finalize uses), the tree is clean, and nothing is unpushed.
@@ -28,7 +28,7 @@ from repo_facts import git as _git, git_ok as _git_ok, run_cmd as _run
 
 HELP = """prune-worktrees.sh — find and remove stale worktrees and merged local branches.
 
-  prune-worktrees.sh [--repo <dir>] [--yes] [--delete-remote]
+  prune-worktrees.sh [--repo <dir>] [--yes] [--delete-remote] [--force-delete]
 
 A worktree/branch is removable only when ALL hold:
   - its PR is MERGED and the work landed on the PR's base (merge-commit,
@@ -43,15 +43,28 @@ be read, every worktree is skipped. Merged local branches that have no
 worktree are listed and removed the same way.
 
 Default is a DRY RUN: nothing changes. With --yes each candidate is re-checked,
-then `git worktree remove` (never --force) and `git branch -d` run. When -d
-refuses a squash/rebase-merged branch, `git branch -D` is used only because
-the PR proof above already holds. Remote branches are listed; they are deleted
-(`git push origin --delete`) only with --delete-remote together with --yes.
+then `git worktree remove` (never --force) and `git branch -d` run.
+
+`git branch -d` only accepts a branch that is contained in its upstream
+(origin/<branch>) or, with no upstream, in HEAD. A squash/rebase-merged
+branch, or any branch whose remote copy was auto-deleted before the local main
+caught up, is refused even though the PR proof holds. By default such a branch
+is kept (its worktree is still removed) and the exact `git branch -D <b>`
+command is printed. With --force-delete, or `prune_force_delete=true` in
+start-ticket.conf (per project or global), the branch is deleted instead via
+`git update-ref -d refs/heads/<b> <verified-tip>`, which fails if the tip moved
+since the PR proof. Use it only for projects whose PRs are squash/rebase
+merged, or where you accept deleting on the PR's word alone.
+
+Remote branches are listed; they are deleted (`git push origin --delete`) only
+with --delete-remote together with --yes.
 
 Options:
   --repo <dir>       any worktree of the repo (default: current directory)
   --yes              perform the removals (default: dry run)
   --delete-remote    also delete origin/<branch> for removed branches
+  --force-delete     delete branches `git branch -d` refuses, after PR proof
+                     (default from prune_force_delete=true in start-ticket.conf)
   -h, --help
 
 Exit codes: 0 report produced (or removals done); 1 usage error or a removal
@@ -94,6 +107,7 @@ class Candidate:
     verdict: str = "unknown"
     how: str = ""  # how the merge was proven, for the report
     pr_number: str = ""
+    tip: str = ""  # local branch tip the merge proof was computed for
     remote_exists: bool | None = False  # None: lookup failed, state unknown
 
 
@@ -181,8 +195,8 @@ def session_state(path: str, session_dirs: list[str] | None) -> str:
     return "active" if inside else "none"
 
 
-def merge_proof(branch: str, wt: str) -> tuple[str, str, str]:
-    """(verdict, pr_number, how): finalize-check's ladder for one branch."""
+def merge_proof(branch: str, wt: str) -> tuple[str, str, str, str]:
+    """(verdict, pr_number, how, tip): finalize-check's ladder for one branch."""
     pr = fc.gh_pr_facts(wt, branch)
     base, source = fc.resolve_base(pr.base, wt, wt)
     merged, fetch = fc.merged_status(branch, base, wt)
@@ -202,7 +216,7 @@ def merge_proof(branch: str, wt: str) -> tuple[str, str, str]:
         how = f"PR #{pr.number} merged; branch is on origin/{base}"
     else:
         how = f"PR #{pr.number} squash/rebase-merged into {base}"
-    return verdict, pr.number, how
+    return verdict, pr.number, how, head
 
 
 def ahead_of_upstream(wt: str, branch: str) -> int:
@@ -239,7 +253,7 @@ def worktree_candidate(w: Worktree, ctx: Context) -> Candidate:
         return c
     c.dirty = bool(_git(w.path, "status", "--porcelain"))
     c.ahead_of_upstream = ahead_of_upstream(w.path, w.branch)
-    c.verdict, c.pr_number, c.how = merge_proof(w.branch, w.path)
+    c.verdict, c.pr_number, c.how, c.tip = merge_proof(w.branch, w.path)
     return c
 
 
@@ -252,7 +266,7 @@ def stale_registration(w: Worktree) -> Candidate:
 def branch_candidate(branch: str, ctx: Context) -> Candidate:
     c = Candidate(path="", branch=branch)
     c.ahead_of_upstream = ahead_of_upstream(ctx.repo, branch)
-    c.verdict, c.pr_number, c.how = merge_proof(branch, ctx.repo)
+    c.verdict, c.pr_number, c.how, c.tip = merge_proof(branch, ctx.repo)
     return c
 
 
@@ -280,32 +294,57 @@ def find_candidates(repo: str) -> list[Candidate]:
 
 # ---- removal -------------------------------------------------------------------------
 
-def remove_candidate(repo: str, c: Candidate, delete_remote: bool) -> tuple[bool, str]:
-    """Remove worktree, then branch. Never --force; -D only after PR proof
-    (c.verdict == "ready") and only when -d refuses a squash/rebase merge."""
+def delete_branch(repo: str, branch: str, tip: str, force: bool) -> tuple[str, str]:
+    """('deleted' | 'kept' | 'failed', detail). `-d` first; on its "not fully
+    merged" refusal the caller's PR proof stands in for it, but only with
+    force, and pinned to the verified tip so a branch that moved survives.
+    LC_ALL=C: the refusal gate matches git's English text."""
+    r = _run(["env", "LC_ALL=C", "git", "-C", repo, "branch", "-d", branch])
+    if r.returncode == 0:
+        return "deleted", ""
+    if "not fully merged" not in r.stderr:
+        return "failed", r.stderr.strip()
+    if not force:
+        return "kept", (f"git -d refuses (PR proof holds); "
+                        f"to delete: git branch -D {branch}")
+    if not tip:
+        return "failed", "verified tip unknown"
+    r = _run(["env", "LC_ALL=C", "git", "-C", repo, "update-ref", "-d",
+              f"refs/heads/{branch}", tip])
+    if r.returncode != 0:
+        return "failed", r.stderr.strip()
+    _run(["git", "-C", repo, "config", "--remove-section", f"branch.{branch}"])
+    return "deleted", ""
+
+
+def remove_candidate(repo: str, c: Candidate, delete_remote: bool,
+                     force_delete: bool = False) -> tuple[str, str]:
+    """Remove worktree, then branch. ('removed' | 'partial' | 'failed', msg).
+    Never --force on the worktree; see delete_branch for the branch rules.
+    'partial' = worktree gone, branch kept for lack of force_delete."""
     if c.verdict != "ready":
-        return False, "no merge proof"
+        return "failed", "no merge proof"
     if delete_remote and c.remote_exists is None:
-        return False, "origin lookup failed; nothing removed"
+        return "failed", "origin lookup failed; nothing removed"
     if c.path:
         r = _run(["git", "-C", repo, "worktree", "remove", c.path])
         if r.returncode != 0:
-            return False, f"worktree remove failed: {r.stderr.strip()}"
+            return "failed", f"worktree remove failed: {r.stderr.strip()}"
     tip = _git(repo, "rev-parse", "--verify", "--quiet", f"refs/heads/{c.branch}")
-    # LC_ALL=C: the -D gate matches git's English refusal text.
-    r = _run(["env", "LC_ALL=C", "git", "-C", repo, "branch", "-d", c.branch])
-    if r.returncode != 0 and "not fully merged" in r.stderr:
-        r = _run(["env", "LC_ALL=C", "git", "-C", repo, "branch", "-D", c.branch])
-    if r.returncode != 0:
-        return False, f"branch delete failed: {r.stderr.strip()}"
+    state, detail = delete_branch(repo, c.branch, c.tip or tip, force_delete)
+    if state == "failed":
+        return "failed", f"branch delete failed: {detail}"
+    if state == "kept":
+        prefix = "worktree removed; branch kept: " if c.path else "branch kept: "
+        return "partial", prefix + detail
     if delete_remote and c.remote_exists:
         # Lease on the tip we just deleted locally: follow-up work pushed since survives.
         r = _run(["git", "-C", repo, "push", "origin",
                   f"--force-with-lease=refs/heads/{c.branch}:{tip}",
                   f":refs/heads/{c.branch}"])
         if r.returncode != 0:
-            return False, f"local branch removed; remote delete failed: {r.stderr.strip()}"
-    return True, "removed"
+            return "failed", f"local branch removed; remote delete failed: {r.stderr.strip()}"
+    return "removed", "removed"
 
 
 def recheck(repo: str, c: Candidate) -> Candidate:
@@ -358,11 +397,13 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--repo", default=".")
     p.add_argument("--yes", action="store_true")
     p.add_argument("--delete-remote", action="store_true")
+    p.add_argument("--force-delete", action="store_true")
     p.add_argument("-h", "--help", action="store_true")
     return p
 
 
-def apply_removals(repo: str, cands: list[Candidate], delete_remote: bool) -> int:
+def apply_removals(repo: str, cands: list[Candidate], delete_remote: bool,
+                   force_delete: bool) -> int:
     failures = 0
     for c in cands:
         if classify(c)[0] != "remove":
@@ -372,9 +413,9 @@ def apply_removals(repo: str, cands: list[Candidate], delete_remote: bool) -> in
         if action != "remove":
             print(render_line("KEPT", c, f"changed since listing: {reason}"))
             continue
-        ok, msg = remove_candidate(repo, fresh, delete_remote)
-        print(render_line("REMOVED" if ok else "FAILED", c, msg))
-        failures += 0 if ok else 1
+        status, msg = remove_candidate(repo, fresh, delete_remote, force_delete)
+        print(render_line(status.upper(), c, msg))
+        failures += status == "failed"
     return failures
 
 
@@ -396,13 +437,18 @@ def main(argv: list[str] | None = None) -> int:
     if not _git_ok(repo, "rev-parse", "--git-dir"):
         print("prune-worktrees: not inside a git repo", file=sys.stderr)
         return 1
+    force_delete = args.force_delete or repo_facts.conf_get(
+        "prune_force_delete", repo) == "true"
     cands = find_candidates(repo)
     sys.stdout.reconfigure(errors="surrogateescape")
     if not args.yes:
         print("DRY RUN: nothing will change. Re-run with --yes to remove.")
+        print(f"force-delete: {'on' if force_delete else 'off'} "
+              "(branches git -d refuses are " +
+              ("deleted after PR proof)" if force_delete else "kept with a -D hint)"))
         print("\n".join(render_report(cands, args.delete_remote)))
         return 0
-    return 1 if apply_removals(repo, cands, args.delete_remote) else 0
+    return 1 if apply_removals(repo, cands, args.delete_remote, force_delete) else 0
 
 
 if __name__ == "__main__":

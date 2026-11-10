@@ -123,8 +123,8 @@ class Base(unittest.TestCase):
                  "headRefOid": head, "baseRefName": "main"}]
         (self.pr_dir / f"{branch}.json").write_text(json.dumps(data))
 
-    def merged_branch(self, name, squash=False):
-        wt = self.worktree(name)
+    def merged_branch(self, name, squash=False, pushed=True):
+        wt = self.worktree(name, pushed=pushed)
         head = self.git(wt, "rev-parse", "HEAD")
         mc = self.merge_into_main(name, squash=squash)
         self.set_pr(name, "MERGED", mc, head=head)
@@ -333,8 +333,8 @@ class Removal(Base):
         self.git(other, "push", "-q", "origin", "feature-a")
         c = pw.Candidate(path=str(wt), branch="feature-a", verdict="ready",
                          remote_exists=True)
-        ok, msg = pw.remove_candidate(str(self.repo), c, True)
-        self.assertFalse(ok)
+        status, msg = pw.remove_candidate(str(self.repo), c, True)
+        self.assertEqual(status, "failed")
         self.assertIn("remote delete failed", msg)
         self.assertIn("feature-a", self.git(self.repo, "ls-remote", "--heads", "origin"))
         self.assertNotIn("feature-a", self.branches())
@@ -343,8 +343,8 @@ class Removal(Base):
         wt = self.merged_branch("feature-a")
         c = pw.Candidate(path=str(wt), branch="feature-a", verdict="ready",
                          remote_exists=None)
-        ok, msg = pw.remove_candidate(str(self.repo), c, True)
-        self.assertFalse(ok)
+        status, msg = pw.remove_candidate(str(self.repo), c, True)
+        self.assertEqual(status, "failed")
         self.assertIn("lookup failed", msg)
         self.assertTrue(wt.is_dir())
         self.assertIn("feature-a", self.branches())
@@ -356,35 +356,72 @@ class Removal(Base):
         self.git(self.repo, "remote", "set-url", "origin", str(self.root / "gone.git"))
         self.assertIsNone(pw.remote_branch_exists(str(self.repo), "feature-a"))
 
-    def _remove_with_d_failure(self, stderr):
-        calls = []
+    def squash_without_upstream(self, name="feature-s"):
+        """Squash-merged, never pushed: git -d refuses it."""
+        return self.merged_branch(name, squash=True, pushed=False)
 
-        def fake_run(cmd, *a, **k):
-            calls.append(cmd)
-            rc = 1 if "-d" in cmd else 0
-            return subprocess.CompletedProcess(cmd, rc, "", stderr if rc else "")
+    def test_squash_without_upstream_keeps_branch_and_prints_hint(self):
+        wt = self.squash_without_upstream()
+        out = self.out("--yes")
+        self.assertRegex(out, r"PARTIAL .*feature-s.*git branch -D feature-s")
+        self.assertFalse(wt.exists())
+        self.assertIn("feature-s", self.branches())
 
-        real, pw._run = pw._run, fake_run
-        try:
-            c = pw.Candidate(path="", branch="feature-a", verdict="ready")
-            pw.remove_candidate(str(self.repo), c, False)
-        finally:
-            pw._run = real
-        return [cmd for cmd in calls if "-D" in cmd]
+    def test_force_delete_flag_deletes_refused_branch(self):
+        wt = self.squash_without_upstream()
+        out = self.out("--yes", "--force-delete")
+        self.assertRegex(out, r"REMOVED .*feature-s")
+        self.assertFalse(wt.exists())
+        self.assertNotIn("feature-s", self.branches())
 
-    def test_force_delete_after_unmerged_refusal(self):
-        self.assertTrue(self._remove_with_d_failure(
-            "error: the branch 'feature-a' is not fully merged."))
+    def test_force_delete_from_conf_key(self):
+        self.squash_without_upstream()
+        (self.repo / ".start-ticket.conf").write_text("prune_force_delete=true\n")
+        self.out("--yes")
+        self.assertNotIn("feature-s", self.branches())
 
-    def test_no_force_delete_when_branch_delete_fails_otherwise(self):
-        self.assertEqual(self._remove_with_d_failure(
-            "error: cannot delete branch 'feature-a' used by worktree"), [])
+    def test_conf_key_false_keeps_branch(self):
+        self.squash_without_upstream()
+        (self.repo / ".start-ticket.conf").write_text("prune_force_delete=false\n")
+        self.out("--yes")
+        self.assertIn("feature-s", self.branches())
+
+    def test_dry_run_reports_force_delete_mode(self):
+        self.assertIn("force-delete: off", self.out())
+        self.assertIn("force-delete: on", self.out("--force-delete"))
+
+    def test_force_delete_is_pinned_to_the_verified_tip(self):
+        wt = self.squash_without_upstream()
+        stale_tip = self.git(self.repo, "rev-parse", "feature-s")
+        self.git(wt, "commit", "-q", "--allow-empty", "-m", "late")
+        c = pw.Candidate(path=str(wt), branch="feature-s", verdict="ready",
+                         tip=stale_tip)
+        status, msg = pw.remove_candidate(str(self.repo), c, False, True)
+        self.assertEqual(status, "failed")
+        self.assertIn("feature-s", self.branches())
+
+    def test_force_delete_clears_branch_config(self):
+        self.squash_without_upstream()
+        self.git(self.repo, "config", "branch.feature-s.note", "x")
+        self.out("--yes", "--force-delete")
+        self.assertEqual(
+            subprocess.run(["git", "-C", str(self.repo), "config", "--get-regexp",
+                            "branch.feature-s"], env=self.env,
+                           capture_output=True).stdout, b"")
+
+    def test_delete_error_other_than_unmerged_never_forces(self):
+        self.merged_branch("feature-a")  # still checked out, so -d fails differently
+        c = pw.Candidate(path="", branch="feature-a", verdict="ready",
+                         tip=self.git(self.repo, "rev-parse", "feature-a"))
+        status, _ = pw.remove_candidate(str(self.repo), c, False, True)
+        self.assertEqual(status, "failed")
+        self.assertIn("feature-a", self.branches())
 
     def test_remove_candidate_refuses_without_proof(self):
         wt = self.worktree("feature-c")
         c = pw.Candidate(path=str(wt), branch="feature-c", verdict="not-merged")
-        ok, _ = pw.remove_candidate(str(self.repo), c, False)
-        self.assertFalse(ok)
+        status, _ = pw.remove_candidate(str(self.repo), c, False)
+        self.assertEqual(status, "failed")
         self.assertTrue(wt.is_dir())
 
 
@@ -392,7 +429,8 @@ class Help(Base):
 
     def test_help_documents_flags(self):
         out = self.out("--help")
-        for flag in ("--yes", "--delete-remote", "--repo", "DRY RUN"):
+        for flag in ("--yes", "--delete-remote", "--force-delete", "--repo",
+                     "DRY RUN", "prune_force_delete"):
             self.assertIn(flag, out)
 
 
