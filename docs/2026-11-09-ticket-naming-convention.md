@@ -77,6 +77,7 @@ Conceptual token library (the DSL; a `{token:option}` substitution is the cheape
 | `{provider}` | `full` (`Issue`, `shortcut`), `brief` (`Is`, `sc-`) |
 | `{chain}` | `all`, `first`, `last`; separator configurable |
 | `{desc}` | source: `model`, `title` (verbatim), `ask` (prompt the user); form: `kebab`, `words`, `Title` |
+| `{type}` | `bug`, `feature`, `chore`, … from the ticket's label or type; `none` when unlabelled; empty by default. Example branch template: `{type}/{key}-{desc:kebab}`; the worktree dir then needs `/` → `-`, as today |
 | `{phase}`, `{branch}`, `{key}` | derived |
 | literals | any separators or symbols |
 
@@ -112,7 +113,7 @@ Each is one reviewable unit. #155 (PR titles on the GitHub provider) is already 
 | --- | --- | --- |
 | 1 | Name resolver: `(key, desc)` → surface strings from templates, with built-in defaults; persist `<git-dir>/name` | - |
 | 2 | Settings layering (user, machine, project) for templates and key parts | 1 |
-| 3 | Branch and worktree creation use the resolver; one slug rule for both providers; drop `<user>/` and slash forms | 1 |
+| 3 | Branch and worktree creation use the resolver; one slug rule for both providers; drop `<user>/` and slash forms; `{type}` token from provider labels | 1 |
 | 4 | Parsers accept the new key and legacy forms (`Is<N>-`, `sc-<id>/`); fixes cloud-branch ticketless PRs | 1 |
 | 5 | Agent row from the resolver; delete the hand-composed path in `session-kickoff.md`; fix the `--tab-only` label loss | 1 |
 | 6 | PR title from the resolver; Shortcut provider; drop integer-only `--issue` | 1, 4 |
