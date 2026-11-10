@@ -347,6 +347,38 @@ class Report(Base):
         self.assertTrue(any("unrecognized validity" in g for g in r["gaps"]))
         self.assertTrue(any("malformed key" in g for g in r["gaps"]))
 
+    def review_run(self, events):
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            wf_report.main(["--log", self.write_log(events), "--now", NOW, "--json"])
+        return json.loads(buf.getvalue())["runs"][0]
+
+    def test_events_with_new_capture_fields_aggregate_like_old_ones(self):
+        key = "a" * 32
+        r = self.review_run([
+            {"v": 1, "ts": "2026-10-20T08:59:00Z", "run_id": "acme/w#5", "event": "review.launch",
+             "reviewer": "correctness-reviewer", "round": 1, "model": "sonnet", "effort": "high"},
+            {"v": 1, "ts": "2026-10-20T09:00:00Z", "run_id": "acme/w#5", "event": "review.round",
+             "round": 1, "state": "end", "sha": "d" * 40},
+            self.finding("2026-10-20T09:00:00Z", "acme/w#5", round=1, validity="valid", key=key,
+                         path="src/a.ts", line=42, claim="src/a.ts - leaks handle", source="local")])
+        self.assertEqual(r["reviews"]["by_reviewer"]["correctness-reviewer"]["valid"], 1)
+        self.assertEqual(r["reviews"]["overlap"]["keys_total"], 1)
+        self.assertFalse(any("review" in g for g in r["gaps"]))
+
+    def test_bot_findings_join_overlap_but_not_local_fallback_totals(self):
+        key = "b" * 32
+        r = self.review_run([
+            self.finding("2026-10-20T09:00:00Z", "acme/w#5", round=1, validity="valid", key=key),
+            self.finding("2026-10-20T09:30:00Z", "acme/w#5", reviewer="copilot", source="bot",
+                         validity="valid", key=key),
+            self.finding("2026-10-20T09:31:00Z", "acme/w#5", reviewer="copilot", source="bot",
+                         verdict="dismissed", validity="rejected", reason="not-a-bug")])
+        rv = r["reviews"]
+        self.assertEqual((rv["fixed"], rv["dismissed"], rv["deferred"]), (1, 0, 0))
+        self.assertEqual(rv["overlap"]["keys_raised_by_2plus"], 1)
+        self.assertEqual(rv["by_reviewer"]["copilot"]["dismissed"], 1)
+
     def test_valid_finding_without_key_is_gapped(self):
         path = self.write_log([
             self.finding("2026-10-20T09:00:00Z", "acme/w#5", round=1, validity="valid"),

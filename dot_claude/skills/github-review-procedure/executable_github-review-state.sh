@@ -34,6 +34,8 @@ while [ $# -gt 0 ]; do
         *'*') wf_args=(review.round "round=$(( ${v%'*'} + 1 ))" state=start) ;;
         *)    wf_args=(review.round "round=$v" state=end) ;;
       esac
+      sha="$(git rev-parse HEAD 2>/dev/null || true)"
+      [ -z "$sha" ] || wf_args+=("sha=$sha")
       if command -v wf-event.sh >/dev/null; then wf-event.sh "${wf_args[@]}" || true; fi
       exit 0 ;;
     *) echo "usage: github-review-state.sh [--pr N] [--local N[*]] [--bare] | --set-local N[*]" >&2; exit 1 ;;

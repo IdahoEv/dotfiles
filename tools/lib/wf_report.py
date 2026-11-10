@@ -208,7 +208,8 @@ class Run:
                "fixed": None, "dismissed": None, "deferred": None, "reviewers": set(),
                "by_reviewer": defaultdict(lambda: defaultdict(int)),
                "dismissed_findings": [], "validity_totals": defaultdict(int),
-               "keys": defaultdict(set), "has_validity": False}
+               "keys": defaultdict(set), "has_validity": False,
+               "local_findings": defaultdict(int), "local_reviewers": set()}
         bad_verdicts = bad_validity = bad_keys = missing_keys = 0
         for e in self.of("review.finding"):
             rv, verdict = e.get("reviewer", "unknown"), e.get("verdict", "unknown")
@@ -220,6 +221,9 @@ class Run:
                       "valid", "rejected", "partial", "validity_unreported"):
                 counts.setdefault(k, 0)
             counts[verdict] += 1
+            if e.get("source") != "bot":
+                out["local_findings"][verdict] += 1
+                out["local_reviewers"].add(rv)
             validity = e.get("validity")
             if validity in ("valid", "rejected", "partial"):
                 counts[validity] = counts.get(validity, 0) + 1
@@ -258,9 +262,10 @@ class Run:
             out["rounds"] = max([out["rounds"]] + local_rounds)
         elif out["by_reviewer"]:
             # No review.result line, but per-finding events carry the same triage.
+            # Bot findings are per-comment detail of a bot batch, not local totals.
             for k in ("fixed", "dismissed", "deferred"):
-                out[k] = sum(c[k] for c in out["by_reviewer"].values())
-            out["reviewers"].update(out["by_reviewer"])
+                out[k] = out["local_findings"][k]
+            out["reviewers"].update(out["local_reviewers"])
         elif rounds:
             self.gaps.append("review rounds ran but no review.result: findings unknown")
         if out["dismissed_findings"] and any(rsn is None for _, _, rsn in out["dismissed_findings"]):

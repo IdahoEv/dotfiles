@@ -396,6 +396,8 @@ Remaining unresolved: N - W (comments marked resolved are no longer unresolved)
 
 Then, when available, record the batch once — in the final report, not in per-round or Quick Mode up-front summaries (those either double-count or have no counts yet): `wf-event.sh review.result source=bot fixed=<Fixed> dismissed=<Disagreed> deferred=<Skipped> reviewers=<bots that commented, comma-separated>`. This is a local log append, not a GitHub write, so it is allowed in Automatic Mode. `deferred` here means Skipped (user chose Skip; nothing filed), unlike the local review cycle's deferred-with-issue. Replied and Resolved are not recorded; there is no `round`.
 
+Also record each Copilot comment (inline and suppressed review-body) as one finding, from the same findings table: `wf-event.sh review.finding source=bot reviewer=copilot verdict=<fixed|dismissed|deferred> validity=<valid|rejected|partial> severity=<Critical|High|Medium|Low> reason=<short phrase> path=<path> line=<line> claim=<normalized claim> comment_id=<id> key=<sha256 hex>`. Verdict from the table: Valid → `fixed`/`valid`, Rejected → `dismissed`/`rejected`, Partially valid → `fixed`/`partial`, Skipped → `deferred` (validity is your judgment of the comment). `key` and `claim` follow the recipe in `local-review-cycle-procedure` §3.4, so bot and local findings can match; omit `line` when the comment is file-level. Emit once per comment in the final report only, like the batch line; skip CodeRabbit.
+
 #### Structured findings table format
 
 Every findings summary — the per-round Automatic Mode summary, the Quick Mode up-front summary, and the final report at the end of a run — uses this format:
