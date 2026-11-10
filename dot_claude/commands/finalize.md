@@ -49,6 +49,9 @@ line such as `tracking_refspec=missing` (it carries the repair command).
   user confirms the merge, they remove the worktree and branch by hand.
 - **`unclaimed-ticket`** — an open ticket the PR never closed (a draft PR from a stopped
   chain). Leave it open and report it as unfinished; finish the rest by hand.
+- **`needs-pull`** — `git pull --ff-only` failed in the base worktree, so the base is
+  behind the merge. Nothing after the ticket close was done. Report `detail=`; once the
+  user has brought the base up to date, re-run `finalize-run.sh`.
 - **`ticket-unreadable`** — `gh` failed on the issue or PR. Report the error.
 - **`dirty`** — list what's dirty and **stop**; don't discard uncommitted work. If the
   repo has `.claude/finalize-notes.md`, read it first — it may name regenerable files safe

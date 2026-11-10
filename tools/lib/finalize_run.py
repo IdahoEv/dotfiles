@@ -10,7 +10,8 @@ Exit 2   stopped; nothing was touched. stdout: `stopped=<verdict>`.
 Exit 3   hand back to the model; stdout: `handoff=<reason>`, `detail=`,
          `done=` (steps already complete) and the finalize-check facts.
          Reasons: shortcut, squash-merged, unknown, no-base-worktree,
-         ticket-unreadable, unclaimed-ticket, dirty, locked, remove-failed.
+         ticket-unreadable, unclaimed-ticket, needs-pull, dirty, locked,
+         remove-failed.
 Exit 1   usage/precondition error.
 
 `--ticket-closed` is the re-run after the model closed a Shortcut ticket.
@@ -259,9 +260,10 @@ def run(dir_: str, branch: str, ticket_closed: bool) -> int:
         elif ticket_closed and f.ticket_id:
             parts.append("ticket closed")
 
-        base_state = pull_base(f)
-        parts.append(f"{f.base} pulled" if base_state == "pulled"
-                     else f"{f.base} needs `git -C {f.base_worktree} pull --ff-only`")
+        if pull_base(f) != "pulled":
+            raise Handoff("needs-pull",
+                          f"`git -C {f.base_worktree} pull --ff-only` failed; {f.base} is behind")
+        parts.append(f"{f.base} pulled")
         done.append("pull")
 
         table: list[str] = []

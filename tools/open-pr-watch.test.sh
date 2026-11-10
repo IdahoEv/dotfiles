@@ -59,7 +59,7 @@ out="$(watch 4)"
 check "reviewer unavailable: phase reviewed" "[REVIEWED][PR]" "$(phase)"
 
 out="$(watch 1)"
-check "timeout: phase untouched" "[REVIEW][PR]" "$(phase)"
+check "timeout: phase reviewed" "[REVIEWED][PR]" "$(phase)"
 check "timeout: outcome"        "1" "$(grep -c 'outcome=timeout' <<<"$out")"
 
 out="$(watch 9)"

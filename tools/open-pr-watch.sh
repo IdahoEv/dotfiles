@@ -4,8 +4,8 @@
 #
 #   open-pr-watch.sh <pr_number>
 #
-# On exit of github-review-poll.sh: stamps REVIEW → REVIEWED when reviewing is
-# over (signed off, or a reviewer couldn't run), sends a macOS notification, and
+# On exit of github-review-poll.sh: stamps REVIEW → REVIEWED when polling has
+# ended without comments (timeout, no PR, signed off, or a reviewer couldn't run), sends a macOS notification, and
 # emits a pr.watch event. $OPEN_PR_POLL overrides the poll script.
 #
 # Poll exit codes: 0 comments arrived, 1 timeout, 2 no PR, 3 signed off,
@@ -38,7 +38,7 @@ case "$rc" in
 esac
 
 case "$rc" in
-  3|4) "$SCRIPT_DIR/agent-phase.sh" --no-review >/dev/null 2>&1 || true ;;
+  1|2|3|4) "$SCRIPT_DIR/agent-phase.sh" --no-review >/dev/null 2>&1 || true ;;
 esac
 
 "$SCRIPT_DIR/wf-event.sh" pr.watch "pr_number=$pr" "exit_code=$rc" "outcome=$outcome" >/dev/null 2>&1 || true

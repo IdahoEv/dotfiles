@@ -131,6 +131,21 @@ class Run(Base):
         self.assertTrue(wt.exists())
         self.assertIn("7-feature", self.branches())
 
+    def test_failed_base_pull_hands_back_before_removal(self):
+        wt = self.merged_branch("7-feature")
+        (self.repo / "local.txt").write_text("diverged")
+        self.git(self.repo, "add", "local.txt")
+        self.git(self.repo, "commit", "-q", "-m", "local-only")
+        other = self.root / "other-clone"
+        self.git(self.root, "clone", "-q", self.git(self.repo, "remote", "get-url", "origin"), str(other))
+        self.git(other, "commit", "-q", "--allow-empty", "-m", "upstream-only")
+        self.git(other, "push", "-q", "origin", "main")
+        r = self.finalize(wt)
+        self.assertEqual(r.returncode, 3, r.stdout + r.stderr)
+        self.assertIn("handoff=needs-pull", r.stdout)
+        self.assertTrue(wt.exists())
+        self.assertIn("7-feature", self.branches())
+
     def test_unclaimed_open_ticket_hands_back_without_closing(self):
         wt = self.merged_branch("7-feature")
         (self.pr_dir / "body.txt").write_text("Summary only\n")
@@ -214,6 +229,9 @@ class Run(Base):
 
     def test_ok_event_survives_removal_of_the_checkout(self):
         wt = self.merged_branch("7-feature")
+        local = self.git(wt, "remote", "get-url", "origin")
+        self.git(wt, "remote", "add", "up", local)
+        self.git(wt, "config", "branch.main.remote", "up")
         self.git(wt, "remote", "set-url", "origin", "https://github.com/o/r.git")
         log = self.root / "events.jsonl"
         r = self.finalize(wt, env={"WF_TELEMETRY_LOG": str(log)})

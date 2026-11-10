@@ -219,12 +219,20 @@ provider::available || die "provider '$provider' unavailable (CLI missing or not
 # validation) via set -e instead of being swallowed like a || true.
 existing_pr="$(gh pr list --head "$branch" --json number --jq '.[0].number // empty')"
 create_pr=""
+if [ -z "$existing_pr" ]; then
+  [ -n "$title" ] || die "no existing PR for '$branch' and no --title given"
+fi
+# Committed before the body is assembled: the body's Risk and diff stat read HEAD.
+# A later usage error leaves a local commit, never a published one.
+if [ -n "$dirty" ] && [ -n "$commit_msg_file" ]; then
+  git add -A
+  git commit -q -F "$commit_msg_file"
+fi
 if [ -n "$existing_pr" ]; then
   pr_number="$existing_pr"
   pr_action="reused"
 else
   create_pr=1
-  [ -n "$title" ] || die "no existing PR for '$branch' and no --title given"
   if [ -n "$summary_file$judgment_file" ]; then
     [ -n "$summary_file" ] && [ -n "$judgment_file" ] || die "--summary-file and --judgment-file go together"
     [ -z "$body_file" ] || die "--body-file can't be combined with --summary-file/--judgment-file"
@@ -304,11 +312,7 @@ else
   fi
 fi
 
-# ---- commit + push ----------------------------------------------------------
-if [ -n "$dirty" ] && [ -n "$commit_msg_file" ]; then
-  git add -A
-  git commit -q -F "$commit_msg_file"
-fi
+# ---- push -------------------------------------------------------------------
 # stdout (the ref-update summary) is suppressed to keep this script's stdout
 # limited to the documented key=value fields; progress/errors go to stderr.
 git push -u origin "$branch" >/dev/null
