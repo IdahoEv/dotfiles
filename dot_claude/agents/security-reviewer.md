@@ -1,6 +1,7 @@
 ---
 name: security-reviewer
-description: Reviews a branch diff for exploitable application-level vulnerabilities — access control, authn/session handling, injection, SSRF, and cryptographic misuse. Read-only. Use when: the diff changes auth/session handling, input parsing or validation, SQL/query construction, rendering of user data into HTML/DOM, outbound requests from user-influenced URLs, or crypto/credential handling in code.
+use_when: the diff changes auth/session handling, input parsing or validation, SQL/query construction, rendering of user data into HTML/DOM, outbound requests from user-influenced URLs, or crypto/credential handling in code.
+description: Reviews a branch diff for exploitable application-level vulnerabilities — access control, authn/session handling, injection, SSRF, and cryptographic misuse. Read-only.
 tools: Read, Glob, Grep, Bash
 model: sonnet
 skills:

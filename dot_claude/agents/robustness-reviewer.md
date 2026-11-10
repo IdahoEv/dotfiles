@@ -1,6 +1,7 @@
 ---
 name: robustness-reviewer
-description: Reviews branch changes for realistic failure handling, state transitions, concurrency, resource lifetimes, and recovery. Read-only. Use when: the diff touches async/concurrent code, persistence, external systems, cleanup, or failure-prone lifecycle paths.
+use_when: the diff touches async/concurrent code, persistence, external systems, cleanup, or failure-prone lifecycle paths.
+description: Reviews branch changes for realistic failure handling, state transitions, concurrency, resource lifetimes, and recovery. Read-only.
 tools: Read, Glob, Grep, Bash
 model: sonnet
 skills:
