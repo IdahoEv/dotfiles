@@ -252,13 +252,15 @@ class Run:
             self.gaps.append(f"{bad_keys} review.finding event(s) with malformed key skipped from overlap")
         if missing_keys:
             self.gaps.append(f"{missing_keys} valid/partial review.finding event(s) without key excluded from overlap")
-        if results:
+        local_results = [e for e in results if e.get("source") != "bot"]
+        if local_results:
+            # Bot batches add to the totals only alongside a local cycle result.
             for k in ("fixed", "dismissed", "deferred"):
                 vals = [e[k] for e in results if isinstance(e.get(k), int)]
                 out[k] = sum(vals) if vals else None
             for e in results:
                 out["reviewers"].update(r for r in str(e.get("reviewers", "")).split(",") if r)
-            local_rounds = [e["round"] for e in results if isinstance(e.get("round"), int)]
+            local_rounds = [e["round"] for e in local_results if isinstance(e.get("round"), int)]
             out["rounds"] = max([out["rounds"]] + local_rounds)
         elif out["local_reviewers"]:
             # No review.result line, but per-finding events carry the same triage.

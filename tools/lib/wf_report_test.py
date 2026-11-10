@@ -386,6 +386,14 @@ class Report(Base):
         rv = r["reviews"]
         self.assertEqual((rv["fixed"], rv["dismissed"], rv["deferred"]), (None, None, None))
 
+    def test_bot_result_and_findings_without_local_result_keep_totals_unknown(self):
+        events = [self.finding("2026-10-20T09:30:00Z", "acme/w#5", reviewer="copilot", source="bot",
+                               validity="valid", key="c" * 32),
+                  {"v": 1, "ts": "2026-10-20T09:40:00Z", "run_id": "acme/w#5", "event": "review.result",
+                   "source": "bot", "fixed": 1, "dismissed": 2, "deferred": 0, "reviewers": "copilot"}]
+        rv = self.review_run(events)["reviews"]
+        self.assertEqual((rv["fixed"], rv["dismissed"], rv["deferred"]), (None, None, None))
+
     def test_valid_finding_without_key_is_gapped(self):
         path = self.write_log([
             self.finding("2026-10-20T09:00:00Z", "acme/w#5", round=1, validity="valid"),
