@@ -47,7 +47,9 @@ Each round:
 3. Deduplicate overlapping findings. Keep findings only when they concern changed code and have evidence plus a credible failure path, meaningful test gap, or material design cost. Discard stylistic preferences, hypothetical risks, extremely unlikely edge cases, and fixes whose complexity/cost exceeds the plausible impact. Require stronger evidence for defensive hardening than for a direct correctness bug. Never resurrect a dismissed finding without new evidence. When two reviewers raise the same finding, it is one triaged finding but two `review.finding` events sharing one `finding_id`. Both events carry the triaged finding's single `verdict` and `validity` (`severity` stays each reviewer's own), with `reason` noting the duplicate, so verdict totals count each outcome once per reviewer instance rather than inventing a dismissal.
 4. For each (reviewer, triaged finding) pair, emit one telemetry event:
 
-   `wf-event.sh review.finding reviewer=<agent> source=local severity=<Critical|High|Medium|Low> verdict=<fixed|dismissed|deferred> validity=<valid|rejected|partial> round=<k> reason="<short phrase>" path=<path> line=<primary line> claim="<claim>" finding_id=<r{k}-{n}>`
+   `wf-event.sh review.finding reviewer=<agent> source=local severity=<Critical|High|Medium|Low> verdict=<fixed|dismissed|deferred> validity=<valid|rejected|partial> round=<k> reason='<short phrase>' path=<path> line=<primary line> claim='<claim>' finding_id=<r{k}-{n}>`
+
+   Pass `claim` and `reason` single-quoted (write an embedded `'` as `'\''`), never double-quoted, so backticks, `$(...)` and `"` in the text stay literal.
 
    `reason` is required for dismissed and deferred (the dismissal rationale or issue ref), optional for fixed. `validity` is your judgment of the finding itself, independent of the verdict: `valid` (real finding), `rejected` (not a real issue on the merits), `partial` (partly real — right concern, wrong location or overstated). `reason` is a short phrase, never code or prompt text.
 

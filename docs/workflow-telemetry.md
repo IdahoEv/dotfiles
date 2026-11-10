@@ -71,7 +71,7 @@ Medians per merged ticket are shown only once there are ≥3 merged runs; the sa
 
 Every line also carries `v`, `ts` (UTC wall clock in ms, used for cross-process ordering), `run_id`, `repo`, `ticket`, `branch`, `session_id`, and `job_id`. `duration_ms` uses a monotonic clock.
 
-Logs hold only identifiers, counts, and Claude Code enum values: no prompts, diffs, command text, transcript paths, or environment. The one free-text exception is `review.finding claim`: a normalized sentence naming a file and what is wrong, never a code excerpt. Values are scalars of at most 200 characters, and hook free text becomes `other`. Each line stays far below PIPE_BUF, so concurrent appends from parallel worktrees don't interleave. A failed write prints a warning and the workflow continues.
+Logs hold only identifiers, counts, and Claude Code enum values: no prompts, diffs, command text, transcript paths, or environment. The one free-text exception is `review.finding claim`: one sentence naming a file and what is wrong, never a code excerpt. The logger only strips control characters and truncates; wording is the reporting agent's, so offline matching must tolerate varied phrasing. Values are scalars of at most 200 characters, and hook free text becomes `other`. Each line stays far below PIPE_BUF, so concurrent appends from parallel worktrees don't interleave. A failed write prints a warning and the workflow continues.
 
 ### Overlap methodology
 

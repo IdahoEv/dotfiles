@@ -409,6 +409,14 @@ class Report(Base):
         rv = self.review_run(events)["reviews"]
         self.assertEqual((rv["fixed"], rv["dismissed"], rv["deferred"]), (None, None, None))
 
+    def test_local_fallback_keeps_bot_result_reviewer_names(self):
+        events = [self.finding("2026-10-20T09:00:00Z", "acme/w#5", round=1, validity="valid", key="b" * 32),
+                  {"v": 1, "ts": "2026-10-20T09:40:00Z", "run_id": "acme/w#5", "event": "review.result",
+                   "source": "bot", "fixed": 1, "dismissed": 2, "deferred": 0, "reviewers": "copilot"}]
+        rv = self.review_run(events)["reviews"]
+        self.assertEqual((rv["fixed"], rv["dismissed"], rv["deferred"]), (1, 0, 0))
+        self.assertIn("copilot", rv["reviewers"])
+
     def test_json_reviews_omit_internal_local_state(self):
         rv = self.review_run([
             self.finding("2026-10-20T09:00:00Z", "acme/w#5", round=1, validity="valid", key="b" * 32)])["reviews"]

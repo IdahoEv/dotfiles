@@ -270,6 +270,8 @@ class Run:
             for k in ("fixed", "dismissed", "deferred"):
                 out[k] = out["local_findings"][k]
             out["reviewers"].update(out["local_reviewers"])
+            for e in results:
+                out["reviewers"].update(r for r in str(e.get("reviewers", "")).split(",") if r)
         elif rounds:
             self.gaps.append("review rounds ran but no review.result: findings unknown")
         if out["dismissed_findings"] and any(rsn is None for _, _, rsn in out["dismissed_findings"]):
