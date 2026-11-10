@@ -247,7 +247,7 @@ class Report(Base):
         self.assertIn("unparseable", out)
         self.assertIn("findings by reviewer", out)
         self.assertIn("2 valid / 1 rejected / 0 partial / 0 unreported", out)
-        self.assertIn("overlap: 1 of 4 hashed finding(s) raised by ≥2 reviewers "
+        self.assertIn("overlap: 1 of 4 identified finding(s) raised by ≥2 reviewers "
                       "(correctness-reviewer↔robustness-reviewer: 1)", out)
         self.assertIn("hypothetical risk (correctness-reviewer, R1)", out)
 
@@ -366,20 +366,34 @@ class Report(Base):
         self.assertEqual(r["reviews"]["overlap"]["keys_total"], 1)
         self.assertFalse(any("review" in g for g in r["gaps"]))
 
-    def test_backfilled_findings_feed_overlap_but_not_verdict_totals(self):
-        key = "e" * 32
-        events = [self.finding("2026-10-20T09:00:00Z", "acme/w#5", round=1),
+    def test_backfilled_findings_do_not_change_totals_or_overlap(self):
+        events = [self.finding("2026-10-20T09:00:00Z", "acme/w#5", round=1, validity="valid", finding_id="r1-1"),
                   {"v": 1, "ts": "2026-10-20T09:00:01Z", "run_id": "acme/w#5", "event": "review.finding",
-                   "reviewer": "correctness-reviewer", "round": 1, "severity": "High", "key": key,
+                   "reviewer": "correctness-reviewer", "round": 1, "severity": "High",
                    "path": "a.sh", "claim": "a.sh drops a line", "backfill": 1, "matched_ts": "2026-10-20T09:00:00Z"},
                   {"v": 1, "ts": "2026-10-20T09:00:02Z", "run_id": "acme/w#5", "event": "review.finding",
-                   "reviewer": "robustness-reviewer", "round": 1, "severity": "High", "key": key, "backfill": 1}]
+                   "reviewer": "robustness-reviewer", "round": 1, "severity": "High", "backfill": 1}]
         r = self.review_run(events)
         rv = r["reviews"]
         self.assertEqual(rv["by_reviewer"]["correctness-reviewer"]["fixed"], 1)
         self.assertNotIn("robustness-reviewer", rv["by_reviewer"])
-        self.assertEqual(rv["overlap"]["keys_raised_by_2plus"], 1)
-        self.assertFalse(any("verdict" in g for g in r["gaps"]))
+        self.assertEqual(rv["overlap"]["keys_raised_by_2plus"], 0)
+        self.assertFalse(any("verdict" in g or "finding_id" in g for g in r["gaps"]))
+
+    def test_finding_id_shared_by_two_reviewers_is_overlap(self):
+        r = self.review_run([
+            self.finding("2026-10-20T09:00:00Z", "acme/w#5", round=1, validity="valid", finding_id="r1-1"),
+            self.finding("2026-10-20T09:00:01Z", "acme/w#5", reviewer="robustness-reviewer", round=1,
+                         validity="valid", finding_id="r1-1"),
+            self.finding("2026-10-20T09:00:02Z", "acme/w#5", round=2, validity="valid", finding_id="r1-1")])
+        ov = r["reviews"]["overlap"]
+        self.assertEqual((ov["keys_total"], ov["keys_raised_by_2plus"]), (1, 1))
+        self.assertFalse(any("finding_id" in g for g in r["gaps"]))
+
+    def test_bot_finding_without_identity_is_not_a_gap(self):
+        r = self.review_run([self.finding("2026-10-20T09:00:00Z", "acme/w#5", reviewer="copilot",
+                                          source="bot", validity="valid", sha="c" * 40)])
+        self.assertFalse(any("without finding_id" in g for g in r["gaps"]))
 
     def test_bot_findings_join_overlap_but_not_local_fallback_totals(self):
         key = "b" * 32
@@ -409,6 +423,20 @@ class Report(Base):
         rv = self.review_run(events)["reviews"]
         self.assertEqual((rv["fixed"], rv["dismissed"], rv["deferred"]), (None, None, None))
 
+    def test_local_fallback_keeps_bot_result_reviewer_names(self):
+        events = [self.finding("2026-10-20T09:00:00Z", "acme/w#5", round=1, validity="valid", key="b" * 32),
+                  {"v": 1, "ts": "2026-10-20T09:40:00Z", "run_id": "acme/w#5", "event": "review.result",
+                   "source": "bot", "fixed": 1, "dismissed": 2, "deferred": 0, "reviewers": "copilot"}]
+        rv = self.review_run(events)["reviews"]
+        self.assertEqual((rv["fixed"], rv["dismissed"], rv["deferred"]), (1, 0, 0))
+        self.assertIn("copilot", rv["reviewers"])
+
+    def test_json_reviews_omit_internal_local_state(self):
+        rv = self.review_run([
+            self.finding("2026-10-20T09:00:00Z", "acme/w#5", round=1, validity="valid", key="b" * 32)])["reviews"]
+        self.assertNotIn("local_reviewers", rv)
+        self.assertNotIn("local_findings", rv)
+
     def test_valid_finding_without_key_is_gapped(self):
         path = self.write_log([
             self.finding("2026-10-20T09:00:00Z", "acme/w#5", round=1, validity="valid"),
@@ -418,7 +446,7 @@ class Report(Base):
         with redirect_stdout(buf):
             wf_report.main(["--log", path, "--now", NOW, "--json"])
         r = json.loads(buf.getvalue())["runs"][0]
-        self.assertIn("2 valid/partial review.finding event(s) without key excluded from overlap", r["gaps"])
+        self.assertIn("2 valid/partial review.finding event(s) without finding_id or key excluded from overlap", r["gaps"])
 
     def test_same_reviewer_re_raising_is_not_overlap(self):
         key = "a" * 64

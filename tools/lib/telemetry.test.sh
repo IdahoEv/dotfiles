@@ -125,23 +125,25 @@ check "agent-phase emits set + no-review only" "WIP REVIEWED" "$(jq -r .phase "$
 reset
 mkdir -p "$ROOT/bin"; ln -sf "$TOOLS/wf-event.sh" "$ROOT/bin/wf-event.sh"
 PATH="$ROOT/bin:$PATH" bash "$REPO/dot_claude/skills/github-review-procedure/executable_github-review-state.sh" --set-local '1*'
+start_sha="$(git -C "$ROOT/repo" rev-parse HEAD)"
+git -C "$ROOT/repo" -c user.name=t -c user.email=t@t commit -q --allow-empty -m round-fix
 PATH="$ROOT/bin:$PATH" bash "$REPO/dot_claude/skills/github-review-procedure/executable_github-review-state.sh" --set-local 2
 check "github-review-state: round start/end" "2:start 2:end" "$(jq -r '"\(.round):\(.state)"' "$LOG" | xargs)"
 head_sha="$(git -C "$ROOT/repo" rev-parse HEAD)"
-check "github-review-state: round events carry head sha" "$head_sha $head_sha" "$(jq -r .sha "$LOG" | xargs)"
+check "github-review-state: round events carry head sha at their own emit" "$start_sha $head_sha" "$(jq -r .sha "$LOG" | xargs)"
 reset
-ev review.finding reviewer=copilot source=bot severity=Medium verdict=dismissed validity=rejected reason=not-a-bug path=src/a.ts line=42 claim=src/a.ts.-.leaks-handle comment_id=991 key=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
-check "review.finding path/line/claim/source" "src/a.ts number 42 src/a.ts.-.leaks-handle bot 991" \
-  "$(jq -r 'select(.event=="review.finding") | "\(.path) \(.line|type) \(.line) \(.claim) \(.source) \(.comment_id)"' "$LOG")"
+ev review.finding reviewer=copilot source=bot severity=Medium verdict=dismissed validity=rejected reason=not-a-bug path=src/a.ts line=42 claim=src/a.ts.-.leaks-handle comment_id=991 sha=cccccccccccccccccccccccccccccccccccccccc
+check "review.finding path/line/claim/source/sha" "src/a.ts number 42 src/a.ts.-.leaks-handle bot 991 cccccccccccccccccccccccccccccccccccccccc" \
+  "$(jq -r 'select(.event=="review.finding") | "\(.path) \(.line|type) \(.line) \(.claim) \(.source) \(.comment_id) \(.sha)"' "$LOG")"
 reset
 ev review.launch reviewer=prompt-reviewer round=1 model=sonnet effort=high source=local
 check "review.launch fields" "review.launch prompt-reviewer 1 sonnet high" \
   "$(jq -r '"\(.event) \(.reviewer) \(.round) \(.model) \(.effort)"' "$LOG")"
 reset
-ev review.finding reviewer=correctness-reviewer severity=High verdict=fixed validity=valid round=1 reason=stale-name key=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+ev review.finding reviewer=correctness-reviewer severity=High verdict=fixed validity=valid round=1 reason=stale-name finding_id=r1-1
 ev review.result round=1 fixed=1 dismissed=2 deferred=0 reviewers=correctness-reviewer,prompt-reviewer
-check "review.finding fields" "review.finding correctness-reviewer High fixed valid 1 stale-name aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" \
-  "$(jq -r 'select(.event=="review.finding") | "\(.event) \(.reviewer) \(.severity) \(.verdict) \(.validity) \(.round) \(.reason) \(.key)"' "$LOG")"
+check "review.finding fields" "review.finding correctness-reviewer High fixed valid 1 stale-name r1-1" \
+  "$(jq -r 'select(.event=="review.finding") | "\(.event) \(.reviewer) \(.severity) \(.verdict) \(.validity) \(.round) \(.reason) \(.finding_id)"' "$LOG")"
 check "review.result fields" "review.result 1 1 2 0 correctness-reviewer,prompt-reviewer" \
   "$(jq -r 'select(.event=="review.result") | "\(.event) \(.round) \(.fixed) \(.dismissed) \(.deferred) \(.reviewers)"' "$LOG")"
 

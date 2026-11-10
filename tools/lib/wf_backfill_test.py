@@ -1,11 +1,10 @@
-"""Tests for wf_backfill: report parsing, key recipe, SHA lookup, join, idempotence.
+"""Tests for wf_backfill: report parsing, SHA lookup, join, idempotence.
 
     python3 -m unittest tools/lib/wf_backfill_test.py
 
 Transcripts and the git repo are synthetic and built per test.
 """
 
-import hashlib
 import io
 import json
 import os
@@ -57,15 +56,8 @@ def write_agent(root, agent_id, agent_type, start, end, text, model="claude-sonn
 
 
 class Pure(unittest.TestCase):
-    def test_normalize_follows_recipe(self):
-        self.assertEqual(bf.normalize_claim("The  Foo.sh\tcrashes (badly)!!. "), "foo.sh crashes badly")
-
-    def test_key_golden_vector(self):
-        claim = "tools/a.sh drops the last line"
-        want = hashlib.sha256(f"tools/a.sh\nL41-L50\n{claim}".encode()).hexdigest()
-        self.assertEqual(bf.finding_key("tools/a.sh", 42, claim), want)
-        self.assertEqual(bf.bucket(7), "L1-L10")
-        self.assertEqual(bf.bucket(None), "L0")
+    def test_clean_claim_collapses_whitespace(self):
+        self.assertEqual(bf.clean_claim("  a.sh:\tdrops\n the line "), "a.sh: drops the line")
 
     def test_parse_report_lines(self):
         text = ("High | tools/a.sh:42 | Drops the last line. Extra. | input X | fix | test\n"
@@ -74,7 +66,7 @@ class Pure(unittest.TestCase):
         got = bf.parse_report(text)
         self.assertEqual([(f["severity"], f["path"], f["line"]) for f in got],
                          [("High", "tools/a.sh", 42), ("Low", "docs/x.md", None)])
-        self.assertEqual(got[0]["claim"], "tools/a.sh drops the last line")
+        self.assertEqual(got[0]["claim"], "tools/a.sh: Drops the last line.")
 
     def test_no_findings_parses_empty(self):
         self.assertEqual(bf.parse_report("no findings. all tests pass"), [])
@@ -143,7 +135,7 @@ class Pipeline(unittest.TestCase):
                          ("claude-sonnet-5-5", 1, 50, 15, 1))
         self.assertNotIn("effort", launch)
 
-    def test_findings_get_text_key_and_pairing(self):
+    def test_findings_get_text_and_pairing(self):
         new, s = bf.plan_branch(BRANCH, self.lines(), self.projects, self.repo)
         fs = [e for e in new if e["event"] == "review.finding"]
         self.assertEqual([(f["severity"], f["path"], f.get("line")) for f in fs],

@@ -9,7 +9,6 @@ Fields no source holds are reported as unknown, never as zero.
 """
 
 import argparse
-import hashlib
 import json
 import os
 import re
@@ -29,23 +28,8 @@ _REVIEW_LINE_RE = re.compile(r"(\d+)\s+rounds?:\s*(\d+)\s+fixed,\s*(\d+)\s+dismi
 EVENT_FIELD_CAP = 200
 
 
-def normalize_claim(text):
-    s = re.sub(r"\s+", " ", text.lower())
-    s = re.sub(r"[^a-z0-9 .\-/]", "", s)
-    s = s.rstrip(" .-")
-    s = re.sub(r"^(the|a|an) ", "", s)
-    return s.strip()
-
-
-def bucket(line):
-    if not line:
-        return "L0"
-    lo = ((line - 1) // 10) * 10 + 1
-    return f"L{lo}-L{lo + 9}"
-
-
-def finding_key(path, line, claim):
-    return hashlib.sha256(f"{path}\n{bucket(line)}\n{claim}".encode()).hexdigest()
+def clean_claim(text):
+    return re.sub(r"\s+", " ", text).strip()
 
 
 def parse_report(text):
@@ -62,7 +46,7 @@ def parse_report(text):
         line = int(loc["line"]) if loc["line"] else None
         sentence = re.split(r"(?<=[.!?])\s", m["defect"].strip(), maxsplit=1)[0]
         out.append({"severity": m["sev"].capitalize(), "path": path, "line": line,
-                    "claim": normalize_claim(f"{path} {sentence}")})
+                    "claim": clean_claim(f"{path}: {sentence}")})
     return out
 
 
@@ -288,8 +272,7 @@ def plan_branch(branch, events, projects, git_dir, pr_body=None):
                 summary["findings_unmatched"] += match is None
                 f = {**base, "ts": iso(t["last_ts"] or t["first_ts"]), "event": "review.finding",
                      "reviewer": agent, "round": rnd, "source": "local", "severity": p["severity"],
-                     "path": p["path"], "claim": p["claim"], "agent_id": agent_id, "idx": i,
-                     "key": finding_key(p["path"], p["line"], p["claim"])}
+                     "path": p["path"], "claim": p["claim"], "agent_id": agent_id, "idx": i}
                 if p["line"]:
                     f["line"] = p["line"]
                 if match:
