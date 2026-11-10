@@ -4,9 +4,6 @@
 # NOTION_OP_REF and SHORTCUT_OP_REF override the default references.
 set -eu
 
-command -v claude >/dev/null 2>&1 || exit 0
-command -v op >/dev/null 2>&1 || { echo "register-mcp: op not found; skipping MCP servers" >&2; exit 0; }
-
 notion_ref="${NOTION_OP_REF:-op://Personal/Notion API/credential}"
 shortcut_ref="${SHORTCUT_OP_REF:-op://Personal/Shortcut API/credential}"
 
@@ -24,8 +21,11 @@ if [ -f "$cfg" ] && grep -Eq '^[[:space:]]*(notion_api_token|shortcut_api_token|
   cat "$cfg.tmp" > "$cfg" && rm -f "$cfg.tmp"
   echo "register-mcp: removed legacy token values from $cfg; rotate those tokens" >&2
 fi
+command -v claude >/dev/null 2>&1 || exit 0
 remove notion
 remove shortcut
+
+command -v op >/dev/null 2>&1 || { echo "register-mcp: op not found; skipping MCP servers" >&2; exit 0; }
 
 has_item() { op read "$1" >/dev/null 2>&1; }
 

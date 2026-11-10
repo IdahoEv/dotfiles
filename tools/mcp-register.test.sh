@@ -46,3 +46,18 @@ PATH="$tmp/bin:$PATH" HOME="$tmp/home" XDG_CONFIG_HOME= "$repo/run_onchange_afte
 toml="$(cat "$tmp/home/.config/chezmoi/chezmoi.toml")"
 [[ "$toml" != *secret-tok* && "$toml" == *'a@b'* ]] || fail "legacy token lines scrubbed from chezmoi.toml, got: $toml"
 pass "scrubs legacy tokens from an existing chezmoi.toml"
+
+printf '[data]\n  shortcut_api_token = "secret-tok"\n' > "$tmp/home/.config/chezmoi/chezmoi.toml"
+mkdir "$tmp/noop"
+for t in sh dirname grep cat rm; do ln -s "$(command -v $t)" "$tmp/noop/$t"; done
+PATH="$tmp/noop" HOME="$tmp/home" XDG_CONFIG_HOME= /bin/sh "$repo/run_onchange_after_register-mcp-servers.sh" 2>/dev/null
+[[ "$(cat "$tmp/home/.config/chezmoi/chezmoi.toml")" != *secret-tok* ]] || fail "legacy tokens scrubbed even without claude or op"
+pass "scrub runs without claude or op installed"
+
+rm "$tmp/claude.log"
+mkdir "$tmp/noop2"
+ln -s "$tmp/bin/claude" "$tmp/noop2/claude"
+for t in sh dirname grep cat rm; do ln -s "$(command -v $t)" "$tmp/noop2/$t"; done
+PATH="$tmp/noop2" HOME="$tmp/home" /bin/sh "$repo/run_onchange_after_register-mcp-servers.sh" 2>/dev/null
+grep -q 'mcp remove --scope user notion' "$tmp/claude.log" || fail "retired entries removed without op installed"
+pass "retired entries removed when op is not installed"
