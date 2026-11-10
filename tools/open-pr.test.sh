@@ -50,6 +50,14 @@ case "$1 $2" in
       *url*)    echo https://example.test/pr/1 ;;
       *title*)  cat "$GH_LOG.title" 2>/dev/null || echo "existing title" ;;
     esac ;;
+  "pr edit")
+    shift 2
+    while [ $# -gt 0 ]; do
+      case "$1" in
+        --title) printf '%s' "$2" > "$GH_LOG.title"; shift 2 ;;
+        *) shift ;;
+      esac
+    done ;;
   *) echo "gh $*" >> "$GH_LOG" ;;
 esac
 STUB
@@ -80,7 +88,20 @@ body()  { cat "$GH_LOG.body" 2>/dev/null; }
 new_repo 42-foo
 out="$(run --title "Add foo" --review none)"
 check "github: default provider"      "provider=github" "$(grep '^provider=' <<<"$out")"
-check "github: plain title"           "Add foo" "$(title)"
+check "github: Is<NNN> title"         "Is42: Add foo" "$(title)"
+check "github: no repair needed"      "0" "$(grep -c '^pr_title_repaired_from=' <<<"$out")"
+
+new_repo 42-foo
+out="$(run --title "Is42: Add foo" --review none)"
+check "github: caller prefix not doubled" "Is42: Add foo" "$(title)"
+check "github: no repair for own prefix"  "0" "$(grep -c '^pr_title_repaired_from=' <<<"$out")"
+new_repo 42-foo
+out="$(run --title "Is42 Add foo" --review none)"
+check "github: colon-less prefix repaired" "Is42: Add foo" "$(title)"
+check "github: repair reported"            "pr_title_repaired_from=Is42: Is42 Add foo" "$(grep '^pr_title_repaired_from=' <<<"$out")"
+new_repo 42-foo
+run --title "sc-42: Add foo" --review none >/dev/null
+check "github: foreign prefix repaired"    "Is42: Add foo" "$(title)"
 check "github: default body"          "Closes #42" "$(body)"
 
 printf 'Summary\n' > "$ROOT/b.md"
@@ -135,16 +156,18 @@ check "ticketless: body untouched"    "Just a summary" "$(body)"
 new_repo scratch
 run --title "Quick fix" --issue 7 --review none >/dev/null
 check "--issue on unnumbered branch"  "Closes #7" "$(body)"
+check "--issue on unnumbered branch: title" "Is7: Quick fix" "$(title)"
 
 # ---- chains (several issues, one PR) ------------------------------------------
 chain_file() { printf '%s\n' "$@" > "$(git rev-parse --absolute-git-dir)/chain"; }
 new_repo 42-foo
 run --title "Add foo" --issue 42,43,44 --review none >/dev/null
 check "--issue list: one Closes per issue" "Closes #42 Closes #43 Closes #44" "$(body | tr '\n' ' ' | sed 's/ $//')"
-check "--issue list: title uses the head"  "Add foo" "$(title)"
+check "--issue list: title uses the head"  "Is42: Add foo" "$(title)"
 new_repo 42-foo; chain_file 42 43
 run --title "Add foo" --review none >/dev/null
 check "chain file: Closes for every ticket" "Closes #42 Closes #43" "$(body | tr '\n' ' ' | sed 's/ $//')"
+check "chain file: title prefixes the head only" "Is42: Add foo" "$(title)"
 new_repo 42-foo; chain_file 42 43
 printf 'Summary\n\nCloses #43\n' > "$ROOT/b.md"
 run --title "Add foo" --body-file "$ROOT/b.md" --review none >/dev/null

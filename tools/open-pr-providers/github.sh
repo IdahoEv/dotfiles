@@ -2,7 +2,7 @@
 #
 # The generic default for any GitHub repo (mirrors start-ticket-providers/github.sh):
 #   - branch convention `<NNN>-slug`  → issue number NNN
-#   - PR title is used as given (no ticket prefix)
+#   - PR title `Is<NNN>: <title>` (ticketless PRs keep the title as given)
 #   - PR body footer `Closes #NNN`
 #   - no review triggers: --review is accepted and ignored. Repos that want
 #     Copilot/claude.yml wiring use the kardashev provider or their own.
@@ -21,8 +21,13 @@ provider::issue_from_branch() {  # <branch> → echoes issue number, or nothing
   return 0
 }
 
-provider::pr_title() {  # <issue> <title> → title unchanged
-  printf '%s\n' "$2"
+provider::pr_title() {  # <issue> <title> → "Is<NNN>: <title>" (idempotent)
+  local issue="$1" t="$2"
+  if [ -z "$issue" ] || [[ "$t" =~ ^Is${issue}:[[:space:]] ]]; then
+    printf '%s\n' "$t"
+  else
+    printf 'Is%s: %s\n' "$issue" "$t"
+  fi
 }
 
 provider::pr_body() {  # <issue> → "Closes #NNN" (default body, no --body-file)
