@@ -1,6 +1,6 @@
 ---
 name: review-lens-contract
-description: Shared contract for periodic project-review lens agents — snapshot scope, finding-line format, word cap, read-only rule, and lens discovery. Preloaded by every lens via skills:; the diff-scoped counterpart is reviewer-contract.
+description: Shared contract for periodic project-review lens agents — snapshot scope, finding-line format, word cap, read-only rule, and lens discovery. Preloaded by registered lenses via skills:, named in the launch prompt for tier-2 lenses; the diff-scoped counterpart is reviewer-contract.
 ---
 
 # Review Lens Contract
@@ -12,7 +12,7 @@ A lens reviews a read-only snapshot of the default branch, not a diff. `reviewer
 The caller supplies:
 
 - Snapshot path (read-only checkout of the default branch).
-- Path to `project-review.md`. Scope, probes, doc roles and conventions come from it; a lens holds no project text. A value still in `<...>` placeholder form counts as unset.
+- Path to `project-review.md`. Scope, probes, doc roles and conventions come from it (a role it omits falls back to `governor.md` § Key documents); a lens holds no project text. A value still in `<...>` placeholder form counts as unset.
 - Word cap for the report.
 - Findings already ticketed or triaged in earlier runs, to tag as `KNOWN` or `ALREADY TICKETED`.
 
