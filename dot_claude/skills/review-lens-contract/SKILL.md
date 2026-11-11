@@ -22,9 +22,10 @@ Missing snapshot or word cap: ask, don't guess. Missing `project-review.md` or a
 
 Within the word cap, most severe first. One line per finding:
 
-`SEVERITY | LENS | file:line | defect | evidence | minimal fix`
+`SEVERITY | LENS | STATUS | file:line | defect | evidence | minimal fix`
 
 - Severity: P0, P1, P2, P3.
+- Status: `NEW`, `KNOWN` or `ALREADY TICKETED`. A finding matching an input entry takes that entry's tag; every other finding is `NEW`.
 - `LENS` is the lens's own `name`.
 - Evidence is a path and line in the snapshot, or a probe command with its output. No evidence, no finding.
 - Then `Verified clean:` listing what was checked and found sound. A clean lens says so; no praise, no summary.
@@ -35,7 +36,7 @@ No edits, commits, pushes, or tracker writes. Tracker reads only through the pro
 
 ## Authoring
 
-Agent file with `name`, `use_when: periodic project review.` directly above `description:`, optional `model`, `tools`, and the brief as body. The body states method and output only, under 60 lines, and begins with a `Lens: collect` or `Lens: triage` line. `use_when:` is required metadata here, not a selection filter.
+Agent file with `name`, `use_when: periodic project review.` directly above `description:`, optional `model`, `tools`, and the brief as body. A registered lens (tier 1 or 3) lists `review-lens-contract` under `skills:` so it receives this contract; tier 2 lenses get it through the launch prompt. The body states method and output only, under 60 lines, and begins with a `Lens: collect` or `Lens: triage` line. `use_when:` is required metadata here, not a selection filter.
 
 ## Discovery
 
