@@ -35,7 +35,7 @@ ee70fb1a401ed104231eb6f9ea72334263ca35b579f030d27946692cc57776be  644  dot_claud
 d7e038f28424138783361121b0871809c7c700703b459ee28d63928497f470e1  644  dot_claude/skills/local-review-cycle-procedure/SKILL.md
 3714ec7476254f20bec4e3d52e31d77f545e8860a82c609c98e48dc74e780172  644  dot_claude/skills/prompt-review/SKILL.md
 91f66b2780160f52a8cc5619c0659375c125a0070fbe7a8ec454a94190d8c413  644  dot_claude/skills/prompt-review/executable_prompt-metrics.sh
-472f5b7ea8c207ce024e7577c23ce3fa90c80da19ff3691f558be3859c67d8ab  644  dot_claude/skills/review-lens-contract/SKILL.md
+0f86283a7e75a2d5b00cb3e7e2897966ffcf7225a18beedc7f3ccd2e981c9c1e  644  dot_claude/skills/review-lens-contract/SKILL.md
 526d2fe15830eabd8368c8d4424ddb20b6391a136a049d6bd1b382bc08d51554  644  dot_claude/skills/reviewer-contract/SKILL.md
 860f5d5674346a68bed681c246c4397adea244c5c7d319012ae3885ac864d5f1  644  dot_claude/skills/security-review-rubric/SKILL.md
 a331dc697855157141a83e160b4f6e44bd8b52541074e511e15dfd2680f3f34c  644  dot_claude/skills/terse-docs/SKILL.md
