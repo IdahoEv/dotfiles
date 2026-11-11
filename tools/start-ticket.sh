@@ -434,6 +434,21 @@ Tickets ${chain_csv//,/, } are one chain: one worktree, one branch, one PR.
 CHAIN
 }
 
+# Appended when this machine opted into unattended GitHub review.
+unattended_block() {
+  cat <<UNATTENDED
+
+## Unattended review
+
+This machine runs review unattended; do not pause for approval until the PR is ready.
+
+1. Once the acceptance criteria are met and the tests pass, commit, then run \`/local-review-cycle\`.
+2. Then run \`/open-pr\` yourself (a chain already does this above), without pausing.
+3. Then run \`/github-review-comments\`. It commits, pushes, posts and re-requests Copilot each round with no prompts, for up to 5 rounds, and stops at reviewer sign-off or a round with no valid fixes.
+4. When it stops, print its single results table covering every local and GitHub round, then wait for my approval of the PR. Do not merge.
+UNATTENDED
+}
+
 # ---- args ------------------------------------------------------------------
 id="" provider="" mode="full" launcher_flag="" tab_wt="" tab_kf="" about="" in_place=""
 while [ $# -gt 0 ]; do
@@ -651,6 +666,7 @@ _tmp="${TMPDIR:-/tmp}"; kickoff="${_tmp%/}/${repo_name}-kickoff-$(IFS=-; echo "$
     [ -z "${chain_urls[_n]}" ] || printf '\n<%s>\n' "${chain_urls[_n]}"
   done
   [ -z "$chain_csv" ] || chain_block
+  ! "$SCRIPT_DIR/review-unattended.sh" active || unattended_block
   # The repo's own preamble wins outright; else the per-project overlay's.
   if _doc="$(gt::find_doc kickoff-preamble.md "$repo_root")"; then
     pre="${_doc%%$'\t'*}"

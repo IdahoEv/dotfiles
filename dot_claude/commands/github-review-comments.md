@@ -16,6 +16,12 @@ argument-hint: "[automatically|quickly|slowly]"
 
 **Automatic:** this session is the controller. It never reads the code under review or the comments. A fresh `github-review-repair-agent` does the review and the edits, so implementation reasoning stays out of the review.
 
+## 0. Mode
+
+Run `review-unattended.sh active`. Exit 0 means **unattended mode**: this machine opted in with `~/.config/github-review-unattended` and `local-review-only` is absent. Then run `review-unattended.sh next-round`; if it prints `cap=reached`, skip to the stop procedure below with reason "round cap (5)". Any other exit means interactive behavior, and every step below applies as written.
+
+**Stop procedure (unattended only).** Whatever ends the loop, run `review-unattended.sh reset` and `agent-phase.sh --no-review`, then print the final report: one table across every local-review-cycle round and every GitHub round (columns: Cycle, Round, Reviewer, Findings, Fixed, Dismissed, Deferred), built from this session's history, followed by the stop reason. Then stop and wait for the user to review and approve the PR. Never merge.
+
 ## 1. Identify the PR
 
 ```bash
@@ -45,11 +51,13 @@ If the agent runs in the background, wait for its completion notice. Don't act o
 
 ## 3. Report
 
-Print the agent's report **unaltered, at top level** — no blockquote, no code fence, tables emitted directly, because quoting or fencing stops the terminal rendering its tables. If it says `Files changed: no` and lists no planned actions, run `agent-phase.sh --no-review`, say the round found nothing to do and polling has stopped, and stop.
+Print the agent's report **unaltered, at top level** — no blockquote, no code fence, tables emitted directly, because quoting or fencing stops the terminal rendering its tables. If it says `Files changed: no` and lists no planned actions, run `agent-phase.sh --no-review`, say the round found nothing to do and polling has stopped, and stop. In unattended mode, use the stop procedure instead, reason "no valid fixes".
 
 ## 4. Approve the commit
 
-If files changed, ask one `AskUserQuestion`. Write it as if the printed report were never shown, because background sessions often don't show it.
+**Unattended mode:** this explicitly overrides the skill's no-commit-without-approval rule, for this mode only. Don't ask. Commit with the proposed message plus this session's attribution trailer and go to step 5.
+
+Otherwise, if files changed, ask one `AskUserQuestion`. Write it as if the printed report were never shown, because background sessions often don't show it.
 
 - `question`: the findings table (file:line, finding, verdict), one line per fix, the validation line, a count of the planned GitHub actions by kind, and the full proposed commit message. End with "Commit, push, then post the GitHub actions?"
 - Option 1, "Commit and push (Recommended)": `preview` = the full commit message, plus `git diff --stat` if it's short.
@@ -65,11 +73,11 @@ A typed `execute` commits with the proposed message; `execute <text>` uses `<tex
 1. `git add` exactly the paths the agent listed, commit, and `git push`. If either fails, post nothing, report the error, and stop.
 2. **After the push succeeds**, run the planned actions in order using the `gh api` snippets in the `github-review-procedure` skill's §4d (reactions, Reply, Mark Resolved, including the review-body `[RESOLVED]` edit); `pr-comment` rows go through `gh pr comment`. Skip 4d's conversational steps — the bodies are already final. Post each body exactly as planned. Confirm each resolution through the API. Report every action that fails, and keep going.
 
-If no files changed but there are planned actions (for example, rejections only), post them directly. There's no commit to gate them on. Then run `agent-phase.sh --no-review`, say polling has stopped because nothing was pushed to trigger a new review, and stop. Skip steps 6 and 7.
+If no files changed but there are planned actions (for example, rejections only), post them directly. There's no commit to gate them on. Then run `agent-phase.sh --no-review`, say polling has stopped because nothing was pushed to trigger a new review, and stop (unattended: the stop procedure, reason "no valid fixes"). Skip steps 6 and 7.
 
 ## 6. Re-request review
 
-GitHub auto-requests Copilot only when the PR opens. A later push gets no new pass unless one is requested. Skip this step while `~/.config/local-review-only` exists. Otherwise ask:
+GitHub auto-requests Copilot only when the PR opens. A later push gets no new pass unless one is requested. Skip this step while `~/.config/local-review-only` exists. In unattended mode, don't ask: run `request-review.sh` (below) and go to step 7. Otherwise ask:
 
 ```text
 Question: "Request another Copilot review round for this push?"
@@ -96,5 +104,7 @@ It polls every 45 s for up to 2 h. Exit codes:
 - **1**: timeout. Say "No new bot activity after 2 hours. Polling stopped." and run `agent-phase.sh --no-review`.
 - **2**: no PR found. Say so, run `agent-phase.sh --no-review`, and stop.
 - **4**: a reviewer couldn't run (Actions billing or spending limit). Name it, run `agent-phase.sh --no-review`, and don't re-poll.
+
+In unattended mode, every exit other than 0 ends with the stop procedure, naming the reason: 3 is "reviewer sign-off", 1 "poll timeout", 2 "no PR", 4 "reviewer unavailable". Exit 0 re-invokes, and `next-round` in step 0 enforces the 5-round cap.
 
 A review with findings only in its body (Copilot Suppressed comments, CodeRabbit Outside-diff-range) doesn't match a sign-off marker, so it correctly exits 0.

@@ -146,6 +146,19 @@ check "single id re-run keeps the chain file" "7 8 9" "$(tr '\n' ' ' < "$(git -C
 check "single id: kickoff has no chain block" "0" "$(grep -c 'chain of' "$(get kickoff <<<"$out")")"
 check "single id: marks only itself" "mark 7" "$(grep '^mark' "$FAKE_LOG")"
 
+check "no marker: kickoff has no unattended block" "0" "$(grep -c 'Unattended review' "$(get kickoff <<<"$out")")"
+touch "$HOME/.config/github-review-unattended" 2>/dev/null || { mkdir -p "$HOME/.config"; touch "$HOME/.config/github-review-unattended"; }
+out="$(chain 7)"
+has "marker: single-ticket kickoff carries the unattended block" "/github-review-comments" "$(get kickoff <<<"$out")"
+has "marker: block forbids merging" "Do not merge" "$(get kickoff <<<"$out")"
+out="$(chain 7,8,9)"
+has "marker: chain kickoff carries the unattended block" "## Unattended review" "$(get kickoff <<<"$out")"
+touch "$HOME/.config/local-review-only"
+out="$(chain 7)"
+check "local-review-only suppresses the block" "0" "$(grep -c 'Unattended review' "$(get kickoff <<<"$out")")"
+rm -f "$HOME/.config/github-review-unattended" "$HOME/.config/local-review-only"
+out="$(chain 7,8,9)"
+
 # Four links are fine now; only the label collapses.
 git -C "$ROOT/widgets" worktree add -q "$ROOT/cwt4" -b 7-ticket-7b
 FAKE_WT="$ROOT/cwt4" chain 7,8,9,10 >/dev/null
