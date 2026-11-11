@@ -3,7 +3,7 @@
 # unattended GitHub review loop.
 #
 #   review-unattended.sh active       exit 0 when unattended mode applies
-#   review-unattended.sh next-round   count a round; prints round=<n>, exit 1 past the cap
+#   review-unattended.sh next-round   count a round; prints round=<n> (plus last=1 on the final round), exit 1 past the cap
 #   review-unattended.sh reset        clear the round counter
 #
 # Unattended mode needs ~/.config/github-review-unattended and no
@@ -35,7 +35,7 @@ case "${1:-}" in
       exit 1
     fi
     echo "$n" > "$f"
-    echo "round=$n"
+    if [ "$n" -eq "$max" ]; then echo "round=$n last=1"; else echo "round=$n"; fi
     ;;
   reset)
     f="$(counter_file)" || exit 2

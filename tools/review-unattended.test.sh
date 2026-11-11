@@ -42,7 +42,8 @@ check "round 1 after reset" "round=1" "$(run next-round)"
 
 export REVIEW_UNATTENDED_MAX=2
 run reset
-run next-round >/dev/null; run next-round >/dev/null
+check "round 1 of 2" "round=1" "$(run next-round)"
+check "final round is flagged" "round=2 last=1" "$(run next-round)"
 out="$(run next-round)"; rc=$?
 check "cap output" "cap=reached" "$out"
 check "cap exit code" 1 "$rc"

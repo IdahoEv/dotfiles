@@ -442,10 +442,9 @@ unattended_block() {
 
 This machine runs review unattended; do not pause for approval until the PR is ready.
 
-1. Once the acceptance criteria are met and the tests pass, commit, then run \`/local-review-cycle\`.
-2. Then run \`/open-pr\` yourself (a chain already does this above), without pausing.
-3. Then run \`/github-review-comments\`. It commits, pushes, posts and re-requests Copilot each round with no prompts, for up to 5 rounds, and stops at reviewer sign-off or a round with no valid fixes.
-4. When it stops, print its single results table covering every local and GitHub round, then wait for my approval of the PR. Do not merge.
+1. Local review and PR: for a chain, follow the chain steps above. Otherwise, once the acceptance criteria are met and the tests pass, commit, run \`/local-review-cycle\`, then run \`/open-pr\` yourself, without pausing.
+2. Run \`review-unattended.sh reset\`, then run \`/github-review-comments\`. It commits, pushes, posts and re-requests Copilot each round with no prompts, up to its round cap, and stops at reviewer sign-off or a round with no valid fixes.
+3. When it stops, print its single results table covering every local and GitHub round, then wait for my approval of the PR. Do not merge.
 UNATTENDED
 }
 

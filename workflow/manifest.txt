@@ -17,7 +17,7 @@ c3c02fec04bfb82a8070f0da0dc957ae81a3ef0727bd2329a8129678a660ece6  644  dot_claud
 92a5a8af85fb042c621cbd142156c5cc976cc1e449b7a93b3a8e3f0b01462a3c  644  dot_claude/commands/discuss.md
 8998b38bc79c43a9a0ed46b71cd239544d630001837e917275a7da64231f51c2  644  dot_claude/commands/finalize.md
 30f03e48c2f2bc6cc60d74195f3da6af3d7f868160a11f43daf759611194b83c  644  dot_claude/commands/generate_prd.md
-88735274dc70e25a6da0d34c4509580752520706cbb0a2cdeedbbecd9aa61755  644  dot_claude/commands/github-review-comments.md
+55da8f62ca97df8356db63fddc2d34155992b99c2c872aa788506ef94768f0a9  644  dot_claude/commands/github-review-comments.md
 d980ad1c2a292434faccbe8f1d76c2db32f08694a09ff1474b85ed82620baef3  644  dot_claude/commands/governor.md
 ee447a7392a65c8de415ed450a6ed9492b2f119a89918b182722e507b1a023a4  644  dot_claude/commands/groom.md
 1ad7374ab13385f8487312affce31905d6c01af1256fd6e6c4a6168d168039f8  644  dot_claude/commands/implement.md
@@ -82,6 +82,7 @@ b127c521bc0b7fd59034739990ec1010f5e929f1584a5fe5ff39746ccb390361  644  tools/pro
 897f3d03a1e760f56fdab55a0d787184e25e1bb265e71cf413c7e1259d747c13  755  tools/prune-worktrees.sh
 d6710ea71d1b71cab9ba9a94dc6ccfd6c1bafbe876d7b186f75633212b0a1652  755  tools/repo-facts.sh
 99f46aff424a3272685909ffe90412157e6516701adee19707ab7f2148a716da  755  tools/request-review.sh
+a1828419c985651842fae9f6fa9ab03d53f13b12a195407a2879f07f7e1fc62d  755  tools/review-unattended.sh
 cf10ecfc2ed012bfee6c334a98df12620b16ec7e62e75ebbb0ba8560f82683c5  755  tools/reviewer-model.sh
 052d2d43aa04b7a8d20f09ecb7e441ca1a9269e951c87729c29c40303dd727a3  644  tools/session-kickoff.md
 71d00250a76fffd58c7e2fc2fc0df3a1b3d1b837bcaaa551c00c488d587183e1  755  tools/session-label.sh
@@ -89,13 +90,13 @@ a394eba77efb25ef1f766806223ac4edf75c5eef0b4347084e6059b5fce9de68  755  tools/set
 e366a502be678c6fa82962d428bbdc9414457a32835de696989c42582e500eca  755  tools/sibling-worktrees.sh
 5b687d90b5ab740ddf39a68ca7bbeb5f93273197c9ba80acbbaca359c4399f25  644  tools/start-ticket-providers/github.sh
 12792385cebfedb159743821ab2ca5338efa145c21ab958f3c7aeb48df32f501  644  tools/start-ticket-providers/shortcut.sh
-d52f50efd2defc8b5c4319701b4a770d7d9d04cf4946e82514be297d105ad4b3  755  tools/start-ticket.sh
+462fe1c86f46d2712dfdba23a8aec3b0eddac82bbb52b851efcdf303bed7f070  755  tools/start-ticket.sh
 b8083091fae3b43f91ae088836762a8116f45021b72d87be197adb98adde21e8  755  tools/wf-backfill.sh
 c1ab6c8c8f800a23622ec35d2b13d9e9bc25f252b67ba785490d23c661e2e34b  755  tools/wf-event.sh
 080bf3233e51fd1e86ee7392d43f73481806b9101716f9c0bff4cd24bb25b500  755  tools/wf-report.sh
 f15dd098841d7963da09693fafbb3bf3f713952434c4c4b8a40dec6cb7cb0fcd  755  tools/workflow-manifest.sh
 8b3c4fad15997740068b84ced54bf8395749d2b33b6700dd9af651b5047d0057  755  tools/workflow-session.sh
 db476f8bde6afdc9933afe7c94e45e76224d7832bd063f6c7dad9fb54fdf61d3  755  tools/worktree-manager.sh
-56e4643aeaafae027d7f42ea8d23351ab18a2dd812880f507ce3a4d48f74cc01  644  workflow/adapters/agy.md
-1785fc462099f774129f36d10ae607d46e5af9adc16323ca73228d690bac2b43  644  workflow/adapters/claude-cloud.md
+cb7525983ca1200a960d7db55b9d3f71283fccbec74328eaccd3274a6a96ec21  644  workflow/adapters/agy.md
+6a34db102a9792f145117bcbed94f75af1ae415b8cbb105a3741b278ab5965c9  644  workflow/adapters/claude-cloud.md
 6e2d521b322e10ab7eebdc54c0557decc8415de6274da60d6890ac368f732324  644  workflow/adapters/codex.md

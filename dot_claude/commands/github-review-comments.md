@@ -18,9 +18,9 @@ argument-hint: "[automatically|quickly|slowly]"
 
 ## 0. Mode
 
-Run `review-unattended.sh active`. Exit 0 means **unattended mode**: this machine opted in with `~/.config/github-review-unattended` and `local-review-only` is absent. Then run `review-unattended.sh next-round`; if it prints `cap=reached`, skip to the stop procedure below with reason "round cap (5)". Any other exit means interactive behavior, and every step below applies as written.
+Run `review-unattended.sh active`. Exit 0 means **unattended mode**: this machine opted in with `~/.config/github-review-unattended` and `local-review-only` is absent. Then run `review-unattended.sh next-round`. It prints `round=<n>`, with `last=1` on the final round; remember whether this round is the last. If it prints `cap=reached`, skip to the stop procedure below with reason "round cap". Any other `next-round` result (an error exit) stops with the error, via the stop procedure. If `active` exits non-zero, behavior is interactive and every step below applies as written.
 
-**Stop procedure (unattended only).** Whatever ends the loop, run `review-unattended.sh reset` and `agent-phase.sh --no-review`, then print the final report: one table across every local-review-cycle round and every GitHub round (columns: Cycle, Round, Reviewer, Findings, Fixed, Dismissed, Deferred), built from this session's history, followed by the stop reason. Then stop and wait for the user to review and approve the PR. Never merge.
+**Stop procedure (unattended only).** Every stop in this command, including "No PR", a failed commit or push, and each exit below, goes through it. Run `review-unattended.sh reset` and `agent-phase.sh --no-review`, then print the final report: one table across every local-review-cycle round and every GitHub round (columns: Cycle = `local` or `github`, Round, Reviewer, Findings, Fixed, Dismissed, Deferred), built from this session's history, followed by the stop reason. Then stop and wait for the user to review and approve the PR. Never merge.
 
 ## 1. Identify the PR
 
@@ -31,7 +31,7 @@ git branch --show-current
 pwd
 ```
 
-No PR → "No pull request found for the current branch." and stop.
+No PR → "No pull request found for the current branch." and stop (unattended: the stop procedure, reason "no PR").
 
 ## 2. Launch the agent
 
@@ -70,10 +70,12 @@ A typed `execute` commits with the proposed message; `execute <text>` uses `<tex
 
 ## 5. Commit, push, post
 
-1. `git add` exactly the paths the agent listed, commit, and `git push`. If either fails, post nothing, report the error, and stop.
+1. `git add` exactly the paths the agent listed, commit, and `git push`. If either fails, post nothing, report the error, and stop (unattended: the stop procedure, reason "commit or push failed").
 2. **After the push succeeds**, run the planned actions in order using the `gh api` snippets in the `github-review-procedure` skill's §4d (reactions, Reply, Mark Resolved, including the review-body `[RESOLVED]` edit); `pr-comment` rows go through `gh pr comment`. Skip 4d's conversational steps — the bodies are already final. Post each body exactly as planned. Confirm each resolution through the API. Report every action that fails, and keep going.
 
 If no files changed but there are planned actions (for example, rejections only), post them directly. There's no commit to gate them on. Then run `agent-phase.sh --no-review`, say polling has stopped because nothing was pushed to trigger a new review, and stop (unattended: the stop procedure, reason "no valid fixes"). Skip steps 6 and 7.
+
+In unattended mode, if this is the last round (`last=1`), run the stop procedure with reason "round cap" once the actions are posted, and skip steps 6 and 7: another review would never be handled.
 
 ## 6. Re-request review
 
@@ -105,6 +107,6 @@ It polls every 45 s for up to 2 h. Exit codes:
 - **2**: no PR found. Say so, run `agent-phase.sh --no-review`, and stop.
 - **4**: a reviewer couldn't run (Actions billing or spending limit). Name it, run `agent-phase.sh --no-review`, and don't re-poll.
 
-In unattended mode, every exit other than 0 ends with the stop procedure, naming the reason: 3 is "reviewer sign-off", 1 "poll timeout", 2 "no PR", 4 "reviewer unavailable". Exit 0 re-invokes, and `next-round` in step 0 enforces the 5-round cap.
+In unattended mode, every exit other than 0 ends with the stop procedure, naming the reason: 3 is "reviewer sign-off", 1 "poll timeout", 2 "no PR", 4 "reviewer unavailable". Exit 0 re-invokes, and `next-round` in step 0 enforces the round cap.
 
 A review with findings only in its body (Copilot Suppressed comments, CodeRabbit Outside-diff-range) doesn't match a sign-off marker, so it correctly exits 0.
