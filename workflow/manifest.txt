@@ -75,13 +75,13 @@ fc3c8ddad937e52ea3760c6e28e18ecb67632e7d3db33b257ec2d0b53e0fb46b  644  tools/lib
 8b380209965a1e2c19bd8770a9e3cd037ee8cfc28a5d7c0c0edf21087b7345d2  644  tools/lib/wf_report.py
 3c46a31599092ceabb336ccd81b8e9a03631dbd0e8942152e8bbc420a74180fc  644  tools/lib/wf_tokens.py
 3b1a0716083c8f92ab94a60d59ecee59a1716e54cca16dd6cf25f77e2abfe41f  644  tools/lib/wf_usage.py
-2be2b4d1f9e75504b610b5c33fe1b4a10d9aa844763f37ee81fbdc5ef4c9101b  644  tools/lib/workstream.py
+49c20df25611be025809e8646a59ac130774e288aa78fc1e2752c17cb0e96344  644  tools/lib/workstream.py
 f6d369e82e99df2b899a4e53f1418bced2ab931851ae6e9ea7603c2460975cbc  755  tools/mcp-notion.sh
 c8ce372b7286fdec6d59dc1cc586f65cffd3ad95cdeebdd089631832c46e1b09  755  tools/migrate-use-when.sh
 ecd5995144d9111762dd751bd341d08a81b8a96b29410830aaa28cdf36cfec55  644  tools/open-pr-providers/github.sh
 ac6967653eba726326ac7a154d3f7472d2c928bef24c40e3bce5c8fc13973f28  644  tools/open-pr-providers/kardashev.sh
 20e1ba6f76351bfc20a2c77acbac4195426e5dd7e2122a60229b0e27c02438b0  755  tools/open-pr-watch.sh
-08e2232ea612ef1692b4015681504fa3c52f06fc974c883565514f5abde10094  755  tools/open-pr.sh
+2c582f261bffb933e14c312e8db10b77bd03109466efcd921ba5cb87a107cd4d  755  tools/open-pr.sh
 dc55a6a27785e8576b61964aeefb66b3e419c24bcb46ee280a2f8463befb450a  755  tools/pending-actions.sh
 924937befc2fa9b642c8cdd3407ec9958a32ca8cc05259bc2b31a1be387849fb  755  tools/pr-body.sh
 f6ec970038d77efb2159bd5818cb7fc4cbd72ceddfe0bcbc353d3a6f51061850  644  tools/project-colors
@@ -100,7 +100,7 @@ a394eba77efb25ef1f766806223ac4edf75c5eef0b4347084e6059b5fce9de68  755  tools/set
 e366a502be678c6fa82962d428bbdc9414457a32835de696989c42582e500eca  755  tools/sibling-worktrees.sh
 f1d8ec270147708ed3c5472da1e2f837be34135c8713ed1a856e6c8b6e4de00a  644  tools/start-ticket-providers/github.sh
 59b10306e57b024527e427dbf54d307301487af814835869d58ccb24fb93c365  644  tools/start-ticket-providers/shortcut.sh
-5e1d345e463deb9594fc72259bb1065ec0f483f822d4e0f54945ba759b84658e  755  tools/start-ticket.sh
+7701c93f2bbf38831f2c2cc5f3c2d8df3f3e19d2024add43dfaad312cd819291  755  tools/start-ticket.sh
 242a517c6322f8dd47a053c459dec7aed2b7b8a803b5f3b4e08e681bbe9b3af7  755  tools/tracker.sh
 b8083091fae3b43f91ae088836762a8116f45021b72d87be197adb98adde21e8  755  tools/wf-backfill.sh
 c1ab6c8c8f800a23622ec35d2b13d9e9bc25f252b67ba785490d23c661e2e34b  755  tools/wf-event.sh
