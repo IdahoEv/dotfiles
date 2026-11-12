@@ -11,16 +11,33 @@ import sys
 
 HEADER = "| issue | action | detail | command |"
 RULE = "| --- | --- | --- | --- |"
-ROW = re.compile(r"^\|\s*(\d+)\s*\|")
-SPLIT = re.compile(r"(?<!\\)\|")
+ROW = re.compile(r"^\|\s*([0-9]+)\s*\|")
 
 
 def escape(s):
-    return s.replace("|", r"\|")
+    return s.replace("\\", "\\\\").replace("|", r"\|")
+
+
+def split_cells(line):
+    cells, cur, i = [], "", 0
+    while i < len(line):
+        c = line[i]
+        if c == "\\" and i + 1 < len(line):
+            cur += line[i : i + 2]
+            i += 2
+            continue
+        if c == "|":
+            cells.append(cur)
+            cur = ""
+        else:
+            cur += c
+        i += 1
+    cells.append(cur)
+    return cells
 
 
 def unescape(s):
-    return s.replace(r"\|", "|")
+    return re.sub(r"\\(.)", r"\1", s)
 
 
 def format_row(issue, action, detail, command):
@@ -31,7 +48,7 @@ def parse_row(line):
     """Return (issue, action, detail, command) or None if the line isn't a data row."""
     if not ROW.match(line):
         return None
-    cells = [unescape(c.strip()) for c in SPLIT.split(line.strip())[1:-1]]
+    cells = [unescape(c.strip()) for c in split_cells(line.strip())[1:-1]]
     cells += [""] * (4 - len(cells))
     return tuple(cells[:4])
 
@@ -59,11 +76,17 @@ def upsert(path, issue, action, detail, command):
         if last_row is not None:
             lines.insert(last_row + 1, new)
         else:
-            if HEADER not in lines:
-                lines += [HEADER, RULE]
-            lines.append(new)
-    with open(path, "w") as f:
+            if HEADER in lines:
+                at = lines.index(HEADER) + 1
+                if at < len(lines) and lines[at] == RULE:
+                    at += 1
+                lines.insert(at, new)
+            else:
+                lines += [HEADER, RULE, new]
+    tmp = path + ".tmp"
+    with open(tmp, "w") as f:
         f.write("\n".join(lines) + "\n")
+    os.replace(tmp, path)
 
 
 def rows(path):
@@ -89,8 +112,9 @@ def main(argv):
             print("\t".join(r))
         return 0
 
-    if not a.issue.isdigit():
+    if not re.fullmatch(r"[0-9]+", a.issue):
         p.error(f"--issue must be a number, got {a.issue!r}")
+    a.issue = str(int(a.issue))
     if a.cmd == "has":
         return 0 if any(r[0] == a.issue and r[1] == a.action for r in rows(a.file)) else 1
 

@@ -9,7 +9,7 @@ f3522de4dc0c92887d60d0b000c79c80cd724b6efae9cb09e2bed932c0bc4ad6  644  dot_claud
 6cc2a0ed6667e8ba0c167e9e76213f0c1d53cc5a43fc5a6f7e441c3bfa3a1040  644  dot_claude/agents/local-review-cycle-manager.md
 efe28e6368f209f515635e5e6d24e27fa69a5ed8123fe1b3cf56e75668688342  644  dot_claude/agents/productivity-coach.md
 b007bc40f22d5239abea43d0bfa590fe309044f1abba0e80707b8704fedec3e8  644  dot_claude/agents/prompt-reviewer.md
-28f74d2618d3fdc01063475bf5427bc7dd04c7f72ff51699680ecb3df29012ca  644  dot_claude/agents/review-triage.md
+bec7e2376a3f7f7b4e0114c3cd51610b5589b63d71f5c68e79ca354207f9be03  644  dot_claude/agents/review-triage.md
 d5ae3f02b18504b3bc4dcbbde25a70bc80a10da3d0cabde3eec635205fc5aa1b  644  dot_claude/agents/robustness-reviewer.md
 da26866e8e7df3397cd6dd540c668f345b68ab6695657957f880f5f8891534f7  644  dot_claude/agents/security-reviewer.md
 9376be325b754228aa68634730d5955a079e68bb1218b4b9b3fefc009aef87cd  644  dot_claude/agents/supply-chain-reviewer.md
@@ -59,7 +59,7 @@ bd7c8224bbfda753dfd2345e11f87df9571e238bba122df02377e69589fe5657  644  tools/lib
 f9a438f73d29326358262339d533f645052072c6740ce5724cc29ff9902273a2  644  tools/lib/finalize_run.py
 f2a76fa675abd9ec93f935a0a9673ea6bbfac857b3ff2db535140c32a166db1e  644  tools/lib/model-pricing.json
 136e5d15665f21c2b8dd43900955182dd6bd3528e666553f8dddfca081a151cb  644  tools/lib/packages.tsv
-36da5f79e8581f922acff2b811aae4c39635185bdfeeeabefcbfa2a57760e0d2  644  tools/lib/pending_actions.py
+82c7e323b4f0c9aa941646a201495865791afa07e1272474c93ab9cadd7074b5  644  tools/lib/pending_actions.py
 c35d14e612032aeb02db2a06ba9770e4b193f42c0c1570a96c0907613d0d959f  644  tools/lib/pr-risk.json
 ac8c0f92f9527fbb17c12a660565f1359150725ea34531f6e556cd0ff056a941  644  tools/lib/pr_body.py
 2022d3ea25c76656a2d963b30bf3ebc185d9bf0cc9c0ba58a15aa4b859ad150d  644  tools/lib/prune_worktrees.py

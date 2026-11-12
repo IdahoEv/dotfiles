@@ -86,6 +86,38 @@ class PendingActionsTest(unittest.TestCase):
             + "| 5 | comment | k2 |  |\n| 6 | relabel | n |  |\n\nTrailer.\n",
         )
 
+    def test_row_goes_under_empty_table_not_after_trailing_prose(self):
+        with open(self.path, "w") as f:
+            f.write("# P\n\n" + HEADER + "\nTrailer.\n")
+        self.upsert(1, "comment", "d")
+        self.assertEqual(self.read(), "# P\n\n" + HEADER + "| 1 | comment | d |  |\n\nTrailer.\n")
+
+    def test_trailing_backslash_roundtrips(self):
+        self.upsert(1, "comment", "see C:\\dir\\", "cmd")
+        self.assertEqual(run("list", self.path).stdout, "1\tcomment\tsee C:\\dir\\\tcmd\n")
+        before = self.read()
+        self.upsert(1, "comment", "see C:\\dir\\", "cmd")
+        self.assertEqual(self.read(), before)
+
+    def test_leading_zero_issue_is_same_key(self):
+        self.upsert(1, "comment", "a")
+        self.upsert("01", "comment", "b")
+        self.assertEqual(run("list", self.path).stdout, "1\tcomment\tb\t\n")
+        self.assertEqual(run("has", self.path, "--issue", "001", "--action", "comment").returncode, 0)
+
+    def test_rejects_unicode_digit_issue(self):
+        self.assertNotEqual(self.upsert("\u00b2", "comment").returncode, 0)
+
+    def test_failed_write_leaves_original_intact(self):
+        self.upsert(1, "comment", "keep")
+        before = self.read()
+        os.chmod(self.dir.name, 0o500)
+        self.addCleanup(os.chmod, self.dir.name, 0o700)
+        if os.access(self.dir.name, os.W_OK):
+            self.skipTest("directory permissions not enforced")
+        self.assertNotEqual(self.upsert(2, "comment", "x").returncode, 0)
+        self.assertEqual(self.read(), before)
+
     def test_rejects_non_numeric_issue(self):
         self.assertNotEqual(self.upsert("abc", "comment").returncode, 0)
 

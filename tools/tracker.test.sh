@@ -67,5 +67,18 @@ check "no write function ever called" 0 "$(grep -c WRITE "$ROOT/log")"
 mkdir -p "$ROOT/bin"; printf '#!/bin/sh\nexit 0\n' > "$ROOT/bin/short"; chmod +x "$ROOT/bin/short"
 (cd "$REPO" && PATH="$ROOT/bin:$PATH" "$TR" list --provider shortcut >/dev/null 2>&1); check "shortcut stub exits 2" 2 "$?"
 
+# shipped github provider: fake gh emits canned `gh issue list --json` output; --jq is applied by real jq
+cat > "$ROOT/bin/gh" <<'EOF2'
+#!/usr/bin/env bash
+[ "$1 $2" = "issue list" ] || exit 0
+echo "$*" >> "$GH_LOG"
+jqf=""; while [ $# -gt 0 ]; do [ "$1" = --jq ] && jqf="$2"; shift; done
+echo '[{"number":7,"title":"T","state":"OPEN","labels":[{"name":"debt"},{"name":"x"}],"url":"u","updatedAt":"2026-02-02","body":"B"}]' | jq -c "$jqf"
+EOF2
+chmod +x "$ROOT/bin/gh"
+out="$(cd "$REPO" && GH_LOG="$ROOT/ghlog" PATH="$ROOT/bin:$PATH" "$TR" list --provider github --state closed --limit 4 2>/dev/null)"
+check "github list maps fields" '{"id":7,"title":"T","state":"OPEN","labels":["debt","x"],"url":"u","updated":"2026-02-02","body":"B"}' "$(jq -c '.issues[0]' <<<"$out")"
+check "github list passes state and limit+1" "true" "$(grep -q -e '--state closed' "$ROOT/ghlog" && grep -q -e '--limit 5' "$ROOT/ghlog" && echo true)"
+
 printf 'tracker.test.sh: %d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

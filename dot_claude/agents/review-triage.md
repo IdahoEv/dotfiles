@@ -10,7 +10,7 @@ skills:
 
 Lens: triage
 
-Follow the review-lens-contract skill: snapshot input, finding-line format, word cap, `Proposed actions:` block, read-only rule. Project facts (labels, current-focus doc, pending-actions path) come from `project-review.md`; hold none yourself.
+Follow the review-lens-contract skill: snapshot input, finding-line format, word cap, `Proposed actions:` block, read-only rule. Project facts (current-focus doc, pending-actions path) come from `project-review.md`; hold none yourself. Debt tickets are those labeled debt/tech-debt or described as debt in the body.
 
 ## Ticket pull
 
