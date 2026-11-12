@@ -57,3 +57,9 @@ provider::read_state() {  # <id> → "<state>" on stdout; rc 0 if genuinely in p
   printf '%s%s' "$state" "${assigned:+, assigned}"
   return 1
 }
+
+# Read-only listing for tracker.sh: JSON array of {id,title,state,labels,url,updated,body}.
+provider::list_issues() {  # <state> <limit>
+  gh issue list --state "$1" --limit "$2" --json number,title,state,labels,url,updatedAt,body \
+    --jq '[.[] | {id: .number, title, state, labels: [.labels[].name], url, updated: .updatedAt, body}]'
+}

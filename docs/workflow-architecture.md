@@ -40,6 +40,9 @@ flowchart TD
 | `agents/github-review-repair-agent.md` | Agent | Fresh context with edit tools; never commits/pushes/writes to GitHub. |
 | `skills/reviewer-contract/SKILL.md` | Skill | Shared contract loaded into every reviewer; avoids per-agent duplication. |
 | `skills/review-lens-contract/SKILL.md` | Skill | Contract for periodic project-review lenses (snapshot-scoped, not diff-scoped) and their discovery rules; mirrors `/local-review-cycle` tiers. |
+| `agents/review-triage.md` | Agent | Periodic `Lens: triage` agent: duplicates, ticket-state consistency, tech-debt priority, work clusters. Reads tickets only through `tracker.sh list`; proposes actions as text and never edits a ticket. |
+| `tools/tracker.sh`, `tools/start-ticket-providers/*.sh` (`provider::list_issues`) | Script | Read-only tracker listing for lenses: JSON with a `truncated` flag; exit 2 when the provider cannot list (Shortcut is stubbed), so callers fall back to report-only. No write subcommands. |
+| `tools/pending-actions.sh`, `tools/lib/pending_actions.py` | Script | Pending-actions file protocol: markdown table keyed `(issue, action)`, upsert replaces in place so reruns never duplicate a queued action. Queues only; the apply step (#137) executes. |
 | `agents/review-{architecture,quality,docs,plan}.md` | Agent | Global `Lens: collect` lenses for the periodic project review. Read-only; scope, probes and doc roles come from `project-review.md`, never from the agent. |
 | `skills/github-review-procedure/SKILL.md` | Skill | 3-mode procedure loaded by the command and repair agent; not user-invocable. |
 | `commands/github-review-comments.md` | Command | Routes mode, launches agent, owns commits and GitHub writes. In unattended mode (below) it commits, pushes, posts and re-requests Copilot with no prompts. |

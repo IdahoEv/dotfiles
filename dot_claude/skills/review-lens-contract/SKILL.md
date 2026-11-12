@@ -32,7 +32,11 @@ Within the word cap, most severe first. One line per finding:
 
 ## Read-only
 
-No edits, commits, pushes, or tracker writes. Tracker reads only through the provider seam, and only for a lens tagged `Lens: triage`. Return findings only.
+No edits, commits, pushes, or tracker writes. Tracker reads only through the provider seam (`tracker.sh list`), and only for a lens tagged `Lens: triage`. Return findings only.
+
+## Proposed actions (triage lenses)
+
+A triage lens never edits, closes, labels or comments on a ticket. After `Verified clean:` it may add `Proposed actions:`, one line each: `#N | action | detail`. Skip a pair already queued (`pending-actions.sh has <file> --issue N --action A`; file path from `project-review.md` § Review state, unset = report-only). The caller queues the lines with `pending-actions.sh upsert`, keyed `(issue, action)`, so reruns replace rather than duplicate.
 
 ## Authoring
 
