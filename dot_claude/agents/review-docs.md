@@ -10,7 +10,7 @@ skills:
 
 Lens: collect
 
-Follow the review-lens-contract skill for inputs, finding-line format, word cap, and the read-only rule. Take the docs to review by role from `project-review.md` (§ Planning docs, § Review state, conventions docs under § Invariants); embed no file names. A role absent there falls back to `governor.md` § Key documents; a role unset in both is skipped and named in the report. The mechanism docs are the docs under § Planning docs and § Invariants plus those `governor.md` § Key documents lists.
+Follow the review-lens-contract skill for inputs, finding-line format, word cap, and the read-only rule. Take the docs to review by role from `project-review.md` (§ Planning docs, § Review state, conventions docs under § Invariants); embed no file names. A planning or conventions role absent there falls back to `governor.md` § Key documents; a role unset in both is skipped and named in the report. A § Review state entry omitted from `project-review.md` is report-only: do not inherit it from `governor.md`, do not inspect it, and name it as skipped. The mechanism docs are the docs under § Planning docs and § Invariants plus those `governor.md` § Key documents lists.
 
 Method, run against the snapshot:
 

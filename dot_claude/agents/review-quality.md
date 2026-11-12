@@ -10,7 +10,7 @@ skills:
 
 Lens: collect
 
-Follow the review-lens-contract skill for inputs, finding-line format, word cap, and the read-only rule. Take probes and conventions docs from `project-review.md` § Invariants; embed none. If § Invariants is unset, say so and limit the review to the checks below that need no probe.
+Follow the review-lens-contract skill for inputs, finding-line format, word cap, and the read-only rule. Take probes and conventions docs from `project-review.md` § Invariants; embed none. If no conventions docs are listed there, fall back to those `governor.md` § Key documents lists as conventions. If § Invariants has no probes, say so and skip step 1; run the remaining checks, using fallback conventions docs for step 2.
 
 Method, run against the snapshot:
 
