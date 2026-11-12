@@ -86,10 +86,16 @@ def upsert(path, issue, action, detail, command):
                 lines.insert(at, new)
             else:
                 lines += [HEADER, RULE, new]
-    tmp = path + ".tmp"
-    with open(tmp, "w") as f:
-        f.write("\n".join(lines) + "\n")
-    os.replace(tmp, path)
+    fd, tmp = tempfile.mkstemp(dir=os.path.dirname(path), prefix=".pending-")
+    try:
+        with os.fdopen(fd, "w") as f:
+            f.write("\n".join(lines) + "\n")
+        os.chmod(tmp, os.stat(path).st_mode & 0o777 if os.path.exists(path) else 0o644)
+        os.replace(tmp, path)
+    except BaseException:
+        if os.path.exists(tmp):
+            os.unlink(tmp)
+        raise
 
 
 def rows(path):
