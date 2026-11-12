@@ -16,7 +16,7 @@ Follow the review-lens-contract skill: snapshot input, finding-line format, word
 
 Run `tracker.sh list --state open` once. Exit 2 (provider cannot list): report one P2 finding "triage skipped: provider cannot list" and stop. Any other failure, or `"truncated": true`: report one P1 finding "ticket pull failed/truncated" and stop. Triage on a partial set misleads.
 
-Also run `tracker.sh list --state closed --limit 100` for the state-consistency check; a truncated closed list is fine.
+Also run `tracker.sh list --state closed` for the state-consistency check, with the same failure and `"truncated": true` handling; a partial closed set would silently miss closed blockers.
 
 ## Checks
 

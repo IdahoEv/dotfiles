@@ -9,7 +9,7 @@ f3522de4dc0c92887d60d0b000c79c80cd724b6efae9cb09e2bed932c0bc4ad6  644  dot_claud
 6cc2a0ed6667e8ba0c167e9e76213f0c1d53cc5a43fc5a6f7e441c3bfa3a1040  644  dot_claude/agents/local-review-cycle-manager.md
 efe28e6368f209f515635e5e6d24e27fa69a5ed8123fe1b3cf56e75668688342  644  dot_claude/agents/productivity-coach.md
 b007bc40f22d5239abea43d0bfa590fe309044f1abba0e80707b8704fedec3e8  644  dot_claude/agents/prompt-reviewer.md
-bec7e2376a3f7f7b4e0114c3cd51610b5589b63d71f5c68e79ca354207f9be03  644  dot_claude/agents/review-triage.md
+d92f44bf0ad2ff31048bdd2fee27a56ddea099d24cdb7064fed0f4950d93bd43  644  dot_claude/agents/review-triage.md
 d5ae3f02b18504b3bc4dcbbde25a70bc80a10da3d0cabde3eec635205fc5aa1b  644  dot_claude/agents/robustness-reviewer.md
 da26866e8e7df3397cd6dd540c668f345b68ab6695657957f880f5f8891534f7  644  dot_claude/agents/security-reviewer.md
 9376be325b754228aa68634730d5955a079e68bb1218b4b9b3fefc009aef87cd  644  dot_claude/agents/supply-chain-reviewer.md
