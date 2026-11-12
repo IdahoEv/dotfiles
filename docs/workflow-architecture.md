@@ -40,6 +40,7 @@ flowchart TD
 | `agents/github-review-repair-agent.md` | Agent | Fresh context with edit tools; never commits/pushes/writes to GitHub. |
 | `skills/reviewer-contract/SKILL.md` | Skill | Shared contract loaded into every reviewer; avoids per-agent duplication. |
 | `skills/review-lens-contract/SKILL.md` | Skill | Contract for periodic project-review lenses (snapshot-scoped, not diff-scoped) and their discovery rules; mirrors `/local-review-cycle` tiers. |
+| `agents/review-{architecture,quality,docs,plan}.md` | Agent | Global `Lens: collect` lenses for the periodic project review. Read-only; scope, probes and doc roles come from `project-review.md`, never from the agent. |
 | `skills/github-review-procedure/SKILL.md` | Skill | 3-mode procedure loaded by the command and repair agent; not user-invocable. |
 | `commands/github-review-comments.md` | Command | Routes mode, launches agent, owns commits and GitHub writes. In unattended mode (below) it commits, pushes, posts and re-requests Copilot with no prompts. |
 | `tools/review-unattended.sh` | Script | Unattended-mode switch (`active`: `~/.config/github-review-unattended` present and `local-review-only` absent) and per-worktree round counter (`next-round [--max N]`, flags the final round; `reset`). Cap: `--max`, else `REVIEW_UNATTENDED_MAX`, else `review_max_rounds` in `.start-ticket.conf`, else 5. `start-ticket.sh` appends an "Unattended review" block to the kickoff when active. |
