@@ -9,6 +9,7 @@ f3522de4dc0c92887d60d0b000c79c80cd724b6efae9cb09e2bed932c0bc4ad6  644  dot_claud
 6cc2a0ed6667e8ba0c167e9e76213f0c1d53cc5a43fc5a6f7e441c3bfa3a1040  644  dot_claude/agents/local-review-cycle-manager.md
 efe28e6368f209f515635e5e6d24e27fa69a5ed8123fe1b3cf56e75668688342  644  dot_claude/agents/productivity-coach.md
 b007bc40f22d5239abea43d0bfa590fe309044f1abba0e80707b8704fedec3e8  644  dot_claude/agents/prompt-reviewer.md
+28f74d2618d3fdc01063475bf5427bc7dd04c7f72ff51699680ecb3df29012ca  644  dot_claude/agents/review-triage.md
 d5ae3f02b18504b3bc4dcbbde25a70bc80a10da3d0cabde3eec635205fc5aa1b  644  dot_claude/agents/robustness-reviewer.md
 da26866e8e7df3397cd6dd540c668f345b68ab6695657957f880f5f8891534f7  644  dot_claude/agents/security-reviewer.md
 9376be325b754228aa68634730d5955a079e68bb1218b4b9b3fefc009aef87cd  644  dot_claude/agents/supply-chain-reviewer.md
@@ -35,7 +36,7 @@ ee70fb1a401ed104231eb6f9ea72334263ca35b579f030d27946692cc57776be  644  dot_claud
 d7e038f28424138783361121b0871809c7c700703b459ee28d63928497f470e1  644  dot_claude/skills/local-review-cycle-procedure/SKILL.md
 3714ec7476254f20bec4e3d52e31d77f545e8860a82c609c98e48dc74e780172  644  dot_claude/skills/prompt-review/SKILL.md
 91f66b2780160f52a8cc5619c0659375c125a0070fbe7a8ec454a94190d8c413  644  dot_claude/skills/prompt-review/executable_prompt-metrics.sh
-0f86283a7e75a2d5b00cb3e7e2897966ffcf7225a18beedc7f3ccd2e981c9c1e  644  dot_claude/skills/review-lens-contract/SKILL.md
+66fa9b3dd23c8af427b204508d8d23c4101026a29a108593c8d5531ad2f0680f  644  dot_claude/skills/review-lens-contract/SKILL.md
 526d2fe15830eabd8368c8d4424ddb20b6391a136a049d6bd1b382bc08d51554  644  dot_claude/skills/reviewer-contract/SKILL.md
 860f5d5674346a68bed681c246c4397adea244c5c7d319012ae3885ac864d5f1  644  dot_claude/skills/security-review-rubric/SKILL.md
 a331dc697855157141a83e160b4f6e44bd8b52541074e511e15dfd2680f3f34c  644  dot_claude/skills/terse-docs/SKILL.md
@@ -58,6 +59,7 @@ bd7c8224bbfda753dfd2345e11f87df9571e238bba122df02377e69589fe5657  644  tools/lib
 f9a438f73d29326358262339d533f645052072c6740ce5724cc29ff9902273a2  644  tools/lib/finalize_run.py
 f2a76fa675abd9ec93f935a0a9673ea6bbfac857b3ff2db535140c32a166db1e  644  tools/lib/model-pricing.json
 136e5d15665f21c2b8dd43900955182dd6bd3528e666553f8dddfca081a151cb  644  tools/lib/packages.tsv
+36da5f79e8581f922acff2b811aae4c39635185bdfeeeabefcbfa2a57760e0d2  644  tools/lib/pending_actions.py
 c35d14e612032aeb02db2a06ba9770e4b193f42c0c1570a96c0907613d0d959f  644  tools/lib/pr-risk.json
 ac8c0f92f9527fbb17c12a660565f1359150725ea34531f6e556cd0ff056a941  644  tools/lib/pr_body.py
 2022d3ea25c76656a2d963b30bf3ebc185d9bf0cc9c0ba58a15aa4b859ad150d  644  tools/lib/prune_worktrees.py
@@ -75,6 +77,7 @@ ecd5995144d9111762dd751bd341d08a81b8a96b29410830aaa28cdf36cfec55  644  tools/ope
 ac6967653eba726326ac7a154d3f7472d2c928bef24c40e3bce5c8fc13973f28  644  tools/open-pr-providers/kardashev.sh
 20e1ba6f76351bfc20a2c77acbac4195426e5dd7e2122a60229b0e27c02438b0  755  tools/open-pr-watch.sh
 b0d046f46bcb38a3015b1506d1d23765345a8d6f3f1b0ffa384141e185816e65  755  tools/open-pr.sh
+dc55a6a27785e8576b61964aeefb66b3e419c24bcb46ee280a2f8463befb450a  755  tools/pending-actions.sh
 924937befc2fa9b642c8cdd3407ec9958a32ca8cc05259bc2b31a1be387849fb  755  tools/pr-body.sh
 f6ec970038d77efb2159bd5818cb7fc4cbd72ceddfe0bcbc353d3a6f51061850  644  tools/project-colors
 b127c521bc0b7fd59034739990ec1010f5e929f1584a5fe5ff39746ccb390361  644  tools/project-config-templates/governor.md
@@ -90,9 +93,10 @@ cf10ecfc2ed012bfee6c334a98df12620b16ec7e62e75ebbb0ba8560f82683c5  755  tools/rev
 71d00250a76fffd58c7e2fc2fc0df3a1b3d1b837bcaaa551c00c488d587183e1  755  tools/session-label.sh
 a394eba77efb25ef1f766806223ac4edf75c5eef0b4347084e6059b5fce9de68  755  tools/setup-ticket-profile.sh
 e366a502be678c6fa82962d428bbdc9414457a32835de696989c42582e500eca  755  tools/sibling-worktrees.sh
-5b687d90b5ab740ddf39a68ca7bbeb5f93273197c9ba80acbbaca359c4399f25  644  tools/start-ticket-providers/github.sh
-12792385cebfedb159743821ab2ca5338efa145c21ab958f3c7aeb48df32f501  644  tools/start-ticket-providers/shortcut.sh
+f1d8ec270147708ed3c5472da1e2f837be34135c8713ed1a856e6c8b6e4de00a  644  tools/start-ticket-providers/github.sh
+59b10306e57b024527e427dbf54d307301487af814835869d58ccb24fb93c365  644  tools/start-ticket-providers/shortcut.sh
 f5d4def3e60232a85421ec88eea8f02e92dad0e1827c3a29ad93be7404aa79d3  755  tools/start-ticket.sh
+d2f26104d7add54f655c3b5d5b2f376d5f8c8cf01b124a8bffe920beb0e507e2  755  tools/tracker.sh
 b8083091fae3b43f91ae088836762a8116f45021b72d87be197adb98adde21e8  755  tools/wf-backfill.sh
 c1ab6c8c8f800a23622ec35d2b13d9e9bc25f252b67ba785490d23c661e2e34b  755  tools/wf-event.sh
 080bf3233e51fd1e86ee7392d43f73481806b9101716f9c0bff4cd24bb25b500  755  tools/wf-report.sh

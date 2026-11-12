@@ -59,3 +59,9 @@ provider::read_state() {  # <id> → "<state>" on stdout; rc 0 only if started
   want="${want:-${SHORTCUT_IN_PROGRESS_STATE:-In Development}}"
   [ "$state" = "$want" ]
 }
+
+# Listing is not implemented for Shortcut; rc 2 tells tracker.sh to fall back to report-only.
+provider::list_issues() {
+  echo "shortcut: listing stories is not implemented" >&2
+  return 2
+}
