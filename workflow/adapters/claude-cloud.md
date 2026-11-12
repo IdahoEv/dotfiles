@@ -41,6 +41,7 @@ Maintained against the covered commands by `tools/cloud-workflow-adapter.test.sh
 | `session-label.sh` | Skip. |
 | `claude agents` | Ignore; there is no agent view. |
 | `--review` | Always `--review none`: the Copilot request goes through GraphQL, which is blocked. To get a Copilot review, call `mcp__github__request_copilot_review` after the PR exists. |
+| `review-unattended.sh` | Treat as exit 1 (interactive); cloud sessions never run unattended. |
 | `~/.config/local-review-only` | Treat as absent. |
 | `--confirm-commits` | Honor it; the question follows protocol 8. |
 | `AskUserQuestion` | Native when attended; otherwise protocol 8. |
