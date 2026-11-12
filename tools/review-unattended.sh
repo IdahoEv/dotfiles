@@ -7,13 +7,16 @@
 #   review-unattended.sh reset        clear the round counter
 #
 # Unattended mode needs ~/.config/github-review-unattended and no
-# ~/.config/local-review-only. REVIEW_UNATTENDED_MAX overrides the cap of 5.
+# ~/.config/local-review-only. REVIEW_UNATTENDED_MAX may lower the cap of 5, never raise it.
 
 set -uo pipefail
 
 die() { echo "review-unattended: $*" >&2; exit 2; }
 
 max="${REVIEW_UNATTENDED_MAX:-5}"
+case "$max" in ''|*[!0-9]*) max=5 ;; esac
+if [ "$max" -gt 5 ]; then max=5; fi
+if [ "$max" -lt 1 ]; then max=1; fi
 
 active() {
   [ -e "$HOME/.config/github-review-unattended" ] && [ ! -e "$HOME/.config/local-review-only" ]
@@ -21,7 +24,7 @@ active() {
 
 counter_file() {
   local gitdir
-  gitdir="$(git rev-parse --git-dir 2>/dev/null)" || die "not in a git repository"
+  gitdir="$(git rev-parse --absolute-git-dir 2>/dev/null)" || die "not in a git repository"
   echo "$gitdir/review-unattended-round"
 }
 
@@ -34,7 +37,7 @@ case "${1:-}" in
       echo "cap=reached"
       exit 1
     fi
-    echo "$n" > "$f"
+    echo "$n" > "$f" || die "cannot write round counter $f"
     if [ "$n" -eq "$max" ]; then echo "round=$n last=1"; else echo "round=$n"; fi
     ;;
   reset)

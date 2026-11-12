@@ -48,6 +48,23 @@ out="$(run next-round)"; rc=$?
 check "cap output" "cap=reached" "$out"
 check "cap exit code" 1 "$rc"
 
+export REVIEW_UNATTENDED_MAX=9
+run reset
+for _ in 1 2 3 4; do run next-round >/dev/null; done
+check "override above 5 is clamped" "round=5 last=1" "$(run next-round)"
+run next-round >/dev/null 2>&1; check "clamped cap holds" 1 $?
+unset REVIEW_UNATTENDED_MAX
+run reset
+
+mkdir -p "$REPO/sub"
+(cd "$REPO/sub" && "$SCRIPT" next-round >/dev/null)
+check "counter is shared from a subdirectory" "round=2" "$(run next-round)"
+run reset
+
+chmod 500 "$(git -C "$REPO" rev-parse --absolute-git-dir)"
+run next-round >/dev/null 2>&1; check "unwritable counter fails" 2 $?
+chmod 700 "$(git -C "$REPO" rev-parse --absolute-git-dir)"
+
 (cd "$ROOT" && "$SCRIPT" next-round) 2>/dev/null; check "outside a repo fails" 2 $?
 run bogus 2>/dev/null; check "unknown subcommand fails" 2 $?
 
