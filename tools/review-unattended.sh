@@ -3,20 +3,35 @@
 # unattended GitHub review loop.
 #
 #   review-unattended.sh active       exit 0 when unattended mode applies
-#   review-unattended.sh next-round   count a round; prints round=<n> (plus last=1 on the final round), exit 1 past the cap
+#   review-unattended.sh next-round [--max N]
+#                                     count a round; prints round=<n> (plus last=1 on the final round), exit 1 past the cap
 #   review-unattended.sh reset        clear the round counter
 #
 # Unattended mode needs ~/.config/github-review-unattended and no
-# ~/.config/local-review-only. REVIEW_UNATTENDED_MAX may lower the cap of 5, never raise it.
+# ~/.config/local-review-only. The round cap is the first valid positive
+# integer of: --max N, $REVIEW_UNATTENDED_MAX, review_max_rounds in the
+# project's .start-ticket.conf (or user config), else 5.
 
 set -uo pipefail
 
 die() { echo "review-unattended: $*" >&2; exit 2; }
 
-max="${REVIEW_UNATTENDED_MAX:-5}"
-case "$max" in ''|*[!0-9]*) max=5 ;; esac
-if [ "$max" -gt 5 ]; then max=5; fi
-if [ "$max" -lt 1 ]; then max=1; fi
+positive_int() { case "$1" in ''|*[!0-9]*|0*) return 1 ;; *) return 0 ;; esac; }
+
+resolve_max() {
+  local v conf
+  for v in "$1" "${REVIEW_UNATTENDED_MAX:-}"; do
+    if positive_int "$v"; then echo "$v"; return; fi
+  done
+  conf="$(cd -P "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/repo-facts.sh"
+  # shellcheck source=lib/repo-facts.sh
+  if [ -r "$conf" ]; then
+    . "$conf"
+    v="$(gt::conf_get review_max_rounds 2>/dev/null || true)"
+    if positive_int "$v"; then echo "$v"; return; fi
+  fi
+  echo 5
+}
 
 active() {
   [ -e "$HOME/.config/github-review-unattended" ] && [ ! -e "$HOME/.config/local-review-only" ]
@@ -31,6 +46,9 @@ counter_file() {
 case "${1:-}" in
   active) active ;;
   next-round)
+    cli_max=""
+    if [ "${2:-}" = "--max" ]; then cli_max="${3:-}"; positive_int "$cli_max" || die "--max needs a positive integer"; fi
+    max="$(resolve_max "$cli_max")"
     f="$(counter_file)" || exit 2
     n=$(( $(cat "$f" 2>/dev/null || echo 0) + 1 ))
     if [ "$n" -gt "$max" ]; then

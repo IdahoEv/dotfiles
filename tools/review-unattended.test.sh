@@ -50,10 +50,23 @@ check "cap exit code" 1 "$rc"
 
 export REVIEW_UNATTENDED_MAX=9
 run reset
-for _ in 1 2 3 4; do run next-round >/dev/null; done
-check "override above 5 is clamped" "round=5 last=1" "$(run next-round)"
-run next-round >/dev/null 2>&1; check "clamped cap holds" 1 $?
+for _ in 1 2 3 4 5 6 7 8; do run next-round >/dev/null; done
+check "env above 5 is honoured" "round=9 last=1" "$(run next-round)"
+run next-round >/dev/null 2>&1; check "raised cap holds" 1 $?
+run reset
+check "--max beats env" "round=1 last=1" "$(run next-round --max 1)"
+check "--max cap applies" "cap=reached" "$(run next-round --max 1)"
+run next-round --max abc >/dev/null 2>&1; check "bad --max fails" 2 $?
 unset REVIEW_UNATTENDED_MAX
+run reset
+
+printf 'review_max_rounds=2\n' > "$REPO/.start-ticket.conf"
+run next-round >/dev/null; run next-round >/dev/null
+check "project config sets the cap" "cap=reached" "$(run next-round)"
+rm "$REPO/.start-ticket.conf"
+run reset
+for _ in 1 2 3 4; do run next-round >/dev/null; done
+check "default cap is 5" "round=5 last=1" "$(run next-round)"
 run reset
 
 mkdir -p "$REPO/sub"
