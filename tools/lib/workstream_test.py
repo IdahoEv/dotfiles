@@ -92,6 +92,10 @@ class SettingsLayeringTests(WorkstreamTestBase):
         repo = self.make_repo("widgets")
         self.assertEqual(workstream.detect_template_source(repo), "default")
 
+        self.write("home/.config/start-ticket/user.conf", "commit.key_prefix=true\n")
+        self.assertEqual(workstream.detect_template_source(repo), "user")
+        self.write("home/.config/start-ticket/user.conf", "")
+
         self.write("home/.config/start-ticket/user.conf", "branch.form=snake\n")
         self.assertEqual(workstream.detect_template_source(repo), "user")
 
@@ -233,6 +237,38 @@ class RecordPersistenceTests(WorkstreamTestBase):
         )
         self.assertEqual([t["id"] for t in rec2.tickets], ["7", "8", "9", "10"])
         self.assertEqual(rec2.tickets[0]["url"], "https://example.test/7")
+
+    def test_init_for_different_ticket_drops_prior_state(self) -> None:
+        repo = self.make_repo("widgets")
+        rec = workstream.init_ticket_record(
+            repo, provider="github", tickets=[{"id": "7", "url": ""}], title="Ticket 7"
+        )
+        rec.pr = {"number": 1, "url": "u"}
+        rec.reviews = {"local": 2, "remote": 1}
+        workstream.save_record(repo, rec)
+        rec9 = workstream.init_ticket_record(
+            repo, provider="github", tickets=[{"id": "9", "url": ""}], title="Ticket 9"
+        )
+        self.assertIsNone(rec9.pr)
+        self.assertEqual(rec9.reviews, {"local": 0, "remote": 0})
+
+    def test_malformed_record_shape_falls_back(self) -> None:
+        repo = self.make_repo("widgets")
+        self.write("widgets/.workstream.json", '{"tickets": 5}')
+        self.assertIsNone(workstream.load_record(repo))
+        self.assertEqual(workstream.chain_ids(repo, "7"), ["7"])
+
+    def test_key_follows_settings_changed_after_init(self) -> None:
+        repo = self.make_repo("widgets")
+        rec = workstream.init_ticket_record(
+            repo,
+            provider="github",
+            tickets=[{"id": "7", "url": ""}, {"id": "8", "url": ""}],
+            title="Ticket 7",
+        )
+        self.assertEqual(workstream.render_surface(rec, "key", repo), "Is7+8")
+        self.write("widgets/.start-ticket.conf", "chain.sep=-\n")
+        self.assertEqual(workstream.render_surface(rec, "key", repo), "Is7-8")
 
 
 class ResolverTests(WorkstreamTestBase):

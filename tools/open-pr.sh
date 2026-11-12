@@ -254,7 +254,8 @@ else
   # the default body, as the old inline version did.
   # A chain's membership (.workstream.json or legacy <git-dir>/chain) is the
   # fallback ahead of the branch name: the branch only carries the head ticket.
-  ws_chain_ids="$("$SCRIPT_DIR/workstream.sh" chain-ids --dir . 2>/dev/null || true)"
+  ws_chain_ids="$("$SCRIPT_DIR/workstream.sh" chain-ids --dir .)" \
+    || die "workstream.sh chain-ids failed; cannot determine the chain's tickets"
   if [ -z "$issue" ] && [ -n "$draft" ] && [[ "$ws_chain_ids" == *,* ]]; then
     die "a draft PR on a chained branch must name the completed tickets with --issue <a,b>"
   fi

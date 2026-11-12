@@ -638,12 +638,15 @@ for _i in "${ids[@]}"; do
   provider::mark_in_progress "$_i" || echo "start-ticket: WARN mark_in_progress failed for $_i" >&2
 done
 
+_ws_title="${chain_titles[0]:-}"
+[ "$_ws_title" != "untitled" ] || _ws_title=""
 "$SCRIPT_DIR/workstream.sh" init-ticket \
   --dir "$wt" \
   --provider "$provider" \
   --ids "$(IFS=,; echo "${ids[*]}")" \
   --urls "$(IFS=,; echo "${chain_urls[*]}")" \
-  --title "${chain_titles[0]:-${ST_TITLE:-}}"
+  "--title=$_ws_title" \
+  || echo "start-ticket: WARN workstream record not written" >&2
 
 # mark_in_progress is best-effort and some tracker CLIs fail while exiting 0, so
 # read the state back here rather than making the caller verify. ticket_state is

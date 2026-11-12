@@ -49,8 +49,8 @@ TEMPLATE_KEYS: tuple[str, ...] = (
     "pr.template",
     "commit.form",
     "commit.template",
-    "provider.brief",
-    "provider.full",
+    "commit.key_prefix",
+    "provider.brief",    "provider.full",
     "provider.form",
     "chain.mode",
     "chain.sep",
@@ -246,7 +246,7 @@ def load_record(worktree: str = ".") -> WorkstreamRecord | None:
             data = json.loads(path.read_text(encoding="utf-8"))
             if isinstance(data, dict):
                 return WorkstreamRecord.from_dict(data)
-        except (OSError, ValueError):
+        except (OSError, ValueError, TypeError, AttributeError):
             pass
     return _legacy_chain_record(root)
 
@@ -348,7 +348,7 @@ def render_template(
     _in_base: bool = False,
 ) -> str:
     """Render a template string containing {provider}, {chain}, {desc}, {type}, {base}, {phase}/{tags}, {key}."""
-    key_val = record.key or derive_key(record, dir_)
+    key_val = derive_key(record, dir_)
 
     def repl(match: re.Match[str]) -> str:
         name = match.group(1)
@@ -382,7 +382,7 @@ def render_template(
 def render_surface(record: WorkstreamRecord, surface: str, dir_: str = ".") -> str:
     """Render a named surface ('key' | 'base' | 'branch' | 'worktree' | 'row' | 'pr' | 'commit')."""
     if surface == "key":
-        return record.key or derive_key(record, dir_)
+        return derive_key(record, dir_)
     default_form = DEFAULT_SURFACE_FORMS.get(surface, "words")
     form, _ = resolve_setting(f"{surface}.form", dir_, default=default_form)
     if form not in VALID_FORMS:
@@ -437,6 +437,13 @@ def init_ticket_record(
         merged_tickets = [dict(t) for t in existing.tickets]
         if tickets[0].get("url"):
             merged_tickets[0]["url"] = tickets[0]["url"]
+
+    if existing is not None and (
+        not existing.tickets
+        or not merged_tickets
+        or existing.tickets[0].get("id") != merged_tickets[0].get("id")
+    ):
+        existing = None
 
     if not desc:
         if existing and existing.desc and not title and not os.environ.get("GT_LABEL_OVERRIDE"):
