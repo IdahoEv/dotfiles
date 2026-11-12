@@ -82,5 +82,5 @@ rc=0
 raw="$(provider::list_issues "$state" "$((limit + 1))")" || rc=$?
 [ "$rc" -ne 2 ] || exit 2
 [ "$rc" -eq 0 ] || die "provider '$provider' failed to list issues"
-jq -e --argjson l "$limit" '{truncated: (length > $l), issues: .[:$l]}' <<<"$raw" \
+jq -e --argjson l "$limit" 'if type == "array" then {truncated: (length > $l), issues: .[:$l]} else error("not an array") end' <<<"$raw" \
   || die "provider '$provider' returned malformed output"

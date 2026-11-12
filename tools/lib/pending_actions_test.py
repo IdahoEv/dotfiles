@@ -140,6 +140,26 @@ class PendingActionsTest(unittest.TestCase):
     def test_rejects_newline_in_field(self):
         self.assertNotEqual(self.upsert(1, "comment", "a\nb").returncode, 0)
 
+    def test_rejects_tab_in_field(self):
+        self.assertNotEqual(self.upsert(1, "comment", "a\tb").returncode, 0)
+
+    def test_numeric_rows_in_other_tables_are_ignored_and_preserved(self):
+        other = "| id | name |\n| --- | --- |\n| 1 | keep |\n\n"
+        with open(self.path, "w") as f:
+            f.write(other + HEADER)
+        self.upsert(1, "comment", "d")
+        self.assertEqual(self.read(), other + HEADER + "| 1 | comment | d |  |\n")
+        self.assertEqual(run("list", self.path).stdout, "1\tcomment\td\t\n")
+
+    def test_concurrent_upserts_all_survive(self):
+        procs = [
+            subprocess.Popen([CLI, "upsert", self.path, "--issue", str(i), "--action", "comment", "--detail", "d"])
+            for i in range(1, 13)
+        ]
+        for p in procs:
+            self.assertEqual(p.wait(), 0)
+        self.assertEqual(len(run("list", self.path).stdout.splitlines()), 12)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -33,6 +33,10 @@ EOF
 cat > "$PD/nolist.sh" <<'EOF'
 provider::available() { return 0; }
 EOF
+cat > "$PD/bad.sh" <<'EOF'
+provider::available() { return 0; }
+provider::list_issues() { echo null; }
+EOF
 cat > "$PD/down.sh" <<'EOF'
 provider::available() { return 1; }
 provider::list_issues() { :; }
@@ -57,6 +61,7 @@ check "state passed through" "all 3" "$(tail -1 "$ROOT/log")"
 
 tr list --provider nolist >/dev/null; check "provider without list_issues exits 2" 2 "$?"
 tr list --provider down >/dev/null;   check "unavailable provider fails" 1 "$?"
+tr list --provider bad >/dev/null;    check "non-array provider output fails" 1 "$?"
 tr list --provider nosuch >/dev/null; check "unknown provider fails" 1 "$?"
 tr list --provider fake --state bogus >/dev/null; check "bad state rejected" 1 "$?"
 tr list --provider fake --limit x >/dev/null; check "bad limit rejected" 1 "$?"

@@ -1,10 +1,11 @@
 """Pending-actions file: a markdown table of queued tracker actions, keyed (issue, action).
 
 Rows: `| issue | action | detail | command |`. A literal `|` in a field is written `\\|`.
-Lines outside the table are left untouched. Nothing here talks to the tracker.
+Only rows under HEADER are read or replaced; other lines are left untouched. Nothing here talks to the tracker.
 """
 
 import argparse
+import fcntl
 import os
 import re
 import sys
@@ -62,31 +63,47 @@ def read_lines(path):
     return text.split("\n")[:-1] if text.endswith("\n") else text.split("\n")
 
 
+def table_span(lines):
+    """Return (start, end) of the data rows under HEADER, or None if the table is absent."""
+    if HEADER not in lines:
+        return None
+    start = lines.index(HEADER) + 1
+    if start < len(lines) and lines[start] == RULE:
+        start += 1
+    end = start
+    while end < len(lines) and lines[end].startswith("|"):
+        end += 1
+    return start, end
+
+
 def upsert(path, issue, action, detail, command):
     path = os.path.realpath(path)
+    directory = os.path.dirname(path)
+    # Lock the directory: the file itself is replaced, so a lock on it would not survive the swap.
+    lock = os.open(directory, os.O_RDONLY)
+    try:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        _upsert_locked(path, directory, issue, action, detail, command)
+    finally:
+        os.close(lock)
+
+
+def _upsert_locked(path, directory, issue, action, detail, command):
     lines = read_lines(path)
     new = format_row(issue, action, detail, command)
-    last_row = None
-    for i, line in enumerate(lines):
-        row = parse_row(line)
-        if row is None:
-            continue
-        last_row = i
-        if row[0] == issue and row[1] == action:
-            lines[i] = new
-            break
+    span = table_span(lines)
+    if span is None:
+        lines += [HEADER, RULE, new]
     else:
-        if last_row is not None:
-            lines.insert(last_row + 1, new)
+        start, end = span
+        for i in range(start, end):
+            row = parse_row(lines[i])
+            if row and row[0] == issue and row[1] == action:
+                lines[i] = new
+                break
         else:
-            if HEADER in lines:
-                at = lines.index(HEADER) + 1
-                if at < len(lines) and lines[at] == RULE:
-                    at += 1
-                lines.insert(at, new)
-            else:
-                lines += [HEADER, RULE, new]
-    fd, tmp = tempfile.mkstemp(dir=os.path.dirname(path), prefix=".pending-")
+            lines.insert(end, new)
+    fd, tmp = tempfile.mkstemp(dir=directory, prefix=".pending-")
     try:
         with os.fdopen(fd, "w") as f:
             f.write("\n".join(lines) + "\n")
@@ -99,7 +116,11 @@ def upsert(path, issue, action, detail, command):
 
 
 def rows(path):
-    return [r for r in map(parse_row, read_lines(path)) if r]
+    lines = read_lines(path)
+    span = table_span(lines)
+    if span is None:
+        return []
+    return [r for r in map(parse_row, lines[span[0] : span[1]]) if r]
 
 
 def main(argv):
@@ -128,8 +149,8 @@ def main(argv):
         return 0 if any(r[0] == a.issue and r[1] == a.action for r in rows(a.file)) else 1
 
     for field in (a.action, a.detail, a.command):
-        if "\n" in field or "\r" in field:
-            p.error("fields must be single-line")
+        if any(c in field for c in "\n\r\t"):
+            p.error("fields must be single-line and tab-free")
     upsert(a.file, a.issue, a.action, a.detail, a.command)
     return 0
 
