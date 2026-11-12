@@ -31,6 +31,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))  # wrapper runs -I
 import repo_facts
 from repo_facts import git as _git, git_ok as _git_ok, run_cmd as _run
+import workstream
 
 TOOLS_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -401,8 +402,13 @@ def tracking_refspec(worktree: str) -> str:
 
 
 def chain_ids(ticket_id: str, worktree: str) -> str:
-    """Every ticket the branch closes, from <git-dir>/chain; just the ticket
-    when not a chain (empty file counts as not a chain)."""
+    """Every ticket the branch closes, from .workstream.json or legacy
+    <git-dir>/chain; just the ticket when not a chain."""
+    rec = workstream.load_record(worktree) if worktree else None
+    if rec and rec.tickets:
+        ids = [t["id"] for t in rec.tickets if t.get("id")]
+        if ids and (not ticket_id or ids[0] == ticket_id):
+            return ",".join(ids)
     path = os.path.join(_git(worktree, "rev-parse", "--absolute-git-dir"), "chain")
     try:
         text = open(path, newline="", errors="surrogateescape").read()

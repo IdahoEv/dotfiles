@@ -398,34 +398,36 @@ def main_root(dir_: str = ".") -> str:
         return ""
 
 
-def conf_files(dir_: str = ".") -> list[str]:
-    """Config files for the repo containing <dir>, highest precedence first:
-    <toplevel>/.start-ticket.conf, <main-root>/.start-ticket.conf,
-    <overlay>/start-ticket.conf, ~/.config/start-ticket/config."""
-    files: list[str] = []
+def conf_layers(dir_: str = ".") -> list[tuple[str, str]]:
+    """Config files with their layer ('project' | 'machine' | 'user'),
+    highest precedence first."""
+    layers: list[tuple[str, str]] = []
     top = git(dir_, "rev-parse", "--show-toplevel")
     if top:
-        files.append(f"{top}/.start-ticket.conf")
+        layers.append(("project", f"{top}/.start-ticket.conf"))
     main = main_root(dir_)
     if main:
-        files.append(f"{main}/.start-ticket.conf")
+        layers.append(("project", f"{main}/.start-ticket.conf"))
     ov = overlay_dir(dir_)
     if ov:
-        files.append(f"{ov}/start-ticket.conf")
-    files.append(os.path.join(os.path.expanduser("~"), ".config",
-                              "start-ticket", "config"))
-    return files
+        layers.append(("project", f"{ov}/start-ticket.conf"))
+    home = os.path.expanduser("~")
+    layers.append(("machine", os.path.join(home, ".config", "start-ticket", "config")))
+    layers.append(("user", f"{overlays_root()}/start-ticket.conf"))
+    layers.append(("user", os.path.join(home, ".config", "start-ticket", "user.conf")))
+    return layers
 
 
-def conf_get(key: str, dir_: str = ".") -> str | None:
-    """First non-empty `key=` across conf_files; None when unset.
+def conf_files(dir_: str = ".") -> list[str]:
+    """Config files for the repo containing <dir>, highest precedence first:
+    project (.start-ticket.conf, overlay), machine (~/.config/start-ticket/config),
+    and user (<overlays-root>/start-ticket.conf, ~/.config/start-ticket/user.conf)."""
+    return [path for _, path in conf_layers(dir_)]
 
-    Per file only the first matching line counts (sed | head -1): an empty
-    value on it moves the search to the next FILE, not the next line. The
-    shell interpolated the key into a sed regex (a "." would wildcard); every
-    real key is [a-z_]+, so a literal prefix match is identical for callers.
-    """
-    for path in conf_files(dir_):
+
+def conf_get_source(key: str, dir_: str = ".") -> tuple[str, str] | None:
+    """First non-empty `key=` across conf_layers as (value, layer); None when unset."""
+    for layer, path in conf_layers(dir_):
         p = Path(path)
         if not p.is_file():
             continue
@@ -440,9 +442,19 @@ def conf_get(key: str, dir_: str = ".") -> str | None:
             if line.startswith(f"{key}="):
                 value = line[len(key) + 1:]
                 if value:
-                    return value
+                    return (value, layer)
                 break
     return None
+
+
+def conf_get(key: str, dir_: str = ".") -> str | None:
+    """First non-empty `key=` across conf_files; None when unset.
+
+    Per file only the first matching line counts (sed | head -1): an empty
+    value on it moves the search to the next FILE, not the next line.
+    """
+    res = conf_get_source(key, dir_)
+    return res[0] if res is not None else None
 
 
 def find_doc(name: str, dir_: str = ".") -> tuple[str, str] | None:

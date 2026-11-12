@@ -117,11 +117,12 @@ conf_get() {  # <key> → value; precedence is gt::conf_get's (repo, overlay, ma
   gt::conf_get "$1"
 }
 
-# setting <conf-key> <ENV_VAR> <default>: env var → conf file → default.
+# setting <conf-key> [<ENV_VAR>] [<default>]: env var → layered conf (project > machine > user) → default.
 setting() {
-  local v="${!2:-}"
-  [ -n "$v" ] || v="$(conf_get "$1" || true)"
-  printf '%s' "${v:-$3}"
+  local key="$1" env_var="${2:-}" def="${3:-}" v=""
+  [ -z "$env_var" ] || v="${!env_var:-}"
+  [ -n "$v" ] || v="$(conf_get "$key" || true)"
+  printf '%s' "${v:-$def}"
 }
 
 # Words that are noise in THIS repo's ticket titles — typically the project's
@@ -133,11 +134,14 @@ export GT_LABEL_NOISE
 
 # chain_tag <worktree> → "12+13" for a chain worktree, empty otherwise.
 chain_tag() {
+  if [ -f "$1/.workstream.json" ] && command -v python3 >/dev/null 2>&1; then
+    "$SCRIPT_DIR/workstream.sh" chain-tag --dir "$1" 2>/dev/null || true
+    return 0
+  fi
   local f ids
   f="$(git -C "$1" rev-parse --absolute-git-dir 2>/dev/null)/chain"
   [ -f "$f" ] || return 0
-  # Long chains collapse to first+last: the label is a glanceable row name, and
-  # <git-dir>/chain is the authoritative membership list.
+  # Long chains collapse to first+last: the label is a glanceable row name.
   ids="$(paste -sd+ "$f")"
   case "$ids" in
     *+*+*+*) ids="${ids%%+*}+${ids##*+}" ;;
@@ -634,8 +638,12 @@ for _i in "${ids[@]}"; do
   provider::mark_in_progress "$_i" || echo "start-ticket: WARN mark_in_progress failed for $_i" >&2
 done
 
-chain_file="$(git -C "$wt" rev-parse --absolute-git-dir)/chain"
-[ -z "$chain_csv" ] || printf '%s\n' "${ids[@]}" > "$chain_file"
+"$SCRIPT_DIR/workstream.sh" init-ticket \
+  --dir "$wt" \
+  --provider "$provider" \
+  --ids "$(IFS=,; echo "${ids[*]}")" \
+  --urls "$(IFS=,; echo "${chain_urls[*]}")" \
+  --title "${chain_titles[0]:-${ST_TITLE:-}}"
 
 # mark_in_progress is best-effort and some tracker CLIs fail while exiting 0, so
 # read the state back here rather than making the caller verify. ticket_state is

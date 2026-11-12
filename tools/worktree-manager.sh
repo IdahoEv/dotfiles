@@ -775,6 +775,11 @@ sync_path() {
     # Normalize: drop any trailing slashes so dirname/ln/rsync behave.
     while [ "${relpath%/}" != "$relpath" ]; do relpath="${relpath%/}"; done
 
+    # Workstream records are per-worktree state; never sync them across trees.
+    if [ "$relpath" = ".workstream.json" ] || [ "${relpath##*/}" = ".workstream.json" ]; then
+        return 0
+    fi
+
     local excludes=()
     while [ $# -gt 0 ]; do
         case "$1" in
