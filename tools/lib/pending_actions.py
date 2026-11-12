@@ -8,6 +8,7 @@ import argparse
 import os
 import re
 import sys
+import tempfile
 
 HEADER = "| issue | action | detail | command |"
 RULE = "| --- | --- | --- | --- |"
@@ -57,10 +58,12 @@ def read_lines(path):
     if not os.path.exists(path):
         return []
     with open(path) as f:
-        return f.read().splitlines()
+        text = f.read()
+    return text.split("\n")[:-1] if text.endswith("\n") else text.split("\n")
 
 
 def upsert(path, issue, action, detail, command):
+    path = os.path.realpath(path)
     lines = read_lines(path)
     new = format_row(issue, action, detail, command)
     last_row = None

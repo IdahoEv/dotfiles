@@ -118,6 +118,22 @@ class PendingActionsTest(unittest.TestCase):
         self.assertNotEqual(self.upsert(2, "comment", "x").returncode, 0)
         self.assertEqual(self.read(), before)
 
+    def test_unicode_line_separators_in_detail_roundtrip(self):
+        detail = "a\u2028b\x0cc"
+        self.upsert(1, "comment", detail)
+        before = self.read()
+        self.upsert(1, "comment", detail)
+        self.assertEqual(self.read(), before)
+        self.assertEqual(run("list", self.path).stdout, f"1\tcomment\t{detail}\t\n")
+
+    def test_symlinked_file_is_updated_through_the_link(self):
+        target = os.path.join(self.dir.name, "real.md")
+        os.symlink(target, self.path)
+        self.upsert(1, "comment", "x")
+        self.assertTrue(os.path.islink(self.path))
+        with open(target) as f:
+            self.assertIn("| 1 | comment | x |", f.read())
+
     def test_rejects_non_numeric_issue(self):
         self.assertNotEqual(self.upsert("abc", "comment").returncode, 0)
 
