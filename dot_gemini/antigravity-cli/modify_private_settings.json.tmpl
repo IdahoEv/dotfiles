@@ -28,23 +28,38 @@ MANAGED = json.loads(r"""
       "command(chezmoi)",
       "command(agy)",
       "command(start-ticket.sh)",
+      "command(open-pr.sh)",
+      "command(pr-body.sh)",
+      "command(wf-event.sh)",
+      "command(repo-facts.sh)",
+      "command(project-config.sh)",
+      "command(review-unattended.sh)",
+      "command(request-review.sh)",
+      "command(workflow-manifest.sh)",
       "command(ast-grep)",
       "command(sg)",
       "command(short)",
-      "command(regex:bash .*tools/.*\\.test\\.sh)",
+      "command(grep)",
+      "command(dotnet)",
+      "command(regex:(bash )?(\\S*/)?tools/[^\\s/]+\\.test\\.sh(\\s.*)?)",
+      "command(regex:python3 -m (unittest|pytest).*)",
       "command(regex:yarn (live|install|db|tsc).*)",
       "command(regex:yarn (build|test|lint).*)",
-      "command(regex:.*/github-review-procedure/github-review-poll\\.sh.*)",
-      "command(docker-compose)"
+      "command(regex:.*/github-review-procedure/(github-review-poll|github-review-state)\\.sh.*)",
+      "command(regex:.*/workflow/wf-context\\.sh.*)",
+      "command(docker-compose)",
+      "read_file({{ .chezmoi.homeDir }}/.local/share/chezmoi)",
+      "read_file({{ .chezmoi.homeDir }}/.claude)",
+      "read_file(/tmp/)",
+      "write_file(/tmp/)",
+      "read_file(/private/tmp/)",
+      "write_file(/private/tmp/)"
     ],
     "ask": [],
     "deny": [
       "command(regex:rm -rf .*)",
       "command(regex:curl .*)",
-      "command(regex:wget .*)",
-      "write_file(.env*)",
-      "write_file(.git/)",
-      "write_file(secrets/)"
+      "command(regex:wget .*)"
     ]
   }
 }

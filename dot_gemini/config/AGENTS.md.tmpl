@@ -2,6 +2,7 @@
 - Do not chain commands with `&&`, `;`, or `|` when individual tool calls can be made.
 - Do not use command substitutions like `$(cmd)`. Run the inner command first, then use the literal result.
 - Avoid wrappers (`sudo`, `eval`). Call target binaries directly so commands remain auto-approvable.
+- Write temporary/scratch files (including PR body drafts and commit message files) under `<worktree>/.scratch/` rather than `/tmp`.
 
 @[CLAUDE.md]({{ .chezmoi.homeDir }}/.claude/CLAUDE.md)
 
