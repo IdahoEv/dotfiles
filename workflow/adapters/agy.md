@@ -36,7 +36,7 @@ Maintained against the covered commands by `tools/cloud-workflow-adapter.test.sh
 | `/finalize` | Not available. Stop and report. |
 | `/local-review-cycle` | Read and follow `local-review-cycle.md` using `run_command` and subagent tools. |
 | `/github-review-comments` | Read and follow `github-review-comments.md` using `run_command`, file tools, and subagent tools (in Quick or Slow mode, load `skills/github-review-procedure/SKILL.md` inline in the current session; in Automatic mode, launch `github-review-repair-agent` and retain parent ownership of commits, push, and GitHub thread writes). |
-| `/discuss` | Read and follow `discuss.md` using `run_command` (`start-ticket.sh --session ...`); report `dir=` and `kickoff=` instead of opening a Claude tab. |
+| `/discuss` | Read and follow `discuss.md` using `run_command` (`start-ticket.sh --session ... --launcher none`); report `dir=`, `kickoff=`, and `label=` instead of opening a Claude tab or session. |
 | `/governor` | Read and follow `governor.md` using `run_command` and file tools; stay in the primary worktree and end the first turn with a plain-text readiness line. |
 | `/pick` | Read and follow `pick.md` using `run_command` (`git worktree list`, `gh`) and file tools. |
 | `/board` | Not available. |
@@ -59,7 +59,7 @@ Maintained against the covered commands by `tools/cloud-workflow-adapter.test.sh
 | `mcp__shortcut__` | Not available. Shortcut tickets: stop and report. GitHub tickets need no MCP. |
 | `mcp__github__` | Not required; use the `gh` CLI (`gh api ...`) via `run_command` as preferred by `github-review-procedure`. |
 | `--review` | Honour as written (`open-pr.sh` defaults to `none` when `~/.config/local-review-only` exists). |
-| `--launcher` | Never pass it. No session is launched. |
+| `--launcher` | Pass `--launcher none` for `/discuss` (`start-ticket.sh --session`); for `/start` (`--tab-only` is skipped), no session is launched. |
 | `review-unattended.sh` | When the script is absent, treat as exit 1 (interactive). Otherwise honour as written; unattended mode is opt-in per machine via `~/.config/github-review-unattended`. |
 | `~/.config/local-review-only` | Honour as written (`open-pr.sh` checks it automatically). |
 | `local-review-cycle-manager` | Define via `define_subagent` (`EnableWriteTools: true`, `EnableSubagentTools: true`, system prompt from `agents/local-review-cycle-manager.md` + `skills/local-review-cycle-procedure/SKILL.md` + `workflow/adapters/agy.md`, passing resolved `workflow_root` and `workflow_bin`) and launch via `invoke_subagent`. Inside the manager, define each reviewer selected under `local-review-cycle-procedure` §2 (all three discovery tiers: `.claude/agents/`, `docs/local/reviewers/` or project-overlay `claude/agents/`, and `dot_claude/agents/`) via `define_subagent` with `EnableWriteTools: false` and system prompt from the reviewer file body plus every skill in its `skills:` frontmatter (`skills/<skill>/SKILL.md`, e.g. `reviewer-contract`, `prompt-review`, `security-review-rubric`; always include `skills/reviewer-contract/SKILL.md` for tier-2 reviewers), then invoke in parallel via `invoke_subagent`. |
