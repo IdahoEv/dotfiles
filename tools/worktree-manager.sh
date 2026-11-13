@@ -427,7 +427,7 @@ fetch_shortcut_ticket() {
 
     info "Fetching Shortcut ticket #${ticket_id}..."
 
-    local out title stype branch_name slug
+    local out title stype branch_name worktree_name slug
     GT_LABEL_NOISE="${GT_LABEL_NOISE:-$(wm_conf_get label_noise)}"
     out="$(FORCE_COLOR=0 short story "$ticket_id" --quiet 2>/dev/null || true)"
     title="$(awk 'NR==1 && match($0,/^#[0-9]+[[:space:]]+/){print substr($0,RLENGTH+1);exit}' <<<"$out")" || title=""
@@ -439,13 +439,21 @@ fetch_shortcut_ticket() {
         *)       stype="" ;;
     esac
 
+    worktree_name=""
     if [ -x "$SCRIPT_DIR/workstream.sh" ]; then
         branch_name="$("$SCRIPT_DIR/workstream.sh" render branch \
             --dir "$repo_dir" \
             --provider shortcut \
             --ids "$ticket_id" \
             "--title=$title" \
-            "--desc=${GT_LABEL_OVERRIDE:-}" \
+            "--desc=${GT_LABEL_SLUG_OVERRIDE:-}" \
+            "--type=$stype" 2>/dev/null || true)"
+        worktree_name="$("$SCRIPT_DIR/workstream.sh" render worktree \
+            --dir "$repo_dir" \
+            --provider shortcut \
+            --ids "$ticket_id" \
+            "--title=$title" \
+            "--desc=${GT_LABEL_SLUG_OVERRIDE:-}" \
             "--type=$stype" 2>/dev/null || true)"
     fi
 
@@ -455,7 +463,7 @@ fetch_shortcut_ticket() {
         : "${branch_name:=sc-${ticket_id}}"
     fi
 
-    echo "$branch_name"
+    printf '%s\t%s\n' "$branch_name" "$worktree_name"
 }
 
 # Fetch and save ticket details to markdown file
@@ -1064,7 +1072,11 @@ main() {
     # If using Shortcut, fetch the branch name unless caller already resolved it
     elif [ "$use_shortcut" = true ]; then
         if [ -z "$branch_name" ]; then
-            branch_name=$(fetch_shortcut_ticket "$ticket_id" "$main_worktree")
+            local _sc_wt=""
+            IFS=$'\t' read -r branch_name _sc_wt < <(fetch_shortcut_ticket "$ticket_id" "$main_worktree")
+            if [ -z "$dir_name" ] && [ -n "$_sc_wt" ]; then
+                dir_name="$_sc_wt"
+            fi
         fi
         info "Branch name: ${branch_name}"
     else

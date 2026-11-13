@@ -172,10 +172,12 @@ def ticket_from_branch(branch: str, dir_: str | None = None) -> str:
         info = _record_ticket_info(dir_)
         if info:
             return info[0]
-    m = re.match(r"^(?:Is|sc-)([0-9]+)(?:\+[0-9]+)*(?:-|$)", branch)
+    ids = re.findall(r"sc-([0-9]+)", branch)
+    if len(ids) > 1:
+        return ids[-1]
+    m = re.search(r"(?:^|/)(?:Is|sc-)([0-9]+)(?:\+[0-9]+)*(?:-|/|$)", branch)
     if m:
         return m.group(1)
-    ids = re.findall(r"sc-([0-9]+)", branch)
     if ids:
         return ids[-1]
     m = re.match(r"([1-9][0-9]*)-", branch)
@@ -188,9 +190,9 @@ def ticket_scheme(branch: str, dir_: str | None = None) -> str:
         info = _record_ticket_info(dir_)
         if info:
             return info[1]
-    if re.match(r"^sc-[0-9]+(?:\+[0-9]+)*(?:-|$)", branch):
+    if re.search(r"(?:^|/)sc-[0-9]+(?:\+[0-9]+)*(?:-|/|$)", branch):
         return "shortcut"
-    if re.match(r"^Is[0-9]+(?:\+[0-9]+)*(?:-|$)", branch):
+    if re.search(r"(?:^|/)Is[0-9]+(?:\+[0-9]+)*(?:-|/|$)", branch):
         return "github"
     if re.search(r"sc-[0-9]+", branch):
         return "shortcut"
@@ -201,7 +203,7 @@ def ticket_scheme(branch: str, dir_: str | None = None) -> str:
 
 # ---- ticket title → short label ----------------------------------------------
 
-def _ascii_separate(text: str) -> str:
+def ascii_separate(text: str) -> str:
     """Everything outside ASCII alphanumerics becomes a separator.
 
     Byte-level, like LC_ALL=C tr: each byte of a multibyte character is its
@@ -227,7 +229,7 @@ def _strip_title(title: str) -> str:
 
 def _kept_words(title: str) -> list[str]:
     noise = frozenset(os.environ.get("GT_LABEL_NOISE", "").split())
-    words = _ascii_separate(_strip_title(title)).split()
+    words = ascii_separate(_strip_title(title)).split()
     kept = [w for w in words if w.lower() not in STOPWORDS and w.lower() not in noise]
     # Drop a leading activity verb only when something survives it: "what"
     # discriminates better than "how" at a four-word budget.
@@ -252,7 +254,7 @@ def _word_count(arg: str | int | None, env_var: str, default: int) -> int:
     return n if n >= 1 else 1
 
 
-def _title_words(words: list[str]) -> str:
+def title_words(words: list[str]) -> str:
     out = []
     for w in words:  # acronyms (APM, ADR, SQL) keep their case
         out.append(w if re.fullmatch(r"[A-Z0-9]{2,}", w) else w[:1].upper() + w[1:])
@@ -270,7 +272,7 @@ def distill_title(title: str, max_words: int | str | None = None) -> str:
     if not kept:
         return ""
     maxw = _word_count(max_words, "GT_LABEL_WORDS", DEFAULT_LABEL_WORDS)
-    return _title_words(kept[-maxw:])
+    return title_words(kept[-maxw:])
 
 
 def sanitize_label(text: str) -> str:
@@ -281,7 +283,7 @@ def sanitize_label(text: str) -> str:
     boundary (never mid-word) at GT_LABEL_MAX_CHARS (default 48, validated
     per call so a caller can change it after import).
     """
-    words = _ascii_separate(text).split()
+    words = ascii_separate(text).split()
     if not words:
         return ""
     s = " ".join(words)

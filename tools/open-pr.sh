@@ -259,7 +259,7 @@ else
   if [ -z "$issue" ] && [ -n "$draft" ] && [[ "$ws_chain_ids" == *,* ]]; then
     die "a draft PR on a chained branch must name the completed tickets with --issue <a,b>"
   fi
-  if [ -z "$issue" ] && [[ "$ws_chain_ids" == *,* ]]; then
+  if [ -z "$issue" ] && [ -n "$ws_chain_ids" ] && [ "$(gt::ticket_scheme "$branch" .)" != "shortcut" ]; then
     issue="$ws_chain_ids"
   fi
   if [ -z "$issue" ]; then

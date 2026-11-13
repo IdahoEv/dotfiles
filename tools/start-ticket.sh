@@ -586,21 +586,31 @@ done
 
 _ws_title="${chain_titles[0]:-}"
 [ "$_ws_title" != "untitled" ] || _ws_title=""
-if [ -z "$ST_BRANCH" ] && [ -x "$SCRIPT_DIR/workstream.sh" ]; then
-  ST_BRANCH="$("$SCRIPT_DIR/workstream.sh" render branch \
-    --dir "$repo_root" \
-    --provider "$provider" \
-    --ids "$(IFS=,; echo "${ids[*]}")" \
-    "--title=$_ws_title" \
-    "--desc=${GT_LABEL_OVERRIDE:-}" \
-    "--type=$ST_TYPE" 2>/dev/null || true)"
-  ST_WORKTREE="$("$SCRIPT_DIR/workstream.sh" render worktree \
-    --dir "$repo_root" \
-    --provider "$provider" \
-    --ids "$(IFS=,; echo "${ids[*]}")" \
-    "--title=$_ws_title" \
-    "--desc=${GT_LABEL_OVERRIDE:-}" \
-    "--type=$ST_TYPE" 2>/dev/null || true)"
+if [ -z "$ST_BRANCH" ]; then
+  if [ -x "$SCRIPT_DIR/workstream.sh" ]; then
+    ST_BRANCH="$("$SCRIPT_DIR/workstream.sh" render branch \
+      --dir "$repo_root" \
+      --provider "$provider" \
+      --ids "$(IFS=,; echo "${ids[*]}")" \
+      "--title=$_ws_title" \
+      "--desc=${GT_LABEL_SLUG_OVERRIDE:-}" \
+      "--type=$ST_TYPE" 2>/dev/null || true)"
+    ST_WORKTREE="$("$SCRIPT_DIR/workstream.sh" render worktree \
+      --dir "$repo_root" \
+      --provider "$provider" \
+      --ids "$(IFS=,; echo "${ids[*]}")" \
+      "--title=$_ws_title" \
+      "--desc=${GT_LABEL_SLUG_OVERRIDE:-}" \
+      "--type=$ST_TYPE" 2>/dev/null || true)"
+  fi
+  if [ -z "$ST_BRANCH" ]; then
+    _fb_slug="$(gt::slug_title "$_ws_title")"
+    case "$provider" in
+      github)   ST_BRANCH="${_fb_slug:+Is${id}-${_fb_slug}}"; : "${ST_BRANCH:=Is${id}}" ;;
+      shortcut) ST_BRANCH="${_fb_slug:+sc-${id}-${_fb_slug}}"; : "${ST_BRANCH:=sc-${id}}" ;;
+      *)        die "could not determine branch name for $provider #$id" ;;
+    esac
+  fi
 fi
 
 # --print-title: resolve the ticket and stop. Lets a caller that wants to supply

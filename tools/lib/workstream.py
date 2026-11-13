@@ -253,7 +253,7 @@ def load_record(worktree: str = ".") -> WorkstreamRecord | None:
 
 def format_text(text: str, form: str) -> str:
     """Render a phrase in kebab, words, Title, or snake form."""
-    words = repo_facts._ascii_separate(text).split()
+    words = repo_facts.ascii_separate(text).split()
     if not words:
         return ""
     if form == "kebab":
@@ -261,8 +261,22 @@ def format_text(text: str, form: str) -> str:
     if form == "snake":
         return "_".join(w.lower() for w in words)
     if form == "Title":
-        return repo_facts._title_words([w.upper() if re.fullmatch(r"[A-Z0-9]{2,}", w) else w.lower() for w in words])
-    return " ".join(w.lower() for w in words)
+        return repo_facts.title_words([w.upper() if re.fullmatch(r"[A-Z0-9]{2,}", w) else w.lower() for w in words])
+    return " ".join(w if re.fullmatch(r"[A-Z0-9]{2,}", w) else w.lower() for w in words)
+
+
+def _slug_phrase(title: str) -> str:
+    override = os.environ.get("GT_LABEL_SLUG_OVERRIDE", "")
+    if override:
+        sanitized = repo_facts.sanitize_label(override)
+        if sanitized:
+            return sanitized
+    if not title:
+        return ""
+    return repo_facts.distill_title(
+        title,
+        os.environ.get("GT_LABEL_SLUG_WORDS") or repo_facts.DEFAULT_SLUG_WORDS,
+    )
 
 
 def _provider_token(record: WorkstreamRecord, style: str = "", dir_: str = ".") -> str:
@@ -446,11 +460,10 @@ def init_ticket_record(
         existing = None
 
     if not desc:
-        if existing and existing.desc and not title and not os.environ.get("GT_LABEL_OVERRIDE"):
+        if existing and existing.desc and not title and not os.environ.get("GT_LABEL_SLUG_OVERRIDE"):
             desc = existing.desc
         else:
-            raw_label = repo_facts.label_from_title(title) if title or os.environ.get("GT_LABEL_OVERRIDE") else ""
-            desc = format_text(raw_label, "words")
+            desc = format_text(_slug_phrase(title), "words")
 
     rec = WorkstreamRecord(
         version=1,
@@ -580,12 +593,11 @@ def main(argv: list[str] | None = None) -> int:
     if args.cmd == "render":
         if args.ids:
             ids = [i.strip() for i in args.ids.split(",") if i.strip()]
-            if args.desc:
-                desc = format_text(repo_facts.sanitize_label(args.desc), "words")
-            elif args.title or os.environ.get("GT_LABEL_OVERRIDE"):
-                desc = format_text(repo_facts.label_from_title(args.title), "words")
+            sanitized = repo_facts.sanitize_label(args.desc) if args.desc else ""
+            if sanitized:
+                desc = format_text(sanitized, "words")
             else:
-                desc = ""
+                desc = format_text(_slug_phrase(args.title), "words")
             rec = WorkstreamRecord(
                 version=1,
                 kind="ticket",

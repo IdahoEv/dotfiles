@@ -87,8 +87,10 @@ gt::ticket_from_branch() {  # <branch> [<dir>] → id, or nothing
       fi
     fi
   fi
-  if [[ "$b" =~ ^(Is|sc-)([0-9]+)(\+[0-9]+)*(-|$) ]]; then
-    printf '%s' "${BASH_REMATCH[2]}"
+  if [[ "$b" =~ sc-[0-9]+.*sc-([0-9]+) ]]; then
+    printf '%s' "${BASH_REMATCH[1]}"
+  elif [[ "$b" =~ (^|/)(Is|sc-)([0-9]+)(\+[0-9]+)*(-|/|$) ]]; then
+    printf '%s' "${BASH_REMATCH[3]}"
   elif [[ "$b" =~ .*sc-([0-9]+) ]]; then
     printf '%s' "${BASH_REMATCH[1]}"
   elif [[ "$b" =~ ^([1-9][0-9]*)- ]]; then
@@ -112,8 +114,8 @@ gt::ticket_scheme() {  # <branch> [<dir>] → shortcut | github | unknown
       fi
     fi
   fi
-  if   [[ "$b" =~ ^sc-[0-9]+(\+[0-9]+)*(-|$) ]]; then printf 'shortcut'
-  elif [[ "$b" =~ ^Is[0-9]+(\+[0-9]+)*(-|$) ]];  then printf 'github'
+  if   [[ "$b" =~ (^|/)sc-[0-9]+(\+[0-9]+)*(-|/|$) ]]; then printf 'shortcut'
+  elif [[ "$b" =~ (^|/)Is[0-9]+(\+[0-9]+)*(-|/|$) ]];  then printf 'github'
   elif [[ "$b" =~ .*sc-[0-9]+ ]];                  then printf 'shortcut'
   elif [[ "$b" =~ ^[1-9][0-9]*- ]];                 then printf 'github'
   else printf 'unknown'

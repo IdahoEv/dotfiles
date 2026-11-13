@@ -162,8 +162,8 @@ class DistillTitle(Base):
     def test_ascii_separate_is_byte_level(self):
         # Each byte of a multibyte char is its own separator, like LC_ALL=C tr:
         # this is what keeps branch names identical across caller locales.
-        self.assertEqual(repo_facts._ascii_separate("Café"), "Caf  ")
-        self.assertEqual(repo_facts._ascii_separate("a_b.c-d"), "a b c d")
+        self.assertEqual(repo_facts.ascii_separate("Café"), "Caf  ")
+        self.assertEqual(repo_facts.ascii_separate("a_b.c-d"), "a b c d")
 
 
 class SanitizeLabel(Base):
@@ -257,6 +257,9 @@ class TicketParsing(Base):
                  "Is160-workstream-record": "160",
                  "Is312+313+315-invoice-totals": "312",
                  "Is7-404-pages": "7",
+                 "Is160/workstream": "160",
+                 "bug/Is312+313-invoice-totals": "312",
+                 "feat/sc-7435-fix-bug": "7435",
                  "sc-7435-fix-bug": "7435",
                  "sc-10+20-chain": "10"}
         for branch, expected in cases.items():
@@ -266,6 +269,8 @@ class TicketParsing(Base):
         cases = {"sc-5/x": "shortcut", "7-foo": "github", "main": "unknown",
                  "2-sc-5/foo": "shortcut", "release/7-foo": "unknown",
                  "Is160-workstream": "github", "Is312+313-chain": "github",
+                 "Is160/workstream": "github", "bug/Is312+313-chain": "github",
+                 "feat/sc-7435-fix-bug": "shortcut",
                  "sc-7435-fix-bug": "shortcut", "sc-10+20-chain": "shortcut"}
         for branch, expected in cases.items():
             self.assertEqual(repo_facts.ticket_scheme(branch), expected, branch)
@@ -591,6 +596,7 @@ class Facade(Base):
         cases = {"7-first-ticket": "7", "2-sc-5/foo": "5", "sc-1/x-sc-2/y": "2",
                  "release/2-fix": "", "main": "",
                  "Is160-cloud-branch": "160", "Is312+313-chain": "312",
+                 "Is160/workstream": "160", "bug/Is312+313-chain": "312",
                  "sc-7435-fix-bug": "7435", "sc-10+20-chain": "10"}
         for branch, expected in cases.items():
             self.assertEqual(self.gt(f'gt::ticket_from_branch "{branch}"'),
@@ -599,7 +605,8 @@ class Facade(Base):
     def test_ticket_scheme_matrix(self):
         cases = {"sc-5/x": "shortcut", "7-foo": "github", "main": "unknown",
                  "2-sc-5/foo": "shortcut", "release/7-foo": "unknown",
-                 "Is160-cloud-branch": "github", "sc-7435-fix-bug": "shortcut"}
+                 "Is160-cloud-branch": "github", "bug/Is160-cloud-branch": "github",
+                 "sc-7435-fix-bug": "shortcut", "feat/sc-7435-fix-bug": "shortcut"}
         for branch, expected in cases.items():
             self.assertEqual(self.gt(f'gt::ticket_scheme "{branch}"'),
                              (0, expected), branch)

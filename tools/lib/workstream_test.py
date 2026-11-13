@@ -425,6 +425,74 @@ class CliTests(WorkstreamTestBase):
         self.assertEqual(r_branch.stdout.strip(), "sc-7435-invoice-totals")
         self.assertFalse(os.path.exists(os.path.join(repo, ".workstream.json")))
 
+    def test_acronym_preserved_in_record_and_title_surface(self) -> None:
+        repo = self.make_repo("widgets")
+        rec = workstream.init_ticket_record(
+            repo,
+            provider="github",
+            tickets=[{"id": "160"}],
+            title="Fix SQL invoice totals",
+        )
+        self.assertIn("SQL", rec.desc)
+        rendered = workstream.render_surface(rec, "row", repo)
+        self.assertIn("SQL", rendered)
+
+    def test_gt_label_override_ignored_for_branch_and_record(self) -> None:
+        repo = self.make_repo("widgets")
+        old_label = os.environ.get("GT_LABEL_OVERRIDE")
+        old_slug = os.environ.get("GT_LABEL_SLUG_OVERRIDE")
+        try:
+            os.environ["GT_LABEL_OVERRIDE"] = "Custom Display Only"
+            os.environ.pop("GT_LABEL_SLUG_OVERRIDE", None)
+            rec = workstream.init_ticket_record(
+                repo,
+                provider="github",
+                tickets=[{"id": "160"}],
+                title="Fix invoice totals",
+            )
+            self.assertEqual(workstream.render_surface(rec, "branch", repo), "Is160-invoice-totals")
+            os.environ["GT_LABEL_SLUG_OVERRIDE"] = "Custom Slug"
+            rec2 = workstream.init_ticket_record(
+                repo,
+                provider="github",
+                tickets=[{"id": "161"}],
+                title="Fix invoice totals",
+            )
+            self.assertEqual(workstream.render_surface(rec2, "branch", repo), "Is161-custom-slug")
+        finally:
+            if old_label is None:
+                os.environ.pop("GT_LABEL_OVERRIDE", None)
+            else:
+                os.environ["GT_LABEL_OVERRIDE"] = old_label
+            if old_slug is None:
+                os.environ.pop("GT_LABEL_SLUG_OVERRIDE", None)
+            else:
+                os.environ["GT_LABEL_SLUG_OVERRIDE"] = old_slug
+
+    def test_cli_render_punctuation_desc_falls_back_to_title(self) -> None:
+        repo = self.make_repo("widgets")
+        r = subprocess.run(
+            [
+                CLI,
+                "render",
+                "branch",
+                "--dir",
+                repo,
+                "--provider",
+                "github",
+                "--ids",
+                "160",
+                "--title",
+                "Fix invoice totals",
+                "--desc",
+                "???",
+            ],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        self.assertEqual(r.stdout.strip(), "Is160-invoice-totals")
+
 
 if __name__ == "__main__":
     unittest.main()
