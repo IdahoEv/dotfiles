@@ -29,6 +29,7 @@ Maintained against the covered commands by `tools/cloud-workflow-adapter.test.sh
 | `/local-review-cycle` | Read and follow `local-review-cycle.md`. |
 | `/github-review-comments` | Read and follow `github-review-comments.md`, with the review-state mappings below. |
 | `/discuss` | Not available. Skip any mention. |
+| `/pick` | Not available. Skip any mention. |
 | `/board` | Not available. Skip any mention. |
 | `--tab-only` | Skip the step that opens a session. |
 | `--launcher` | Never pass it. No launcher exists here (equivalent to `none`). |

@@ -16,11 +16,11 @@ import re, sys
 
 adapter, commands = sys.argv[1], sys.argv[2:]
 construct = re.compile(
-    r"mcp__[a-z_]+__|\b(?:AskUserQuestion|EnterWorktree|ExitWorktree|TodoWrite|EnterPlanMode|ExitPlanMode)\b"
+    r"mcp__[a-z_]+__|\b(?:AskUserQuestion|EnterWorktree|ExitWorktree|ListAgents|TodoWrite|EnterPlanMode|ExitPlanMode)\b"
     r"|\b(?:agent-phase|session-label|sibling-worktrees|github-review-poll|github-review-state|request-review|review-unattended)\.sh\b"
     r"|\bGT_LABEL_[A-Z_]+\b|--tab-only|--no-multi|--no-watch|--review|--launcher|--confirm-commits|github-review-repair-agent|local-review-cycle-manager|~/\.config/local-review-only|claude agents|Co-Authored-By|git push --no-verify"
     r"|~/\.claude/"
-    r"|(?<![\w/.-])/(?:start|open-pr|finalize|discuss|board|github-review-comments|local-review-cycle)\b"
+    r"|(?<![\w/.-])/(?:add-dir|start|open-pr|finalize|discuss|board|governor|pick|github-review-comments|local-review-cycle)\b"
 )
 used = {}
 for path in commands:
@@ -53,6 +53,10 @@ agy_commands=(
   "$repo/dot_claude/commands/github-review-comments.md"
   "$repo/dot_claude/agents/github-review-repair-agent.md"
   "$repo/dot_claude/skills/github-review-procedure/SKILL.md"
+  "$repo/dot_claude/commands/governor.md"
+  "$repo/dot_claude/commands/pick.md"
+  "$repo/dot_claude/commands/discuss.md"
+  "$repo/dot_claude/commands/remind.md"
 )
 check "$repo/workflow/adapters/agy.md" "${agy_commands[@]}" || fail "agy adapter has drifted from the commands it covers"
 printf 'PASS agy adapter maps every Claude-only construct in its covered commands\n'
