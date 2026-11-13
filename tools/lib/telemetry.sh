@@ -45,7 +45,7 @@ _wf_warn() {
 
 wf::emit() {
   [ "${WF_TELEMETRY:-1}" = "0" ] && return 0
-  local dir="." event branch url repo log line
+  local dir="." event branch url repo log line root
   if [ "${1:-}" = "--dir" ]; then dir="${2:-.}"; shift 2; fi
   event="${1:-}"; shift || true
   [ -n "$event" ] || return 0
@@ -54,13 +54,15 @@ wf::emit() {
   branch="$(git -C "$dir" branch --show-current 2>/dev/null || true)"
   url="$(git -C "$dir" remote get-url origin 2>/dev/null || true)"
   repo="$(gt::repo_key "$url")"
+  root="$(git -C "$dir" rev-parse --show-toplevel 2>/dev/null || true)"
+  root="${root:-$dir}"
 
   # A Shortcut story spans repos, so its run is the story; a GitHub issue
   # number is only unique within its repo. ticket=/scheme= override the branch
   # for events emitted before the ticket branch exists.
   line="$(jq -nc \
     --arg ts "$(wf::ts)" --arg event "$event" --arg branch "$branch" --arg repo "$repo" \
-    --arg bticket "$(gt::ticket_from_branch "$branch" "$dir")" --arg bscheme "$(gt::ticket_scheme "$branch" "$dir")" \
+    --arg bticket "$(gt::ticket_from_branch "$branch" "$root")" --arg bscheme "$(gt::ticket_scheme "$branch" "$root")" \
     --arg session_id "${CLAUDE_CODE_SESSION_ID:-}" --arg job_id "$(basename "${CLAUDE_JOB_DIR:-}")" \
     --args '
     def coerce:

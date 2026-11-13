@@ -65,6 +65,9 @@ check "explicit scheme" "sc-7" "$(last .run_id)"
 printf '{"tickets":[{"id":"88","url":""}],"ticket_provider":"shortcut"}\n' > "$ROOT/repo/.workstream.json"
 reset; ev x
 check "workstream record overrides non-ticket branch" "sc-88" "$(last .run_id)"
+mkdir -p "$ROOT/repo/nested/sub"
+reset; "$TOOLS/wf-event.sh" --dir "$ROOT/repo/nested/sub" x
+check "workstream record resolves from nested subdir" "sc-88" "$(last .run_id)"
 
 # ---- coercion and sanitization -------------------------------------------------
 new_repo 42-add-thing
