@@ -89,11 +89,13 @@ def resolve_ticket(ticket: str, branch: str, cwd: str) -> str:
     [<prefix>/]sc-<id>/<slug> Shortcut). The LAST sc-<id> wins — a follow-up
     branch can name several."""
     if not ticket:
+        used_cwd = False
         if not branch:
             branch = _git(cwd, "branch", "--show-current")
+            used_cwd = True
         if not branch:
             _die("not on a branch (detached HEAD) — pass --ticket")
-        ticket = repo_facts.ticket_from_branch(branch)
+        ticket = repo_facts.ticket_from_branch(branch, cwd if used_cwd else None)
     if not ticket:
         _die(f"can't parse a ticket id from branch '{branch or '?'}' — pass --ticket")
     if not re.fullmatch(r"[1-9][0-9]*", ticket):
@@ -179,7 +181,7 @@ def scan(candidates: list[str], ticket: str, self_common: str,
             elif line.startswith("branch "):
                 br = line[len("branch "):].removeprefix("refs/heads/")
             elif line == "":
-                if wt and br and repo_facts.ticket_from_branch(br) == ticket:
+                if wt and br and repo_facts.ticket_from_branch(br, wt) == ticket:
                     state = worktree_state(wt)
                     if include_clean or state != "clean":
                         records.append(f"{name}\t{wt}\t{br}\t{state}")

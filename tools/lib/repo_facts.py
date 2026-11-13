@@ -541,8 +541,8 @@ class _Spec:
 SPECS = [
     _Spec("default-branch", default_branch, ("dir",), rc_empty=1),
     _Spec("default-branch-ref", default_branch_ref, ("dir",), rc_empty=1),
-    _Spec("ticket-from-branch", ticket_from_branch, ("branch",)),
-    _Spec("ticket-scheme", ticket_scheme, ("branch",)),
+    _Spec("ticket-from-branch", ticket_from_branch, ("branch", "opt_dir")),
+    _Spec("ticket-scheme", ticket_scheme, ("branch", "opt_dir")),
     _Spec("distill-title", distill_title, ("title", "max_words")),
     _Spec("slug-title", slug_title, ("title", "max_words")),
     _Spec("sanitize-label", sanitize_label, ("text",)),
@@ -558,7 +558,7 @@ SPECS = [
     _Spec("find-doc", find_doc, ("name", "dir"), rc_empty=1),
 ]
 
-_OPTIONAL_DEFAULTS = {"dir": ".", "kind": "", "max_words": None}
+_OPTIONAL_DEFAULTS = {"dir": ".", "opt_dir": None, "kind": "", "max_words": None}
 
 
 def build_parser() -> argparse.ArgumentParser:
