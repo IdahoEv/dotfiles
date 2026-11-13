@@ -26,6 +26,7 @@ Maintained against the covered commands by `tools/cloud-workflow-adapter.test.sh
 | `/local-review-cycle` | Not available; independent review is not performed (see protocol 5). Skip any mention. |
 | `/github-review-comments` | Not available. Skip; report that review follow-up is manual. |
 | `/discuss` | Not available. |
+| `/pick` | Not available. |
 | `/board` | Not available. |
 | `--tab-only` | Skip the step that opens a session. The task is already the session. |
 | `--no-watch` | Always pass it. There is no review wait and no desktop to notify. |

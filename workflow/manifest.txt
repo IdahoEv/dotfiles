@@ -100,7 +100,7 @@ a394eba77efb25ef1f766806223ac4edf75c5eef0b4347084e6059b5fce9de68  755  tools/set
 e366a502be678c6fa82962d428bbdc9414457a32835de696989c42582e500eca  755  tools/sibling-worktrees.sh
 fe34a71d2260c726846a0eef9673688185d019036e0c9e55df3e918030f06ae1  644  tools/start-ticket-providers/github.sh
 ae4e93d3a0d38815b1c929d3ff237054c71a8a46dd01e30e2cd23c2ed9343fee  644  tools/start-ticket-providers/shortcut.sh
-1da40aab6643f9cb8a16cc7ef456aa403d8c6d6dc0bb4a7c98dd39c9726b3474  755  tools/start-ticket.sh
+bcba28e5f38b3c70d8d8e7f1175b6333eead3c38392875304ed8af630ff4f532  755  tools/start-ticket.sh
 242a517c6322f8dd47a053c459dec7aed2b7b8a803b5f3b4e08e681bbe9b3af7  755  tools/tracker.sh
 b8083091fae3b43f91ae088836762a8116f45021b72d87be197adb98adde21e8  755  tools/wf-backfill.sh
 c1ab6c8c8f800a23622ec35d2b13d9e9bc25f252b67ba785490d23c661e2e34b  755  tools/wf-event.sh
@@ -109,6 +109,6 @@ f15dd098841d7963da09693fafbb3bf3f713952434c4c4b8a40dec6cb7cb0fcd  755  tools/wor
 8b3c4fad15997740068b84ced54bf8395749d2b33b6700dd9af651b5047d0057  755  tools/workflow-session.sh
 0e8c1deefa52ec93b05c3e69b89f612adc5bb434d8c1ec8c8e98813313c92f44  755  tools/workstream.sh
 cb41af044928182975030d4ede61783b4c03acf1d5d766ae7890f0557efa64bd  755  tools/worktree-manager.sh
-97b8ab5d68153d9a3701fdccd0b88262b0f7f9aefe4140d6afd6168d6baff8bf  644  workflow/adapters/agy.md
-6a34db102a9792f145117bcbed94f75af1ae415b8cbb105a3741b278ab5965c9  644  workflow/adapters/claude-cloud.md
-6e2d521b322e10ab7eebdc54c0557decc8415de6274da60d6890ac368f732324  644  workflow/adapters/codex.md
+cd2713302b8b5137b6d5addc99f5b793ae248726fe1038870de46e66b398a000  644  workflow/adapters/agy.md
+717652c28f5729a760c568cc27dc288e36c182485a7c787d2404970fb2dd474e  644  workflow/adapters/claude-cloud.md
+e43c819e80c56184ab86d53eeb7e75024cc7e9c843598ad26c224948b1d46397  644  workflow/adapters/codex.md
