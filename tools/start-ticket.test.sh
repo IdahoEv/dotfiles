@@ -174,6 +174,18 @@ check "chain with the shortcut provider is refused" "1" "$rc"
 has "shortcut refusal is explained" "github" "$ROOT/chain.err"
 check "refusals create nothing" "" "$(grep '^create' "$FAKE_LOG")"
 
+# Chained start must fail closed if the workstream record cannot be written.
+git init -q -b main "$ROOT/chainfail"
+git -C "$ROOT/chainfail" config user.email t@e; git -C "$ROOT/chainfail" config user.name t
+echo a > "$ROOT/chainfail/a"; git -C "$ROOT/chainfail" add a; git -C "$ROOT/chainfail" commit -q -m init
+git -C "$ROOT/chainfail" worktree add -q "$ROOT/cf_wt" -b 7-ticket-7
+: > "$ROOT/chainfail/.git/info/exclude"
+chmod 444 "$ROOT/chainfail/.git/info/exclude"
+(cd "$ROOT/chainfail" && FAKE_WT="$ROOT/cf_wt" START_TICKET_PROVIDER_DIR="$CP" "$ST" 7,8 --provider fake --no-tab >/dev/null 2>"$ROOT/cf.err"); rc=$?
+chmod 644 "$ROOT/chainfail/.git/info/exclude"
+check "chain: record write failure fails closed" "1" "$rc"
+has "chain: record write failure is explained" "workstream record not written" "$ROOT/cf.err"
+
 # bg launcher: the session name carries every id; claude is a recording stub.
 mkdir -p "$ROOT/stubbin"
 printf '#!/bin/sh\nprintf "%%s\\n" "$@" > "%s/claude.args"\n' "$ROOT" > "$ROOT/stubbin/claude"; chmod +x "$ROOT/stubbin/claude"

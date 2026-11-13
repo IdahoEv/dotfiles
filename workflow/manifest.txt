@@ -67,15 +67,15 @@ f2a76fa675abd9ec93f935a0a9673ea6bbfac857b3ff2db535140c32a166db1e  644  tools/lib
 c35d14e612032aeb02db2a06ba9770e4b193f42c0c1570a96c0907613d0d959f  644  tools/lib/pr-risk.json
 ac8c0f92f9527fbb17c12a660565f1359150725ea34531f6e556cd0ff056a941  644  tools/lib/pr_body.py
 2022d3ea25c76656a2d963b30bf3ebc185d9bf0cc9c0ba58a15aa4b859ad150d  644  tools/lib/prune_worktrees.py
-ef3a7c8151efba8c6e66fc52c244962256d05e6005110fbf14a4b98173a4c64a  644  tools/lib/repo-facts.sh
-7cdd569aaab27e4790e255ba47d4c49be576d02ab6b9264bc42601aed39efcd6  644  tools/lib/repo_facts.py
+0d3c21eccab00c8f4fdce929fe2c239d3cf46d5996270f6e3b4e2276674fe3a4  644  tools/lib/repo-facts.sh
+38b3466dc4e1932100a7d675461a8648afcf7ea55b0407c9caf763d019ca6a18  644  tools/lib/repo_facts.py
 6ffe03df2f611dcf2380938d6b28c99b77f6d416eb06a65f36d6a41683a1df04  644  tools/lib/sibling_worktrees.py
 72716d1352f92fa937ab0a487e633818d4f4ca256cd2c797a9d16e47d6b4a267  644  tools/lib/telemetry.sh
 42aa7a9a88efd1f56e57f044d71d0d9f7aec4a378fbd315d7359555af489ce13  644  tools/lib/wf_backfill.py
 8b380209965a1e2c19bd8770a9e3cd037ee8cfc28a5d7c0c0edf21087b7345d2  644  tools/lib/wf_report.py
 3c46a31599092ceabb336ccd81b8e9a03631dbd0e8942152e8bbc420a74180fc  644  tools/lib/wf_tokens.py
 3b1a0716083c8f92ab94a60d59ecee59a1716e54cca16dd6cf25f77e2abfe41f  644  tools/lib/wf_usage.py
-77994063eb63c5d2be82c461edaf1e9898ce0acc1337934e949799b9bfa5dfa8  644  tools/lib/workstream.py
+53f4a1ac8192f13c557b4e1dc9fcf85184d80a466ec48b7d7aab56791c38929b  644  tools/lib/workstream.py
 f6d369e82e99df2b899a4e53f1418bced2ab931851ae6e9ea7603c2460975cbc  755  tools/mcp-notion.sh
 c8ce372b7286fdec6d59dc1cc586f65cffd3ad95cdeebdd089631832c46e1b09  755  tools/migrate-use-when.sh
 d5457eadb87b866ec3089323cabe4c156badf2503b4b85f7fd3a85bcdcebf7b0  644  tools/open-pr-providers/github.sh
@@ -100,7 +100,7 @@ a394eba77efb25ef1f766806223ac4edf75c5eef0b4347084e6059b5fce9de68  755  tools/set
 e366a502be678c6fa82962d428bbdc9414457a32835de696989c42582e500eca  755  tools/sibling-worktrees.sh
 fe34a71d2260c726846a0eef9673688185d019036e0c9e55df3e918030f06ae1  644  tools/start-ticket-providers/github.sh
 ae4e93d3a0d38815b1c929d3ff237054c71a8a46dd01e30e2cd23c2ed9343fee  644  tools/start-ticket-providers/shortcut.sh
-7dbd7a7271f4ac0a8e2b0e386abffc70d2ed08f95e9cc2c01c10a36953dcad53  755  tools/start-ticket.sh
+1da40aab6643f9cb8a16cc7ef456aa403d8c6d6dc0bb4a7c98dd39c9726b3474  755  tools/start-ticket.sh
 242a517c6322f8dd47a053c459dec7aed2b7b8a803b5f3b4e08e681bbe9b3af7  755  tools/tracker.sh
 b8083091fae3b43f91ae088836762a8116f45021b72d87be197adb98adde21e8  755  tools/wf-backfill.sh
 c1ab6c8c8f800a23622ec35d2b13d9e9bc25f252b67ba785490d23c661e2e34b  755  tools/wf-event.sh

@@ -672,14 +672,16 @@ done
 
 _ws_title="${chain_titles[0]:-}"
 [ "$_ws_title" != "untitled" ] || _ws_title=""
-"$SCRIPT_DIR/workstream.sh" init-ticket \
+if ! "$SCRIPT_DIR/workstream.sh" init-ticket \
   --dir "$wt" \
   --provider "$provider" \
   --ids "$(IFS=,; echo "${ids[*]}")" \
   --urls "$(IFS=,; echo "${chain_urls[*]}")" \
   "--title=$_ws_title" \
-  "--type=$ST_TYPE" \
-  || echo "start-ticket: WARN workstream record not written" >&2
+  "--type=$ST_TYPE"; then
+  [ -z "$chain_csv" ] || die "workstream record not written (required for chain $chain_csv)"
+  echo "start-ticket: WARN workstream record not written" >&2
+fi
 
 # mark_in_progress is best-effort and some tracker CLIs fail while exiting 0, so
 # read the state back here rather than making the caller verify. ticket_state is
