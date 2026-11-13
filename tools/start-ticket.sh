@@ -117,11 +117,12 @@ conf_get() {  # <key> → value; precedence is gt::conf_get's (repo, overlay, ma
   gt::conf_get "$1"
 }
 
-# setting <conf-key> <ENV_VAR> <default>: env var → conf file → default.
+# setting <conf-key> [<ENV_VAR>] [<default>]: env var → layered conf (project > machine > user) → default.
 setting() {
-  local v="${!2:-}"
-  [ -n "$v" ] || v="$(conf_get "$1" || true)"
-  printf '%s' "${v:-$3}"
+  local key="$1" env_var="${2:-}" def="${3:-}" v=""
+  [ -z "$env_var" ] || v="${!env_var:-}"
+  [ -n "$v" ] || v="$(conf_get "$key" || true)"
+  printf '%s' "${v:-$def}"
 }
 
 # Words that are noise in THIS repo's ticket titles — typically the project's
@@ -133,11 +134,14 @@ export GT_LABEL_NOISE
 
 # chain_tag <worktree> → "12+13" for a chain worktree, empty otherwise.
 chain_tag() {
+  if [ -f "$1/.workstream.json" ] && command -v python3 >/dev/null 2>&1; then
+    "$SCRIPT_DIR/workstream.sh" chain-tag --dir "$1" 2>/dev/null || true
+    return 0
+  fi
   local f ids
   f="$(git -C "$1" rev-parse --absolute-git-dir 2>/dev/null)/chain"
   [ -f "$f" ] || return 0
-  # Long chains collapse to first+last: the label is a glanceable row name, and
-  # <git-dir>/chain is the authoritative membership list.
+  # Long chains collapse to first+last: the label is a glanceable row name.
   ids="$(paste -sd+ "$f")"
   case "$ids" in
     *+*+*+*) ids="${ids%%+*}+${ids##*+}" ;;
@@ -160,12 +164,15 @@ chain_tag() {
 # came from distills to "Data Deletion Retention Policy". See gt::distill_title.
 make_label() {
   local branch="$1" maxlen="$2" pretty="${3:-}" num="" slug="$1" distilled=""
-  if [[ "$branch" =~ ^([0-9]+)-(.+)$ ]]; then
+  if [[ "$branch" =~ (^|/)Is([0-9]+(\+[0-9]+)*)[-/](.+)$ ]]; then
+    num="Is${ST_CHAIN_TAG:-${BASH_REMATCH[2]}}"
+    slug="${BASH_REMATCH[4]}"
+  elif [[ "$branch" =~ ^([0-9]+)-(.+)$ ]]; then
     num="Is${ST_CHAIN_TAG:-${BASH_REMATCH[1]}}"
     slug="${BASH_REMATCH[2]}"
-  elif [[ "$branch" =~ (^|/)sc-([0-9]+)/(.+)$ ]]; then
-    num="Sc${BASH_REMATCH[2]}"
-    slug="${BASH_REMATCH[3]}"
+  elif [[ "$branch" =~ (^|/)sc-([0-9]+(\+[0-9]+)*)[-/](.+)$ ]]; then
+    num="Sc${ST_CHAIN_TAG:-${BASH_REMATCH[2]}}"
+    slug="${BASH_REMATCH[4]}"
   fi
   if [ -n "${ST_TITLE:-}" ] || [ -n "${GT_LABEL_OVERRIDE:-}" ]; then
     distilled="$(gt::label_from_title "${ST_TITLE:-}")"
@@ -568,7 +575,7 @@ export WORKTREE_MANAGER
 provider::available || die "provider '$provider' unavailable (CLI missing or not authed)"
 
 # ---- run ---------------------------------------------------------------
-ST_TITLE="" ST_BODY="" ST_URL="" ST_PARENT="" ST_BRANCH="" ST_REF=""
+ST_TITLE="" ST_BODY="" ST_URL="" ST_PARENT="" ST_BRANCH="" ST_WORKTREE="" ST_REF="" ST_TYPE=""
 # Chain links are fetched first and the head last, so ST_* (branch, label,
 # parent) are the head's when the loop ends; the per-ticket arrays keep the
 # kickoff sections.
@@ -580,6 +587,35 @@ for ((_n = ${#ids[@]} - 1; _n >= 0; _n--)); do
 done
 : "${ST_REF:=${provider} ticket ${id}}"
 
+_ws_title="${chain_titles[0]:-}"
+[ "$_ws_title" != "untitled" ] || _ws_title=""
+if [ -z "$ST_BRANCH" ]; then
+  if [ -x "$SCRIPT_DIR/workstream.sh" ]; then
+    ST_BRANCH="$("$SCRIPT_DIR/workstream.sh" render branch \
+      --dir "$repo_root" \
+      --provider "$provider" \
+      --ids "$(IFS=,; echo "${ids[*]}")" \
+      "--title=$_ws_title" \
+      "--desc=${GT_LABEL_SLUG_OVERRIDE:-}" \
+      "--type=$ST_TYPE" 2>/dev/null || true)"
+    ST_WORKTREE="$("$SCRIPT_DIR/workstream.sh" render worktree \
+      --dir "$repo_root" \
+      --provider "$provider" \
+      --ids "$(IFS=,; echo "${ids[*]}")" \
+      "--title=$_ws_title" \
+      "--desc=${GT_LABEL_SLUG_OVERRIDE:-}" \
+      "--type=$ST_TYPE" 2>/dev/null || true)"
+  fi
+  if [ -z "$ST_BRANCH" ]; then
+    _fb_slug="$(gt::slug_title "$_ws_title")"
+    case "$provider" in
+      github)   ST_BRANCH="${_fb_slug:+Is${id}-${_fb_slug}}"; : "${ST_BRANCH:=Is${id}}" ;;
+      shortcut) ST_BRANCH="${_fb_slug:+sc-${id}-${_fb_slug}}"; : "${ST_BRANCH:=sc-${id}}" ;;
+      *)        die "could not determine branch name for $provider #$id" ;;
+    esac
+  fi
+fi
+
 # --print-title: resolve the ticket and stop. Lets a caller that wants to supply
 # its own label (GT_LABEL_OVERRIDE) read the title FIRST — the branch and the
 # worktree dir are both named during create_worktree below, so an override
@@ -590,7 +626,7 @@ if [ "$mode" = "print-title" ]; then
   # GT_LABEL_OVERRIDE by design, so printing it here tells the caller the slug
   # is not theirs to choose (short of GT_LABEL_SLUG_OVERRIDE).
   printf 'title=%s\nproposed_label=%s\nproposed_slug=%s\n' \
-    "$ST_TITLE" "$(gt::distill_title "$ST_TITLE")" "$(gt::slug_title "$ST_TITLE")"
+    "$ST_TITLE" "$(gt::distill_title "$ST_TITLE")" "${ST_BRANCH:-$(gt::slug_title "$ST_TITLE")}"
   exit 0
 fi
 
@@ -634,8 +670,18 @@ for _i in "${ids[@]}"; do
   provider::mark_in_progress "$_i" || echo "start-ticket: WARN mark_in_progress failed for $_i" >&2
 done
 
-chain_file="$(git -C "$wt" rev-parse --absolute-git-dir)/chain"
-[ -z "$chain_csv" ] || printf '%s\n' "${ids[@]}" > "$chain_file"
+_ws_title="${chain_titles[0]:-}"
+[ "$_ws_title" != "untitled" ] || _ws_title=""
+if ! "$SCRIPT_DIR/workstream.sh" init-ticket \
+  --dir "$wt" \
+  --provider "$provider" \
+  --ids "$(IFS=,; echo "${ids[*]}")" \
+  --urls "$(IFS=,; echo "${chain_urls[*]}")" \
+  "--title=$_ws_title" \
+  "--type=$ST_TYPE"; then
+  [ -z "$chain_csv" ] || die "workstream record not written (required for chain $chain_csv)"
+  echo "start-ticket: WARN workstream record not written" >&2
+fi
 
 # mark_in_progress is best-effort and some tracker CLIs fail while exiting 0, so
 # read the state back here rather than making the caller verify. ticket_state is

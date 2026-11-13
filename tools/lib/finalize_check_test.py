@@ -459,6 +459,22 @@ class PreconditionsAndFacts(Base):
         self.assertEqual(f["ticket_id"], "7")
         self.assertEqual(f["chain_ids"], "7,8,9")
 
+    def test_chain_ids_from_workstream_record_beats_legacy_chain(self):
+        repo, wt = self.repo_with_wt()
+        gitdir = self.git(wt, "rev-parse", "--absolute-git-dir")
+        Path(gitdir, "chain").write_text("7\n8\n")
+        Path(wt, ".workstream.json").write_text(json.dumps({
+            "version": 1,
+            "kind": "ticket",
+            "tickets": [{"id": "7", "url": ""}, {"id": "8", "url": ""}, {"id": "10", "url": ""}],
+            "ticket_provider": "github",
+            "key": "Is7+8+10",
+            "desc": "first ticket",
+        }))
+        f = self.facts(self.run_check("--dir", str(wt)))
+        self.assertEqual(f["ticket_id"], "7")
+        self.assertEqual(f["chain_ids"], "7,8,10")
+
     def test_tracking_refspec_missing_warns_but_answers(self):
         repo, wt = self.repo_with_wt()
         self.git(wt, "config", "--unset", "remote.origin.fetch")

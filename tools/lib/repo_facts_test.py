@@ -11,6 +11,7 @@ their value-level equivalents live here.
 """
 
 import io
+import json
 import os
 import shutil
 import subprocess
@@ -161,8 +162,8 @@ class DistillTitle(Base):
     def test_ascii_separate_is_byte_level(self):
         # Each byte of a multibyte char is its own separator, like LC_ALL=C tr:
         # this is what keeps branch names identical across caller locales.
-        self.assertEqual(repo_facts._ascii_separate("Café"), "Caf  ")
-        self.assertEqual(repo_facts._ascii_separate("a_b.c-d"), "a b c d")
+        self.assertEqual(repo_facts.ascii_separate("Café"), "Caf  ")
+        self.assertEqual(repo_facts.ascii_separate("a_b.c-d"), "a b c d")
 
 
 class SanitizeLabel(Base):
@@ -252,15 +253,36 @@ class LabelSlugSplit(Base):
 class TicketParsing(Base):
     def test_from_branch_matrix(self):
         cases = {"7-first-ticket": "7", "2-sc-5/foo": "5", "sc-1/x-sc-2/y": "2",
-                 "release/2-fix": "", "123-": "123", "main": ""}
+                 "release/2-fix": "", "123-": "123", "main": "",
+                 "Is160-workstream-record": "160",
+                 "Is312+313+315-invoice-totals": "312",
+                 "Is7-404-pages": "7",
+                 "Is7-fix-sc-5-sc-6": "7",
+                 "Is160/workstream": "160",
+                 "bug/Is312+313-invoice-totals": "312",
+                 "feat/sc-7435-fix-bug": "7435",
+                 "sc-7435-fix-bug": "7435",
+                 "sc-10+20-chain": "10"}
         for branch, expected in cases.items():
             self.assertEqual(repo_facts.ticket_from_branch(branch), expected, branch)
 
     def test_scheme_matrix(self):
         cases = {"sc-5/x": "shortcut", "7-foo": "github", "main": "unknown",
-                 "2-sc-5/foo": "shortcut", "release/7-foo": "unknown"}
+                 "2-sc-5/foo": "shortcut", "release/7-foo": "unknown",
+                 "Is160-workstream": "github", "Is312+313-chain": "github",
+                 "Is160/workstream": "github", "bug/Is312+313-chain": "github",
+                 "feat/sc-7435-fix-bug": "shortcut",
+                 "sc-7435-fix-bug": "shortcut", "sc-10+20-chain": "shortcut"}
         for branch, expected in cases.items():
             self.assertEqual(repo_facts.ticket_scheme(branch), expected, branch)
+
+    def test_workstream_record_wins_over_branch(self):
+        with tempfile.TemporaryDirectory() as repo:
+            subprocess.run(["git", "-C", repo, "init", "-q"], check=True)
+            with open(os.path.join(repo, ".workstream.json"), "w", encoding="utf-8") as fh:
+                json.dump({"tickets": [{"id": "99", "url": ""}], "ticket_provider": "shortcut"}, fh)
+            self.assertEqual(repo_facts.ticket_from_branch("unrelated-branch", repo), "99")
+            self.assertEqual(repo_facts.ticket_scheme("unrelated-branch", repo), "shortcut")
 
 
 class RepoKey(Base):
@@ -573,14 +595,20 @@ class Facade(Base):
 
     def test_ticket_from_branch_matrix(self):
         cases = {"7-first-ticket": "7", "2-sc-5/foo": "5", "sc-1/x-sc-2/y": "2",
-                 "release/2-fix": "", "main": ""}
+                 "release/2-fix": "", "main": "",
+                 "Is160-cloud-branch": "160", "Is312+313-chain": "312",
+                 "Is7-fix-sc-5-sc-6": "7",
+                 "Is160/workstream": "160", "bug/Is312+313-chain": "312",
+                 "sc-7435-fix-bug": "7435", "sc-10+20-chain": "10"}
         for branch, expected in cases.items():
             self.assertEqual(self.gt(f'gt::ticket_from_branch "{branch}"'),
                              (0, expected), branch)
 
     def test_ticket_scheme_matrix(self):
         cases = {"sc-5/x": "shortcut", "7-foo": "github", "main": "unknown",
-                 "2-sc-5/foo": "shortcut", "release/7-foo": "unknown"}
+                 "2-sc-5/foo": "shortcut", "release/7-foo": "unknown",
+                 "Is160-cloud-branch": "github", "bug/Is160-cloud-branch": "github",
+                 "sc-7435-fix-bug": "shortcut", "feat/sc-7435-fix-bug": "shortcut"}
         for branch, expected in cases.items():
             self.assertEqual(self.gt(f'gt::ticket_scheme "{branch}"'),
                              (0, expected), branch)

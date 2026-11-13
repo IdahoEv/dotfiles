@@ -126,7 +126,8 @@ check "chain: one worktree, named from the head" "create 7" "$(grep '^create' "$
 check "chain: every ticket is marked in progress" "mark 7 mark 8 mark 9" "$(grep '^mark' "$FAKE_LOG" | tr '\n' ' ' | sed 's/ $//')"
 check "chain: stdout carries the chain" "7,8,9" "$(get chain <<<"$out")"
 check "chain: stdout branch is the head's" "7-ticket-7" "$(get branch <<<"$out")"
-check "chain: ids recorded in order" "7 8 9" "$(tr '\n' ' ' < "$(git -C "$ROOT/cwt" rev-parse --absolute-git-dir)/chain" | sed 's/ $//')"
+check "chain: ids recorded in order" "7,8,9" "$("$TOOLS/workstream.sh" chain-ids --dir "$ROOT/cwt")"
+check "chain: .workstream.json written in worktree" "yes" "$([ -f "$ROOT/cwt/.workstream.json" ] && echo yes || echo no)"
 kf="$(get kickoff <<<"$out")"
 has "chain: kickoff lists the head ticket" "## 7 — Ticket 7" "$kf"
 has "chain: kickoff lists the last ticket" "## 9 — Ticket 9" "$kf"
@@ -142,7 +143,7 @@ has "chain: preamble ID is the head" "Ticket 7 on 7-ticket-7." "$kf"
 : > "$FAKE_LOG"
 out="$(chain 7)"
 check "single id: no chain stdout" "" "$(get chain <<<"$out")"
-check "single id re-run keeps the chain file" "7 8 9" "$(tr '\n' ' ' < "$(git -C "$ROOT/cwt" rev-parse --absolute-git-dir)/chain" | sed 's/ $//')"
+check "single id re-run keeps the chain record" "7,8,9" "$("$TOOLS/workstream.sh" chain-ids --dir "$ROOT/cwt")"
 check "single id: kickoff has no chain block" "0" "$(grep -c 'chain of' "$(get kickoff <<<"$out")")"
 check "single id: marks only itself" "mark 7" "$(grep '^mark' "$FAKE_LOG")"
 
@@ -173,6 +174,18 @@ check "chain with the shortcut provider is refused" "1" "$rc"
 has "shortcut refusal is explained" "github" "$ROOT/chain.err"
 check "refusals create nothing" "" "$(grep '^create' "$FAKE_LOG")"
 
+# Chained start must fail closed if the workstream record cannot be written.
+git init -q -b main "$ROOT/chainfail"
+git -C "$ROOT/chainfail" config user.email t@e; git -C "$ROOT/chainfail" config user.name t
+echo a > "$ROOT/chainfail/a"; git -C "$ROOT/chainfail" add a; git -C "$ROOT/chainfail" commit -q -m init
+git -C "$ROOT/chainfail" worktree add -q "$ROOT/cf_wt" -b 7-ticket-7
+: > "$ROOT/chainfail/.git/info/exclude"
+chmod 444 "$ROOT/chainfail/.git/info/exclude"
+(cd "$ROOT/chainfail" && FAKE_WT="$ROOT/cf_wt" START_TICKET_PROVIDER_DIR="$CP" "$ST" 7,8 --provider fake --no-tab >/dev/null 2>"$ROOT/cf.err"); rc=$?
+chmod 644 "$ROOT/chainfail/.git/info/exclude"
+check "chain: record write failure fails closed" "1" "$rc"
+has "chain: record write failure is explained" "workstream record not written" "$ROOT/cf.err"
+
 # bg launcher: the session name carries every id; claude is a recording stub.
 mkdir -p "$ROOT/stubbin"
 printf '#!/bin/sh\nprintf "%%s\\n" "$@" > "%s/claude.args"\n' "$ROOT" > "$ROOT/stubbin/claude"; chmod +x "$ROOT/stubbin/claude"
@@ -183,6 +196,9 @@ git -C "$ROOT/widgets" worktree add -q "$ROOT/swt" -b 7-single
 has "single id: session name unchanged" "[PLAN] Is7 Ticket 7" "$ROOT/claude.args"
 (cd "$ROOT/widgets" && PATH="$ROOT/stubbin:$PATH" START_TICKET_PROVIDER_DIR="$CP" FAKE_WT="$ROOT/cwt4" "$ST" 7,8,9,10 --provider fake --launcher bg >/dev/null 2>&1)
 has "long chain: label collapses to first+last" "[PLAN] Is7+10 Ticket 7" "$ROOT/claude.args"
+git -C "$ROOT/widgets" worktree add -q "$ROOT/swt_is" -b Is160-workstream-record
+(cd "$ROOT/widgets" && FAKE_WT="$ROOT/swt_is" PATH="$ROOT/stubbin:$PATH" START_TICKET_PROVIDER_DIR="$CP" "$ST" 160 --provider fake --launcher bg >/dev/null 2>&1)
+has "Is<N> branch: session name uses Is<N> prefix" "[PLAN] Is160 Ticket 160" "$ROOT/claude.args"
 
 # ---- --in-place (cloud sessions: one fixed checkout, no worktree) ---------------
 IP="$ROOT/inplaceproviders"; mkdir -p "$IP"

@@ -25,10 +25,18 @@ provider::fetch() {
   ST_PARENT="$(awk 'match($0,/^[Ee]pic:[[:space:]]*/){print substr($0,RLENGTH+1);exit}'      <<<"$out")"
   ST_BODY="$out"
   ST_REF="Shortcut story ${id}"
-  ST_BRANCH=""                       # let `worktree-manager --sc` decide
+  local stype
+  stype="$(awk 'match($0,/^[Tt]ype:[[:space:]]*/){print tolower(substr($0,RLENGTH+1));exit}' <<<"$out")"
+  case "$stype" in
+    feature) ST_TYPE="feat" ;;
+    bug)     ST_TYPE="fix" ;;
+    chore)   ST_TYPE="chore" ;;
+    *)       ST_TYPE="" ;;
+  esac
+  ST_BRANCH=""
 }
 
-provider::create_worktree() { "$WORKTREE_MANAGER" --sc "$1"; }
+provider::create_worktree() { "$WORKTREE_MANAGER" --sc "$1" ${ST_BRANCH:+--branch "$ST_BRANCH"} ${ST_WORKTREE:+--dir-name "$ST_WORKTREE"}; }
 
 # after the worktree exists, prefer the richer detail file worktree-manager wrote
 provider::post_worktree() {

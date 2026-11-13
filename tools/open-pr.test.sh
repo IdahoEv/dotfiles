@@ -248,6 +248,25 @@ new_repo 42-foo; rm -f "$WATCH_ARGS"
 out="$(run --title "Add foo" --review copilot --no-watch)"
 check "--no-watch skips the watcher"    "watch=skipped" "$(grep '^watch=' <<<"$out")"
 
+# Cloud Is<N>- and chain Is<N>+<M>- branches extract the issue number instead of opening a ticketless PR.
+new_repo Is88-cloud-branch
+out="$(run --title "Cloud fix" --review none)"
+check "cloud Is<N>- branch: PR title prefixed" "Shipped Is88: Cloud fix" "$(grep '^Shipped ' <<<"$out")"
+
+# Single-ticket .workstream.json on a branch without Is<N> prefix resolves the ticket ID.
+new_repo feature/custom-branch
+cat > "$ROOT/repo/.workstream.json" <<'EOF'
+{"version":1,"kind":"ticket","tickets":[{"id":"88"}],"ticket_provider":"github"}
+EOF
+out="$(run --title "Custom branch fix" --review none)"
+check "single-ticket .workstream.json: PR title prefixed" "Shipped Is88: Custom branch fix" "$(grep '^Shipped ' <<<"$out")"
+check "single-ticket .workstream.json: Closes footer" "Closes #88" "$(cat "$GH_LOG.body")"
+
+# bug/Is88-foo and Is88/foo branches extract the issue number even without .workstream.json.
+new_repo bug/Is88-foo
+out="$(run --title "Typed branch fix" --review none)"
+check "bug/Is88-foo branch: PR title prefixed" "Shipped Is88: Typed branch fix" "$(grep '^Shipped ' <<<"$out")"
+
 # ---- telemetry --------------------------------------------------------------
 export WF_TELEMETRY_LOG="$ROOT/events.jsonl"
 # Events need an owner/repo origin. The URL is display-only: pushes are routed

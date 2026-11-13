@@ -29,6 +29,7 @@ network is the host CLI fallback in default_branch; no writes, no side effects.
 from __future__ import annotations
 
 import argparse
+import json
 import locale
 import os
 import re
@@ -134,22 +135,68 @@ def default_branch_ref(dir_: str = ".") -> str:
 
 # ---- ticket id from branch ---------------------------------------------------
 
-def ticket_from_branch(branch: str) -> str:
-    """Ticket id from a branch, or "".
+def _record_ticket_info(dir_: str) -> tuple[str, str] | None:
+    """Return (head_ticket_id, provider) from .workstream.json when present."""
+    if not dir_:
+        return None
+    root = git(dir_, "rev-parse", "--show-toplevel") or dir_
+    path = os.path.join(root, ".workstream.json")
+    try:
+        with open(path, encoding="utf-8") as fh:
+            data = json.load(fh)
+    except (OSError, json.JSONDecodeError, ValueError):
+        return None
+    if not isinstance(data, dict):
+        return None
+    tickets = data.get("tickets")
+    if not isinstance(tickets, list) or not tickets:
+        return None
+    first = tickets[0]
+    if not isinstance(first, dict) or not first.get("id"):
+        return None
+    provider = str(data.get("ticket_provider") or "github")
+    scheme = "shortcut" if provider == "shortcut" else "github"
+    return str(first["id"]), scheme
 
-    Shortcut branches (sc-<id>) are matched first: an sc- id is unambiguous
-    while the GitHub form is just "leading digits". The LAST sc-<id> wins —
-    a follow-up branch can name several.
+
+def ticket_from_branch(branch: str, dir_: str | None = None) -> str:
+    """Ticket id from .workstream.json (when dir_ is given) or branch name, or "".
+
+    When parsing a branch:
+    1. New resolver key prefix (`^(?:Is|sc-)([0-9]+)(?:\\+[0-9]+)*(?:-|/|$)`),
+       returning the head ticket id.
+    2. Legacy Shortcut (`sc-<id>`, last match wins).
+    3. Legacy GitHub (`^([1-9][0-9]*)-`).
     """
+    if dir_:
+        info = _record_ticket_info(dir_)
+        if info:
+            return info[0]
+    m = re.search(r"(?:^|/)Is([0-9]+)(?:\+[0-9]+)*(?:-|/|$)", branch)
+    if m:
+        return m.group(1)
     ids = re.findall(r"sc-([0-9]+)", branch)
+    if len(ids) > 1:
+        return ids[-1]
+    m = re.search(r"(?:^|/)sc-([0-9]+)(?:\+[0-9]+)*(?:-|/|$)", branch)
+    if m:
+        return m.group(1)
     if ids:
         return ids[-1]
     m = re.match(r"([1-9][0-9]*)-", branch)
     return m.group(1) if m else ""
 
 
-def ticket_scheme(branch: str) -> str:
-    """Which dialect the branch uses: shortcut | github | unknown."""
+def ticket_scheme(branch: str, dir_: str | None = None) -> str:
+    """Which dialect the workstream or branch uses: shortcut | github | unknown."""
+    if dir_:
+        info = _record_ticket_info(dir_)
+        if info:
+            return info[1]
+    if re.search(r"(?:^|/)sc-[0-9]+(?:\+[0-9]+)*(?:-|/|$)", branch):
+        return "shortcut"
+    if re.search(r"(?:^|/)Is[0-9]+(?:\+[0-9]+)*(?:-|/|$)", branch):
+        return "github"
     if re.search(r"sc-[0-9]+", branch):
         return "shortcut"
     if re.match(r"[1-9][0-9]*-", branch):
@@ -159,7 +206,7 @@ def ticket_scheme(branch: str) -> str:
 
 # ---- ticket title → short label ----------------------------------------------
 
-def _ascii_separate(text: str) -> str:
+def ascii_separate(text: str) -> str:
     """Everything outside ASCII alphanumerics becomes a separator.
 
     Byte-level, like LC_ALL=C tr: each byte of a multibyte character is its
@@ -185,7 +232,7 @@ def _strip_title(title: str) -> str:
 
 def _kept_words(title: str) -> list[str]:
     noise = frozenset(os.environ.get("GT_LABEL_NOISE", "").split())
-    words = _ascii_separate(_strip_title(title)).split()
+    words = ascii_separate(_strip_title(title)).split()
     kept = [w for w in words if w.lower() not in STOPWORDS and w.lower() not in noise]
     # Drop a leading activity verb only when something survives it: "what"
     # discriminates better than "how" at a four-word budget.
@@ -210,7 +257,7 @@ def _word_count(arg: str | int | None, env_var: str, default: int) -> int:
     return n if n >= 1 else 1
 
 
-def _title_words(words: list[str]) -> str:
+def title_words(words: list[str]) -> str:
     out = []
     for w in words:  # acronyms (APM, ADR, SQL) keep their case
         out.append(w if re.fullmatch(r"[A-Z0-9]{2,}", w) else w[:1].upper() + w[1:])
@@ -228,7 +275,7 @@ def distill_title(title: str, max_words: int | str | None = None) -> str:
     if not kept:
         return ""
     maxw = _word_count(max_words, "GT_LABEL_WORDS", DEFAULT_LABEL_WORDS)
-    return _title_words(kept[-maxw:])
+    return title_words(kept[-maxw:])
 
 
 def sanitize_label(text: str) -> str:
@@ -239,7 +286,7 @@ def sanitize_label(text: str) -> str:
     boundary (never mid-word) at GT_LABEL_MAX_CHARS (default 48, validated
     per call so a caller can change it after import).
     """
-    words = _ascii_separate(text).split()
+    words = ascii_separate(text).split()
     if not words:
         return ""
     s = " ".join(words)
@@ -398,34 +445,36 @@ def main_root(dir_: str = ".") -> str:
         return ""
 
 
-def conf_files(dir_: str = ".") -> list[str]:
-    """Config files for the repo containing <dir>, highest precedence first:
-    <toplevel>/.start-ticket.conf, <main-root>/.start-ticket.conf,
-    <overlay>/start-ticket.conf, ~/.config/start-ticket/config."""
-    files: list[str] = []
+def conf_layers(dir_: str = ".") -> list[tuple[str, str]]:
+    """Config files with their layer ('project' | 'machine' | 'user'),
+    highest precedence first."""
+    layers: list[tuple[str, str]] = []
     top = git(dir_, "rev-parse", "--show-toplevel")
     if top:
-        files.append(f"{top}/.start-ticket.conf")
+        layers.append(("project", f"{top}/.start-ticket.conf"))
     main = main_root(dir_)
     if main:
-        files.append(f"{main}/.start-ticket.conf")
+        layers.append(("project", f"{main}/.start-ticket.conf"))
     ov = overlay_dir(dir_)
     if ov:
-        files.append(f"{ov}/start-ticket.conf")
-    files.append(os.path.join(os.path.expanduser("~"), ".config",
-                              "start-ticket", "config"))
-    return files
+        layers.append(("project", f"{ov}/start-ticket.conf"))
+    home = os.path.expanduser("~")
+    layers.append(("machine", os.path.join(home, ".config", "start-ticket", "config")))
+    layers.append(("user", f"{overlays_root()}/start-ticket.conf"))
+    layers.append(("user", os.path.join(home, ".config", "start-ticket", "user.conf")))
+    return layers
 
 
-def conf_get(key: str, dir_: str = ".") -> str | None:
-    """First non-empty `key=` across conf_files; None when unset.
+def conf_files(dir_: str = ".") -> list[str]:
+    """Config files for the repo containing <dir>, highest precedence first:
+    project (.start-ticket.conf, overlay), machine (~/.config/start-ticket/config),
+    and user (<overlays-root>/start-ticket.conf, ~/.config/start-ticket/user.conf)."""
+    return [path for _, path in conf_layers(dir_)]
 
-    Per file only the first matching line counts (sed | head -1): an empty
-    value on it moves the search to the next FILE, not the next line. The
-    shell interpolated the key into a sed regex (a "." would wildcard); every
-    real key is [a-z_]+, so a literal prefix match is identical for callers.
-    """
-    for path in conf_files(dir_):
+
+def conf_get_source(key: str, dir_: str = ".") -> tuple[str, str] | None:
+    """First non-empty `key=` across conf_layers as (value, layer); None when unset."""
+    for layer, path in conf_layers(dir_):
         p = Path(path)
         if not p.is_file():
             continue
@@ -440,9 +489,19 @@ def conf_get(key: str, dir_: str = ".") -> str | None:
             if line.startswith(f"{key}="):
                 value = line[len(key) + 1:]
                 if value:
-                    return value
+                    return (value, layer)
                 break
     return None
+
+
+def conf_get(key: str, dir_: str = ".") -> str | None:
+    """First non-empty `key=` across conf_files; None when unset.
+
+    Per file only the first matching line counts (sed | head -1): an empty
+    value on it moves the search to the next FILE, not the next line.
+    """
+    res = conf_get_source(key, dir_)
+    return res[0] if res is not None else None
 
 
 def find_doc(name: str, dir_: str = ".") -> tuple[str, str] | None:

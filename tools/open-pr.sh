@@ -252,14 +252,15 @@ else
   # Resolve the issue number (branch convention first, else --issue). The
   # title/body conventions hang off it, so it's resolved for both — not just
   # the default body, as the old inline version did.
-  # A chain's membership is the fallback ahead of the branch name: the branch
-  # only carries the head ticket.
-  chain_file="$(git rev-parse --absolute-git-dir)/chain"
-  if [ -z "$issue" ] && [ -n "$draft" ] && [ -s "$chain_file" ]; then
+  # A chain's membership (.workstream.json or legacy <git-dir>/chain) is the
+  # fallback ahead of the branch name: the branch only carries the head ticket.
+  ws_chain_ids="$("$SCRIPT_DIR/workstream.sh" chain-ids --dir .)" \
+    || die "workstream.sh chain-ids failed; cannot determine the chain's tickets"
+  if [ -z "$issue" ] && [ -n "$draft" ] && [[ "$ws_chain_ids" == *,* ]]; then
     die "a draft PR on a chained branch must name the completed tickets with --issue <a,b>"
   fi
-  if [ -z "$issue" ] && [ -s "$chain_file" ]; then
-    issue="$(paste -sd, "$chain_file")"
+  if [ -z "$issue" ] && [ -n "$ws_chain_ids" ] && [ "$(gt::ticket_scheme "$branch" .)" != "shortcut" ]; then
+    issue="$ws_chain_ids"
   fi
   if [ -z "$issue" ]; then
     issue="$(provider::issue_from_branch "$branch")"

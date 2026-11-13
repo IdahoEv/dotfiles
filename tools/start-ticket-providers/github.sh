@@ -11,8 +11,8 @@ provider::available() {
 }
 
 provider::fetch() {
-  local id="$1" json state
-  json="$(gh issue view "$id" --json number,title,body,state,url)" \
+  local id="$1" json state label
+  json="$(gh issue view "$id" --json number,title,body,state,url,labels)" \
     || { echo "gh issue view #$id failed" >&2; return 1; }
   state="$(jq -r .state <<<"$json")"
   [ "$state" = OPEN ] || { echo "issue #$id is $state, not OPEN" >&2; return 1; }
@@ -23,14 +23,20 @@ provider::fetch() {
   # sub-issues, and parent is optional metadata - don't abort fetch over it.
   ST_PARENT="$(gh issue view "$id" --json parent --jq '.parent.number // empty' 2>/dev/null || true)"
   ST_REF="GitHub issue #${id}"
-  local slug
-  slug="$(printf '%s' "$ST_TITLE" | tr '[:upper:]' '[:lower:]' \
-        | sed -E 's/[^a-z0-9]+/-/g; s/^-+//; s/-+$//' | cut -d- -f1-6)"
-  [ -n "$slug" ] || slug="ticket"
-  ST_BRANCH="${id}-${slug}"
+  ST_TYPE=""
+  while IFS= read -r label; do
+    case "$label" in
+      type:*)    ST_TYPE="${label#*:}"; break ;;
+      bug|bugfix|fix) ST_TYPE="fix"; break ;;
+      feat|feature|enhancement) ST_TYPE="feat"; break ;;
+      chore|docs|refactor|test|perf|ci|build) ST_TYPE="$label"; break ;;
+      documentation) ST_TYPE="docs"; break ;;
+    esac
+  done < <(jq -r '.labels[]?.name // empty | ascii_downcase' <<<"$json" 2>/dev/null || true)
+  ST_BRANCH=""
 }
 
-provider::create_worktree() { "$WORKTREE_MANAGER" "$ST_BRANCH"; }
+provider::create_worktree() { "$WORKTREE_MANAGER" "$ST_BRANCH" ${ST_WORKTREE:+--dir-name "$ST_WORKTREE"}; }
 
 provider::mark_in_progress() {
   local me; me="$(gh api user --jq .login 2>/dev/null || true)"
