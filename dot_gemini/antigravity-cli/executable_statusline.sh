@@ -11,15 +11,15 @@ IFS=$US read -r cwd model used_pct state sandbox tasks pr_num pr_state pr_url si
     .model.display_name // "",
     (.context_window.used_percentage // 0 | floor),
     .agent_state // "",
-    (if .sandbox | type == "object" then (.sandbox.enabled // "") else "" end),
+    (if (.sandbox | type) == "object" and (.sandbox.enabled != null) then .sandbox.enabled else "" end),
     (.task_count // (if (.subagents | type) == "array" then (.subagents | length) elif (.subagents | type) == "number" then .subagents else "" end)),
     .pr.number // "", .pr.review_state // "", .pr.url // "",
     .session_id // ""
-  ] | map(tostring) | join("\u001f")' 2>/dev/null || printf '\x1f\x1f0\x1f\x1f\x1f\x1f\x1f\x1f\x1f'
+  ] | map(tostring | gsub("[[:cntrl:]]"; "")) | join("\u001f")' 2>/dev/null || printf '\x1f\x1f0\x1f\x1f\x1f\x1f\x1f\x1f\x1f'
 )
 
 cwd="${cwd:-$PWD}"
-used_pct=${used_pct:-0}
+[[ "$used_pct" =~ ^[0-9]+$ ]] || used_pct=0
 
 DIM=$'\e[38;2;140;140;140m'; RST=$'\e[0m'
 GREEN=$'\e[38;2;55;133;4m'; AMBER=$'\e[38;2;169;116;0m'; RED=$'\e[38;2;200;50;50m'
@@ -79,7 +79,7 @@ rounds_seg=""
 gitdir=$(git -C "$cwd" rev-parse --absolute-git-dir 2>/dev/null || true)
 rounds_file="${gitdir:+$gitdir/local-review-rounds}"
 if [ -n "$pr_num" ] || { [ -n "$rounds_file" ] && [ -f "$rounds_file" ]; }; then
-  key="${sid:-$(printf '%s' "$gitdir" | cksum | cut -d' ' -f1)}"
+  key=$(printf '%s' "${sid:-$gitdir}" | cksum | cut -d' ' -f1)
   cache="${TMPDIR:-/tmp}/agy-statusline-rounds-$key"
   if [ ! -f "$cache" ] || [ -n "$(find "$cache" -mmin +1 2>/dev/null)" ] || [ "$rounds_file" -nt "$cache" ]; then
     [ -n "$(find "$cache.lock" -maxdepth 0 -mmin +1 2>/dev/null)" ] && rmdir "$cache.lock" 2>/dev/null
