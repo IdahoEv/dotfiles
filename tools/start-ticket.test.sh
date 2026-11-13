@@ -184,6 +184,9 @@ git -C "$ROOT/widgets" worktree add -q "$ROOT/swt" -b 7-single
 has "single id: session name unchanged" "[PLAN] Is7 Ticket 7" "$ROOT/claude.args"
 (cd "$ROOT/widgets" && PATH="$ROOT/stubbin:$PATH" START_TICKET_PROVIDER_DIR="$CP" FAKE_WT="$ROOT/cwt4" "$ST" 7,8,9,10 --provider fake --launcher bg >/dev/null 2>&1)
 has "long chain: label collapses to first+last" "[PLAN] Is7+10 Ticket 7" "$ROOT/claude.args"
+git -C "$ROOT/widgets" worktree add -q "$ROOT/swt_is" -b Is160-workstream-record
+(cd "$ROOT/widgets" && FAKE_WT="$ROOT/swt_is" PATH="$ROOT/stubbin:$PATH" START_TICKET_PROVIDER_DIR="$CP" "$ST" 160 --provider fake --launcher bg >/dev/null 2>&1)
+has "Is<N> branch: session name uses Is<N> prefix" "[PLAN] Is160 Ticket 160" "$ROOT/claude.args"
 
 # ---- --in-place (cloud sessions: one fixed checkout, no worktree) ---------------
 IP="$ROOT/inplaceproviders"; mkdir -p "$IP"

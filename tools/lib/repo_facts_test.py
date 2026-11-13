@@ -257,6 +257,7 @@ class TicketParsing(Base):
                  "Is160-workstream-record": "160",
                  "Is312+313+315-invoice-totals": "312",
                  "Is7-404-pages": "7",
+                 "Is7-fix-sc-5-sc-6": "7",
                  "Is160/workstream": "160",
                  "bug/Is312+313-invoice-totals": "312",
                  "feat/sc-7435-fix-bug": "7435",
@@ -596,6 +597,7 @@ class Facade(Base):
         cases = {"7-first-ticket": "7", "2-sc-5/foo": "5", "sc-1/x-sc-2/y": "2",
                  "release/2-fix": "", "main": "",
                  "Is160-cloud-branch": "160", "Is312+313-chain": "312",
+                 "Is7-fix-sc-5-sc-6": "7",
                  "Is160/workstream": "160", "bug/Is312+313-chain": "312",
                  "sc-7435-fix-bug": "7435", "sc-10+20-chain": "10"}
         for branch, expected in cases.items():

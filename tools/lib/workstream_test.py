@@ -192,6 +192,29 @@ class RecordPersistenceTests(WorkstreamTestBase):
         ).stdout.strip()
         self.assertEqual(st, "")
 
+    def test_save_record_fails_closed_when_exclude_unwritable(self) -> None:
+        if os.geteuid() == 0:
+            self.skipTest("chmod does not restrict root")
+        repo = self.make_repo("widgets")
+        exclude_path = subprocess.run(
+            ["git", "-C", repo, "rev-parse", "--git-path", "info/exclude"],
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.strip()
+        if not os.path.isabs(exclude_path):
+            exclude_path = os.path.join(repo, exclude_path)
+        Path(exclude_path).parent.mkdir(parents=True, exist_ok=True)
+        Path(exclude_path).write_text("", encoding="utf-8")
+        os.chmod(exclude_path, 0o444)
+        try:
+            rec = workstream.WorkstreamRecord(key="Is1", ticket_provider="github")
+            with self.assertRaises(OSError):
+                workstream.save_record(repo, rec)
+            self.assertFalse(os.path.exists(os.path.join(repo, ".workstream.json")))
+        finally:
+            os.chmod(exclude_path, 0o644)
+
     def test_legacy_chain_file_fallback(self) -> None:
         repo = self.make_repo("widgets")
         subprocess.run(["git", "-C", repo, "checkout", "-q", "-b", "12-head-ticket"], check=True)

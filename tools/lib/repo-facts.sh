@@ -87,10 +87,12 @@ gt::ticket_from_branch() {  # <branch> [<dir>] → id, or nothing
       fi
     fi
   fi
-  if [[ "$b" =~ sc-[0-9]+.*sc-([0-9]+) ]]; then
+  if [[ "$b" =~ (^|/)Is([0-9]+)(\+[0-9]+)*(-|/|$) ]]; then
+    printf '%s' "${BASH_REMATCH[2]}"
+  elif [[ "$b" =~ sc-[0-9]+.*sc-([0-9]+) ]]; then
     printf '%s' "${BASH_REMATCH[1]}"
-  elif [[ "$b" =~ (^|/)(Is|sc-)([0-9]+)(\+[0-9]+)*(-|/|$) ]]; then
-    printf '%s' "${BASH_REMATCH[3]}"
+  elif [[ "$b" =~ (^|/)sc-([0-9]+)(\+[0-9]+)*(-|/|$) ]]; then
+    printf '%s' "${BASH_REMATCH[2]}"
   elif [[ "$b" =~ .*sc-([0-9]+) ]]; then
     printf '%s' "${BASH_REMATCH[1]}"
   elif [[ "$b" =~ ^([1-9][0-9]*)- ]]; then

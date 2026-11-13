@@ -164,12 +164,15 @@ chain_tag() {
 # came from distills to "Data Deletion Retention Policy". See gt::distill_title.
 make_label() {
   local branch="$1" maxlen="$2" pretty="${3:-}" num="" slug="$1" distilled=""
-  if [[ "$branch" =~ ^([0-9]+)-(.+)$ ]]; then
+  if [[ "$branch" =~ (^|/)Is([0-9]+(\+[0-9]+)*)[-/](.+)$ ]]; then
+    num="Is${ST_CHAIN_TAG:-${BASH_REMATCH[2]}}"
+    slug="${BASH_REMATCH[4]}"
+  elif [[ "$branch" =~ ^([0-9]+)-(.+)$ ]]; then
     num="Is${ST_CHAIN_TAG:-${BASH_REMATCH[1]}}"
     slug="${BASH_REMATCH[2]}"
-  elif [[ "$branch" =~ (^|/)sc-([0-9]+)/(.+)$ ]]; then
-    num="Sc${BASH_REMATCH[2]}"
-    slug="${BASH_REMATCH[3]}"
+  elif [[ "$branch" =~ (^|/)sc-([0-9]+(\+[0-9]+)*)[-/](.+)$ ]]; then
+    num="Sc${ST_CHAIN_TAG:-${BASH_REMATCH[2]}}"
+    slug="${BASH_REMATCH[4]}"
   fi
   if [ -n "${ST_TITLE:-}" ] || [ -n "${GT_LABEL_OVERRIDE:-}" ]; then
     distilled="$(gt::label_from_title "${ST_TITLE:-}")"

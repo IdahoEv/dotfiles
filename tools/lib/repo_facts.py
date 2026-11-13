@@ -172,10 +172,13 @@ def ticket_from_branch(branch: str, dir_: str | None = None) -> str:
         info = _record_ticket_info(dir_)
         if info:
             return info[0]
+    m = re.search(r"(?:^|/)Is([0-9]+)(?:\+[0-9]+)*(?:-|/|$)", branch)
+    if m:
+        return m.group(1)
     ids = re.findall(r"sc-([0-9]+)", branch)
     if len(ids) > 1:
         return ids[-1]
-    m = re.search(r"(?:^|/)(?:Is|sc-)([0-9]+)(?:\+[0-9]+)*(?:-|/|$)", branch)
+    m = re.search(r"(?:^|/)sc-([0-9]+)(?:\+[0-9]+)*(?:-|/|$)", branch)
     if m:
         return m.group(1)
     if ids:

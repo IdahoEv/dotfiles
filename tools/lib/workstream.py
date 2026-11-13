@@ -175,16 +175,13 @@ def ensure_excluded(worktree: str) -> None:
     if not rel:
         return
     exclude_path = Path(rel if os.path.isabs(rel) else os.path.join(worktree, rel))
-    try:
-        exclude_path.parent.mkdir(parents=True, exist_ok=True)
-        existing = exclude_path.read_text(encoding="utf-8", errors="surrogateescape") if exclude_path.is_file() else ""
-        lines = [line.strip() for line in existing.splitlines()]
-        if RECORD_FILENAME not in lines and f"/{RECORD_FILENAME}" not in lines:
-            prefix = "" if (not existing or existing.endswith("\n")) else "\n"
-            with exclude_path.open("a", encoding="utf-8", errors="surrogateescape") as f:
-                f.write(f"{prefix}{RECORD_FILENAME}\n")
-    except OSError:
-        pass
+    exclude_path.parent.mkdir(parents=True, exist_ok=True)
+    existing = exclude_path.read_text(encoding="utf-8", errors="surrogateescape") if exclude_path.is_file() else ""
+    lines = [line.strip() for line in existing.splitlines()]
+    if RECORD_FILENAME not in lines and f"/{RECORD_FILENAME}" not in lines:
+        prefix = "" if (not existing or existing.endswith("\n")) else "\n"
+        with exclude_path.open("a", encoding="utf-8", errors="surrogateescape") as f:
+            f.write(f"{prefix}{RECORD_FILENAME}\n")
 
 
 def save_record(worktree: str, record: WorkstreamRecord) -> str:
