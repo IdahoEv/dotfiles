@@ -17,6 +17,13 @@ import sys
 MANAGED = json.loads(r"""
 {
   "$schema": "https://antigravity.google/schemas/v1/settings.json",
+  "statusLine": {
+    "type": "command",
+    "command": "{{ .chezmoi.homeDir }}/.gemini/antigravity-cli/statusline.sh",
+    "padding": 0,
+    "enabled": true,
+    "stack_with_default": false
+  },
   "permissions": {
     "allow": [
       "command(git)",
