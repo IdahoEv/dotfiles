@@ -400,6 +400,31 @@ class CliTests(WorkstreamTestBase):
         )
         self.assertEqual(r_branch.stdout.strip(), "Is312+313+315-invoice-totals-staging")
 
+    def test_cli_ephemeral_render_without_record(self) -> None:
+        repo = self.make_repo("widgets")
+        r_branch = subprocess.run(
+            [
+                CLI,
+                "render",
+                "branch",
+                "--dir",
+                repo,
+                "--provider",
+                "shortcut",
+                "--ids",
+                "7435",
+                "--title",
+                "Fix invoice totals",
+                "--type",
+                "fix",
+            ],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        self.assertEqual(r_branch.stdout.strip(), "sc-7435-invoice-totals")
+        self.assertFalse(os.path.exists(os.path.join(repo, ".workstream.json")))
+
 
 if __name__ == "__main__":
     unittest.main()

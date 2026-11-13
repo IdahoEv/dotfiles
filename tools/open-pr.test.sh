@@ -248,6 +248,11 @@ new_repo 42-foo; rm -f "$WATCH_ARGS"
 out="$(run --title "Add foo" --review copilot --no-watch)"
 check "--no-watch skips the watcher"    "watch=skipped" "$(grep '^watch=' <<<"$out")"
 
+# Cloud Is<N>- and chain Is<N>+<M>- branches extract the issue number instead of opening a ticketless PR.
+new_repo Is88-cloud-branch
+out="$(run --title "Cloud fix" --review none)"
+check "cloud Is<N>- branch: PR title prefixed" "Shipped Is88: Cloud fix" "$(grep '^Shipped ' <<<"$out")"
+
 # ---- telemetry --------------------------------------------------------------
 export WF_TELEMETRY_LOG="$ROOT/events.jsonl"
 # Events need an owner/repo origin. The URL is display-only: pushes are routed

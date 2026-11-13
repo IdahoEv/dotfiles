@@ -519,6 +519,11 @@ def build_parser() -> argparse.ArgumentParser:
     p_ren = sub.add_parser("render")
     p_ren.add_argument("surface", choices=SURFACES)
     p_ren.add_argument("--dir", default=".")
+    p_ren.add_argument("--provider", default="")
+    p_ren.add_argument("--ids", default="")
+    p_ren.add_argument("--title", default="")
+    p_ren.add_argument("--desc", default="")
+    p_ren.add_argument("--type", dest="type_", default="")
 
     p_set = sub.add_parser("setting")
     p_set.add_argument("key")
@@ -573,9 +578,28 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.cmd == "render":
-        rec = load_record(args.dir)
-        if rec is None:
-            return 1
+        if args.ids:
+            ids = [i.strip() for i in args.ids.split(",") if i.strip()]
+            if args.desc:
+                desc = format_text(repo_facts.sanitize_label(args.desc), "words")
+            elif args.title or os.environ.get("GT_LABEL_OVERRIDE"):
+                desc = format_text(repo_facts.label_from_title(args.title), "words")
+            else:
+                desc = ""
+            rec = WorkstreamRecord(
+                version=1,
+                kind="ticket",
+                tickets=[{"id": tid, "url": ""} for tid in ids],
+                ticket_provider=args.provider or "github",
+                desc=desc,
+                type=args.type_,
+                tags=["PLAN"],
+            )
+            rec.key = derive_key(rec, args.dir)
+        else:
+            rec = load_record(args.dir)
+            if rec is None:
+                return 1
         sys.stdout.write(render_surface(rec, args.surface, args.dir))
         return 0
 

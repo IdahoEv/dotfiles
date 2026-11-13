@@ -572,7 +572,7 @@ export WORKTREE_MANAGER
 provider::available || die "provider '$provider' unavailable (CLI missing or not authed)"
 
 # ---- run ---------------------------------------------------------------
-ST_TITLE="" ST_BODY="" ST_URL="" ST_PARENT="" ST_BRANCH="" ST_REF=""
+ST_TITLE="" ST_BODY="" ST_URL="" ST_PARENT="" ST_BRANCH="" ST_WORKTREE="" ST_REF="" ST_TYPE=""
 # Chain links are fetched first and the head last, so ST_* (branch, label,
 # parent) are the head's when the loop ends; the per-ticket arrays keep the
 # kickoff sections.
@@ -584,6 +584,25 @@ for ((_n = ${#ids[@]} - 1; _n >= 0; _n--)); do
 done
 : "${ST_REF:=${provider} ticket ${id}}"
 
+_ws_title="${chain_titles[0]:-}"
+[ "$_ws_title" != "untitled" ] || _ws_title=""
+if [ -z "$ST_BRANCH" ] && [ -x "$SCRIPT_DIR/workstream.sh" ]; then
+  ST_BRANCH="$("$SCRIPT_DIR/workstream.sh" render branch \
+    --dir "$repo_root" \
+    --provider "$provider" \
+    --ids "$(IFS=,; echo "${ids[*]}")" \
+    "--title=$_ws_title" \
+    "--desc=${GT_LABEL_OVERRIDE:-}" \
+    "--type=$ST_TYPE" 2>/dev/null || true)"
+  ST_WORKTREE="$("$SCRIPT_DIR/workstream.sh" render worktree \
+    --dir "$repo_root" \
+    --provider "$provider" \
+    --ids "$(IFS=,; echo "${ids[*]}")" \
+    "--title=$_ws_title" \
+    "--desc=${GT_LABEL_OVERRIDE:-}" \
+    "--type=$ST_TYPE" 2>/dev/null || true)"
+fi
+
 # --print-title: resolve the ticket and stop. Lets a caller that wants to supply
 # its own label (GT_LABEL_OVERRIDE) read the title FIRST — the branch and the
 # worktree dir are both named during create_worktree below, so an override
@@ -594,7 +613,7 @@ if [ "$mode" = "print-title" ]; then
   # GT_LABEL_OVERRIDE by design, so printing it here tells the caller the slug
   # is not theirs to choose (short of GT_LABEL_SLUG_OVERRIDE).
   printf 'title=%s\nproposed_label=%s\nproposed_slug=%s\n' \
-    "$ST_TITLE" "$(gt::distill_title "$ST_TITLE")" "$(gt::slug_title "$ST_TITLE")"
+    "$ST_TITLE" "$(gt::distill_title "$ST_TITLE")" "${ST_BRANCH:-$(gt::slug_title "$ST_TITLE")}"
   exit 0
 fi
 
@@ -646,6 +665,7 @@ _ws_title="${chain_titles[0]:-}"
   --ids "$(IFS=,; echo "${ids[*]}")" \
   --urls "$(IFS=,; echo "${chain_urls[*]}")" \
   "--title=$_ws_title" \
+  "--type=$ST_TYPE" \
   || echo "start-ticket: WARN workstream record not written" >&2
 
 # mark_in_progress is best-effort and some tracker CLIs fail while exiting 0, so

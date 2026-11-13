@@ -419,86 +419,40 @@ wm_conf_get() {  # <key> → value, or empty
 # Fetch ticket details from Shortcut and generate branch name
 fetch_shortcut_ticket() {
     local ticket_id="$1"
+    local repo_dir="${2:-.}"
 
-    # Check if short CLI is available
     if ! command -v short >/dev/null 2>&1; then
         error "'short' CLI not found. Install it from https://github.com/shortcut/short (brew install short on macOS)"
     fi
 
     info "Fetching Shortcut ticket #${ticket_id}..."
 
-    # Get the git branch name format from Shortcut. `--git-branch-short` works by
-    # literally checking the branch out in the current git repo — so run it inside
-    # a throwaway repo, not the user's. Otherwise it hijacks whatever branch the
-    # invoking worktree has checked out. The throwaway repo needs an `origin`
-    # remote pointing at the real repo and at least one commit, or `short`
-    # silently skips the checkout and never prints the branch name.
-    local branch_name
-    local scratch
-    scratch=$(mktemp -d)
-    git -C "$scratch" init -q -b main
-    git -C "$scratch" remote add origin "$(git remote get-url origin 2>/dev/null || echo https://example.invalid/x.git)"
-    git -C "$scratch" commit -q --allow-empty -m scratch
-    # The checkout result line goes to stderr (and is CLI-version-fragile), so
-    # don't parse CLI text at all — read the checked-out branch from the scratch
-    # repo's git state.
-    (cd "$scratch" && short story "$ticket_id" --git-branch-short --quiet >/dev/null 2>&1 || true)
-    branch_name=$(git -C "$scratch" branch --show-current 2>/dev/null || true)
-    [ "$branch_name" = "main" ] && branch_name=""    # checkout never happened
-    rm -rf "$scratch"
-
-    if [ -z "$branch_name" ]; then
-        # Fallback: try to construct it manually
-        branch_name="sc-${ticket_id}"
-        warning "Could not auto-generate branch name, using: $branch_name"
-    fi
-
-    # Shortcut generates branch names as {username}/{ticket}/{slug} (e.g.
-    # evandorn4181/sc-74085/fix-thing). Strip the username segment so branch
-    # and worktree dir names start at the ticket id. Only strip when the
-    # middle segment is exactly a numeric ticket id (sc-<digits>) AND the
-    # first segment isn't a conventional prefix, so feature/sc-...,
-    # fix/sc-..., and non-ticket slugs like sc-foo1 survive.
-    case "$branch_name" in
-        feature/*|fix/*|chore/*|bug/*|hotfix/*|refactor/*|docs/*|test/*|release/*)
-            ;;
-        *)
-            if [[ "$branch_name" =~ ^[^/]+/sc-[0-9]+/[^/]+$ ]]; then
-                local stripped="${branch_name#*/}"
-                info "Stripping username prefix from branch name: $branch_name -> $stripped"
-                branch_name="$stripped"
-            fi
-            ;;
+    local out title stype branch_name slug
+    GT_LABEL_NOISE="${GT_LABEL_NOISE:-$(wm_conf_get label_noise)}"
+    out="$(FORCE_COLOR=0 short story "$ticket_id" --quiet 2>/dev/null || true)"
+    title="$(awk 'NR==1 && match($0,/^#[0-9]+[[:space:]]+/){print substr($0,RLENGTH+1);exit}' <<<"$out")" || title=""
+    stype="$(awk 'match($0,/^[Tt]ype:[[:space:]]*/){print tolower(substr($0,RLENGTH+1));exit}' <<<"$out")" || stype=""
+    case "$stype" in
+        feature) stype="feat" ;;
+        bug)     stype="fix" ;;
+        chore)   stype="chore" ;;
+        *)       stype="" ;;
     esac
 
-    # Replace Shortcut's slug with one distilled from the ticket title.
-    #
-    # Shortcut builds its slug by lowercasing and hyphenating the WHOLE title,
-    # bracketed track tags included, then truncating to a fixed width — so
-    # "[Core] Decide billing data deletion & retention policy (...)" arrives as
-    # "-core--decide-billing-data-deletio": leading junk, and the one word that
-    # identifies the ticket cut in half. Everything downstream (worktree dir,
-    # agent-view row) inherits that. Distilling the title instead yields
-    # "data-deletion-retention-policy". See gt::slug_title in lib/repo-facts.sh.
-    #
-    # Only the slug segment changes; the sc-<id> segment is preserved exactly,
-    # which is what Shortcut matches branches to stories on.
-    # $GT_LABEL_OVERRIDE, when a caller set one, wins over both — see
-    # gt::label_from_title. It is sanitized there, not trusted, because it
-    # lands in a branch name.
-    local title slug
-    GT_LABEL_NOISE="${GT_LABEL_NOISE:-$(wm_conf_get label_noise)}"
-    title="$(FORCE_COLOR=0 short story "$ticket_id" --quiet 2>/dev/null \
-             | awk 'NR==1 && match($0,/^#[0-9]+[[:space:]]+/){print substr($0,RLENGTH+1);exit}')" || title=""
-    if [ -n "$title" ] || [ -n "${GT_LABEL_OVERRIDE:-}" ]; then
+    if [ -x "$SCRIPT_DIR/workstream.sh" ]; then
+        branch_name="$("$SCRIPT_DIR/workstream.sh" render branch \
+            --dir "$repo_dir" \
+            --provider shortcut \
+            --ids "$ticket_id" \
+            "--title=$title" \
+            "--desc=${GT_LABEL_OVERRIDE:-}" \
+            "--type=$stype" 2>/dev/null || true)"
+    fi
+
+    if [ -z "$branch_name" ]; then
         slug="$(gt::slug_title "$title")"
-        if [ -n "$slug" ] && [[ "$branch_name" =~ ^(.*)(sc-[0-9]+)/.+$ ]]; then
-            local rebuilt="${BASH_REMATCH[1]}${BASH_REMATCH[2]}/${slug}"
-            if [ "$rebuilt" != "$branch_name" ]; then
-                info "Branch name from ticket title: $branch_name -> $rebuilt"
-                branch_name="$rebuilt"
-            fi
-        fi
+        branch_name="${slug:+sc-${ticket_id}-${slug}}"
+        : "${branch_name:=sc-${ticket_id}}"
     fi
 
     echo "$branch_name"
@@ -610,7 +564,7 @@ find_ticket_branch() {  # <ticket-id> → branch name, or empty
     local id="$1"
     [ -n "$id" ] || return 0
     git for-each-ref --format='%(refname:short)' refs/heads 2>/dev/null \
-        | grep -E "(^|/)sc-${id}(/|\$)" \
+        | grep -E "(^|/)sc-${id}(\\+[0-9]+)*(/|-|\$)" \
         | head -1 || true
 }
 
@@ -666,15 +620,17 @@ create_or_use_worktree() {
     local branch_name="$1"
     local base_branch="$2"
     local main_worktree="$3"
+    local dir_name="${4:-}"
     local is_new_worktree=true
 
     # Determine project root (parent of main worktree)
     local project_root
     project_root=$(dirname "$main_worktree")
 
-    # Sanitize branch name for directory (replace slashes with dashes)
-    local dir_name
-    dir_name=$(echo "$branch_name" | sed 's/\//-/g')
+    # Sanitize branch name for directory (replace slashes with dashes) unless overridden
+    if [ -z "$dir_name" ]; then
+        dir_name=$(echo "$branch_name" | sed 's/\//-/g')
+    fi
 
     local worktree_path="${project_root}/${dir_name}"
 
@@ -1028,6 +984,7 @@ EOF
 
 main() {
     local branch_name=""
+    local dir_name=""
     local ticket_id=""
     local use_shortcut=false
     local open_claude=false
@@ -1050,23 +1007,37 @@ main() {
             exit 0
         fi
 
-        # Check for --claude flag
-        if [ "$1" = "--claude" ]; then
-            open_claude=true
-            shift
-        fi
-
-        # Check if we still have arguments after consuming --claude
-        if [ $# -eq 0 ]; then
+        while [ $# -gt 0 ]; do
+            case "$1" in
+                --claude)
+                    open_claude=true
+                    shift
+                    ;;
+                --sc)
+                    [ -n "${2:-}" ] || error "Shortcut ticket ID required after --sc"
+                    use_shortcut=true
+                    ticket_id="$2"
+                    shift 2
+                    ;;
+                --branch)
+                    [ -n "${2:-}" ] || error "Branch name required after --branch"
+                    branch_name="$2"
+                    shift 2
+                    ;;
+                --dir-name)
+                    [ -n "${2:-}" ] || error "Directory name required after --dir-name"
+                    dir_name="$2"
+                    shift 2
+                    ;;
+                *)
+                    [ -z "$branch_name" ] || error "Unexpected argument: $1"
+                    branch_name="$1"
+                    shift
+                    ;;
+            esac
+        done
+        if [ "$use_shortcut" != true ] && [ -z "$branch_name" ]; then
             interactive_mode=true
-        elif [ "$1" = "--sc" ]; then
-            if [ -z "${2:-}" ]; then
-                error "Shortcut ticket ID required after --sc"
-            fi
-            use_shortcut=true
-            ticket_id="$2"
-        else
-            branch_name="$1"
         fi
     fi
 
@@ -1090,9 +1061,11 @@ main() {
             error "No branch selected"
         fi
         info "Selected: ${branch_name}"
-    # If using Shortcut, fetch the branch name
+    # If using Shortcut, fetch the branch name unless caller already resolved it
     elif [ "$use_shortcut" = true ]; then
-        branch_name=$(fetch_shortcut_ticket "$ticket_id")
+        if [ -z "$branch_name" ]; then
+            branch_name=$(fetch_shortcut_ticket "$ticket_id" "$main_worktree")
+        fi
         info "Branch name: ${branch_name}"
     else
         info "Branch name: ${branch_name}"
@@ -1134,7 +1107,7 @@ main() {
         fi
     else
         # Create or checkout worktree
-        worktree_path=$(create_or_use_worktree "$branch_name" "$base_branch" "$main_worktree")
+        worktree_path=$(create_or_use_worktree "$branch_name" "$base_branch" "$main_worktree" "$dir_name")
 
         # Only do setup for newly created worktrees
         sync_configuration "$main_worktree" "$worktree_path"

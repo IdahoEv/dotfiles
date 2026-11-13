@@ -525,7 +525,7 @@ def collect_facts(branch: str, dir_: str) -> Facts:
     shallow = ("yes"
                if _git(worktree, "rev-parse", "--is-shallow-repository") == "true"
                else "no")
-    ticket_id = repo_facts.ticket_from_branch(branch)
+    ticket_id = repo_facts.ticket_from_branch(branch, worktree)
     pr = gh_pr_facts(worktree, branch)
     base, base_source = resolve_base(pr.base, dir_, worktree)
     merged, base_fetch = merged_status(branch, base, worktree)
@@ -535,7 +535,7 @@ def collect_facts(branch: str, dir_: str) -> Facts:
         branch=branch,
         ticket_id=ticket_id,
         chain_ids=chain_ids(ticket_id, worktree),
-        ticket_scheme=repo_facts.ticket_scheme(branch),
+        ticket_scheme=repo_facts.ticket_scheme(branch, worktree),
         base=base,
         base_source=base_source,
         pr_number=pr.number,

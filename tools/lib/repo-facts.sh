@@ -72,15 +72,24 @@ gt::repo_key() {  # <url> → "owner/repo", or nothing
   printf '%s' "$path"
 }
 
-# The two branch conventions worktree-manager.sh creates:
-#   <id>-<slug>                GitHub issues (default)
-#   [<prefix>/]sc-<id>/<slug>  Shortcut      (--sc)
-# Shortcut is matched first: an sc- id is unambiguous, while the GitHub form is
-# just "leading digits" and would also match a branch like "2-sc-5/foo". The
-# LAST sc-<id> wins — a follow-up branch can name several. Native bash (header).
-gt::ticket_from_branch() {  # <branch> → id, or nothing
-  local b="$1"
-  if [[ "$b" =~ .*sc-([0-9]+) ]]; then
+# Ticket id / scheme: read .workstream.json first when <dir> is given, then
+# accept both resolver key prefixes (Is<N>[+<N>...]-, sc-<N>[+<N>...]-) and
+# legacy forms (<N>-slug, [<prefix>/]sc-<id>/<slug>). Native bash (header).
+gt::ticket_from_branch() {  # <branch> [<dir>] → id, or nothing
+  local b="$1" dir="${2:-}" rec="" id=""
+  if [ -n "$dir" ] && [ -f "$dir/.workstream.json" ]; then
+    rec="$dir/.workstream.json"
+    if command -v jq >/dev/null 2>&1; then
+      id="$(jq -r '.tickets[0].id // empty' "$rec" 2>/dev/null || true)"
+      if [ -n "$id" ]; then
+        printf '%s' "$id"
+        return 0
+      fi
+    fi
+  fi
+  if [[ "$b" =~ ^(Is|sc-)([0-9]+)(\+[0-9]+)*(-|$) ]]; then
+    printf '%s' "${BASH_REMATCH[2]}"
+  elif [[ "$b" =~ .*sc-([0-9]+) ]]; then
     printf '%s' "${BASH_REMATCH[1]}"
   elif [[ "$b" =~ ^([1-9][0-9]*)- ]]; then
     printf '%s' "${BASH_REMATCH[1]}"
@@ -88,12 +97,25 @@ gt::ticket_from_branch() {  # <branch> → id, or nothing
   return 0
 }
 
-# Which dialect the branch uses, so callers can label a ticket ref correctly
-# without re-parsing. Prints shortcut | github | unknown. Native bash (header).
-gt::ticket_scheme() {  # <branch> → shortcut | github | unknown
-  local b="$1"
-  if   [[ "$b" =~ .*sc-[0-9]+ ]];  then printf 'shortcut'
-  elif [[ "$b" =~ ^[1-9][0-9]*- ]]; then printf 'github'
+# Which dialect the workstream or branch uses: shortcut | github | unknown.
+gt::ticket_scheme() {  # <branch> [<dir>] → shortcut | github | unknown
+  local b="$1" dir="${2:-}" rec="" prov=""
+  if [ -n "$dir" ] && [ -f "$dir/.workstream.json" ]; then
+    rec="$dir/.workstream.json"
+    if command -v jq >/dev/null 2>&1; then
+      prov="$(jq -r 'if (.tickets | length) > 0 then (.ticket_provider // "github") else empty end' "$rec" 2>/dev/null || true)"
+      if [ -n "$prov" ]; then
+        if [ "$prov" = "shortcut" ]; then printf 'shortcut'
+        else printf 'github'
+        fi
+        return 0
+      fi
+    fi
+  fi
+  if   [[ "$b" =~ ^sc-[0-9]+(\+[0-9]+)*(-|$) ]]; then printf 'shortcut'
+  elif [[ "$b" =~ ^Is[0-9]+(\+[0-9]+)*(-|$) ]];  then printf 'github'
+  elif [[ "$b" =~ .*sc-[0-9]+ ]];                  then printf 'shortcut'
+  elif [[ "$b" =~ ^[1-9][0-9]*- ]];                 then printf 'github'
   else printf 'unknown'
   fi
 }

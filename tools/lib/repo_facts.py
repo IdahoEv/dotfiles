@@ -29,6 +29,7 @@ network is the host CLI fallback in default_branch; no writes, no side effects.
 from __future__ import annotations
 
 import argparse
+import json
 import locale
 import os
 import re
@@ -134,13 +135,46 @@ def default_branch_ref(dir_: str = ".") -> str:
 
 # ---- ticket id from branch ---------------------------------------------------
 
-def ticket_from_branch(branch: str) -> str:
-    """Ticket id from a branch, or "".
+def _record_ticket_info(dir_: str) -> tuple[str, str] | None:
+    """Return (head_ticket_id, provider) from .workstream.json when present."""
+    if not dir_:
+        return None
+    root = git(dir_, "rev-parse", "--show-toplevel") or dir_
+    path = os.path.join(root, ".workstream.json")
+    try:
+        with open(path, encoding="utf-8") as fh:
+            data = json.load(fh)
+    except (OSError, json.JSONDecodeError, ValueError):
+        return None
+    if not isinstance(data, dict):
+        return None
+    tickets = data.get("tickets")
+    if not isinstance(tickets, list) or not tickets:
+        return None
+    first = tickets[0]
+    if not isinstance(first, dict) or not first.get("id"):
+        return None
+    provider = str(data.get("ticket_provider") or "github")
+    scheme = "shortcut" if provider == "shortcut" else "github"
+    return str(first["id"]), scheme
 
-    Shortcut branches (sc-<id>) are matched first: an sc- id is unambiguous
-    while the GitHub form is just "leading digits". The LAST sc-<id> wins —
-    a follow-up branch can name several.
+
+def ticket_from_branch(branch: str, dir_: str | None = None) -> str:
+    """Ticket id from .workstream.json (when dir_ is given) or branch name, or "".
+
+    When parsing a branch:
+    1. New resolver key prefix (`^(?:Is|sc-)([0-9]+)(?:\\+[0-9]+)*(?:-|/|$)`),
+       returning the head ticket id.
+    2. Legacy Shortcut (`sc-<id>`, last match wins).
+    3. Legacy GitHub (`^([1-9][0-9]*)-`).
     """
+    if dir_:
+        info = _record_ticket_info(dir_)
+        if info:
+            return info[0]
+    m = re.match(r"^(?:Is|sc-)([0-9]+)(?:\+[0-9]+)*(?:-|$)", branch)
+    if m:
+        return m.group(1)
     ids = re.findall(r"sc-([0-9]+)", branch)
     if ids:
         return ids[-1]
@@ -148,8 +182,16 @@ def ticket_from_branch(branch: str) -> str:
     return m.group(1) if m else ""
 
 
-def ticket_scheme(branch: str) -> str:
-    """Which dialect the branch uses: shortcut | github | unknown."""
+def ticket_scheme(branch: str, dir_: str | None = None) -> str:
+    """Which dialect the workstream or branch uses: shortcut | github | unknown."""
+    if dir_:
+        info = _record_ticket_info(dir_)
+        if info:
+            return info[1]
+    if re.match(r"^sc-[0-9]+(?:\+[0-9]+)*(?:-|$)", branch):
+        return "shortcut"
+    if re.match(r"^Is[0-9]+(?:\+[0-9]+)*(?:-|$)", branch):
+        return "github"
     if re.search(r"sc-[0-9]+", branch):
         return "shortcut"
     if re.match(r"[1-9][0-9]*-", branch):

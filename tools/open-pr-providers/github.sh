@@ -15,7 +15,9 @@ provider::available() {
 
 provider::issue_from_branch() {  # <branch> → echoes issue number, or nothing
   local branch="$1"
-  if [[ "$branch" =~ ^([1-9][0-9]*)-.+$ ]]; then
+  if [[ "$branch" =~ ^Is([1-9][0-9]*)(\+[0-9]+)*(-.+|$) ]]; then
+    printf '%s\n' "${BASH_REMATCH[1]}"
+  elif [[ "$branch" =~ ^([1-9][0-9]*)-.+$ ]]; then
     printf '%s\n' "${BASH_REMATCH[1]}"
   fi
   return 0
