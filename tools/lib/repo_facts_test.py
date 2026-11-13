@@ -516,6 +516,16 @@ class Cli(Base):
         r = self.run_cli("ticket-from-branch", "release/2-fix")
         self.assertEqual((r.returncode, r.stdout), (0, b""))
 
+    def test_ticket_cli_accepts_optional_dir(self):
+        with tempfile.TemporaryDirectory() as repo:
+            subprocess.run(["git", "-C", repo, "init", "-q"], check=True)
+            with open(os.path.join(repo, ".workstream.json"), "w", encoding="utf-8") as fh:
+                json.dump({"tickets": [{"id": "55", "url": ""}], "ticket_provider": "shortcut"}, fh)
+            r1 = self.run_cli("ticket-from-branch", "unrelated", repo)
+            self.assertEqual((r1.returncode, r1.stdout), (0, b"55"))
+            r2 = self.run_cli("ticket-scheme", "unrelated", repo)
+            self.assertEqual((r2.returncode, r2.stdout), (0, b"shortcut"))
+
     def test_get_dispatcher_accepts_underscore_names(self):
         r = self.run_cli("get", "ticket_from_branch", "7-first-ticket")
         self.assertEqual((r.returncode, r.stdout), (0, b"7"))

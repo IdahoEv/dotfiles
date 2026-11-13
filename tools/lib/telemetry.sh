@@ -60,7 +60,7 @@ wf::emit() {
   # for events emitted before the ticket branch exists.
   line="$(jq -nc \
     --arg ts "$(wf::ts)" --arg event "$event" --arg branch "$branch" --arg repo "$repo" \
-    --arg bticket "$(gt::ticket_from_branch "$branch")" --arg bscheme "$(gt::ticket_scheme "$branch")" \
+    --arg bticket "$(gt::ticket_from_branch "$branch" "$dir")" --arg bscheme "$(gt::ticket_scheme "$branch" "$dir")" \
     --arg session_id "${CLAUDE_CODE_SESSION_ID:-}" --arg job_id "$(basename "${CLAUDE_JOB_DIR:-}")" \
     --args '
     def coerce:

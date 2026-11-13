@@ -240,6 +240,20 @@ class Errors(Base):
             self.assertEqual(r.returncode, 1, flag)
             self.assertIn(f"{flag} needs a value", r.stderr.decode())
 
+    def test_workstream_record_matches_unrelated_branch(self):
+        import json
+        a_custom = self._worktree(self.repoA, "a_custom", "custom/a-slug")
+        b_custom = self._worktree(self.repoB, "b_custom", "custom/b-slug")
+        (b_custom / "dirty.txt").write_text("d\n")
+        rec = json.dumps({"tickets": [{"id": "77", "url": ""}], "ticket_provider": "github"})
+        (a_custom / ".workstream.json").write_text(rec)
+        (b_custom / ".workstream.json").write_text(rec)
+        r = self.run_sib(cwd=a_custom)
+        self.assertEqual(r.returncode, 0)
+        lines = [line for line in r.stdout.decode().splitlines() if line]
+        self.assertEqual(len(lines), 1)
+        self.assertEqual(lines[0], f"repoB\t{b_custom}\tcustom/b-slug\tdirty")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -62,6 +62,9 @@ reset; ev ticket.start ticket=7
 check "explicit ticket overrides branch" "acme/widgets#7" "$(last .run_id)"
 reset; ev ticket.start ticket=7 scheme=shortcut
 check "explicit scheme" "sc-7" "$(last .run_id)"
+printf '{"tickets":[{"id":"88","url":""}],"ticket_provider":"shortcut"}\n' > "$ROOT/repo/.workstream.json"
+reset; ev x
+check "workstream record overrides non-ticket branch" "sc-88" "$(last .run_id)"
 
 # ---- coercion and sanitization -------------------------------------------------
 new_repo 42-add-thing
