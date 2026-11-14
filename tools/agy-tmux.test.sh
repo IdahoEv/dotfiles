@@ -26,7 +26,7 @@ has() {
 }
 
 # ---- mocks -----------------------------------------------------------------
-mkdir -p "$ROOT/bin" "$ROOT/wt1" "$ROOT/wt2" "$ROOT/wt3" "$ROOT/wt4"
+mkdir -p "$ROOT/bin" "$ROOT/wt1" "$ROOT/wt2" "$ROOT/wt3" "$ROOT/wt4" "$ROOT/wt5"
 
 cat > "$ROOT/bin/mock-start-ticket.sh" <<EOF
 #!/usr/bin/env bash
@@ -54,6 +54,11 @@ case "\$group" in
     printf 'Kickoff sc-12345\n' > "\$kf"
     printf 'worktree=%s\nkickoff=%s\nbranch=sc-12345-fix-bug\n' "$ROOT/wt4" "\$kf"
     ;;
+  77,78)
+    kf="$ROOT/kickoff-77-78.md"
+    printf 'Kickoff 77+78\n' > "\$kf"
+    printf 'worktree=%s\nkickoff=%s\nbranch=\n' "$ROOT/wt5" "\$kf"
+    ;;
   *)
     echo "unexpected group: \$group" >&2; exit 1 ;;
 esac
@@ -65,7 +70,12 @@ printf '%s\n' "\$*" >> "$ROOT/agy-calls.log"
 sleep 30
 EOF
 
-chmod +x "$ROOT/bin/mock-start-ticket.sh" "$ROOT/bin/mock-agy"
+cat > "$ROOT/bin/mock-agy-fast-exit" <<EOF
+#!/usr/bin/env bash
+exit 1
+EOF
+
+chmod +x "$ROOT/bin/mock-start-ticket.sh" "$ROOT/bin/mock-agy" "$ROOT/bin/mock-agy-fast-exit"
 
 export AGY_TMUX_START_TICKET="$ROOT/bin/mock-start-ticket.sh"
 export AGY_TMUX_AGY_BIN="$ROOT/bin/mock-agy"
@@ -81,7 +91,10 @@ if "$TOOLS/agy-tmux.sh" --session "missing-ws" --no-attach >/dev/null 2>&1; then
 fi
 printf 'PASS no-args on missing session exits non-zero\n'
 
-# ---- 3. launch chain + single ticket ---------------------------------------
+# ---- 3. preserve existing C-z binding & launch chain + single ticket -------
+tmux -L "$SOCK" new-session -d -s "other-ws" "sleep 30"
+tmux -L "$SOCK" bind-key -n C-z "display-message custom-cz"
+
 "$TOOLS/agy-tmux.sh" --session "test-ws" --no-attach 12,13 14 >/dev/null
 
 win_list="$(tmux -L "$SOCK" list-windows -t '=test-ws' -F '#{window_index}:#{window_name}')"
@@ -95,6 +108,7 @@ check "@agy_dashboard option set" "1" "$tag"
 cz_bind="$(tmux -L "$SOCK" list-keys -T root | grep 'C-z' || true)"
 has "root C-z binding installed" "@agy_dashboard" "$cz_bind"
 has "root C-z selects window 0" "select-window -t :0" "$cz_bind"
+has "root C-z preserves prior binding as fallback" "display-message custom-cz" "$cz_bind"
 
 for _ in 1 2 3 4 5; do
   [ -f "$ROOT/agy-calls.log" ] && [ "$(wc -l < "$ROOT/agy-calls.log")" -ge 2 ] && break
@@ -118,6 +132,24 @@ tmux -L "$SOCK" kill-window -t '=test-ws:0'
 win_list3="$(tmux -L "$SOCK" list-windows -t '=test-ws' -F '#{window_index}:#{window_name}')"
 has "window 0 recreated on re-attach" "0:dashboard" "$win_list3"
 
+# ---- 5b. repair non-dashboard window 0 on reuse ----------------------------
+tmux -L "$SOCK" new-session -d -s "manual-ws" -n "shell" "sleep 30"
+"$TOOLS/agy-tmux.sh" --session "manual-ws" --no-attach >/dev/null
+manual_wins="$(tmux -L "$SOCK" list-windows -t '=manual-ws' -F '#{window_index}:#{window_name}')"
+has "manual session window 0 replaced with dashboard" "0:dashboard" "$manual_wins"
+has "manual session original shell preserved" ":shell" "$manual_wins"
+
+# ---- 5c. fallback chain label uses '+' not ',' -----------------------------
+"$TOOLS/agy-tmux.sh" --session "test-ws" --no-attach 77,78 >/dev/null
+win_list4="$(tmux -L "$SOCK" list-windows -t '=test-ws' -F '#{window_index}:#{window_name}')"
+has "fallback chain label replaces comma with plus" ":77+78" "$win_list4"
+
+# ---- 5d. fast-exiting agy stays alive via remain-on-exit -------------------
+AGY_TMUX_AGY_BIN="$ROOT/bin/mock-agy-fast-exit" "$TOOLS/agy-tmux.sh" --session "fast-exit-ws" --no-attach 15 >/dev/null
+sleep 0.2
+fe_wins="$(tmux -L "$SOCK" list-windows -t '=fast-exit-ws' -F '#{window_index}:#{window_name}:#{pane_dead}')"
+has "fast-exit window kept alive with pane_dead=1" "1:Is15:1" "$fe_wins"
+
 # ---- 6. session prefix isolation (=exact match) ----------------------------
 tmux -L "$SOCK" new-session -d -s "test-exact-other" "sleep 30"
 "$TOOLS/agy-tmux.sh" --session "test-exact" --no-attach 15 >/dev/null
@@ -138,3 +170,15 @@ if "$TOOLS/agy-tmux.sh" --session "test-partial" --no-attach 999 15 >/dev/null 2
 fi
 partial_wins="$(tmux -L "$SOCK" list-windows -t '=test-partial' -F '#{window_index}:#{window_name}')"
 has "valid group launches despite earlier failing group" "1:Is15" "$partial_wins"
+
+# ---- 8. C-z restored when last @agy_dashboard session closes ---------------
+for s in test-ws manual-ws fast-exit-ws test-exact test-partial; do
+  tmux -L "$SOCK" kill-session -t "=$s"
+done
+sleep 0.2
+restored_cz="$(tmux -L "$SOCK" list-keys -T root | grep 'C-z' || true)"
+has "prior C-z binding restored after agy sessions close" "display-message custom-cz" "$restored_cz"
+if printf '%s' "$restored_cz" | grep -qF '@agy_dashboard'; then
+  fail "C-z binding still contains @agy_dashboard after cleanup"
+fi
+printf 'PASS C-z @agy_dashboard wrapper cleaned up\n'

@@ -226,18 +226,24 @@ def _detach_client(base: list[str]) -> None:
     subprocess.run([*base, "detach-client"], check=False)
 
 
-def _curses_loop(stdscr: Any, session: str, socket: str | None, refresh_sec: float) -> None:
+def _curses_loop(
+    stdscr: Any,
+    session: str,
+    socket: str | None,
+    refresh_sec: float,
+    tmux_bin: str = "tmux",
+) -> None:
     curses.curs_set(0)
     stdscr.keypad(True)
     stdscr.timeout(int(refresh_sec * 1000))
-    base = _tmux_base("tmux", socket)
+    base = _tmux_base(tmux_bin, socket)
     selected = 0
     rows: list[WorkstreamRow] = []
     needs_refresh = True
 
     while True:
         if needs_refresh:
-            rows = fetch_windows(session, socket=socket)
+            rows = fetch_windows(session, tmux_bin=tmux_bin, socket=socket)
             needs_refresh = False
         if rows:
             selected = max(0, min(selected, len(rows) - 1))
@@ -290,10 +296,15 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Interactive tmux dashboard for agy-tmux.")
     parser.add_argument("--session", required=True, help="Target tmux session name")
     parser.add_argument("--socket", default=None, help="Optional tmux -L socket name")
+    parser.add_argument(
+        "--tmux-bin",
+        default=os.environ.get("AGY_TMUX_TMUX_BIN") or "tmux",
+        help="Path or name of the tmux binary",
+    )
     parser.add_argument("--refresh", type=float, default=2.0, help="Refresh interval in seconds")
     args = parser.parse_args(argv)
 
-    curses.wrapper(_curses_loop, args.session, args.socket, args.refresh)
+    curses.wrapper(_curses_loop, args.session, args.socket, args.refresh, args.tmux_bin)
     return 0
 
 

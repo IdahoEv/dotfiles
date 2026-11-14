@@ -115,7 +115,7 @@ class TestHelpers(unittest.TestCase):
                 status="running",
                 last_line="working",
             )
-            for i in range(8)
+            for i in range(10)
         ]
         lines = dash.render_lines(rows, selected=7, width=100, session="agy-dotfiles", max_rows=3)
         joined = "\n".join(lines)
@@ -189,7 +189,7 @@ class TestHelpers(unittest.TestCase):
             self.assertEqual(rows[0].desc, "Is99-some-branch")
             self.assertEqual(rows[0].status, "exited")
 
-    def test_curses_loop_skips_fetch_on_navigation(self):
+    def test_curses_loop_skips_fetch_on_navigation_and_uses_tmux_bin(self):
         rows = [
             dash.WorkstreamRow("1", "Is1", "%1", "/tmp/1", "Is1", "One", "", "running", "ok"),
             dash.WorkstreamRow("2", "Is2", "%2", "/tmp/2", "Is2", "Two", "", "exited", "done"),
@@ -214,11 +214,20 @@ class TestHelpers(unittest.TestCase):
             mock.patch.object(dash, "_kill_window") as kill_mock,
         ):
             with self.assertRaises(StopIteration):
-                dash._curses_loop(FakeStdscr(), "agy-dotfiles", None, 2.0)
+                dash._curses_loop(FakeStdscr(), "agy-dotfiles", None, 2.0, tmux_bin="/custom/tmux")
 
         # Initial fetch + 1 on 'r' + 1 after 'x' killing exited window = 3 (not 6)
         self.assertEqual(fetch_mock.call_count, 3)
-        kill_mock.assert_called_once_with(["tmux"], "agy-dotfiles", "2")
+        fetch_mock.assert_called_with("agy-dotfiles", tmux_bin="/custom/tmux", socket=None)
+        kill_mock.assert_called_once_with(["/custom/tmux"], "agy-dotfiles", "2")
+
+    def test_main_honors_agy_tmux_bin_env(self):
+        with (
+            mock.patch.dict(os.environ, {"AGY_TMUX_TMUX_BIN": "/env/tmux"}),
+            mock.patch.object(curses, "wrapper") as wrapper_mock,
+        ):
+            dash.main(["--session", "agy-dotfiles"])
+        wrapper_mock.assert_called_once_with(dash._curses_loop, "agy-dotfiles", None, 2.0, "/env/tmux")
 
 
 if __name__ == "__main__":

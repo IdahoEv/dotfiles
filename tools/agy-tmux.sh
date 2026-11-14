@@ -75,9 +75,34 @@ attach_session() {
   fi
 }
 
+is_dashboard_win0() {
+  tmux_cmd list-windows -t "=$session" -F '#{window_index}:#{window_name}:#{@agy_dashboard_win}' 2>/dev/null \
+    | grep -qx '0:dashboard:1'
+}
+
+install_cz_binding() {
+  local existing_cz fallback_cmd
+  existing_cz="$(tmux_cmd list-keys -T root 2>/dev/null | grep -E '[[:space:]]C-z[[:space:]]' || true)"
+  if ! printf '%s' "$existing_cz" | grep -qF '@agy_dashboard'; then
+    if [ -n "$existing_cz" ]; then
+      tmux_cmd set-option -s @agy_prev_cz_bind "$existing_cz"
+      fallback_cmd="$(printf '%s' "$existing_cz" | sed -E 's/^bind-key[[:space:]]+(-r[[:space:]]+)?-T[[:space:]]+root[[:space:]]+C-z[[:space:]]+//')"
+      [ -n "$fallback_cmd" ] || fallback_cmd="send-keys C-z"
+    else
+      tmux_cmd set-option -su @agy_prev_cz_bind 2>/dev/null || true
+      fallback_cmd="send-keys C-z"
+    fi
+    tmux_cmd bind-key -n C-z if-shell -F '#{==:#{@agy_dashboard},1}' 'select-window -t :0' "$fallback_cmd"
+  fi
+
+  local hook_sh
+  hook_sh='if ! tmux list-sessions -F "#{@agy_dashboard}" 2>/dev/null | grep -qx 1; then prev=$(tmux show-options -sv @agy_prev_cz_bind 2>/dev/null || true); tmux unbind-key -n C-z 2>/dev/null || true; if [ -n "$prev" ]; then printf "%s\n" "$prev" | tmux source-file - 2>/dev/null || true; tmux set-option -su @agy_prev_cz_bind 2>/dev/null || true; fi; tmux set-hook -gu "session-closed[99]" 2>/dev/null || true; fi'
+  tmux_cmd set-hook -g 'session-closed[99]' "run-shell '$hook_sh'"
+}
+
 ensure_session() {
   local dash_cmd
-  dash_cmd="python3 -I $(printf '%q' "$DASHBOARD_PY") --session $(printf '%q' "$session")"
+  dash_cmd="python3 -I $(printf '%q' "$DASHBOARD_PY") --session $(printf '%q' "$session") --tmux-bin $(printf '%q' "$TMUX_BIN")"
   if [ -n "${AGY_TMUX_SOCKET:-}" ]; then
     dash_cmd="$dash_cmd --socket $(printf '%q' "$AGY_TMUX_SOCKET")"
   fi
@@ -89,15 +114,20 @@ ensure_session() {
     if [ "$created_idx" != "0" ]; then
       tmux_cmd move-window -s "=$session:$created_idx" -t "=$session:0"
     fi
-  elif ! tmux_cmd list-windows -t "=$session" -F '#{window_index}' 2>/dev/null | grep -qx '0'; then
+    tmux_cmd set-window-option -t "=$session:0" @agy_dashboard_win 1
+  elif ! is_dashboard_win0; then
+    if tmux_cmd list-windows -t "=$session" -F '#{window_index}' 2>/dev/null | grep -qx '0'; then
+      tmux_cmd move-window -s "=$session:0" -t "=$session:"
+    fi
     created_idx="$(tmux_cmd new-window -d -P -F '#{window_index}' -t "=$session:" -n "dashboard" "$dash_cmd")"
     if [ "$created_idx" != "0" ]; then
       tmux_cmd move-window -s "=$session:$created_idx" -t "=$session:0"
     fi
+    tmux_cmd set-window-option -t "=$session:0" @agy_dashboard_win 1
   fi
 
   tmux_cmd set-option -t "$session" @agy_dashboard 1
-  tmux_cmd bind-key -n C-z if-shell -F '#{==:#{@agy_dashboard},1}' 'select-window -t :0' 'send-keys C-z'
+  install_cz_binding
 }
 
 session=""
@@ -135,9 +165,7 @@ session="${session//[.:]/-}"
 
 if [ "${#groups[@]}" -eq 0 ]; then
   if tmux_cmd has-session -t "=$session" 2>/dev/null; then
-    if ! tmux_cmd list-windows -t "=$session" -F '#{window_index}' 2>/dev/null | grep -qx '0'; then
-      ensure_session
-    fi
+    ensure_session
     tmux_cmd select-window -t "=$session:0"
     attach_session
     exit 0
@@ -165,7 +193,7 @@ window_label_for() {  # <group> <branch> [<worktree>]
   elif [ -n "$branch" ]; then
     printf '%s' "${branch%%-*}"
   else
-    printf '%s' "${group//,+}"
+    printf '%s' "${group//,/+}"
   fi
 }
 
@@ -204,8 +232,9 @@ launch_group() {  # <group>
   win_name="$(window_label_for "$group" "$branch" "$wt")"
   agent_cmd="$(printf 'cd %q && exec %q --mode plan --prompt-interactive "$(cat %q)"' "$wt" "$AGY_BIN" "$kf")"
 
-  win_idx="$(tmux_cmd new-window -d -P -F '#{window_index}' -t "=$session:" -n "$win_name" -c "$wt" "$agent_cmd")"
+  win_idx="$(tmux_cmd new-window -d -P -F '#{window_index}' -t "=$session:" -n "$win_name" -c "$wt" "sleep 60")"
   tmux_cmd set-window-option -t "=$session:$win_idx" remain-on-exit on
+  tmux_cmd respawn-pane -k -t "=$session:$win_idx" "$agent_cmd"
   printf 'agy-tmux: launched [%s] %s in %s (window %s)\n' "$win_name" "$branch" "$wt" "$win_idx"
 }
 
