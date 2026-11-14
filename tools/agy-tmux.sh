@@ -39,6 +39,7 @@ done
 SCRIPT_DIR="$(cd -P "$(dirname "$_src")" && pwd)"
 
 START_TICKET_BIN="${AGY_TMUX_START_TICKET:-$SCRIPT_DIR/start-ticket.sh}"
+WORKSTREAM_BIN="${AGY_TMUX_WORKSTREAM_BIN:-$SCRIPT_DIR/workstream.sh}"
 AGY_BIN="${AGY_TMUX_AGY_BIN:-agy}"
 TMUX_BIN="${AGY_TMUX_TMUX_BIN:-tmux}"
 DASHBOARD_PY="$SCRIPT_DIR/lib/agy_tmux_dashboard.py"
@@ -63,6 +64,40 @@ default_session_name() {
   [ -n "$root" ] && name="agy-$(basename "$root")"
   # tmux forbids '.' and ':' in session names
   printf '%s' "${name//[.:]/-}"
+}
+
+attach_session() {
+  [ "$no_attach" -eq 0 ] || return 0
+  if [ -n "${TMUX:-}" ] && [ -z "${AGY_TMUX_SOCKET:-}" ]; then
+    tmux_cmd switch-client -t "=$session:0"
+  else
+    exec env -u TMUX "$TMUX_BIN" ${AGY_TMUX_SOCKET:+-L "$AGY_TMUX_SOCKET"} attach-session -t "=$session:0"
+  fi
+}
+
+ensure_session() {
+  local dash_cmd
+  dash_cmd="python3 -I $(printf '%q' "$DASHBOARD_PY") --session $(printf '%q' "$session")"
+  if [ -n "${AGY_TMUX_SOCKET:-}" ]; then
+    dash_cmd="$dash_cmd --socket $(printf '%q' "$AGY_TMUX_SOCKET")"
+  fi
+
+  local created_idx
+  if ! tmux_cmd has-session -t "=$session" 2>/dev/null; then
+    created_idx="$(tmux_cmd new-session -d -P -F '#{window_index}' -s "$session" -n "dashboard" "$dash_cmd")"
+    tmux_cmd set-option -t "$session" base-index 0
+    if [ "$created_idx" != "0" ]; then
+      tmux_cmd move-window -s "=$session:$created_idx" -t "=$session:0"
+    fi
+  elif ! tmux_cmd list-windows -t "=$session" -F '#{window_index}' 2>/dev/null | grep -qx '0'; then
+    created_idx="$(tmux_cmd new-window -d -P -F '#{window_index}' -t "=$session:" -n "dashboard" "$dash_cmd")"
+    if [ "$created_idx" != "0" ]; then
+      tmux_cmd move-window -s "=$session:$created_idx" -t "=$session:0"
+    fi
+  fi
+
+  tmux_cmd set-option -t "$session" @agy_dashboard 1
+  tmux_cmd bind-key -n C-z if-shell -F '#{==:#{@agy_dashboard},1}' 'select-window -t :0' 'send-keys C-z'
 }
 
 session=""
@@ -99,15 +134,12 @@ command -v python3 >/dev/null 2>&1 || die "python3 not found"
 session="${session//[.:]/-}"
 
 if [ "${#groups[@]}" -eq 0 ]; then
-  if tmux_cmd has-session -t "$session" 2>/dev/null; then
-    tmux_cmd select-window -t "$session:0"
-    if [ "$no_attach" -eq 0 ]; then
-      if [ -n "${TMUX:-}" ]; then
-        tmux_cmd switch-client -t "$session:0"
-      else
-        exec "$TMUX_BIN" ${AGY_TMUX_SOCKET:+-L "$AGY_TMUX_SOCKET"} attach-session -t "$session:0"
-      fi
+  if tmux_cmd has-session -t "=$session" 2>/dev/null; then
+    if ! tmux_cmd list-windows -t "=$session" -F '#{window_index}' 2>/dev/null | grep -qx '0'; then
+      ensure_session
     fi
+    tmux_cmd select-window -t "=$session:0"
+    attach_session
     exit 0
   fi
   usage >&2
@@ -118,32 +150,22 @@ fi
   || die "start-ticket.sh not found ($START_TICKET_BIN)"
 command -v "$AGY_BIN" >/dev/null 2>&1 || die "agy CLI not found ($AGY_BIN)"
 
-ensure_session() {
-  local dash_cmd
-  dash_cmd="python3 -I $(printf '%q' "$DASHBOARD_PY") --session $(printf '%q' "$session")"
-  if [ -n "${AGY_TMUX_SOCKET:-}" ]; then
-    dash_cmd="$dash_cmd --socket $(printf '%q' "$AGY_TMUX_SOCKET")"
-  fi
-
-  if ! tmux_cmd has-session -t "$session" 2>/dev/null; then
-    local created_idx
-    created_idx="$(tmux_cmd new-session -d -P -F '#{window_index}' -s "$session" -n "dashboard" "$dash_cmd")"
-    tmux_cmd set-option -t "$session" base-index 0
-    if [ "$created_idx" != "0" ]; then
-      tmux_cmd move-window -s "$session:$created_idx" -t "$session:0"
+window_label_for() {  # <group> <branch> [<worktree>]
+  local group="$1" branch="$2" wt="${3:-}"
+  if [ -n "$wt" ] && [ -x "$WORKSTREAM_BIN" ]; then
+    local key
+    key="$("$WORKSTREAM_BIN" render key --dir "$wt" 2>/dev/null || true)"
+    if [ -n "$key" ]; then
+      printf '%s' "$key"
+      return 0
     fi
   fi
-
-  tmux_cmd set-option -t "$session" @agy_dashboard 1
-  tmux_cmd bind-key -n C-z if-shell -F '#{==:#{@agy_dashboard},1}' 'select-window -t :0' 'send-keys C-z'
-}
-
-window_label_for() {  # <group> <branch>
-  local group="$1" branch="$2"
-  if [ -n "$branch" ]; then
+  if [[ "$branch" =~ ^(sc-[0-9]+(\+[0-9]+)*|Is[0-9]+(\+[0-9]+)*)- ]]; then
+    printf '%s' "${BASH_REMATCH[1]}"
+  elif [ -n "$branch" ]; then
     printf '%s' "${branch%%-*}"
   else
-    printf '%s' "${group//,/+}"
+    printf '%s' "${group//,+}"
   fi
 }
 
@@ -153,7 +175,10 @@ launch_group() {  # <group>
   [ -z "$provider" ] || st_args+=(--provider "$provider")
 
   local out
-  out="$("$START_TICKET_BIN" "${st_args[@]}")"
+  if ! out="$("$START_TICKET_BIN" "${st_args[@]}")"; then
+    printf 'agy-tmux: start-ticket.sh failed for %s\n' "$group" >&2
+    return 1
+  fi
 
   local wt="" kf="" branch="" line=""
   while IFS= read -r line; do
@@ -164,28 +189,40 @@ launch_group() {  # <group>
     esac
   done <<< "$out"
 
-  [ -n "$wt" ] && [ -d "$wt" ] || die "start-ticket.sh did not return a valid worktree for '$group'"
-  [ -n "$kf" ] && [ -f "$kf" ] || die "start-ticket.sh did not return a valid kickoff for '$group'"
+  if [ -z "$wt" ] || [ ! -d "$wt" ]; then
+    printf 'agy-tmux: start-ticket.sh did not return a valid worktree for %s\n' "$group" >&2
+    return 1
+  fi
+  if [ -z "$kf" ] || [ ! -f "$kf" ]; then
+    printf 'agy-tmux: start-ticket.sh did not return a valid kickoff for %s\n' "$group" >&2
+    return 1
+  fi
+
+  ensure_session
 
   local win_name agent_cmd win_idx
-  win_name="$(window_label_for "$group" "$branch")"
+  win_name="$(window_label_for "$group" "$branch" "$wt")"
   agent_cmd="$(printf 'cd %q && exec %q --mode plan --prompt-interactive "$(cat %q)"' "$wt" "$AGY_BIN" "$kf")"
 
-  win_idx="$(tmux_cmd new-window -d -P -F '#{window_index}' -t "$session:" -n "$win_name" -c "$wt" "$agent_cmd")"
-  tmux_cmd set-window-option -t "$session:$win_idx" remain-on-exit on
+  win_idx="$(tmux_cmd new-window -d -P -F '#{window_index}' -t "=$session:" -n "$win_name" -c "$wt" "$agent_cmd")"
+  tmux_cmd set-window-option -t "=$session:$win_idx" remain-on-exit on
   printf 'agy-tmux: launched [%s] %s in %s (window %s)\n' "$win_name" "$branch" "$wt" "$win_idx"
 }
 
-ensure_session
+launched=0
+failed=0
 for g in "${groups[@]}"; do
-  launch_group "$g"
+  if launch_group "$g"; then
+    launched=$((launched + 1))
+  else
+    failed=1
+  fi
 done
 
-tmux_cmd select-window -t "$session:0"
-if [ "$no_attach" -eq 0 ]; then
-  if [ -n "${TMUX:-}" ]; then
-    tmux_cmd switch-client -t "$session:0"
-  else
-    exec "$TMUX_BIN" ${AGY_TMUX_SOCKET:+-L "$AGY_TMUX_SOCKET"} attach-session -t "$session:0"
-  fi
+if [ "$launched" -eq 0 ]; then
+  exit 1
 fi
+
+tmux_cmd select-window -t "=$session:0"
+attach_session
+exit "$failed"

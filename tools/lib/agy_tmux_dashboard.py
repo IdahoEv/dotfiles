@@ -112,7 +112,7 @@ def fetch_windows(
     """Query tmux for all non-dashboard windows in <session> and enrich with workstream metadata."""
     base = _tmux_base(tmux_bin, socket)
     fmt = "#{window_index}\t#{window_name}\t#{pane_id}\t#{pane_current_path}\t#{pane_dead}\t#{window_activity}"
-    raw = _run_cmd([*base, "list-windows", "-t", session, "-F", fmt])
+    raw = _run_cmd([*base, "list-windows", "-t", f"={session}", "-F", fmt])
     if not raw.strip():
         return []
 
@@ -132,7 +132,7 @@ def fetch_windows(
             last_activity = None
 
         ticket_ref, desc = load_workstream_meta(pane_path)
-        branch = _git_branch(pane_path)
+        branch = "" if desc else _git_branch(pane_path)
         captured = _run_cmd([*base, "capture-pane", "-p", "-t", pane_id, "-S", "-30"])
         rows.append(
             WorkstreamRow(
@@ -160,11 +160,23 @@ def _clip(text: str, width: int) -> str:
     return text[: width - 1] + "…"
 
 
+def visible_slice(total: int, selected: int, max_rows: int | None) -> tuple[int, int]:
+    """Return [start, end) slice of rows keeping selected centered in max_rows."""
+    if total <= 0:
+        return (0, 0)
+    if max_rows is None or total <= max_rows:
+        return (0, total)
+    cap = max(1, max_rows)
+    start = max(0, min(selected - cap // 2, total - cap))
+    return (start, start + cap)
+
+
 def render_lines(
     rows: list[WorkstreamRow],
     selected: int,
     width: int,
     session: str,
+    max_rows: int | None = None,
 ) -> list[str]:
     """Render the dashboard header, workstream table, and footer into text lines."""
     w = max(40, width)
@@ -177,7 +189,9 @@ def render_lines(
     else:
         header = f"  {'#':<3} {'Ticket':<12} {'Status':<12} {'Title':<28} {'Last output'}"
         lines.append(_clip(header, w))
-        for idx, row in enumerate(rows):
+        start, end = visible_slice(len(rows), selected, max_rows)
+        for idx in range(start, end):
+            row = rows[idx]
             marker = ">" if idx == selected else " "
             fixed_width = 2 + 4 + 13 + 13 + 29
             rem = max(10, w - fixed_width)
@@ -201,11 +215,11 @@ def render_lines(
 
 
 def _switch_to_window(base: list[str], session: str, window_index: str) -> None:
-    subprocess.run([*base, "select-window", "-t", f"{session}:{window_index}"], check=False)
+    subprocess.run([*base, "select-window", "-t", f"={session}:{window_index}"], check=False)
 
 
 def _kill_window(base: list[str], session: str, window_index: str) -> None:
-    subprocess.run([*base, "kill-window", "-t", f"{session}:{window_index}"], check=False)
+    subprocess.run([*base, "kill-window", "-t", f"={session}:{window_index}"], check=False)
 
 
 def _detach_client(base: list[str]) -> None:
@@ -218,19 +232,26 @@ def _curses_loop(stdscr: Any, session: str, socket: str | None, refresh_sec: flo
     stdscr.timeout(int(refresh_sec * 1000))
     base = _tmux_base("tmux", socket)
     selected = 0
+    rows: list[WorkstreamRow] = []
+    needs_refresh = True
 
     while True:
-        rows = fetch_windows(session, socket=socket)
+        if needs_refresh:
+            rows = fetch_windows(session, socket=socket)
+            needs_refresh = False
         if rows:
             selected = max(0, min(selected, len(rows) - 1))
         else:
             selected = 0
 
         height, width = stdscr.getmaxyx()
-        lines = render_lines(rows, selected, width - 1, session)
+        max_rows = max(1, height - 6)
+        start, _ = visible_slice(len(rows), selected, max_rows)
+        selected_line = 3 + (selected - start)
+        lines = render_lines(rows, selected, width - 1, session, max_rows=max_rows)
         stdscr.erase()
         for y, text in enumerate(lines[: max(1, height - 1)]):
-            attr = curses.A_REVERSE if (rows and y == selected + 3) else curses.A_NORMAL
+            attr = curses.A_REVERSE if (rows and y == selected_line) else curses.A_NORMAL
             if y == 0:
                 attr = curses.A_BOLD
             try:
@@ -241,6 +262,7 @@ def _curses_loop(stdscr: Any, session: str, socket: str | None, refresh_sec: flo
 
         ch = stdscr.getch()
         if ch == -1 or ch in (ord("r"), ord("R")):
+            needs_refresh = True
             continue
         if ch in (ord("q"), ord("Q")):
             _detach_client(base)
@@ -261,6 +283,7 @@ def _curses_loop(stdscr: Any, session: str, socket: str | None, refresh_sec: flo
             row = rows[selected]
             if row.status == "exited":
                 _kill_window(base, session, row.window_index)
+                needs_refresh = True
 
 
 def main(argv: list[str] | None = None) -> int:
