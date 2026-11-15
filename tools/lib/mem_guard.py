@@ -585,7 +585,7 @@ def _cmd_check(args: argparse.Namespace) -> int:
     say(f"mem-guard: BLOCKED{ctx}: not launching more work while memory pressure is dangerous ({host_line(host)})")
     explain()
     say("mem-guard:   free memory by closing sessions yourself (no session was killed, no work discarded),")
-    say("mem-guard:   or override once with --force / MEM_GUARD_OVERRIDE=1, or tune mem_block_free_pct / mem_guard=off")
+    say("mem-guard:   or override once with MEM_GUARD_OVERRIDE=1 (or --force where the launcher takes it), or tune mem_block_free_pct / mem_enabled=off")
     return EXIT_BLOCKED
 
 
