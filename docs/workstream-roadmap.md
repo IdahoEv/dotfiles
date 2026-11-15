@@ -1,0 +1,18 @@
+# Workstream Workflow & Tmux Dashboard Roadmap
+
+**Goal:** Evolve the ticket workflow (prompts, agents, skills, `.workstream.json`, scripts) and tmux dashboard into a **backend-agnostic agentic workflow** supporting `claude`, `agy`, and `codex` as peer backends—cleanly extractable from `dotfiles` into a standalone project.
+
+## Architecture Boundary
+
+- **Core contract:** `<worktree>/.workstream.json` + tmux window options (`@ws_backend`, `@ws_dashboard`, `@ws_phase`).
+- **Dashboard isolation:** `agy_tmux_dashboard.py` (future `ws_tmux_dashboard.py`) depends only on tmux and `.workstream.json`—never on `start-ticket.sh`, `gh`, or a specific agent CLI.
+- **Canonical core vs. adapters:** Long-term, prompts/commands/agents/skills move from `dot_claude/` into a neutral workflow core, with thin per-backend bindings for `~/.claude`, `~/.gemini`, and `~/.codex`.
+
+## Phases
+
+| Phase | Scope | Target |
+| --- | --- | --- |
+| **1. Local dashboard parity** | Per-project colors ([#187](https://github.com/IdahoEv/dotfiles/issues/187)), `.workstream.json` phase/PR tags ([#188](https://github.com/IdahoEv/dotfiles/issues/188)), group-by-project & group-by-state views ([#189](https://github.com/IdahoEv/dotfiles/issues/189)) | `dotfiles` (`agy-tmux`) |
+| **2. Backend-agnostic multiplexer** | Rename `agy-tmux` → `ws-tmux`; add `--backend claude\|agy\|codex` and `Backend` column; add `--launcher tmux` to `start-ticket.sh`; custom 256-color palette & `PR` column | `dotfiles` (`ws-tmux`) |
+| **3. Cross-machine dashboard** | Async SSH status poller (`Host` column) across laptop + desktop; `Enter` on remote row attaches via `ssh -t <host> tmux attach` | `ws-tmux` |
+| **4. Standalone extraction** | Invert `dot_claude/` → neutral workflow core + per-backend installers; extract workflow + `ws-tmux` into its own repository | Standalone repo |
