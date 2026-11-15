@@ -250,5 +250,87 @@ class Pipeline(unittest.TestCase):
         self.assertEqual([f["severity"] for f in got], ["High"])
 
 
+class BotBackfillTests(unittest.TestCase):
+    def test_plan_bot_pr_inline_and_review_body_verdicts(self):
+        pr_data = {
+            "number": 173,
+            "branch": "Is10+11-chain-feature",
+            "comments": [
+                {"id": 101, "user": {"login": "copilot-pull-request-reviewer[bot]"},
+                 "path": "a.py", "original_line": 12, "original_commit_id": "a" * 40,
+                 "created_at": "2026-11-12T01:00:00Z", "body": "Null check missing here."},
+                {"id": 102, "user": {"login": "copilot-pull-request-reviewer[bot]"},
+                 "path": "b.py", "original_line": 30, "original_commit_id": "a" * 40,
+                 "created_at": "2026-11-12T01:00:00Z", "body": "Unused import."},
+                {"id": 103, "user": {"login": "IdahoEv"}, "in_reply_to_id": 102,
+                 "created_at": "2026-11-12T01:05:00Z", "body": "Disagree, this is not a bug."},
+                {"id": 104, "user": {"login": "copilot-pull-request-reviewer[bot]"},
+                 "path": "c.py", "original_line": 5, "original_commit_id": "a" * 40,
+                 "created_at": "2026-11-12T01:00:00Z", "body": "Edge case on empty input."},
+            ],
+            "reviews": [
+                {"id": 500, "user": {"login": "copilot-pull-request-reviewer[bot]"},
+                 "commit_id": "b" * 40, "submitted_at": "2026-11-12T01:00:00Z",
+                 "body": "<details><summary>Suppressed comments (1)</summary>\n- **d.py:9** — Consider caching this. [RESOLVED]\n</details>"},
+            ],
+            "threads": [
+                {"isResolved": False, "comments": {"nodes": [{"databaseId": 101, "body": "Null check"}]}},
+                {"isResolved": True, "comments": {"nodes": [{"databaseId": 102, "body": "Unused"}]}},
+                {"isResolved": False, "comments": {"nodes": [{"databaseId": 104, "body": "Edge case"}]}},
+            ],
+            "commit_files": [
+                ("2026-11-12T01:10:00Z", {"a.py"}),
+            ],
+        }
+        new, summary = bf.plan_bot_pr(pr_data, [], "IdahoEv/dotfiles")
+        self.assertEqual(summary["run_id"], "IdahoEv/dotfiles#10")
+        self.assertEqual((summary["inline"], summary["review_body"]), (3, 1))
+        findings = [e for e in new if e["event"] == "review.finding"]
+        results = [e for e in new if e["event"] == "review.result"]
+        self.assertEqual(len(findings), 4)
+        self.assertEqual(len(results), 1)
+        by_path = {f["path"]: f for f in findings}
+        self.assertEqual((by_path["a.py"]["verdict"], by_path["a.py"]["validity"], by_path["a.py"]["comment_id"]),
+                         ("fixed", "valid", 101))
+        self.assertEqual((by_path["b.py"]["verdict"], by_path["b.py"]["validity"]),
+                         ("dismissed", "rejected"))
+        self.assertEqual((by_path["c.py"]["verdict"], by_path["c.py"]["validity"]),
+                         ("deferred", "valid"))
+        self.assertEqual((by_path["d.py"]["verdict"], by_path["d.py"]["sha"], by_path["d.py"].get("comment_id")),
+                         ("fixed", "b" * 40, None))
+        self.assertTrue(all(e["backfill"] is True for e in new))
+        self.assertEqual((results[0]["fixed"], results[0]["dismissed"], results[0]["deferred"]), (2, 1, 1))
+
+    def test_numeric_branch_and_idempotency_with_live_events(self):
+        existing = [
+            {"v": 1, "ts": "2026-11-12T00:00:00Z", "run_id": "IdahoEv/dotfiles#160",
+             "repo": "IdahoEv/dotfiles", "ticket": "160", "branch": "160-workstream",
+             "event": "review.finding", "source": "bot", "reviewer": "copilot", "comment_id": 201},
+        ]
+        pr_data = {
+            "number": 178,
+            "branch": "160-workstream",
+            "comments": [
+                {"id": 201, "user": {"login": "copilot-pull-request-reviewer[bot]"},
+                 "path": "x.py", "original_line": 1, "original_commit_id": "c" * 40,
+                 "created_at": "2026-11-12T01:00:00Z", "body": "Already logged live."},
+                {"id": 202, "user": {"login": "copilot-pull-request-reviewer[bot]"},
+                 "path": "y.py", "original_line": 2, "original_commit_id": "c" * 40,
+                 "created_at": "2026-11-12T01:00:00Z", "body": "Missing from live log."},
+            ],
+            "reviews": [],
+            "threads": [],
+            "commit_files": [],
+        }
+        new, _ = bf.plan_bot_pr(pr_data, existing, "IdahoEv/dotfiles")
+        with tempfile.TemporaryDirectory() as d:
+            log = os.path.join(d, "events.jsonl")
+            w1, s1 = bf.append_new(log, new, existing)
+            self.assertEqual((w1, s1), (2, 1))  # 202 finding + review.result; 201 skipped
+            existing2 = existing + bf.load_log(log)
+            w2, s2 = bf.append_new(log, new, existing2)
+            self.assertEqual((w2, s2), (0, 3))
+
+
 if __name__ == "__main__":
     unittest.main()

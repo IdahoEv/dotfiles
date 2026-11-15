@@ -393,6 +393,14 @@ class Report(Base):
     def test_bot_finding_without_identity_is_not_a_gap(self):
         r = self.review_run([self.finding("2026-10-20T09:00:00Z", "acme/w#5", reviewer="copilot",
                                           source="bot", validity="valid", sha="c" * 40)])
+
+    def test_backfilled_bot_findings_are_counted(self):
+        events = [{"v": 1, "ts": "2026-10-20T09:00:00Z", "run_id": "acme/w#5", "event": "review.finding",
+                   "reviewer": "copilot", "source": "bot", "severity": "Medium", "verdict": "fixed",
+                   "validity": "valid", "path": "a.py", "claim": "a.py: bug", "comment_id": 1, "backfill": True}]
+        r = self.review_run(events)
+        self.assertEqual(r["reviews"]["by_reviewer"]["copilot"]["fixed"], 1)
+        self.assertEqual(r["reviews"]["by_reviewer"]["copilot"]["valid"], 1)
         self.assertFalse(any("without finding_id" in g for g in r["gaps"]))
 
     def test_bot_findings_join_overlap_but_not_local_fallback_totals(self):

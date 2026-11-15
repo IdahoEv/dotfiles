@@ -84,6 +84,26 @@ wf::emit() {
   [ -n "$line" ] || return 0
 
   log="$(wf::log_path)"
+  if [ "$event" = "review.finding" ] && [ -f "$log" ]; then
+    case "$line" in
+      *'"source":"bot"'*)
+        if grep -F '"source":"bot"' "$log" 2>/dev/null \
+          | jq -se --argjson new "$line" '
+              any(.[]; .event == "review.finding" and .run_id == $new.run_id and (
+                if ($new.comment_id // null) != null then
+                  .comment_id == $new.comment_id
+                else
+                  (.sha // "") == ($new.sha // "")
+                  and (.path // "") == ($new.path // "")
+                  and (.line // null) == ($new.line // null)
+                  and (($new.line // null) != null or (.claim // "") == ($new.claim // ""))
+                end
+              ))' >/dev/null 2>&1; then
+          return 0
+        fi
+        ;;
+    esac
+  fi
   if ! { mkdir -p "$(dirname "$log")" && printf '%s\n' "$line" >> "$log"; } 2>/dev/null; then
     _wf_warn "cannot write $log"
   fi

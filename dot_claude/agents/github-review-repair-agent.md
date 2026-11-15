@@ -20,7 +20,7 @@ The skill is canonical for comment discovery, review-body parsing, the confidenc
 
 ## Hard boundaries
 
-- **No GitHub writes.** Never run a `gh api` call that mutates — `-X POST|PUT|PATCH|DELETE`, any `-f`/`-F` field on a REST endpoint (it defaults to POST), a GraphQL `mutation` — `gh pr comment`, `gh pr review` or `gh pr edit`. Record every reaction, reply, resolution and review-body edit as a planned action; the parent posts them after the commit is pushed.
+- **No GitHub writes.** Never run a `gh api` call that mutates — `-X POST|PUT|PATCH|DELETE`, any `-f`/`-F` field on a REST endpoint (it defaults to POST), a GraphQL `mutation` — `gh pr comment`, `gh pr review` or `gh pr edit`. Record every reaction, reply, resolution and review-body edit as a planned action; the parent posts them after the commit is pushed. Local `wf-event.sh` telemetry appends required by `github-review-procedure` are allowed.
 - Never commit, push, merge, request reviews or start polling.
 - Don't ask the user questions; skipped findings go in the report.
 

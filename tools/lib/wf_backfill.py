@@ -17,6 +17,7 @@ import sys
 from collections import Counter, defaultdict
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import repo_facts  # noqa: E402
 import wf_usage  # noqa: E402
 
 SEVERITIES = ("Critical", "High", "Medium", "Low")
@@ -138,6 +139,12 @@ def cap(v):
 def event_id(e):
     """Identity of a backfilled event; equal ids mean already written."""
     ev = e["event"]
+    if e.get("source") == "bot":
+        if ev == "review.result":
+            return (ev, "bot", e.get("run_id"))
+        if e.get("comment_id") is not None:
+            return (ev, "bot", e.get("run_id"), e.get("comment_id"))
+        return (ev, "bot", e.get("run_id"), e.get("sha"), e.get("path"), e.get("line"))
     base = (ev, e.get("branch"), e.get("reviewer"), e.get("round"))
     if ev == "review.round":
         return base + (e.get("state"),)
@@ -319,7 +326,7 @@ def plan_branch(branch, events, projects, git_dir, pr_body=None):
 
 def append_new(log_path, events, existing, dry_run=False):
     """Append events whose identity is not already in the log; returns (written, skipped)."""
-    have = {event_id(e) for e in existing if e.get("backfill") == 1}
+    have = {event_id(e) for e in existing if e.get("backfill") == 1 or e.get("source") == "bot"}
     fresh = []
     for e in events:
         eid = event_id(e)
@@ -365,6 +372,287 @@ def format_summary(s, written, skipped):
     return "\n".join(lines)
 
 
+_COPILOT_LOGINS = {"copilot-pull-request-reviewer[bot]", "Copilot"}
+_SUPPRESSED_RE = re.compile(
+    r"^\s*(?:[-*]|\d+\.)\s+\*\*`?([^:`*\s]+?)(?::(\d+)(?:\s*[-,]\s*\d+)*)?`?\*\*\s*(?:[:—–-]\s*)?(.*)$"
+)
+_SEVERITY_RE = re.compile(r"\b(Critical|High|Medium|Low)\b", re.I)
+_REJECT_RE = re.compile(
+    r"\b(disagree|not a bug|false positive|rejected|intended|by design|won't fix|wontfix|invalid|already handled|not needed|unnecessary|intentional)\b|👎",
+    re.I,
+)
+_PARTIAL_RE = re.compile(r"\bpartially\s+valid\b", re.I)
+_FIXED_RE = re.compile(r"\b(fixed|addressed|applied|resolved|done|updated)\b|👍", re.I)
+
+
+def clean_bot_claim(path, body):
+    """Build a one-sentence claim naming path, stripped of HTML/code/markdown."""
+    text = re.sub(r"```.*?```", " ", body or "", flags=re.S)
+    text = re.sub(r"<[^>]+>", " ", text)
+    text = re.sub(r"`([^`]+)`", r"\1", text)
+    text = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", text)
+    text = re.sub(r"\*\*([^*]+)\*\*", r"\1", text)
+    text = clean_claim(text)
+    sentence = re.split(r"(?<=[.!?])\s+", text, maxsplit=1)[0] if text else "Copilot comment"
+    if path and path not in sentence:
+        return clean_claim(f"{path}: {sentence}")
+    return sentence
+
+
+def parse_bot_severity(body):
+    m = _SEVERITY_RE.search(body or "")
+    return m.group(1).capitalize() if m else "Medium"
+
+
+def parse_suppressed_review_body(body):
+    """Extract [{path, line, text, resolved}] from Copilot review-body bullets."""
+    out = []
+    in_suppressed = False
+    for raw in (body or "").splitlines():
+        if "<summary>" in raw and "suppressed" in raw.lower():
+            in_suppressed = True
+            continue
+        if in_suppressed and "</details>" in raw:
+            in_suppressed = False
+            continue
+        m = _SUPPRESSED_RE.match(raw)
+        if not m:
+            continue
+        path, line_s, rest = m.group(1), m.group(2), m.group(3)
+        resolved = "[RESOLVED]" in rest
+        rest = rest.replace("[RESOLVED]", "").strip()
+        out.append({
+            "path": path,
+            "line": int(line_s) if line_s else None,
+            "text": rest,
+            "resolved": resolved,
+        })
+    return out
+
+
+def infer_bot_verdict(replies, resolved, later_touched):
+    """Infer (verdict, validity, reason) from thread replies, resolution, and later commits."""
+    reply_text = "\n".join(r.get("body") or "" for r in replies)
+    has_fix_commit = bool(later_touched)
+    if _REJECT_RE.search(reply_text):
+        return "dismissed", "rejected", "disagreed-in-thread"
+    if _PARTIAL_RE.search(reply_text):
+        verdict = "fixed" if (resolved or has_fix_commit or _FIXED_RE.search(reply_text)) else "dismissed"
+        return verdict, "partial", "partial-in-thread"
+    if _FIXED_RE.search(reply_text):
+        return "fixed", "valid", "fixed-in-thread"
+    if has_fix_commit:
+        return "fixed", "valid", "later-commit-touched-file"
+    if resolved:
+        return "fixed", "valid", "thread-resolved"
+    return "deferred", "valid", "unresolved-at-merge"
+
+
+def resolve_run_identity(branch, repo, existing):
+    """Resolve (run_id, repo, ticket) matching live telemetry for branch."""
+    for e in existing:
+        if e.get("branch") == branch and e.get("run_id"):
+            return e["run_id"], e.get("repo", repo), str(e.get("ticket", ""))
+    ticket = repo_facts.ticket_from_branch(branch)
+    scheme = repo_facts.ticket_scheme(branch)
+    if not ticket:
+        return None, repo, ""
+    if scheme == "shortcut":
+        run_id = f"sc-{ticket}"
+    else:
+        run_id = f"{repo}#{ticket}"
+    for e in existing:
+        if e.get("run_id", "").lower() == run_id.lower():
+            return e["run_id"], e.get("repo", repo), str(e.get("ticket", ticket))
+    return run_id, repo, ticket
+
+
+def plan_bot_pr(pr_data, existing, repo):
+    """Reconstruct bot review.finding and review.result events from fetched PR data.
+
+    pr_data keys: number, branch, comments, reviews, threads, commit_files
+      where commit_files is [(ts_str, set_of_paths)].
+    Returns (new_events, summary).
+    """
+    branch = pr_data["branch"]
+    pr_num = pr_data["number"]
+    run_id, canon_repo, ticket = resolve_run_identity(branch, repo, existing)
+    summary = {"pr": pr_num, "branch": branch, "run_id": run_id, "copilot_comments": 0,
+               "inline": 0, "review_body": 0, "notes": []}
+    if not run_id:
+        summary["notes"].append("no ticket id in branch: skipped")
+        return [], summary
+
+    comments = pr_data.get("comments") or []
+    reviews = pr_data.get("reviews") or []
+    threads = pr_data.get("threads") or []
+    commit_files = pr_data.get("commit_files") or []
+
+    resolved_by_cid = {}
+    thread_replies_by_cid = defaultdict(list)
+    for th in threads:
+        nodes = (th.get("comments") or {}).get("nodes") or []
+        if not nodes:
+            continue
+        root_id = nodes[0].get("databaseId")
+        if root_id is None:
+            continue
+        resolved_by_cid[root_id] = bool(th.get("isResolved"))
+        thread_replies_by_cid[root_id].extend(nodes[1:])
+
+    replies_by_parent = defaultdict(list)
+    for c in comments:
+        pid = c.get("in_reply_to_id")
+        if pid is not None:
+            replies_by_parent[pid].append(c)
+
+    base = {"v": 1, "run_id": run_id, "repo": canon_repo, "ticket": ticket,
+            "branch": branch, "source": "bot", "reviewer": "copilot", "backfill": True}
+    new = []
+    counts = Counter()
+
+    for c in comments:
+        login = (c.get("user") or {}).get("login") or ""
+        if login not in _COPILOT_LOGINS or c.get("in_reply_to_id") is not None:
+            continue
+        cid = c["id"]
+        path = c.get("path") or ""
+        created_at = c.get("created_at") or ""
+        replies = replies_by_parent.get(cid) or thread_replies_by_cid.get(cid) or []
+        resolved = resolved_by_cid.get(cid, False)
+        later_touched = any(ts > created_at and path in files for ts, files in commit_files)
+        verdict, validity, reason = infer_bot_verdict(replies, resolved, later_touched)
+        ev = {
+            **base,
+            "ts": created_at,
+            "event": "review.finding",
+            "severity": parse_bot_severity(c.get("body")),
+            "verdict": verdict,
+            "validity": validity,
+            "reason": reason,
+            "path": path,
+            "claim": clean_bot_claim(path, c.get("body")),
+            "comment_id": cid,
+            "sha": c.get("original_commit_id") or c.get("commit_id") or "",
+        }
+        line = c.get("original_line") or c.get("line")
+        if line is not None:
+            ev["line"] = line
+        new.append(ev)
+        counts[verdict] += 1
+        summary["inline"] += 1
+
+    for rv in reviews:
+        login = (rv.get("user") or {}).get("login") or ""
+        if login not in _COPILOT_LOGINS:
+            continue
+        submitted_at = rv.get("submitted_at") or ""
+        rv_sha = rv.get("commit_id") or ""
+        for item in parse_suppressed_review_body(rv.get("body")):
+            path = item["path"]
+            later_touched = any(ts > submitted_at and path in files for ts, files in commit_files)
+            verdict, validity, reason = infer_bot_verdict([], item["resolved"], later_touched)
+            ev = {
+                **base,
+                "ts": submitted_at,
+                "event": "review.finding",
+                "severity": parse_bot_severity(item["text"]),
+                "verdict": verdict,
+                "validity": validity,
+                "reason": reason,
+                "path": path,
+                "claim": clean_bot_claim(path, item["text"]),
+                "sha": rv_sha,
+            }
+            if item["line"] is not None:
+                ev["line"] = item["line"]
+            new.append(ev)
+            counts[verdict] += 1
+            summary["review_body"] += 1
+
+    summary["copilot_comments"] = summary["inline"] + summary["review_body"]
+    if summary["copilot_comments"] > 0:
+        latest_ts = max((e["ts"] for e in new if e.get("ts")), default="")
+        new.append({
+            **{k: v for k, v in base.items() if k != "reviewer"},
+            "ts": latest_ts,
+            "event": "review.result",
+            "fixed": counts["fixed"],
+            "dismissed": counts["dismissed"],
+            "deferred": counts["deferred"],
+            "reviewers": "copilot",
+        })
+    return new, summary
+
+
+def _gh_json(args):
+    r = subprocess.run(["gh"] + args, capture_output=True, text=True)
+    if r.returncode != 0:
+        raise SystemExit(f"gh {' '.join(args[:3])} failed: {r.stderr.strip()}")
+    return json.loads(r.stdout)
+
+
+def resolve_repo_slug(repo=None):
+    if repo:
+        d = _gh_json(["repo", "view", repo, "--json", "nameWithOwner"])
+    else:
+        d = _gh_json(["repo", "view", "--json", "nameWithOwner"])
+    return d["nameWithOwner"]
+
+
+def fetch_pr_bot_data(number, repo):
+    owner, name = repo.split("/", 1)
+    pr = _gh_json(["pr", "view", str(number), "--repo", repo, "--json", "number,headRefName"])
+    comments = _gh_json(["api", f"repos/{owner}/{name}/pulls/{number}/comments", "--paginate"])
+    reviews = _gh_json(["api", f"repos/{owner}/{name}/pulls/{number}/reviews", "--paginate"])
+    gql_q = (
+        "query($owner:String!,$name:String!,$num:Int!){"
+        "repository(owner:$owner,name:$name){pullRequest(number:$num){"
+        "reviewThreads(first:100){nodes{isResolved comments(first:20){nodes{databaseId body}}}}}}}"
+    )
+    gql = _gh_json(["api", "graphql", "-f", f"query={gql_q}", "-F", f"owner={owner}",
+                    "-F", f"name={name}", "-F", f"num={number}"])
+    threads = (((gql.get("data") or {}).get("repository") or {}).get("pullRequest") or {}).get("reviewThreads", {}).get("nodes") or []
+
+    has_copilot = any(
+        ((c.get("user") or {}).get("login") in _COPILOT_LOGINS and c.get("in_reply_to_id") is None)
+        for c in comments
+    ) or any(
+        ((rv.get("user") or {}).get("login") in _COPILOT_LOGINS and parse_suppressed_review_body(rv.get("body")))
+        for rv in reviews
+    )
+    commit_files = []
+    if has_copilot:
+        pr_commits = _gh_json(["api", f"repos/{owner}/{name}/pulls/{number}/commits", "--paginate"])
+        for cm in pr_commits:
+            sha = cm.get("sha")
+            ts = ((cm.get("commit") or {}).get("committer") or {}).get("date") or ""
+            detail = _gh_json(["api", f"repos/{owner}/{name}/commits/{sha}"])
+            files = {f.get("filename") for f in detail.get("files") or [] if f.get("filename")}
+            commit_files.append((ts, files))
+    return {
+        "number": pr["number"],
+        "branch": pr["headRefName"],
+        "comments": comments,
+        "reviews": reviews,
+        "threads": threads,
+        "commit_files": commit_files,
+    }
+
+
+def list_merged_prs_since(repo, since):
+    prs = _gh_json(["pr", "list", "--repo", repo, "--state", "merged", "--limit", "100",
+                    "--json", "number,mergedAt"])
+    return sorted(p["number"] for p in prs if (p.get("mergedAt") or "") >= since)
+
+
+def format_bot_summary(s, written, skipped):
+    notes = "".join(f" ({n})" for n in s["notes"])
+    return (f"PR #{s['pr']} ({s['branch']} -> {s['run_id'] or 'none'}): "
+            f"{s['copilot_comments']} copilot comments ({s['inline']} inline, {s['review_body']} body); "
+            f"events written {written}, already present {skipped}{notes}")
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(prog="wf-backfill.sh", description=__doc__)
     ap.add_argument("--pr", action="append", default=[], type=int, help="PR number (repeatable)")
@@ -374,8 +662,32 @@ def main(argv=None):
     ap.add_argument("--log", default=os.environ.get("WF_TELEMETRY_LOG") or os.path.join(
         os.environ.get("XDG_STATE_HOME") or os.path.expanduser("~/.local/state"), "workflow-telemetry", "events.jsonl"))
     ap.add_argument("--projects", default=None, help="transcripts root (default: WF_CLAUDE_PROJECTS or ~/.claude/projects)")
+    ap.add_argument("--bot", action="store_true", help="backfill bot findings from GitHub PR reviews/comments")
+    ap.add_argument("--since", help="backfill bot findings for merged PRs on/after YYYY-MM-DD (implies --bot)")
     ap.add_argument("--dry-run", action="store_true", help="report only; append nothing")
     args = ap.parse_args(argv)
+
+    if args.since:
+        args.bot = True
+    if args.bot:
+        repo = resolve_repo_slug(args.repo)
+        pr_nums = list(args.pr)
+        if args.since:
+            for n in list_merged_prs_since(repo, args.since):
+                if n not in pr_nums:
+                    pr_nums.append(n)
+        if not pr_nums:
+            print(f"No merged PRs found in {repo} since {args.since or 'always'}.")
+            return 0
+        existing = load_log(args.log)
+        for n in pr_nums:
+            pr_data = fetch_pr_bot_data(n, repo)
+            new, summary = plan_bot_pr(pr_data, existing, repo)
+            written, skipped = append_new(args.log, new, existing, args.dry_run)
+            print(format_bot_summary(summary, written, skipped))
+            if not args.dry_run and written:
+                existing = load_log(args.log)
+        return 0
 
     targets = [(b, None) for b in args.branch] + [fetch_pr(n, args.repo) for n in args.pr]
     if not targets:
