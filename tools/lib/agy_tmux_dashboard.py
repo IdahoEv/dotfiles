@@ -17,9 +17,12 @@ _LIB_DIR = Path(__file__).resolve().parent
 if str(_LIB_DIR) not in sys.path:
     sys.path.insert(0, str(_LIB_DIR))
 
+import repo_facts  # noqa: E402
 import workstream  # noqa: E402
 
 ACTIVE_THRESHOLD_SECS = 5
+VIEW_MODES = ("flat", "project", "state")
+STATE_ORDER = ("running", "idle", "exited")
 
 
 @dataclasses.dataclass
@@ -33,6 +36,18 @@ class WorkstreamRow:
     branch: str
     status: str
     last_line: str
+    project: str = ""
+
+
+@dataclasses.dataclass(frozen=True)
+class DisplayItem:
+    header: str | None = None
+    row_index: int | None = None
+    row: WorkstreamRow | None = None
+
+    @property
+    def is_header(self) -> bool:
+        return self.header is not None
 
 
 def format_age(seconds: int) -> str:
@@ -55,6 +70,27 @@ def compute_status(pane_dead: bool, last_activity: int | None, now: int) -> str:
     if age <= ACTIVE_THRESHOLD_SECS:
         return "running"
     return f"idle ({format_age(age)})"
+
+
+def row_state(status: str) -> str:
+    """Normalize a WorkstreamRow status string into running, idle, or exited."""
+    if status == "exited":
+        return "exited"
+    if status.startswith("idle"):
+        return "idle"
+    return "running"
+
+
+def resolve_project(pane_path: str) -> str:
+    """Derive a project name from pane_path's git main root, falling back to basename."""
+    if pane_path and os.path.isdir(pane_path):
+        root = repo_facts.main_root(pane_path)
+        if root:
+            return Path(root).name or root
+        return Path(pane_path).name or pane_path
+    if pane_path:
+        return Path(pane_path).name or pane_path
+    return "other"
 
 
 def extract_last_line(captured_text: str) -> str:
@@ -145,6 +181,7 @@ def fetch_windows(
                 branch=branch,
                 status=compute_status(pane_dead, last_activity, current_time),
                 last_line=extract_last_line(captured),
+                project=resolve_project(pane_path),
             )
         )
     return rows
@@ -160,14 +197,95 @@ def _clip(text: str, width: int) -> str:
     return text[: width - 1] + "…"
 
 
-def visible_slice(total: int, selected: int, max_rows: int | None) -> tuple[int, int]:
-    """Return [start, end) slice of rows keeping selected centered in max_rows."""
+def next_view_mode(mode: str) -> str:
+    """Cycle through flat -> project -> state -> flat."""
+    try:
+        idx = VIEW_MODES.index(mode)
+    except ValueError:
+        return VIEW_MODES[0]
+    return VIEW_MODES[(idx + 1) % len(VIEW_MODES)]
+
+
+def build_display_items(
+    rows: list[WorkstreamRow],
+    view_mode: str = "flat",
+) -> list[DisplayItem]:
+    """Build display items (with optional group headers) for the active view mode."""
+    if not rows:
+        return []
+    if view_mode == "flat":
+        return [DisplayItem(row_index=i, row=row) for i, row in enumerate(rows)]
+
+    groups: dict[str, list[tuple[int, WorkstreamRow]]] = {}
+    for i, row in enumerate(rows):
+        if view_mode == "project":
+            key = row.project or resolve_project(row.pane_path)
+        elif view_mode == "state":
+            key = row_state(row.status)
+        else:
+            key = "other"
+        groups.setdefault(key, []).append((i, row))
+
+    if view_mode == "state":
+        ordered_keys = [k for k in STATE_ORDER if k in groups]
+        ordered_keys.extend(k for k in sorted(groups) if k not in STATE_ORDER)
+    else:
+        ordered_keys = sorted(groups, key=str.lower)
+
+    items: list[DisplayItem] = []
+    for key in ordered_keys:
+        members = groups[key]
+        items.append(DisplayItem(header=f"── {key} ({len(members)})"))
+        for orig_idx, row in members:
+            items.append(DisplayItem(row_index=orig_idx, row=row))
+    return items
+
+
+def step_selection(items: list[DisplayItem], selected: int, delta: int) -> int:
+    """Move selection by delta (+1/-1), wrapping and skipping group headers."""
+    selectable = [i for i, item in enumerate(items) if not item.is_header]
+    if not selectable:
+        return 0
+    if selected not in selectable:
+        return selectable[0] if delta >= 0 else selectable[-1]
+    pos = selectable.index(selected)
+    return selectable[(pos + delta) % len(selectable)]
+
+
+def first_selectable_index(
+    items: list[DisplayItem],
+    preferred_pane_id: str | None = None,
+) -> int:
+    """Return display index matching preferred_pane_id, or the first selectable row."""
+    first = 0
+    found_first = False
+    for i, item in enumerate(items):
+        if item.is_header:
+            continue
+        if not found_first:
+            first = i
+            found_first = True
+        if preferred_pane_id and item.row and item.row.pane_id == preferred_pane_id:
+            return i
+    return first
+
+
+def visible_slice(
+    total: int,
+    selected: int,
+    max_rows: int | None,
+    items: list[DisplayItem] | None = None,
+) -> tuple[int, int]:
+    """Return [start, end) slice of items keeping selected centered in max_rows."""
     if total <= 0:
         return (0, 0)
     if max_rows is None or total <= max_rows:
         return (0, total)
     cap = max(1, max_rows)
     start = max(0, min(selected - cap // 2, total - cap))
+    # Include the group header immediately above start when it fits without hiding selected.
+    if items and start > 0 and items[start - 1].is_header and selected < start + cap - 1:
+        start -= 1
     return (start, start + cap)
 
 
@@ -177,24 +295,31 @@ def render_lines(
     width: int,
     session: str,
     max_rows: int | None = None,
+    view_mode: str = "flat",
 ) -> list[str]:
     """Render the dashboard header, workstream table, and footer into text lines."""
     w = max(40, width)
     lines: list[str] = []
-    lines.append(_clip(f"agy-tmux dashboard  [{session}]  ({len(rows)} workstreams)", w))
+    lines.append(_clip(f"agy-tmux dashboard  [{session}]  [{view_mode}]  ({len(rows)} workstreams)", w))
     lines.append("─" * w)
 
-    if not rows:
+    items = build_display_items(rows, view_mode)
+    if not items:
         lines.append("No active workstream windows. Launch tickets with: agy-tmux.sh <id> ...")
     else:
         header = f"  {'#':<3} {'Ticket':<12} {'Status':<12} {'Title':<28} {'Last output'}"
         lines.append(_clip(header, w))
-        start, end = visible_slice(len(rows), selected, max_rows)
+        start, end = visible_slice(len(items), selected, max_rows, items=items)
+        fixed_width = 2 + 4 + 13 + 13 + 29
+        rem = max(10, w - fixed_width)
         for idx in range(start, end):
-            row = rows[idx]
+            item = items[idx]
+            if item.is_header:
+                lines.append(_clip(item.header or "", w))
+                continue
+            row = item.row
+            assert row is not None
             marker = ">" if idx == selected else " "
-            fixed_width = 2 + 4 + 13 + 13 + 29
-            rem = max(10, w - fixed_width)
             line = (
                 f"{marker} {row.window_index:<3} "
                 f"{_clip(row.ticket_ref, 12):<12} "
@@ -207,7 +332,7 @@ def render_lines(
     lines.append("─" * w)
     lines.append(
         _clip(
-            "↑/↓ j/k: select  Enter/1-9: switch  Ctrl-z (in agent): return  r: refresh  x: close  q: detach",
+            "↑/↓ j/k: select  Enter/1-9: switch  g: group  Ctrl-z (in agent): return  r: refresh  x: close  q: detach",
             w,
         )
     )
@@ -238,27 +363,45 @@ def _curses_loop(
     stdscr.timeout(int(refresh_sec * 1000))
     base = _tmux_base(tmux_bin, socket)
     selected = 0
+    view_mode = VIEW_MODES[0]
     rows: list[WorkstreamRow] = []
+    items: list[DisplayItem] = []
     needs_refresh = True
 
     while True:
         if needs_refresh:
+            prev_pane_id = (
+                items[selected].row.pane_id
+                if 0 <= selected < len(items) and items[selected].row is not None
+                else None
+            )
             rows = fetch_windows(session, tmux_bin=tmux_bin, socket=socket)
+            items = build_display_items(rows, view_mode)
+            selected = first_selectable_index(items, prev_pane_id)
             needs_refresh = False
-        if rows:
-            selected = max(0, min(selected, len(rows) - 1))
+        elif items:
+            selected = first_selectable_index(
+                items,
+                items[selected].row.pane_id
+                if 0 <= selected < len(items) and items[selected].row is not None
+                else None,
+            )
         else:
             selected = 0
 
         height, width = stdscr.getmaxyx()
         max_rows = max(1, height - 6)
-        start, _ = visible_slice(len(rows), selected, max_rows)
+        start, end = visible_slice(len(items), selected, max_rows, items=items)
         selected_line = 3 + (selected - start)
-        lines = render_lines(rows, selected, width - 1, session, max_rows=max_rows)
+        lines = render_lines(rows, selected, width - 1, session, max_rows=max_rows, view_mode=view_mode)
         stdscr.erase()
         for y, text in enumerate(lines[: max(1, height - 1)]):
-            attr = curses.A_REVERSE if (rows and y == selected_line) else curses.A_NORMAL
+            attr = curses.A_NORMAL
             if y == 0:
+                attr = curses.A_BOLD
+            elif items and y == selected_line and not items[selected].is_header:
+                attr = curses.A_REVERSE
+            elif 3 <= y < 3 + (end - start) and items[start + (y - 3)].is_header:
                 attr = curses.A_BOLD
             try:
                 stdscr.addnstr(y, 0, text, max(1, width - 1), attr)
@@ -273,21 +416,32 @@ def _curses_loop(
         if ch in (ord("q"), ord("Q")):
             _detach_client(base)
             continue
-        if ch in (curses.KEY_UP, ord("k")) and rows:
-            selected = (selected - 1) % len(rows)
-        elif ch in (curses.KEY_DOWN, ord("j")) and rows:
-            selected = (selected + 1) % len(rows)
-        elif ch in (10, 13, curses.KEY_ENTER) and rows:
-            _switch_to_window(base, session, rows[selected].window_index)
+        if ch in (ord("g"), ord("G")):
+            prev_pane_id = (
+                items[selected].row.pane_id
+                if 0 <= selected < len(items) and items[selected].row is not None
+                else None
+            )
+            view_mode = next_view_mode(view_mode)
+            items = build_display_items(rows, view_mode)
+            selected = first_selectable_index(items, prev_pane_id)
+        elif ch in (curses.KEY_UP, ord("k")) and items:
+            selected = step_selection(items, selected, -1)
+        elif ch in (curses.KEY_DOWN, ord("j")) and items:
+            selected = step_selection(items, selected, 1)
+        elif ch in (10, 13, curses.KEY_ENTER) and items:
+            row = items[selected].row if 0 <= selected < len(items) else None
+            if row is not None:
+                _switch_to_window(base, session, row.window_index)
         elif ord("1") <= ch <= ord("9") and rows:
             target = chr(ch)
             for row in rows:
                 if row.window_index == target:
                     _switch_to_window(base, session, target)
                     break
-        elif ch in (ord("x"), ord("X")) and rows:
-            row = rows[selected]
-            if row.status == "exited":
+        elif ch in (ord("x"), ord("X")) and items:
+            row = items[selected].row if 0 <= selected < len(items) else None
+            if row is not None and row.status == "exited":
                 _kill_window(base, session, row.window_index)
                 needs_refresh = True
 

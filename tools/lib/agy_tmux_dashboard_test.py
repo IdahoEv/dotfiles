@@ -230,5 +230,141 @@ class TestHelpers(unittest.TestCase):
         wrapper_mock.assert_called_once_with(dash._curses_loop, "agy-dotfiles", None, 2.0, "/env/tmux")
 
 
+class TestGroupingAndNavigation(unittest.TestCase):
+    def _row(
+        self,
+        idx: str,
+        status: str = "running",
+        project: str = "alpha",
+        pane_path: str = "/tmp/alpha/wt",
+    ) -> dash.WorkstreamRow:
+        return dash.WorkstreamRow(
+            window_index=idx,
+            window_name=f"Is{idx}",
+            pane_id=f"%{idx}",
+            pane_path=pane_path,
+            ticket_ref=f"Is{idx}",
+            desc=f"Task {idx}",
+            branch="",
+            status=status,
+            last_line="ok",
+            project=project,
+        )
+
+    def test_resolve_project_uses_main_root_and_fallbacks(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            with mock.patch.object(dash.repo_facts, "main_root", return_value="/repos/dotfiles"):
+                self.assertEqual(dash.resolve_project(tmp), "dotfiles")
+            with mock.patch.object(dash.repo_facts, "main_root", return_value=""):
+                self.assertEqual(dash.resolve_project(tmp), Path(tmp).name)
+        self.assertEqual(dash.resolve_project(""), "other")
+
+    def test_row_state_and_next_view_mode(self):
+        self.assertEqual(dash.row_state("running"), "running")
+        self.assertEqual(dash.row_state("idle (15s)"), "idle")
+        self.assertEqual(dash.row_state("exited"), "exited")
+        self.assertEqual(dash.next_view_mode("flat"), "project")
+        self.assertEqual(dash.next_view_mode("project"), "state")
+        self.assertEqual(dash.next_view_mode("state"), "flat")
+        self.assertEqual(dash.next_view_mode("unknown"), "flat")
+
+    def test_build_display_items_flat_project_and_state(self):
+        rows = [
+            self._row("1", status="exited", project="beta"),
+            self._row("2", status="running", project="alpha"),
+            self._row("3", status="idle (5m)", project="beta"),
+        ]
+        flat = dash.build_display_items(rows, "flat")
+        self.assertEqual([item.row.window_index for item in flat if item.row], ["1", "2", "3"])
+        self.assertFalse(any(item.is_header for item in flat))
+
+        by_project = dash.build_display_items(rows, "project")
+        self.assertEqual(
+            [item.header if item.is_header else item.row.window_index for item in by_project],
+            ["── alpha (1)", "2", "── beta (2)", "1", "3"],
+        )
+
+        by_state = dash.build_display_items(rows, "state")
+        self.assertEqual(
+            [item.header if item.is_header else item.row.window_index for item in by_state],
+            ["── running (1)", "2", "── idle (1)", "3", "── exited (1)", "1"],
+        )
+
+        # Empty state groups are omitted.
+        only_running = dash.build_display_items([self._row("1", status="running")], "state")
+        self.assertEqual(
+            [item.header if item.is_header else item.row.window_index for item in only_running],
+            ["── running (1)", "1"],
+        )
+
+    def test_step_selection_skips_headers_and_wraps(self):
+        rows = [
+            self._row("1", status="running", project="alpha"),
+            self._row("2", status="exited", project="beta"),
+            self._row("3", status="exited", project="beta"),
+        ]
+        items = dash.build_display_items(rows, "project")
+        # items: 0:H(alpha), 1:row1, 2:H(beta), 3:row2, 4:row3
+        self.assertEqual(dash.step_selection(items, 1, 1), 3)
+        self.assertEqual(dash.step_selection(items, 3, 1), 4)
+        self.assertEqual(dash.step_selection(items, 4, 1), 1)
+        self.assertEqual(dash.step_selection(items, 1, -1), 4)
+        self.assertEqual(dash.step_selection(items, 3, -1), 1)
+        self.assertEqual(dash.step_selection(items, 0, 1), 1)
+
+    def test_viewport_scrolling_with_group_headers_keeps_selected_visible(self):
+        rows = [
+            self._row(str(i + 1), status="running" if i < 4 else "exited", project=f"p{i // 2}")
+            for i in range(8)
+        ]
+        items = dash.build_display_items(rows, "project")
+        # 4 project headers + 8 rows = 12 display items; test every selectable index with max_rows=4
+        for idx, item in enumerate(items):
+            if item.is_header:
+                continue
+            start, end = dash.visible_slice(len(items), idx, max_rows=4, items=items)
+            self.assertLessEqual(start, idx)
+            self.assertLess(idx, end)
+            self.assertEqual(end - start, 4)
+
+            lines = dash.render_lines(rows, selected=idx, width=100, session="agy-dotfiles", max_rows=4, view_mode="project")
+            joined = "\n".join(lines)
+            self.assertIn("[project]", lines[0])
+            self.assertIn("g: group", lines[-1])
+            self.assertIn(f"> {item.row.window_index}", joined)
+            self.assertEqual(len(lines), 9)  # 3 header + 4 display items + 2 footer
+
+    def test_curses_loop_cycles_modes_and_skips_headers(self):
+        rows = [
+            self._row("1", status="exited", project="beta"),
+            self._row("2", status="running", project="alpha"),
+        ]
+        # Start on row 1 (flat idx 0). 'g' -> project mode (items: H(alpha), row2, H(beta), row1; selected=3).
+        # 'k' -> skips H(beta), lands on row2 (idx 1). Enter -> switches to window 2.
+        keys = [ord("g"), ord("k"), 10]
+
+        class FakeStdscr:
+            def keypad(self, _flag): pass
+            def timeout(self, _ms): pass
+            def getmaxyx(self): return (24, 100)
+            def erase(self): pass
+            def addnstr(self, *_args): pass
+            def refresh(self): pass
+            def getch(self):
+                if keys:
+                    return keys.pop(0)
+                raise StopIteration
+
+        with (
+            mock.patch.object(curses, "curs_set"),
+            mock.patch.object(dash, "fetch_windows", return_value=rows),
+            mock.patch.object(dash, "_switch_to_window") as switch_mock,
+        ):
+            with self.assertRaises(StopIteration):
+                dash._curses_loop(FakeStdscr(), "agy-dotfiles", None, 2.0)
+
+        switch_mock.assert_called_once_with(["tmux"], "agy-dotfiles", "2")
+
+
 if __name__ == "__main__":
     unittest.main()
