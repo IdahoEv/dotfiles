@@ -230,5 +230,32 @@ class TestHelpers(unittest.TestCase):
         wrapper_mock.assert_called_once_with(dash._curses_loop, "agy-dotfiles", None, 2.0, "/env/tmux")
 
 
+class TestMemoryColumn(unittest.TestCase):
+    def _row(self, mem=""):
+        return dash.WorkstreamRow("1", "Is5", "%1", "/x", "Is5", "desc", "b", "running", "out", mem=mem)
+
+    def test_render_shows_mem_and_host_line(self):
+        lines = dash.render_lines([self._row("~1.2 GB")], 0, 120, "s", host_line="host pressure: warn  [WARN]")
+        self.assertIn("host pressure: warn", lines[0])
+        self.assertIn("Mem", lines[2])
+        self.assertIn("~1.2 GB", lines[3])
+
+    def test_unmeasured_row_shows_dash(self):
+        lines = dash.render_lines([self._row()], 0, 120, "s")
+        self.assertIn(" - ", lines[3])
+
+    def test_fetch_memory_never_raises(self):
+        with mock.patch.object(dash.mem_guard, "collect_cached", side_effect=RuntimeError("boom")):
+            self.assertEqual(dash.fetch_memory("s"), ({}, ""))
+
+    def test_fetch_memory_maps_windows_and_flags_pressure(self):
+        sess = dash.mem_guard.SessionMem("Is5", "tmux", 9, "1", "agy", 2, 2048 * 1024, "live", [9, 10])
+        host = dash.mem_guard.Host("critical", 5.0, "t")
+        with mock.patch.object(dash.mem_guard, "collect_cached", return_value=([sess], host, True)):
+            by_win, line = dash.fetch_memory("s")
+        self.assertEqual(by_win, {"1": "~2.0 GB"})
+        self.assertIn("[BLOCK]", line)
+
+
 if __name__ == "__main__":
     unittest.main()

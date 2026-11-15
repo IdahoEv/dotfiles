@@ -9,8 +9,11 @@ From inside a repository:
 ```bash
 agy-tmux.sh 12,13 14 15        # chain 12+13, plus tickets 14 and 15
 agy-tmux.sh --session my-work 183
+agy-tmux.sh --force 12 13       # launch even if mem-guard blocks on memory pressure
 agy-tmux.sh                     # re-attach to an existing session
 ```
+
+Before each group launches, `mem-guard.sh check` runs; under dangerous memory pressure that group is skipped (nothing is killed) unless `--force`. See `docs/memory-guard.md`.
 
 ## Dashboard & Switching
 
@@ -24,6 +27,8 @@ You land directly on **window `0` (dashboard)**:
 | `r` | Force refresh |
 | `x` | Close an `exited` workstream window |
 | `q` | Detach from tmux (agents keep running in the background) |
+
+The `Mem` column is an estimate of each window's process tree (`~1.2 GB`; `-` = not measured or exited), and the title line shows host memory pressure (`[WARN]`/`[BLOCK]` when thresholds are crossed). Details and limits: `docs/memory-guard.md`.
 
 ## Essential Tmux Keys
 

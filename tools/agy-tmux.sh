@@ -20,6 +20,7 @@ Options:
   --session <name>       Tmux session name (default: agy-<repo>)
   --provider <provider>  Forward --provider to start-ticket.sh (github|shortcut)
   --no-attach            Create/update the session without attaching
+  --force                Launch even if mem-guard blocks on memory pressure
   -h, --help             Show this help
 
 Examples:
@@ -43,6 +44,7 @@ WORKSTREAM_BIN="${AGY_TMUX_WORKSTREAM_BIN:-$SCRIPT_DIR/workstream.sh}"
 AGY_BIN="${AGY_TMUX_AGY_BIN:-agy}"
 TMUX_BIN="${AGY_TMUX_TMUX_BIN:-tmux}"
 DASHBOARD_PY="$SCRIPT_DIR/lib/agy_tmux_dashboard.py"
+MEM_GUARD_BIN="${AGY_TMUX_MEM_GUARD:-$SCRIPT_DIR/mem-guard.sh}"
 
 tmux_cmd() {
   if [ -n "${AGY_TMUX_SOCKET:-}" ]; then
@@ -145,6 +147,8 @@ while [ "$#" -gt 0 ]; do
       provider="$2"; shift 2 ;;
     --no-attach)
       no_attach=1; shift ;;
+    --force)
+      export MEM_GUARD_OVERRIDE=1; shift ;;
     -h|--help)
       usage; exit 0 ;;
     --)
@@ -199,6 +203,19 @@ window_label_for() {  # <group> <branch> [<worktree>]
 
 launch_group() {  # <group>
   local group="$1"
+  # Per-group, not once: each launched agent changes memory pressure. Blocked groups
+  # are skipped (not killed, nothing created); --force / MEM_GUARD_OVERRIDE=1 overrides.
+  if [ -x "$MEM_GUARD_BIN" ] || command -v "$MEM_GUARD_BIN" >/dev/null 2>&1; then
+    local grc=0
+    "$MEM_GUARD_BIN" check --context "agy-tmux $group" || grc=$?
+    if [ "$grc" -eq 3 ]; then
+      printf 'agy-tmux: skipped %s: blocked by mem-guard (override with --force)\n' "$group" >&2
+      return 1
+    fi
+  else
+    printf 'agy-tmux: mem-guard.sh not found (%s); launching without a memory check\n' "$MEM_GUARD_BIN" >&2
+  fi
+
   local st_args=("$group" --no-tab)
   [ -z "$provider" ] || st_args+=(--provider "$provider")
 

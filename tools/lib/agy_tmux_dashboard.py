@@ -17,6 +17,7 @@ _LIB_DIR = Path(__file__).resolve().parent
 if str(_LIB_DIR) not in sys.path:
     sys.path.insert(0, str(_LIB_DIR))
 
+import mem_guard  # noqa: E402
 import workstream  # noqa: E402
 
 ACTIVE_THRESHOLD_SECS = 5
@@ -33,6 +34,7 @@ class WorkstreamRow:
     branch: str
     status: str
     last_line: str
+    mem: str = ""  # estimate for the window's process tree ("~1.2 GB"), "" when not measured
 
 
 def format_age(seconds: int) -> str:
@@ -103,6 +105,26 @@ def _git_branch(path: str) -> str:
     return _run_cmd(["git", "-C", path, "branch", "--show-current"]).strip()
 
 
+def fetch_memory(
+    session: str, tmux_bin: str = "tmux", socket: str | None = None
+) -> tuple[dict[str, str], str]:
+    """({window_index: "~1.2 GB"}, host line). Best effort: any failure yields ({}, "") so
+    the dashboard never depends on memory sampling working. Cached ~10 s (mem_guard)."""
+    try:
+        cfg = mem_guard.load_config()
+        sessions, host, procs_ok = mem_guard.collect_cached(cfg, session, tmux_bin, socket)
+        by_window = {s.key: mem_guard.fmt_mb(s.mb) for s in sessions if s.source == "tmux"}
+        verdict = mem_guard.evaluate(host, sessions, cfg)
+        line = mem_guard.host_line(host)
+        if verdict.status in ("warn", "block"):
+            line += f"  [{verdict.status.upper()}]"
+        if not procs_ok:
+            line += "  (process table unreadable)"
+        return (by_window, line)
+    except Exception:  # noqa: BLE001 - observability must not take the dashboard down
+        return ({}, "")
+
+
 def fetch_windows(
     session: str,
     tmux_bin: str = "tmux",
@@ -134,6 +156,7 @@ def fetch_windows(
         ticket_ref, desc = load_workstream_meta(pane_path)
         branch = "" if desc else _git_branch(pane_path)
         captured = _run_cmd([*base, "capture-pane", "-p", "-t", pane_id, "-S", "-30"])
+        status = compute_status(pane_dead, last_activity, current_time)
         rows.append(
             WorkstreamRow(
                 window_index=win_idx,
@@ -143,7 +166,7 @@ def fetch_windows(
                 ticket_ref=ticket_ref or win_name,
                 desc=desc or branch or Path(pane_path).name,
                 branch=branch,
-                status=compute_status(pane_dead, last_activity, current_time),
+                status=status,
                 last_line=extract_last_line(captured),
             )
         )
@@ -177,28 +200,31 @@ def render_lines(
     width: int,
     session: str,
     max_rows: int | None = None,
+    host_line: str = "",
 ) -> list[str]:
     """Render the dashboard header, workstream table, and footer into text lines."""
     w = max(40, width)
     lines: list[str] = []
-    lines.append(_clip(f"agy-tmux dashboard  [{session}]  ({len(rows)} workstreams)", w))
+    title = f"agy-tmux dashboard  [{session}]  ({len(rows)} workstreams)"
+    lines.append(_clip(f"{title}  {host_line}" if host_line else title, w))
     lines.append("─" * w)
 
     if not rows:
         lines.append("No active workstream windows. Launch tickets with: agy-tmux.sh <id> ...")
     else:
-        header = f"  {'#':<3} {'Ticket':<12} {'Status':<12} {'Title':<28} {'Last output'}"
+        header = f"  {'#':<3} {'Ticket':<12} {'Status':<12} {'Mem':<9} {'Title':<28} {'Last output'}"
         lines.append(_clip(header, w))
         start, end = visible_slice(len(rows), selected, max_rows)
         for idx in range(start, end):
             row = rows[idx]
             marker = ">" if idx == selected else " "
-            fixed_width = 2 + 4 + 13 + 13 + 29
+            fixed_width = 2 + 4 + 13 + 13 + 10 + 29
             rem = max(10, w - fixed_width)
             line = (
                 f"{marker} {row.window_index:<3} "
                 f"{_clip(row.ticket_ref, 12):<12} "
                 f"{_clip(row.status, 12):<12} "
+                f"{_clip(row.mem or '-', 9):<9} "
                 f"{_clip(row.desc, 28):<28} "
                 f"{_clip(row.last_line, rem)}"
             )
@@ -239,11 +265,15 @@ def _curses_loop(
     base = _tmux_base(tmux_bin, socket)
     selected = 0
     rows: list[WorkstreamRow] = []
+    host_line = ""
     needs_refresh = True
 
     while True:
         if needs_refresh:
             rows = fetch_windows(session, tmux_bin=tmux_bin, socket=socket)
+            mem_by_window, host_line = fetch_memory(session, tmux_bin, socket)
+            for row in rows:
+                row.mem = mem_by_window.get(row.window_index, "")
             needs_refresh = False
         if rows:
             selected = max(0, min(selected, len(rows) - 1))
@@ -254,7 +284,7 @@ def _curses_loop(
         max_rows = max(1, height - 6)
         start, _ = visible_slice(len(rows), selected, max_rows)
         selected_line = 3 + (selected - start)
-        lines = render_lines(rows, selected, width - 1, session, max_rows=max_rows)
+        lines = render_lines(rows, selected, width - 1, session, max_rows=max_rows, host_line=host_line)
         stdscr.erase()
         for y, text in enumerate(lines[: max(1, height - 1)]):
             attr = curses.A_REVERSE if (rows and y == selected_line) else curses.A_NORMAL

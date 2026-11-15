@@ -80,6 +80,10 @@ chmod +x "$ROOT/bin/mock-start-ticket.sh" "$ROOT/bin/mock-agy" "$ROOT/bin/mock-a
 export AGY_TMUX_START_TICKET="$ROOT/bin/mock-start-ticket.sh"
 export AGY_TMUX_AGY_BIN="$ROOT/bin/mock-agy"
 export AGY_TMUX_SOCKET="$SOCK"
+# Never measure the real host: pin a healthy memory reading (guard tests override it).
+export MEM_GUARD_HOST_FIXTURE="level=normal free_pct=80"
+export MEM_GUARD_PS_FIXTURE="$ROOT/no-ps"
+unset MEM_GUARD_OVERRIDE
 
 # ---- 1. help output --------------------------------------------------------
 help_out="$("$TOOLS/agy-tmux.sh" --help)"
@@ -182,3 +186,28 @@ if printf '%s' "$restored_cz" | grep -qF '@agy_dashboard'; then
   fail "C-z binding still contains @agy_dashboard after cleanup"
 fi
 printf 'PASS C-z @agy_dashboard wrapper cleaned up\n'
+
+# ---- 9. mem-guard blocks launches under dangerous memory pressure ----------
+rm -f "$ROOT/start-ticket-calls.log"
+rc=0
+MEM_GUARD_HOST_FIXTURE="level=critical free_pct=4" "$TOOLS/agy-tmux.sh" --session "mem-block-ws" --no-attach 14 >"$ROOT/mem.out" 2>"$ROOT/mem.err" || rc=$?
+check "blocked launch exits non-zero" "1" "$rc"
+has "blocked launch names mem-guard" "blocked by mem-guard" "$(cat "$ROOT/mem.err")"
+check "blocked launch never runs start-ticket" "no" "$([ -s "$ROOT/start-ticket-calls.log" ] && echo yes || echo no)"
+if tmux -L "$SOCK" has-session -t '=mem-block-ws' 2>/dev/null; then
+  fail "blocked launch should not create a session"
+fi
+printf 'PASS blocked launch creates no tmux session\n'
+
+MEM_GUARD_HOST_FIXTURE="level=critical free_pct=4" "$TOOLS/agy-tmux.sh" --session "mem-force-ws" --no-attach --force 14 >/dev/null 2>"$ROOT/mem.err"
+has "--force overrides the block" "1:Is14" "$(tmux -L "$SOCK" list-windows -t '=mem-force-ws' -F '#{window_index}:#{window_name}')"
+has "override is announced" "OVERRIDE" "$(cat "$ROOT/mem.err")"
+
+MEM_GUARD_HOST_FIXTURE="level=warn free_pct=12" "$TOOLS/agy-tmux.sh" --session "mem-warn-ws" --no-attach 15 >/dev/null 2>"$ROOT/mem.err"
+has "warning level still launches" "1:Is15" "$(tmux -L "$SOCK" list-windows -t '=mem-warn-ws' -F '#{window_index}:#{window_name}')"
+has "warning level warns" "WARNING" "$(cat "$ROOT/mem.err")"
+
+AGY_TMUX_MEM_GUARD="$ROOT/bin/does-not-exist" "$TOOLS/agy-tmux.sh" --session "mem-missing-ws" --no-attach 15 >/dev/null 2>"$ROOT/mem.err"
+has "missing guard script warns and launches" "launching without a memory check" "$(cat "$ROOT/mem.err")"
+has "missing guard script still launches" "1:Is15" "$(tmux -L "$SOCK" list-windows -t '=mem-missing-ws' -F '#{window_index}:#{window_name}')"
+for s in mem-force-ws mem-warn-ws mem-missing-ws; do tmux -L "$SOCK" kill-session -t "=$s"; done

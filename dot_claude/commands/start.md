@@ -40,6 +40,9 @@ worktree= kickoff= branch= provider= ticket_state= ticket_in_progress= ticket_pa
 ```
 
 Non-zero exit (ticket not open, no provider, CLI not authed) → **stop** and report why.
+A `mem-guard` block (host memory pressure is dangerous; stderr says `BLOCKED`) is one of these: stop,
+report it with the largest sessions it listed, and **never** set `MEM_GUARD_OVERRIDE` or `--force`
+yourself — that is the user's call (`docs/memory-guard.md`). Warnings are informational; continue.
 An already-existing worktree still succeeds.
 
 ### 1a. Repair the ticket state, only if needed

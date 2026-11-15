@@ -34,6 +34,9 @@ ROOT="$(cd -P "$(mktemp -d "${TMPDIR:-/tmp}/start-ticket-test.XXXXXX")" && pwd)"
 trap 'rm -rf "$ROOT"' EXIT
 export HOME="$ROOT/home"; mkdir -p "$HOME"
 export TMPDIR="$ROOT/tmp"; mkdir -p "$TMPDIR"
+# Never measure the real host: pin a healthy memory reading (guard tests override it).
+export MEM_GUARD_HOST_FIXTURE="level=normal free_pct=80" MEM_GUARD_PS_FIXTURE="$ROOT/no-ps"
+unset MEM_GUARD_OVERRIDE
 unset GIT_TOOLS_PROJECTS_DIR CLAUDE_JOB_DIR START_TICKET_LAUNCHER GT_LABEL_OVERRIDE
 export GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@t
 
@@ -279,6 +282,31 @@ printf '#!/bin/sh\necho Linux\n' > "$CB/uname-bin/uname"; chmod +x "$CB/uname-bi
 out="$(PATH="$CB/uname-bin:$PATH" "$TOOLS/setup-ticket-profile.sh" 2>&1)"; rc=$?
 check "profile setup exits 0 on Linux" "0" "$rc"
 check "profile setup creates no ~/Library" "no" "$([ -e "$HOME/Library" ] && echo yes || echo no)"
+
+# ---- mem-guard on the launch path ---------------------------------------------
+rm -f "$ROOT/claude.args"
+mem_tab() {  # <host fixture> [extra env...] → rc; stderr in $ROOT/mem.err
+  (cd "$ROOT/widgets" && env MEM_GUARD_HOST_FIXTURE="$1" "${@:2}" PATH="$ROOT/stubbin:$PATH" \
+    "$ST" --tab-only "$ROOT/wt" "$CB/kf" --launcher bg >/dev/null 2>"$ROOT/mem.err")
+}
+mem_tab "level=critical free_pct=3"; rc=$?
+check "blocked by mem-guard: tab-only exits non-zero" "1" "$rc"
+has "blocked by mem-guard: says so" "launch blocked by mem-guard" "$ROOT/mem.err"
+check "blocked by mem-guard: nothing launched" "no" "$([ -e "$ROOT/claude.args" ] && echo yes || echo no)"
+mem_tab "level=critical free_pct=3" MEM_GUARD_OVERRIDE=1; rc=$?
+check "override: tab-only launches" "0 yes" "$rc $([ -e "$ROOT/claude.args" ] && echo yes || echo no)"
+has "override: announced" "OVERRIDE" "$ROOT/mem.err"
+rm -f "$ROOT/claude.args"
+(cd "$ROOT/widgets" && MEM_GUARD_HOST_FIXTURE="level=critical free_pct=3" PATH="$ROOT/stubbin:$PATH" START_TICKET_PROVIDER_DIR="$CP" "$ST" 7 --provider fake --launcher bg >/dev/null 2>"$ROOT/mem.err"); rc=$?
+check "blocked ticket start exits non-zero" "1" "$rc"
+check "blocked ticket start: no session launched" "no" "$([ -e "$ROOT/claude.args" ] && echo yes || echo no)"
+(cd "$ROOT/widgets" && MEM_GUARD_HOST_FIXTURE="level=critical free_pct=3" "$ST" --session "mem topic" --launcher none >/dev/null 2>&1); rc=$?
+check "launcher none is never guarded" "0" "$rc"
+(cd "$ROOT/widgets" && MEM_GUARD_HOST_FIXTURE="level=critical free_pct=3" START_TICKET_PROVIDER_DIR="$CP" "$ST" 7 --provider fake --print-title >/dev/null 2>&1); rc=$?
+check "print-title is read-only and never guarded" "0" "$rc"
+(cd "$ROOT/widgets" && START_TICKET_MEM_GUARD="$ROOT/nope" PATH="$ROOT/stubbin:$PATH" "$ST" --tab-only "$ROOT/wt" "$CB/kf" --launcher bg >/dev/null 2>"$ROOT/mem.err"); rc=$?
+check "missing guard script does not block" "0" "$rc"
+has "missing guard script is reported" "launching without a memory check" "$ROOT/mem.err"
 
 printf '%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
