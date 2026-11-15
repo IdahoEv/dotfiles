@@ -236,31 +236,31 @@ class TestHelpers(unittest.TestCase):
 class TestProjectColors(unittest.TestCase):
     def test_resolve_color_conf_override_beats_project_colors(self):
         with tempfile.TemporaryDirectory() as tmp:
-            wt = Path(tmp) / "Kardashev" / "wt1"
+            wt = Path(tmp) / "My-Project" / "wt1"
             wt.mkdir(parents=True)
             colors_file = Path(tmp) / "project-colors"
-            colors_file.write_text("# comment\nKardashev purple\n", encoding="utf-8")
+            colors_file.write_text("# comment\nMy-Project purple\n", encoding="utf-8")
 
             with (
                 mock.patch.object(dash.repo_facts, "conf_get", return_value="  Cyan \r"),
-                mock.patch.object(dash.repo_facts, "main_root", return_value=str(Path(tmp) / "Kardashev")),
+                mock.patch.object(dash.repo_facts, "main_root", return_value=str(Path(tmp) / "My-Project")),
             ):
                 self.assertEqual(dash.resolve_project_color(str(wt), colors_file=colors_file), "cyan")
 
     def test_resolve_color_falls_back_to_project_colors_when_conf_unset_or_blank(self):
         with tempfile.TemporaryDirectory() as tmp:
-            wt = Path(tmp) / "Kardashev" / "wt1"
+            wt = Path(tmp) / "My-Project" / "wt1"
             wt.mkdir(parents=True)
             colors_file = Path(tmp) / "project-colors"
             colors_file.write_text(
-                "# header\n\ndotfiles green\nkardashev Purple\n",
+                "# header\n\ndotfiles green\nmy-project Purple\n",
                 encoding="utf-8",
             )
 
             for conf_val in (None, "   "):
                 with (
                     mock.patch.object(dash.repo_facts, "conf_get", return_value=conf_val),
-                    mock.patch.object(dash.repo_facts, "main_root", return_value=str(Path(tmp) / "Kardashev")),
+                    mock.patch.object(dash.repo_facts, "main_root", return_value=str(Path(tmp) / "My-Project")),
                 ):
                     self.assertEqual(dash.resolve_project_color(str(wt), colors_file=colors_file), "purple")
 
@@ -309,6 +309,22 @@ class TestColorRendering(unittest.TestCase):
 
         self.assertEqual(set(pairs.keys()), set(dash.PALETTE))
         self.assertEqual(init_pair_mock.call_count, len(dash.PALETTE))
+
+    def test_init_color_pairs_keeps_valid_pairs_when_pair_limit_reached(self):
+        def fake_init_pair(idx, _fg, _bg):
+            if idx >= 8:
+                raise curses.error("pair limit")
+
+        with (
+            mock.patch.object(curses, "has_colors", return_value=True),
+            mock.patch.object(curses, "start_color"),
+            mock.patch.object(curses, "use_default_colors"),
+            mock.patch.object(curses, "init_pair", side_effect=fake_init_pair),
+            mock.patch.object(curses, "COLORS", 8, create=True),
+        ):
+            pairs = dash.init_color_pairs()
+
+        self.assertEqual(set(pairs.keys()), set(dash.PALETTE[:7]))
 
     def test_draw_row_colorizes_ticket_and_title_with_color_support(self):
         calls: list[tuple[int, int, str, int, int]] = []

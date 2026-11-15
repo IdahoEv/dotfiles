@@ -303,7 +303,10 @@ def init_color_pairs() -> dict[str, int]:
         pairs: dict[str, int] = {}
         for idx, name in enumerate(PALETTE, start=1):
             fg = _EXTENDED_256_COLORS[name] if (use_256 and name in _EXTENDED_256_COLORS) else _BASE_CURSES_COLORS[name]
-            curses.init_pair(idx, fg, bg)
+            try:
+                curses.init_pair(idx, fg, bg)
+            except curses.error:
+                break
             pairs[name] = idx
         return pairs
     except curses.error:
