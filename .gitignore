@@ -5,3 +5,5 @@
 # Python bytecode from skill scripts.
 __pycache__/
 *.pyc
+
+*.local
