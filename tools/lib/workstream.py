@@ -3,6 +3,7 @@
 
     workstream.py init-ticket --dir <wt> --provider <p> --ids <csv> [--urls <csv>] [--title <t>] [--desc <d>] [--type <ty>] [--tag <tag>]...
     workstream.py show [--dir <wt>]
+    workstream.py phase [<PHASE>] [--dir <wt>] [--pr | --no-review | --clear | --show]
     workstream.py chain-ids [--dir <wt>] [--fallback <id>]
     workstream.py chain-tag [--dir <wt>]
     workstream.py render <surface> [--dir <wt>]
@@ -26,6 +27,7 @@ import repo_facts  # noqa: E402
 
 RECORD_FILENAME = ".workstream.json"
 VALID_KINDS = ("ticket", "talk", "iteration")
+VALID_PHASES = ("PLAN", "WIP", "REVIEW", "REVIEWED", "MERGED", "DONE")
 VALID_FORMS = ("kebab", "words", "Title", "snake")
 SURFACES = ("key", "base", "branch", "worktree", "row", "pr", "commit")
 
@@ -312,7 +314,8 @@ def derive_key(record: WorkstreamRecord, dir_: str = ".") -> str:
     return record.key
 
 
-def _phase_token(record: WorkstreamRecord) -> str:
+def format_phase_tags(record: WorkstreamRecord) -> str:
+    """Format a record's phase/kind/PR tags as '[WIP][PR]'."""
     tags = list(record.tags)
     if record.kind == "talk" and "TALK" not in tags:
         tags.insert(0, "TALK")
@@ -325,6 +328,64 @@ def _phase_token(record: WorkstreamRecord) -> str:
             continue
         out.append(t_clean if (t_clean.startswith("[") and t_clean.endswith("]")) else f"[{t_clean}]")
     return "".join(out)
+
+
+def update_phase(
+    worktree: str,
+    phase: str | None = None,
+    *,
+    pr: bool = False,
+    no_review: bool = False,
+    clear: bool = False,
+) -> WorkstreamRecord | None:
+    """Update workflow phase/PR tags in <worktree>/.workstream.json when present."""
+    root = _worktree_root(worktree)
+    path = Path(root) / RECORD_FILENAME
+    if not path.is_file():
+        return None
+    rec = load_record(root)
+    if rec is None:
+        return None
+
+    other_tags: list[str] = []
+    cur_phase: str | None = None
+    cur_pr = False
+    for raw in rec.tags:
+        clean = raw.strip().strip("[]").upper()
+        if clean in VALID_PHASES:
+            cur_phase = clean
+        elif clean == "PR":
+            cur_pr = True
+        elif raw.strip():
+            other_tags.append(raw.strip())
+
+    new_phase, new_pr = cur_phase, cur_pr
+    if clear:
+        new_phase, new_pr = None, False
+    elif pr:
+        new_pr = True
+    elif no_review:
+        if cur_phase == "REVIEW":
+            new_phase = "REVIEWED"
+    elif phase is not None:
+        norm = phase.strip().upper()
+        if norm not in VALID_PHASES:
+            raise ValueError(f"unknown phase: {phase}")
+        new_phase = norm
+        if norm in ("MERGED", "DONE"):
+            new_pr = False
+
+    new_tags: list[str] = []
+    if new_phase:
+        new_tags.append(new_phase)
+    if new_pr:
+        new_tags.append("PR")
+    new_tags.extend(other_tags)
+
+    if new_tags != rec.tags:
+        rec.tags = new_tags
+        save_record(root, rec)
+    return rec
 
 
 def _clean_rendered(text: str, form: str) -> str:
@@ -379,7 +440,7 @@ def render_template(
             target_form = opt if opt in VALID_FORMS else form
             return format_text(record.type, target_form)
         if name in ("phase", "tags"):
-            return _phase_token(record)
+            return format_phase_tags(record)
         if name == "base":
             if _in_base:
                 return f"{key_val} {format_text(record.desc, form)}".strip()
@@ -519,6 +580,14 @@ def build_parser() -> argparse.ArgumentParser:
     p_show = sub.add_parser("show")
     p_show.add_argument("--dir", default=".")
 
+    p_phase = sub.add_parser("phase")
+    p_phase.add_argument("phase", nargs="?", default=None)
+    p_phase.add_argument("--dir", default=".")
+    p_phase.add_argument("--pr", action="store_true")
+    p_phase.add_argument("--no-review", action="store_true")
+    p_phase.add_argument("--clear", action="store_true")
+    p_phase.add_argument("--show", action="store_true")
+
     p_cids = sub.add_parser("chain-ids")
     p_cids.add_argument("--dir", default=".")
     p_cids.add_argument("--fallback", default="")
@@ -573,6 +642,33 @@ def main(argv: list[str] | None = None) -> int:
         if rec is None:
             return 1
         sys.stdout.write(json.dumps(rec.to_dict(), indent=2) + "\n")
+        return 0
+
+    if args.cmd == "phase":
+        if args.show:
+            rec = load_record(args.dir)
+            if rec is None:
+                return 1
+            out = format_phase_tags(rec)
+            if out:
+                sys.stdout.write(out + "\n")
+            return 0
+        try:
+            rec = update_phase(
+                args.dir,
+                phase=args.phase,
+                pr=args.pr,
+                no_review=args.no_review,
+                clear=args.clear,
+            )
+        except ValueError as exc:
+            sys.stderr.write(f"workstream: {exc}\n")
+            return 1
+        if rec is None:
+            return 1
+        out = format_phase_tags(rec)
+        if out:
+            sys.stdout.write(out + "\n")
         return 0
 
     if args.cmd == "chain-ids":

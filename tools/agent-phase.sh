@@ -100,6 +100,21 @@ case "$action" in
       && wf::emit phase "phase=${phase:-REVIEWED}"; } || true ;;
 esac
 
+# ---- .workstream.json phase -------------------------------------------------
+if [ -x "$SCRIPT_DIR/workstream.sh" ]; then
+  case "$action" in
+    show)
+      if [ -z "${CLAUDE_JOB_DIR:-}" ]; then
+        "$SCRIPT_DIR/workstream.sh" phase --show 2>/dev/null || true
+      fi
+      ;;
+    clear)     "$SCRIPT_DIR/workstream.sh" phase --clear >/dev/null 2>&1 || true ;;
+    pr)        "$SCRIPT_DIR/workstream.sh" phase --pr >/dev/null 2>&1 || true ;;
+    no-review) "$SCRIPT_DIR/workstream.sh" phase --no-review >/dev/null 2>&1 || true ;;
+    set)       "$SCRIPT_DIR/workstream.sh" phase "$phase" >/dev/null 2>&1 || true ;;
+  esac
+fi
+
 # ---- locate the session's state file ----------------------------------------
 # CLAUDE_JOB_DIR is exported into every tool call of a background session and
 # names that session's own job dir. Its absence means we're in an interactive

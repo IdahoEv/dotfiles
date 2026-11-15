@@ -52,13 +52,15 @@ class TestHelpers(unittest.TestCase):
                         "ticket_provider": "github",
                         "key": "Is12+13",
                         "desc": "Add OAuth flow",
+                        "tags": ["WIP", "PR"],
                     }
                 ),
                 encoding="utf-8",
             )
-            ref, desc = dash.load_workstream_meta(tmp)
+            ref, desc, tags = dash.load_workstream_meta(tmp)
             self.assertEqual(ref, "Is12+13")
             self.assertEqual(desc, "Add OAuth flow")
+            self.assertEqual(tags, "[WIP][PR]")
 
     def test_load_workstream_meta_fallback_from_tickets(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -76,9 +78,10 @@ class TestHelpers(unittest.TestCase):
                 ),
                 encoding="utf-8",
             )
-            ref, desc = dash.load_workstream_meta(tmp)
+            ref, desc, tags = dash.load_workstream_meta(tmp)
             self.assertEqual(ref, "sc-12+13")
             self.assertEqual(desc, "")
+            self.assertEqual(tags, "")
 
     def test_render_lines_includes_rows_and_footer(self):
         rows = [
@@ -92,11 +95,14 @@ class TestHelpers(unittest.TestCase):
                 branch="Is183-agy-tmux",
                 status="idle (12s)",
                 last_line="Waiting for plan approval?",
+                tags="[WIP][PR]",
             )
         ]
-        lines = dash.render_lines(rows, selected=0, width=100, session="agy-dotfiles")
+        lines = dash.render_lines(rows, selected=0, width=120, session="agy-dotfiles")
         joined = "\n".join(lines)
         self.assertIn("agy-dotfiles", joined)
+        self.assertIn("Tags", joined)
+        self.assertIn("[WIP][PR]", joined)
         self.assertIn("Is183", joined)
         self.assertIn("idle (12s)", joined)
         self.assertIn("Waiting for plan approval?", joined)
@@ -136,6 +142,7 @@ class TestHelpers(unittest.TestCase):
                         "ticket_provider": "github",
                         "key": "Is183",
                         "desc": "Dashboard",
+                        "tags": ["PLAN"],
                     }
                 ),
                 encoding="utf-8",
@@ -162,6 +169,7 @@ class TestHelpers(unittest.TestCase):
             self.assertEqual(len(rows), 1)
             self.assertEqual(rows[0].window_index, "1")
             self.assertEqual(rows[0].ticket_ref, "Is183")
+            self.assertEqual(rows[0].tags, "[PLAN]")
             self.assertEqual(rows[0].status, "idle (50s)")
             self.assertEqual(rows[0].last_line, "Ready for review?")
 

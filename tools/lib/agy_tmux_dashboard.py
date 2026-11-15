@@ -33,6 +33,7 @@ class WorkstreamRow:
     branch: str
     status: str
     last_line: str
+    tags: str = ""
 
 
 def format_age(seconds: int) -> str:
@@ -66,20 +67,20 @@ def extract_last_line(captured_text: str) -> str:
     return ""
 
 
-def load_workstream_meta(pane_path: str) -> tuple[str, str]:
-    """Return (ticket_ref, desc) from <pane_path>/.workstream.json when present."""
+def load_workstream_meta(pane_path: str) -> tuple[str, str, str]:
+    """Return (ticket_ref, desc, tags) from <pane_path>/.workstream.json when present."""
     if not pane_path or not os.path.isdir(pane_path):
-        return ("", "")
+        return ("", "", "")
     rec = workstream.load_record(pane_path)
     if rec is None:
-        return ("", "")
+        return ("", "", "")
     ticket_ref = rec.key or ""
     if not ticket_ref and rec.tickets:
         ids = [t.get("id", "") for t in rec.tickets if t.get("id")]
         if ids:
             prefix = workstream.PROVIDER_TOKENS.get(rec.ticket_provider, {}).get("brief", "")
             ticket_ref = f"{prefix}{'+'.join(ids)}"
-    return (ticket_ref, rec.desc or "")
+    return (ticket_ref, rec.desc or "", workstream.format_phase_tags(rec))
 
 
 def _tmux_base(tmux_bin: str, socket: str | None) -> list[str]:
@@ -131,7 +132,7 @@ def fetch_windows(
         except ValueError:
             last_activity = None
 
-        ticket_ref, desc = load_workstream_meta(pane_path)
+        ticket_ref, desc, tags = load_workstream_meta(pane_path)
         branch = "" if desc else _git_branch(pane_path)
         captured = _run_cmd([*base, "capture-pane", "-p", "-t", pane_id, "-S", "-30"])
         rows.append(
@@ -145,6 +146,7 @@ def fetch_windows(
                 branch=branch,
                 status=compute_status(pane_dead, last_activity, current_time),
                 last_line=extract_last_line(captured),
+                tags=tags,
             )
         )
     return rows
@@ -187,17 +189,18 @@ def render_lines(
     if not rows:
         lines.append("No active workstream windows. Launch tickets with: agy-tmux.sh <id> ...")
     else:
-        header = f"  {'#':<3} {'Ticket':<12} {'Status':<12} {'Title':<28} {'Last output'}"
+        header = f"  {'#':<3} {'Ticket':<12} {'Tags':<14} {'Status':<12} {'Title':<28} {'Last output'}"
         lines.append(_clip(header, w))
         start, end = visible_slice(len(rows), selected, max_rows)
         for idx in range(start, end):
             row = rows[idx]
             marker = ">" if idx == selected else " "
-            fixed_width = 2 + 4 + 13 + 13 + 29
+            fixed_width = 2 + 4 + 13 + 15 + 13 + 29
             rem = max(10, w - fixed_width)
             line = (
                 f"{marker} {row.window_index:<3} "
                 f"{_clip(row.ticket_ref, 12):<12} "
+                f"{_clip(row.tags, 14):<14} "
                 f"{_clip(row.status, 12):<12} "
                 f"{_clip(row.desc, 28):<28} "
                 f"{_clip(row.last_line, rem)}"
