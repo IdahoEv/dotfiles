@@ -389,6 +389,52 @@ class BotBackfillTests(unittest.TestCase):
             else:
                 os.environ["WF_TELEMETRY"] = old
 
+    def test_same_path_review_body_bullets_without_line_stay_distinct(self):
+        body = ("<details><summary>Suppressed comments (2)</summary>\n"
+                "- **a.py**: First problem.\n- **a.py**: Second problem.\n</details>")
+        pr = {"number": 9, "branch": "Is9-live", "comments": [], "threads": [], "commit_files": [],
+              "reviews": [{"user": {"login": "Copilot"}, "commit_id": "e" * 40,
+                           "submitted_at": "2026-11-12T01:00:00Z", "body": body}]}
+        new, _ = bf.plan_bot_pr(pr, [], "o/r", live=True)
+        with tempfile.TemporaryDirectory() as d:
+            log = os.path.join(d, "events.jsonl")
+            self.assertEqual(bf.append_new(log, new, [])[0], 3)
+            existing = bf.load_log(log)
+            again, _ = bf.plan_bot_pr(pr, existing, "o/r", live=True)
+            self.assertEqual(again, [])
+
+    def test_non_path_bold_bullets_in_review_body_are_not_findings(self):
+        body = "Overview\n- **Note**: tests added\n1. **Summary** of changes\n- **a.py:3** — Real one."
+        items = bf.parse_suppressed_review_body(body)
+        self.assertEqual([i["path"] for i in items], ["a.py"])
+
+    def test_main_live_exits_zero_on_gh_or_verdicts_failure(self):
+        def boom(repo=None):
+            raise SystemExit("gh repo view failed: offline")
+        orig = bf.resolve_repo_slug
+        bf.resolve_repo_slug = boom
+        try:
+            self.assertEqual(bf.main(["--live", "--pr", "1", "--log", os.devnull]), 0)
+            with self.assertRaises(SystemExit):
+                bf.main(["--bot", "--pr", "1", "--log", os.devnull])
+        finally:
+            bf.resolve_repo_slug = orig
+        bf.resolve_repo_slug = lambda repo=None: "o/r"
+        orig_fetch = bf.fetch_pr_bot_data
+        bf.fetch_pr_bot_data = lambda *a, **k: self._live_pr([self._c(1, "a.py")])
+        try:
+            with tempfile.TemporaryDirectory() as d:
+                bad = os.path.join(d, "v.json")
+                with open(bad, "w") as fh:
+                    fh.write("{half")
+                log = os.path.join(d, "events.jsonl")
+                with redirect_stdout(io.StringIO()):
+                    self.assertEqual(bf.main(["--live", "--pr", "9", "--verdicts", bad, "--log", log]), 0)
+                self.assertEqual(sum(e["event"] == "review.finding" for e in bf.load_log(log)), 1)
+        finally:
+            bf.resolve_repo_slug = orig
+            bf.fetch_pr_bot_data = orig_fetch
+
     def test_run_identity_matches_shell_resolver(self):
         facts = os.path.join(HERE, "repo-facts.sh")
         for branch in ("Is12+13-chain", "Is7-x", "42-slug", "sc-5-thing", "feature/sc-9/do-it", "sc-1+2-x"):

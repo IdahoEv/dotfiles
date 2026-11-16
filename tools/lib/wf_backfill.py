@@ -145,7 +145,7 @@ def event_id(e):
             return (ev, "bot", e.get("run_id"), e.get("batch"))
         if e.get("comment_id") is not None:
             return (ev, "bot", e.get("run_id"), e.get("comment_id"))
-        return (ev, "bot", e.get("run_id"), e.get("sha"), e.get("path"), e.get("line"))
+        return (ev, "bot", e.get("run_id"), e.get("sha"), e.get("path"), e.get("line"), cap(e.get("claim")))
     base = (ev, e.get("branch"), e.get("reviewer"), e.get("round"))
     if ev == "review.round":
         return base + (e.get("state"),)
@@ -420,6 +420,8 @@ def parse_suppressed_review_body(body):
         if not m:
             continue
         path, line_s, rest = m.group(1), m.group(2), m.group(3)
+        if "." not in path and "/" not in path:
+            continue
         resolved = "[RESOLVED]" in rest
         rest = rest.replace("[RESOLVED]", "").strip()
         out.append({
@@ -670,7 +672,7 @@ def fetch_pr_bot_data(number, repo, with_commit_files=True):
 
 
 def list_merged_prs_since(repo, since):
-    prs = _gh_json(["pr", "list", "--repo", repo, "--state", "merged", "--limit", "100",
+    prs = _gh_json(["pr", "list", "--repo", repo, "--state", "merged", "--limit", "1000",
                     "--json", "number,mergedAt"])
     return sorted(p["number"] for p in prs if (p.get("mergedAt") or "") >= since)
 
@@ -680,6 +682,45 @@ def format_bot_summary(s, written, skipped):
     return (f"PR #{s['pr']} ({s['branch']} -> {s['run_id'] or 'none'}): "
             f"{s['copilot_comments']} copilot comments ({s['inline']} inline, {s['review_body']} body); "
             f"events written {written}, already present {skipped}{notes}")
+
+
+def run_bot(args):
+    repo = resolve_repo_slug(args.repo)
+    pr_nums = list(args.pr)
+    if args.since:
+        for n in list_merged_prs_since(repo, args.since):
+            if n not in pr_nums:
+                pr_nums.append(n)
+    if not pr_nums:
+        print(f"No merged PRs found in {repo} since {args.since or 'always'}.")
+        return 0
+    existing = load_log(args.log)
+    verdicts = None
+    if args.verdicts:
+        try:
+            with open(args.verdicts) as fh:
+                verdicts = {str(k): v for k, v in json.load(fh).items()}
+        except (OSError, ValueError, AttributeError) as e:
+            if not args.live:
+                raise
+            print(f"telemetry: verdicts file unreadable, inferring verdicts: {e}", file=sys.stderr)
+    for n in pr_nums:
+        try:
+            pr_data = fetch_pr_bot_data(n, repo, with_commit_files=not args.live)
+        except SystemExit as e:
+            if not args.live:
+                raise
+            print(f"telemetry: bot findings for PR {n} not recorded: {e}", file=sys.stderr)
+            continue
+        new, summary = plan_bot_pr(pr_data, existing, repo, live=args.live, verdicts=verdicts)
+        if summary["unjudged"]:
+            print(f"telemetry: {summary['unjudged']} bot finding(s) on PR {n} have no verdicts entry; "
+                  "verdicts inferred from the thread", file=sys.stderr)
+        written, skipped = append_new(args.log, new, existing, args.dry_run)
+        print(format_bot_summary(summary, written, skipped))
+        if not args.dry_run and written:
+            existing = load_log(args.log)
+    return 0
 
 
 def main(argv=None):
@@ -704,37 +745,13 @@ def main(argv=None):
     if args.live and os.environ.get("WF_TELEMETRY") == "0":
         return 0
     if args.bot:
-        repo = resolve_repo_slug(args.repo)
-        pr_nums = list(args.pr)
-        if args.since:
-            for n in list_merged_prs_since(repo, args.since):
-                if n not in pr_nums:
-                    pr_nums.append(n)
-        if not pr_nums:
-            print(f"No merged PRs found in {repo} since {args.since or 'always'}.")
+        try:
+            return run_bot(args)
+        except (SystemExit, OSError, ValueError) as e:
+            if not args.live:
+                raise
+            print(f"telemetry: bot findings not recorded: {e}", file=sys.stderr)
             return 0
-        existing = load_log(args.log)
-        verdicts = None
-        if args.verdicts:
-            with open(args.verdicts) as fh:
-                verdicts = {str(k): v for k, v in json.load(fh).items()}
-        for n in pr_nums:
-            try:
-                pr_data = fetch_pr_bot_data(n, repo, with_commit_files=not args.live)
-            except SystemExit as e:
-                if not args.live:
-                    raise
-                print(f"telemetry: bot findings for PR {n} not recorded: {e}", file=sys.stderr)
-                continue
-            new, summary = plan_bot_pr(pr_data, existing, repo, live=args.live, verdicts=verdicts)
-            if summary["unjudged"]:
-                print(f"telemetry: {summary['unjudged']} bot finding(s) on PR {n} have no verdicts entry; "
-                      "verdicts inferred from the thread", file=sys.stderr)
-            written, skipped = append_new(args.log, new, existing, args.dry_run)
-            print(format_bot_summary(summary, written, skipped))
-            if not args.dry_run and written:
-                existing = load_log(args.log)
-        return 0
 
     targets = [(b, None) for b in args.branch] + [fetch_pr(n, args.repo) for n in args.pr]
     if not targets:
