@@ -135,8 +135,9 @@ check repo state, present a plan, and wait for approval before editing.
 
 **Workflow phase in the agent view.** Background ticket sessions carry their lifecycle
 phase as a name prefix (`[PLAN] Sc74618 …`) — a third state axis beside `status`
-(idle/busy) and `state` (working/blocked/done). `agent-phase.sh <PHASE>` sets it and
-no-ops outside a bg session. Phases: `PLAN → WIP → REVIEW → REVIEWED → MERGED → DONE`.
+(idle/busy) and `state` (working/blocked/done). `agent-phase.sh <PHASE>` updates
+`.workstream.json` in the worktree and, in a background session, stamps that prefix
+onto the agent-view row (no-oping where inapplicable). Phases: `PLAN → WIP → REVIEW → REVIEWED → MERGED → DONE`.
 
 Scripts and commands own all of them but one: `start-ticket.sh` sets `PLAN`, `open-pr.sh`
 and the review commands set `REVIEW`, `/finalize` sets `MERGED` then `DONE`. **You own `PLAN → WIP`** — when I

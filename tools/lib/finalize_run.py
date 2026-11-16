@@ -69,8 +69,8 @@ def reload_table(files: list[str]) -> list[str]:
 
 # ---- helpers ---------------------------------------------------------------------
 
-def stamp_phase(phase: str) -> None:
-    run_cmd([os.path.join(TOOLS_DIR, "agent-phase.sh"), phase])
+def stamp_phase(phase: str, dir_: str = ".") -> None:
+    run_cmd([os.path.join(TOOLS_DIR, "agent-phase.sh"), "--dir", dir_, phase])
 
 
 def emit(f: fc.Facts, dir_: str, outcome: str, reason: str = "") -> None:
@@ -194,7 +194,7 @@ def remove_checkout(f: fc.Facts) -> str:
     if is_locked(f.base_worktree, f.worktree):
         if not in_session:
             raise Handoff("locked", f"{f.worktree} is locked by an agent-view session")
-        stamp_phase("DONE")
+        stamp_phase("DONE", f.worktree)
         dispose_session(f.base_worktree, f.branch, f.head_oid, delete_branch_after=True)
         return "worktree and branch removal scheduled with session disposal"
     r = run_cmd(["git", "-C", f.base_worktree, "worktree", "remove", f.worktree])
@@ -204,7 +204,7 @@ def remove_checkout(f: fc.Facts) -> str:
     if state != "deleted":
         raise Handoff("remove-failed", f"worktree removed; branch {state}: {detail}")
     if in_session:
-        stamp_phase("DONE")
+        stamp_phase("DONE", f.worktree)
         dispose_session(f.base_worktree, f.branch, f.head_oid, delete_branch_after=False)
     return "worktree removed, branch deleted"
 
@@ -228,7 +228,7 @@ def run(dir_: str, branch: str, ticket_closed: bool) -> int:
     f = fc.collect_facts(branch, dir_)
     fc.emit_telemetry(dir_, f)
     if f.agent_phase:
-        stamp_phase(f.agent_phase)
+        stamp_phase(f.agent_phase, f.worktree)
     if f.verdict in STOP_VERDICTS:
         print(f"stopped={f.verdict}")
         print_facts(f)
@@ -277,7 +277,7 @@ def run(dir_: str, branch: str, ticket_closed: bool) -> int:
     except Handoff as h:
         return hand_off(f, dir_, h.reason, h.detail, done)
 
-    stamp_phase("DONE")
+    stamp_phase("DONE", f.worktree)
     print(f"Finalized {ticket_ref(f, f.ticket_id) if f.ticket_id else f.branch} "
           f"(PR #{f.pr_number}, merged as {f.pr_merge_commit[:7]}): {', '.join(parts)}")
     for line in table:

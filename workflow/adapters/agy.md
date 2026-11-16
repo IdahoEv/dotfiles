@@ -50,7 +50,7 @@ Maintained against the covered commands by `tools/cloud-workflow-adapter.test.sh
 | `sibling-worktrees.sh` | Do not run (fan-out is skipped). |
 | `GT_LABEL_OVERRIDE` | Do not set. Session labels do not exist here. |
 | `GT_LABEL_SLUG_OVERRIDE` | Do not set. The deterministic branch name stands. |
-| `agent-phase.sh` | Skip direct calls; scripts that call it already no-op. |
+| `agent-phase.sh` | Run as written (`agent-phase.sh <PHASE>`, `--pr`, `--no-review`); it updates `.workstream.json` in the worktree (and is a no-op outside a workstream). |
 | `github-review-state.sh` | Skip direct `--set-local` statusline calls; `wf-event.sh review.result` records the final round count. |
 | `session-label.sh` | Skip. |
 | `AskUserQuestion` | Follow protocol 9: in interactive sessions use `ask_question` with self-contained context; in headless/Telegram sessions print the self-contained question and options at the end of the turn and wait. |
