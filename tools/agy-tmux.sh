@@ -318,6 +318,7 @@ if [ -n "$window_wt" ]; then
   [ -f "$window_kf" ] || die "kickoff not found: $window_kf"
   window_wt="$(cd "$window_wt" && pwd)"
   window_kf="$(cd "$(dirname "$window_kf")" && pwd)/$(basename "$window_kf")"
+  check_mem_guard "$(basename "$window_wt")" || exit 1
   open_worktree_window "$window_wt" "$window_kf"
   exit 0
 fi

@@ -302,4 +302,18 @@ git -C "$ROOT/detached_wt" checkout -q --detach HEAD
 TMUX="stub,1,0" TMUX_PANE="$caller_pane" "$TOOLS/agy-tmux.sh" --window "$ROOT/detached_wt" "$ROOT/win_kf.md" >/dev/null
 detached_wins="$(tmux -L "$SOCK" list-windows -t '=win-ws' -F '#{window_index}:#{window_name}')"
 has "--window detached HEAD falls back to basename" "3:detached_wt" "$detached_wins"
+
+rc=0
+MEM_GUARD_HOST_FIXTURE="level=critical free_pct=4" TMUX="stub,1,0" TMUX_PANE="$caller_pane" \
+  "$TOOLS/agy-tmux.sh" --window "$ROOT/win_wt" "$ROOT/win_kf.md" >/dev/null 2>"$ROOT/mem.err" || rc=$?
+check "--window blocked by mem-guard exits non-zero" "1" "$rc"
+has "--window blocked names mem-guard" "blocked by mem-guard" "$(cat "$ROOT/mem.err")"
+check "--window blocked adds no window" "$detached_wins" "$(tmux -L "$SOCK" list-windows -t '=win-ws' -F '#{window_index}:#{window_name}')"
+
+rm -f "$ROOT/agy-env.log"
+MEM_GUARD_HOST_FIXTURE="level=critical free_pct=4" TMUX="stub,1,0" TMUX_PANE="$caller_pane" \
+  "$TOOLS/agy-tmux.sh" --window "$ROOT/win_wt" "$ROOT/win_kf.md" --force >/dev/null 2>"$ROOT/mem.err"
+for _ in 1 2 3 4 5; do [ -s "$ROOT/agy-env.log" ] && break; sleep 0.2; done
+check "--window --force never reaches the agent pane" "override=unset" "$(cat "$ROOT/agy-env.log")"
+has "--window --force overrides the block" "4:Is198" "$(tmux -L "$SOCK" list-windows -t '=win-ws' -F '#{window_index}:#{window_name}')"
 tmux -L "$SOCK" kill-session -t "=win-ws"
