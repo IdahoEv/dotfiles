@@ -23,6 +23,7 @@ You land directly on **window `0` (dashboard)**:
 | --- | --- |
 | `↑` / `↓` or `j` / `k` | Select a workstream |
 | `Enter` (or `1`–`9`) | Switch into that `agy` window |
+| `g` | Cycle grouping mode (`flat` → `project` → `state`) |
 | `Ctrl-z` *(inside any agent)* | Return to the dashboard (no prefix; scoped to `agy-tmux` sessions) |
 | `r` | Force refresh |
 | `x` | Close an `exited` workstream window |
