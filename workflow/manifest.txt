@@ -53,14 +53,14 @@ bddf25616fa63f0ca8ac5b4930003b30deab97b5058a623c8a88320938a8d6a7  644  dot_claud
 620422885b927180f9a5aa8be24e988ca6f21dcbefe231b5068a90da1e059d72  644  dot_claude/skills/workflow/delivery.md
 337f1a99f921ac9c485bd1f25a6b9b50393f3898ef9bd793896cfada59e336e3  755  dot_claude/skills/workflow/executable_wf-context.sh
 13c7edab5aa922e6b2bce52f156701032bfc8144a22e79e461fb6b90d272d814  755  tools/agent-phase.sh
-77d094f34bb5ab2ad592ce0a97da2610fbe00bf05b7e3ef7e3e82b541de6a46a  755  tools/agy-tmux.sh
+c513d23914128771aa6b8600015a1b180b7a5196d4ff8d7675af00cb5a124aba  755  tools/agy-tmux.sh
 392b86f6854e4e3ffa1dcbd28904afa1c15536a1dea48039be0e3b69a5d35d71  644  tools/bootstrap-linux.sh
 56642e1c7439303b525d6b594ec2420f598feabe330d846e7420d4dad0f0e5d8  644  tools/bootstrap-mac.sh
 2005d23e14e09fec069d999bc58813745b711e65c14c50d22787e9f769f801b2  644  tools/cloud-gh-shim.py
 60a99a97d37a74b7198c608731c56dab7afd893af18bbe93a4faad173a5735db  644  tools/cloud-workflow-bootstrap.sh
 aba2b3934bec4b85ba04e090631da2057c981cac6059dec8ace4a8a3bd0fac9b  755  tools/finalize-check.sh
 2b0879df07b0123f330bd67e06e860453e229f422385f0c6da19e88277d855c9  755  tools/finalize-run.sh
-9573e199092fa838ad754749b832d10a6e0e74a1520e016902b09ada385341d0  644  tools/lib/agy_tmux_dashboard.py
+4ae5e7bfeb0484e464138074a4c638aa27c6a78a74bdf1ba6a21cd7139cd3bd7  644  tools/lib/agy_tmux_dashboard.py
 f7673606e34113d3fbd15395094c7fdbfddce405964cc5f0f7222260c6d2282d  644  tools/lib/finalize_check.py
 f9a438f73d29326358262339d533f645052072c6740ce5724cc29ff9902273a2  644  tools/lib/finalize_run.py
 06127d9b52fa4eac4a6a64fb8f05e91b6c8d05cc2fa2f695cf08c43760349c24  644  tools/lib/mem_guard.py
@@ -104,7 +104,7 @@ a394eba77efb25ef1f766806223ac4edf75c5eef0b4347084e6059b5fce9de68  755  tools/set
 e366a502be678c6fa82962d428bbdc9414457a32835de696989c42582e500eca  755  tools/sibling-worktrees.sh
 fe34a71d2260c726846a0eef9673688185d019036e0c9e55df3e918030f06ae1  644  tools/start-ticket-providers/github.sh
 ae4e93d3a0d38815b1c929d3ff237054c71a8a46dd01e30e2cd23c2ed9343fee  644  tools/start-ticket-providers/shortcut.sh
-c2090545e06289ae569deacbd90426ad247c7ca47d003b4cb498a51a31441d12  755  tools/start-ticket.sh
+034fcc268301c6b8d123e814e1ff3c6a9a34fdd290bb07031d9c136df4114ca2  755  tools/start-ticket.sh
 242a517c6322f8dd47a053c459dec7aed2b7b8a803b5f3b4e08e681bbe9b3af7  755  tools/tracker.sh
 b8083091fae3b43f91ae088836762a8116f45021b72d87be197adb98adde21e8  755  tools/wf-backfill.sh
 c1ab6c8c8f800a23622ec35d2b13d9e9bc25f252b67ba785490d23c661e2e34b  755  tools/wf-event.sh
@@ -113,6 +113,6 @@ f15dd098841d7963da09693fafbb3bf3f713952434c4c4b8a40dec6cb7cb0fcd  755  tools/wor
 8b3c4fad15997740068b84ced54bf8395749d2b33b6700dd9af651b5047d0057  755  tools/workflow-session.sh
 0e8c1deefa52ec93b05c3e69b89f612adc5bb434d8c1ec8c8e98813313c92f44  755  tools/workstream.sh
 cb41af044928182975030d4ede61783b4c03acf1d5d766ae7890f0557efa64bd  755  tools/worktree-manager.sh
-dc7c2b299452574dbcc8db1e81026091d8dd3b21e3d4a3c855df68350b5bc8fa  644  workflow/adapters/agy.md
+d88be862e6f3a00ee07e0f603caf0bb90f6bce2a31f7e14d9be2f7ddf0166a34  644  workflow/adapters/agy.md
 717652c28f5729a760c568cc27dc288e36c182485a7c787d2404970fb2dd474e  644  workflow/adapters/claude-cloud.md
 e43c819e80c56184ab86d53eeb7e75024cc7e9c843598ad26c224948b1d46397  644  workflow/adapters/codex.md
