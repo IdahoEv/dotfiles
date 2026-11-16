@@ -27,8 +27,7 @@ A ticket is ready only if all hold:
 - Every prerequisite ticket is **merged**, or is **earlier in the same chain** (see below).
   A prerequisite whose PR is open, or that is in no chain of the pick, makes the ticket
   "ready after #N", not ready.
-- Acceptance criteria and an estimate exist. Missing either → not ready; list it under
-  *Needs refinement*.
+- Acceptance criteria exist. Missing → not ready; list it under *Needs refinement*.
 - Design is decided; no open question or unresolved spike upstream.
 - Not already assigned to a worktree, PR, or session.
 - Not sourced from a draft planning doc marked "for local review".

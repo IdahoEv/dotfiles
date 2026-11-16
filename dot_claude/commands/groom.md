@@ -37,7 +37,6 @@ any sourced from a draft doc marked "for local review".
 Flag each upcoming ticket with every reason that applies:
 
 - No acceptance criteria.
-- No estimate. GitHub has no estimate field; look for an Estimate section in the body.
 - Vague scope, or ACs that need "and then also" (a split candidate).
 - Unresolved open question or undecided design.
 - A dependency mentioned but not named.
