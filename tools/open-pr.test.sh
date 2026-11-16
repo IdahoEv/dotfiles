@@ -271,6 +271,16 @@ EOF
 out="$(run --review none)"
 check "chain .workstream.json without --title: PR title from resolver" "Shipped Is42+43: chain fix" "$(grep '^Shipped ' <<<"$out")"
 
+# Nested invocations resolve the root workstream record for title and resolver.
+new_repo feature/nested-custom
+mkdir -p "$ROOT/repo/nested/tools"
+cat > "$ROOT/repo/.workstream.json" <<'EOF'
+{"version":1,"kind":"ticket","tickets":[{"id":"89"}],"ticket_provider":"github","desc":"nested directory fix"}
+EOF
+out="$(cd "$ROOT/repo/nested/tools" && run --review none)"
+check "nested .workstream.json without --title: stored description used" "Shipped Is89: nested directory fix" "$(grep '^Shipped ' <<<"$out")"
+check "nested .workstream.json: Closes footer" "Closes #89" "$(cat "$GH_LOG.body")"
+
 # Shortcut open-pr provider: sc-<id> branch, --issue sc-<id>, Story footer (no Closes #).
 new_repo sc-7435-add-cache 'provider=shortcut'
 out="$(run --title "Add cache" --review none)"

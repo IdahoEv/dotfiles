@@ -151,6 +151,7 @@ if [ -n "$issue" ]; then
 fi
 
 git rev-parse --is-inside-work-tree >/dev/null 2>&1 || die "not inside a git repo"
+worktree_root="$(git rev-parse --show-toplevel)"
 wf_t0="$(wf::mono_ms)"
 command -v gh >/dev/null || die "gh CLI not found"
 
@@ -226,9 +227,13 @@ fi
 # validation) via set -e instead of being swallowed like a || true.
 existing_pr="$(gh pr list --head "$branch" --json number --jq '.[0].number // empty')"
 create_pr=""
+ws_record=""
+if [ -x "$SCRIPT_DIR/workstream.sh" ] && [ -f "$worktree_root/.workstream.json" ]; then
+  ws_record="$("$SCRIPT_DIR/workstream.sh" show --dir "$worktree_root" 2>/dev/null || true)"
+fi
 if [ -z "$existing_pr" ] && [ -z "$title" ]; then
-  if [ -f .workstream.json ] && command -v python3 >/dev/null 2>&1; then
-    title="$(python3 -c 'import json; print(json.load(open(".workstream.json")).get("desc", ""))' 2>/dev/null || true)"
+  if [ -n "$ws_record" ] && command -v python3 >/dev/null 2>&1; then
+    title="$(python3 -c 'import json, sys; print(json.load(sys.stdin).get("desc", ""))' <<<"$ws_record" 2>/dev/null || true)"
   fi
   [ -n "$title" ] || die "no existing PR for '$branch' and no --title given"
 fi
@@ -291,12 +296,12 @@ else
   fi
 
   used_resolver=""
-  if [ -f .workstream.json ] && [ -x "$SCRIPT_DIR/workstream.sh" ]; then
+  if [ -n "$ws_record" ]; then
     bare_title="$title"
     while [[ "$bare_title" =~ ^(Is[0-9]+(\+[0-9]+)*|sc-[0-9]+(\+[0-9]+)*)(:?)[[:space:]]+(.*)$ ]]; do
       bare_title="${BASH_REMATCH[5]}"
     done
-    ws_pr_title="$("$SCRIPT_DIR/workstream.sh" render pr --dir . \
+    ws_pr_title="$("$SCRIPT_DIR/workstream.sh" render pr --dir "$worktree_root" \
       ${issue_explicit:+--ids "$issue_csv"} \
       ${provider:+--provider "$provider"} \
       ${bare_title:+--desc "$bare_title"} 2>/dev/null || true)"
