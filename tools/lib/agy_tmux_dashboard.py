@@ -6,9 +6,12 @@ from __future__ import annotations
 import argparse
 import curses
 import dataclasses
+import json
 import os
+import shlex
 import subprocess
 import sys
+import threading
 import time
 from pathlib import Path
 from typing import Any
@@ -17,7 +20,6 @@ _LIB_DIR = Path(__file__).resolve().parent
 if str(_LIB_DIR) not in sys.path:
     sys.path.insert(0, str(_LIB_DIR))
 
-import mem_guard  # noqa: E402
 import workstream  # noqa: E402
 
 ACTIVE_THRESHOLD_SECS = 5
@@ -105,24 +107,63 @@ def _git_branch(path: str) -> str:
     return _run_cmd(["git", "-C", path, "branch", "--show-current"]).strip()
 
 
-def fetch_memory(
-    session: str, tmux_bin: str = "tmux", socket: str | None = None
-) -> tuple[dict[str, str], str]:
-    """({window_index: "~1.2 GB"}, host line). Best effort: any failure yields ({}, "") so
-    the dashboard never depends on memory sampling working. Cached ~10 s (mem_guard)."""
+MEM_REFRESH_SECS = 10.0
+MEM_CMD_TIMEOUT_SECS = 20.0
+
+
+def fetch_memory(mem_cmd: str) -> tuple[dict[str, str], str]:
+    """({window_index: "~1.2 GB"}, host line) from an optional memory provider.
+
+    The provider is any command that prints the `mem-guard.sh report --json` shape. The
+    dashboard knows only that JSON contract, not how memory is measured. Best effort: any
+    failure yields ({}, "") so a broken provider never affects the dashboard.
+    """
+    if not mem_cmd:
+        return ({}, "")
     try:
-        cfg = mem_guard.load_config()
-        sessions, host, procs_ok = mem_guard.collect_cached(cfg, session, tmux_bin, socket)
-        by_window = {s.key: mem_guard.fmt_mb(s.mb) for s in sessions if s.source == "tmux"}
-        verdict = mem_guard.evaluate(host, sessions, cfg)
-        line = mem_guard.host_line(host)
-        if verdict.status in ("warn", "block"):
-            line += f"  [{verdict.status.upper()}]"
-        if not procs_ok:
+        res = subprocess.run(
+            shlex.split(mem_cmd), capture_output=True, text=True, check=False, timeout=MEM_CMD_TIMEOUT_SECS
+        )
+        if res.returncode != 0:
+            return ({}, "")
+        data = json.loads(res.stdout)
+        by_window = {
+            str(s["key"]): str(s.get("mem") or "-")
+            for s in data.get("sessions", [])
+            if s.get("source") == "tmux" and s.get("key")
+        }
+        line = str(data.get("host_line") or "")
+        status = str((data.get("verdict") or {}).get("status") or "")
+        if line and status in ("warn", "block"):
+            line += f"  [{status.upper()}]"
+        if line and not data.get("process_table_ok", True):
             line += "  (process table unreadable)"
         return (by_window, line)
-    except Exception:  # noqa: BLE001 - observability must not take the dashboard down
+    except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError):
         return ({}, "")
+
+
+class MemorySampler:
+    """Samples the memory provider on a background thread so slow `ps`/`lsof` never stall the UI."""
+
+    def __init__(self, mem_cmd: str, interval: float = MEM_REFRESH_SECS) -> None:
+        self._cmd = mem_cmd
+        self._interval = interval
+        self._lock = threading.Lock()
+        self._value: tuple[dict[str, str], str] = ({}, "")
+        if mem_cmd:
+            threading.Thread(target=self._loop, daemon=True).start()
+
+    def _loop(self) -> None:
+        while True:
+            value = fetch_memory(self._cmd)
+            with self._lock:
+                self._value = value
+            time.sleep(self._interval)
+
+    def latest(self) -> tuple[dict[str, str], str]:
+        with self._lock:
+            return self._value
 
 
 def fetch_windows(
@@ -258,6 +299,7 @@ def _curses_loop(
     socket: str | None,
     refresh_sec: float,
     tmux_bin: str = "tmux",
+    mem_cmd: str = "",
 ) -> None:
     curses.curs_set(0)
     stdscr.keypad(True)
@@ -266,12 +308,13 @@ def _curses_loop(
     selected = 0
     rows: list[WorkstreamRow] = []
     host_line = ""
+    sampler = MemorySampler(mem_cmd)
     needs_refresh = True
 
     while True:
         if needs_refresh:
             rows = fetch_windows(session, tmux_bin=tmux_bin, socket=socket)
-            mem_by_window, host_line = fetch_memory(session, tmux_bin, socket)
+            mem_by_window, host_line = sampler.latest()
             for row in rows:
                 row.mem = mem_by_window.get(row.window_index, "")
             needs_refresh = False
@@ -332,9 +375,14 @@ def main(argv: list[str] | None = None) -> int:
         help="Path or name of the tmux binary",
     )
     parser.add_argument("--refresh", type=float, default=2.0, help="Refresh interval in seconds")
+    parser.add_argument(
+        "--mem-cmd",
+        default="",
+        help="Optional command printing `mem-guard.sh report --json`; enables the Mem column and host line",
+    )
     args = parser.parse_args(argv)
 
-    curses.wrapper(_curses_loop, args.session, args.socket, args.refresh, args.tmux_bin)
+    curses.wrapper(_curses_loop, args.session, args.socket, args.refresh, args.tmux_bin, args.mem_cmd)
     return 0
 
 

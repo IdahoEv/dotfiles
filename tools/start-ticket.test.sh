@@ -300,6 +300,8 @@ rm -f "$ROOT/claude.args"
 (cd "$ROOT/widgets" && MEM_GUARD_HOST_FIXTURE="level=critical free_pct=3" PATH="$ROOT/stubbin:$PATH" START_TICKET_PROVIDER_DIR="$CP" "$ST" 7 --provider fake --launcher bg >/dev/null 2>"$ROOT/mem.err"); rc=$?
 check "blocked ticket start exits non-zero" "1" "$rc"
 check "blocked ticket start: no session launched" "no" "$([ -e "$ROOT/claude.args" ] && echo yes || echo no)"
+(cd "$ROOT/widgets" && MEM_GUARD_HOST_FIXTURE="level=critical free_pct=3" START_TICKET_PROVIDER_DIR="$CP" PATH="$ROOT/stubbin:$PATH" "$ST" 7 --provider fake --no-tab --launcher bg >/dev/null 2>"$ROOT/mem.err"); rc=$?
+check "--no-tab launches nothing so is not guarded (--tab-only is the gate)" "0" "$rc"
 (cd "$ROOT/widgets" && MEM_GUARD_HOST_FIXTURE="level=critical free_pct=3" "$ST" --session "mem topic" --launcher none >/dev/null 2>&1); rc=$?
 check "launcher none is never guarded" "0" "$rc"
 (cd "$ROOT/widgets" && MEM_GUARD_HOST_FIXTURE="level=critical free_pct=3" START_TICKET_PROVIDER_DIR="$CP" "$ST" 7 --provider fake --print-title >/dev/null 2>&1); rc=$?

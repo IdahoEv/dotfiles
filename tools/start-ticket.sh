@@ -549,7 +549,9 @@ fi
 
 [ -n "$id" ] || die "usage: start-ticket.sh <id>[,<id>…] [--provider github|shortcut] [--no-tab|--print-title] [--launcher iterm|bg|none]"
 # Guard before any worktree or tracker write, so a blocked launch leaves no half-started ticket.
-[ "$mode" = "print-title" ] || mem_guard "ticket $id"
+# --no-tab and --print-title launch nothing: the later --tab-only call is the gate for /start,
+# and agy-tmux.sh guards each group itself, so guarding here would only check twice.
+[ "$mode" = "print-title" ] || [ "$mode" = "no-tab" ] || mem_guard "ticket $id"
 
 # ---- chain ids -------------------------------------------------------------
 # `12,13` → head 12 plus the rest. `id` stays the head, so everything that names

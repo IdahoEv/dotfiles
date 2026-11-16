@@ -189,6 +189,20 @@ if printf '%s' "$restored_cz" | grep -qF '@agy_dashboard'; then
 fi
 printf 'PASS C-z @agy_dashboard wrapper cleaned up\n'
 
+# ---- 8b. dashboard gets the memory provider as an opaque command ---------------
+"$TOOLS/agy-tmux.sh" --session "mem-cmd-ws" --no-attach 15 >/dev/null
+dash_cmd="$(tmux -L "$SOCK" list-windows -t '=mem-cmd-ws' -F '#{window_index} #{pane_start_command}' | grep '^0 ')"
+has "dashboard is given --mem-cmd" "--mem-cmd" "$dash_cmd"
+has "provider is mem-guard.sh" "mem-guard.sh" "$dash_cmd"
+has "provider asks for JSON" "--json" "$dash_cmd"
+has "provider is scoped to the session" "mem-cmd-ws" "$(printf '%s' "$dash_cmd" | sed 's/.*--mem-cmd//')"
+tmux -L "$SOCK" kill-session -t "=mem-cmd-ws"
+AGY_TMUX_MEM_GUARD="$ROOT/bin/does-not-exist" "$TOOLS/agy-tmux.sh" --session "no-mem-ws" --no-attach 15 >/dev/null 2>&1
+dash_cmd="$(tmux -L "$SOCK" list-windows -t '=no-mem-ws' -F '#{window_index} #{pane_start_command}' | grep '^0 ')"
+if printf '%s' "$dash_cmd" | grep -qF -- '--mem-cmd'; then fail "dashboard should have no memory provider when the guard is absent"; fi
+printf 'PASS dashboard has no memory provider when mem-guard is absent\n'
+tmux -L "$SOCK" kill-session -t "=no-mem-ws"
+
 # ---- 9. mem-guard blocks launches under dangerous memory pressure ----------
 rm -f "$ROOT/start-ticket-calls.log"
 rc=0

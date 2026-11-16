@@ -108,6 +108,13 @@ ensure_session() {
   if [ -n "${AGY_TMUX_SOCKET:-}" ]; then
     dash_cmd="$dash_cmd --socket $(printf '%q' "$AGY_TMUX_SOCKET")"
   fi
+  # Optional memory column: the dashboard only sees this command's JSON, nothing else.
+  if [ -x "$MEM_GUARD_BIN" ] || command -v "$MEM_GUARD_BIN" >/dev/null 2>&1; then
+    local mem_cmd
+    mem_cmd="$(printf '%q' "$MEM_GUARD_BIN") report --json --session $(printf '%q' "$session") --tmux-bin $(printf '%q' "$TMUX_BIN")"
+    [ -z "${AGY_TMUX_SOCKET:-}" ] || mem_cmd="$mem_cmd --socket $(printf '%q' "$AGY_TMUX_SOCKET")"
+    dash_cmd="$dash_cmd --mem-cmd $(printf '%q' "$mem_cmd")"
+  fi
 
   local created_idx
   if ! tmux_cmd has-session -t "=$session" 2>/dev/null; then

@@ -58,8 +58,23 @@ class TestAgentDetection(unittest.TestCase):
         p = lambda n: mg.Proc(1, 0, 0, n)  # noqa: E731
         self.assertTrue(mg.is_agent(p("/usr/local/bin/codex"), NAMES))
         self.assertTrue(mg.is_agent(p("/Users/e/.local/share/claude/versions/2.1.0"), NAMES))
-        self.assertFalse(mg.is_agent(p("/Users/claude/bin/vim"), NAMES))  # home dir named like an agent
         self.assertFalse(mg.is_agent(p("/usr/local/bin/node"), NAMES))
+
+    def test_directories_named_like_agents_do_not_match(self):
+        p = lambda n: mg.Proc(1, 0, 0, n)  # noqa: E731
+        self.assertFalse(mg.is_agent(p("/Users/claude/bin/vim"), NAMES))
+        self.assertFalse(mg.is_agent(p("/Users/e/Development/codex/node_modules/.bin/vite"), NAMES))
+        self.assertFalse(mg.is_agent(p("/Users/e/Development/agy/build/server"), NAMES))
+        self.assertFalse(mg.is_agent(p("/Users/e/share/claude/other/2.1.0"), NAMES))  # not a versions/ layout
+
+    def test_desktop_app_bundles_are_not_agent_sessions(self):
+        p = lambda n: mg.Proc(1, 0, 0, n)  # noqa: E731
+        self.assertFalse(mg.is_agent(p("/Applications/Claude.app/Contents/MacOS/Claude"), NAMES))
+        self.assertFalse(mg.is_agent(p("/Applications/Claude.app/Contents/Frameworks/Helper (GPU).app/Contents/MacOS/claude"), NAMES))
+        self.assertEqual(mg.backend_of(["/Applications/Claude.app/Contents/MacOS/Claude"], NAMES), "-")
+
+    def test_backend_names(self):
+        self.assertEqual(mg.backend_of(["/bin/bash", "/Users/e/.local/share/claude/versions/2.1.0"], NAMES), "claude")
 
 
 class TestAttribution(unittest.TestCase):
@@ -147,6 +162,14 @@ class TestRoots(unittest.TestCase):
             (Path(d) / ".workstream.json").write_text(json.dumps({"version": 1, "key": "Is9"}))
             self.assertEqual(mg.workstream_label(str(deep)), "Is9")
             self.assertEqual(mg.workstream_label("/"), "")  # terminates at the filesystem root
+
+    def test_lsof_partial_output_survives_an_exited_pid(self):
+        # lsof exits 1 when any listed pid is gone but still prints the rest; run_lenient keeps it.
+        import subprocess as sp
+        with mock.patch.object(mg.subprocess, "run", return_value=sp.CompletedProcess([], 1, "p300\nn/w\n", "")):
+            self.assertEqual(mg.run_lenient(["lsof"]), "p300\nn/w\n")
+            self.assertIsNone(mg.run(["lsof"]))  # strict runner still treats non-zero as failure
+        self.assertEqual(mg.resolve_cwds([300, 99999], lambda c: "p300\nn/w\n"), {300: "/w"})
 
     def test_lsof_missing_falls_back_to_unmanaged(self):
         roots = mg.build_roots_for_untracked(mg.parse_ps(PS), [], NAMES, lambda cmd: None)
@@ -331,6 +354,7 @@ class TestCheckCli(unittest.TestCase):
         with mock.patch.dict(os.environ, env), redirect_stdout(out):
             self.assertEqual(mg.main(["report", "--json"]), 0)
         data = json.loads(out.getvalue())
+        self.assertEqual(data["host_line"], "host pressure: normal, ~50% free")
         self.assertEqual(data["host"]["level"], "normal")
         self.assertFalse(data["process_table_ok"])
         self.assertEqual(data["sessions"], [])

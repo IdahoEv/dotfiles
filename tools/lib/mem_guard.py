@@ -33,7 +33,6 @@ import os
 import re
 import subprocess
 import sys
-import time
 from pathlib import Path
 from typing import Callable
 
@@ -47,7 +46,6 @@ EXIT_BLOCKED = 3
 LEVELS = ("ok", "warn", "block")
 DEFAULT_AGENT_NAMES = ("claude", "agy", "codex")
 PS_CMD = ["ps", "-axo", "pid=,ppid=,rss=,comm="]
-CACHE_TTL_SECS = 10.0
 
 Runner = Callable[[list[str]], "str | None"]
 
@@ -108,8 +106,12 @@ class Proc:
     name: str  # executable path as reported by ps comm (no arguments)
 
 
-def run(cmd: list[str], timeout: float = 10.0) -> str | None:
-    """stdout of cmd, or None when it is missing, fails or times out."""
+def run(cmd: list[str], timeout: float = 10.0, accept_nonzero: bool = False) -> str | None:
+    """stdout of cmd, or None when it is missing, fails or times out.
+
+    accept_nonzero keeps stdout from a non-zero exit: lsof exits 1 when any listed pid has
+    gone or is unreadable yet still prints the rows it could read.
+    """
     try:
         res = subprocess.run(
             cmd, capture_output=True, text=True, check=False, timeout=timeout,
@@ -117,7 +119,11 @@ def run(cmd: list[str], timeout: float = 10.0) -> str | None:
         )
     except (OSError, subprocess.SubprocessError):
         return None
-    return res.stdout if res.returncode == 0 else None
+    return res.stdout if (res.returncode == 0 or accept_nonzero) else None
+
+
+def run_lenient(cmd: list[str]) -> str | None:
+    return run(cmd, accept_nonzero=True)
 
 
 def parse_ps(text: str) -> dict[int, Proc]:
@@ -154,27 +160,33 @@ def _basename(name: str) -> str:
     return name.rstrip("/").rsplit("/", 1)[-1].lower()
 
 
-def is_agent(proc: Proc, agent_names: tuple[str, ...]) -> bool:
-    """Executable basename is an agent CLI, or sits in a directory named for one.
+def agent_name_of(name: str, agent_names: tuple[str, ...]) -> str | None:
+    """Agent CLI name for an executable path, or None.
 
-    The directory rule covers installers that exec a versioned file such as
-    `.../claude/versions/2.1.0`. The first three path segments are ignored so a
-    home directory named like an agent does not match.
+    Matches the basename, or an installer layout `<...>/<agent>/versions/<file>` (a native
+    `claude` install execs a versioned file). Anything inside a `.app` bundle is a desktop
+    application, not the CLI, and never matches: Claude.app and its helpers are not sessions.
     """
-    if _basename(proc.name) in agent_names:
-        return True
-    segments = proc.name.lower().split("/")[4:-1]
-    return any(seg in agent_names for seg in segments)
+    low = name.lower()
+    if ".app/" in low:
+        return None
+    parts = low.rstrip("/").split("/")
+    if parts[-1] in agent_names:
+        return parts[-1]
+    if len(parts) >= 3 and parts[-2] == "versions" and parts[-3] in agent_names:
+        return parts[-3]
+    return None
+
+
+def is_agent(proc: Proc, agent_names: tuple[str, ...]) -> bool:
+    return agent_name_of(proc.name, agent_names) is not None
 
 
 def backend_of(proc_names: list[str], agent_names: tuple[str, ...]) -> str:
     for name in proc_names:
-        base = _basename(name)
-        if base in agent_names:
-            return base
-        for seg in name.lower().split("/")[4:-1]:
-            if seg in agent_names:
-                return seg
+        found = agent_name_of(name, agent_names)
+        if found:
+            return found
     return "-"
 
 
@@ -277,7 +289,7 @@ def attribute(
     return out
 
 
-def resolve_cwds(pids: list[int], runner: Runner = run) -> dict[int, str]:
+def resolve_cwds(pids: list[int], runner: Runner = run_lenient) -> dict[int, str]:
     """Working directory per pid via one lsof call; empty when lsof is unavailable."""
     if not pids:
         return {}
@@ -314,7 +326,7 @@ def build_roots_for_untracked(
     procs: dict[int, Proc],
     known: list[Root],
     agent_names: tuple[str, ...],
-    cwd_runner: Runner = run,
+    cwd_runner: Runner = run_lenient,
 ) -> list[Root]:
     """Roots for agent sessions that were not started by the managed launcher."""
     pids = discover_agent_roots(procs, {r.pid for r in known}, agent_names)
@@ -323,7 +335,7 @@ def build_roots_for_untracked(
     for pid in pids:
         cwd = cwds.get(pid, "")
         ws = workstream_label(cwd) if cwd else ""
-        name = _basename(procs[pid].name)
+        name = agent_name_of(procs[pid].name, agent_names) or _basename(procs[pid].name)
         if ws:
             roots.append(Root(pid, f"{ws} ({name})", "worktree"))
         else:
@@ -511,24 +523,8 @@ def collect(
     if procs is None:
         return ([], False)
     roots = tmux_roots(session, tmux_bin, socket, runner) if session else []
-    roots += build_roots_for_untracked(procs, roots, cfg.agent_names, runner)
+    roots += build_roots_for_untracked(procs, roots, cfg.agent_names, run_lenient if runner is run else runner)
     return (attribute(procs, roots, cfg.agent_names), True)
-
-
-_cache: dict[tuple, tuple[float, tuple]] = {}
-
-
-def collect_cached(cfg: Config, session: str, tmux_bin: str, socket: str | None) -> tuple[list[SessionMem], Host, bool]:
-    """collect + read_host throttled to one sample per CACHE_TTL_SECS (dashboard refreshes every 2 s)."""
-    key = (session, tmux_bin, socket)
-    now = time.monotonic()
-    hit = _cache.get(key)
-    if hit and now - hit[0] < CACHE_TTL_SECS:
-        return hit[1]  # type: ignore[return-value]
-    sessions, ok = collect(cfg, session, tmux_bin, socket)
-    val = (sessions, read_host(), ok)
-    _cache[key] = (now, val)
-    return val
 
 
 # ---- CLI ----------------------------------------------------------------------
@@ -541,7 +537,8 @@ def _cmd_report(args: argparse.Namespace) -> int:
         print(json.dumps({
             "host": dataclasses.asdict(host),
             "process_table_ok": ok,
-            "sessions": [dataclasses.asdict(s) for s in sessions],
+            "host_line": host_line(host),
+            "sessions": [{**dataclasses.asdict(s), "mem": fmt_mb(s.mb)} for s in sessions],
             "verdict": dataclasses.asdict(evaluate(host, sessions, cfg)),
             "estimate_note": ESTIMATE_NOTE,
         }, indent=2))
