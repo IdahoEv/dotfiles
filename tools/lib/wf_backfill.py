@@ -495,7 +495,7 @@ def plan_bot_pr(pr_data, existing, repo, live=False, verdicts=None):
     pr_num = pr_data["number"]
     run_id, canon_repo, ticket = resolve_run_identity(branch, repo, existing)
     summary = {"pr": pr_num, "branch": branch, "run_id": run_id, "copilot_comments": 0,
-               "inline": 0, "review_body": 0, "notes": []}
+               "inline": 0, "review_body": 0, "unjudged": 0, "notes": []}
     if not run_id:
         summary["notes"].append("no ticket id in branch: skipped")
         return [], summary
@@ -591,6 +591,11 @@ def plan_bot_pr(pr_data, existing, repo, live=False, verdicts=None):
     if live:
         have = {event_id(e) for e in existing if e.get("source") == "bot"}
         new = [e for e in new if event_id(e) not in have]
+    if live:
+        judged = {str(k) for k in (verdicts or {})}
+        summary["unjudged"] = sum(
+            1 for e in new
+            if str(e.get("comment_id") or f"{e.get('path')}:{e.get('line')}") not in judged)
     counts = Counter(e["verdict"] for e in new)
     result_logged = any(e.get("event") == "review.result" and e.get("source") == "bot"
                         and e.get("run_id") == run_id for e in existing)
@@ -624,7 +629,7 @@ def resolve_repo_slug(repo=None):
     return d["nameWithOwner"]
 
 
-def fetch_pr_bot_data(number, repo):
+def fetch_pr_bot_data(number, repo, with_commit_files=True):
     owner, name = repo.split("/", 1)
     pr = _gh_json(["pr", "view", str(number), "--repo", repo, "--json", "number,headRefName"])
     comments = _gh_json(["api", f"repos/{owner}/{name}/pulls/{number}/comments", "--paginate"])
@@ -646,7 +651,7 @@ def fetch_pr_bot_data(number, repo):
         for rv in reviews
     )
     commit_files = []
-    if has_copilot:
+    if has_copilot and with_commit_files:
         pr_commits = _gh_json(["api", f"repos/{owner}/{name}/pulls/{number}/commits", "--paginate"])
         for cm in pr_commits:
             sha = cm.get("sha")
@@ -715,13 +720,16 @@ def main(argv=None):
                 verdicts = {str(k): v for k, v in json.load(fh).items()}
         for n in pr_nums:
             try:
-                pr_data = fetch_pr_bot_data(n, repo)
+                pr_data = fetch_pr_bot_data(n, repo, with_commit_files=not args.live)
             except SystemExit as e:
                 if not args.live:
                     raise
                 print(f"telemetry: bot findings for PR {n} not recorded: {e}", file=sys.stderr)
                 continue
             new, summary = plan_bot_pr(pr_data, existing, repo, live=args.live, verdicts=verdicts)
+            if summary["unjudged"]:
+                print(f"telemetry: {summary['unjudged']} bot finding(s) on PR {n} have no verdicts entry; "
+                      "verdicts inferred from the thread", file=sys.stderr)
             written, skipped = append_new(args.log, new, existing, args.dry_run)
             print(format_bot_summary(summary, written, skipped))
             if not args.dry_run and written:

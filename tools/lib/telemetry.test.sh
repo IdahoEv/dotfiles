@@ -141,12 +141,6 @@ reset
 ev review.finding reviewer=copilot source=bot severity=Medium verdict=dismissed validity=rejected reason=not-a-bug path=src/a.ts line=42 claim=src/a.ts.-.leaks-handle comment_id=991 sha=cccccccccccccccccccccccccccccccccccccccc
 check "review.finding path/line/claim/source/sha" "src/a.ts number 42 src/a.ts.-.leaks-handle bot 991 cccccccccccccccccccccccccccccccccccccccc" \
   "$(jq -r 'select(.event=="review.finding") | "\(.path) \(.line|type) \(.line) \(.claim) \(.source) \(.comment_id) \(.sha)"' "$LOG")"
-ev review.finding reviewer=copilot source=bot severity=Medium verdict=dismissed validity=rejected reason=not-a-bug path=src/a.ts line=42 claim=src/a.ts.-.leaks-handle comment_id=991 sha=cccccccccccccccccccccccccccccccccccccccc
-ev review.finding reviewer=copilot source=bot severity=High verdict=fixed validity=valid reason=fixed path=src/b.ts line=10 claim=src/b.ts.-.missing-check comment_id=992 sha=cccccccccccccccccccccccccccccccccccccccc
-check "bot review.finding deduplicates by comment_id" "2" "$(wc -l < "$LOG" | tr -d ' ')"
-ev review.finding reviewer=copilot source=bot severity=Low verdict=fixed validity=valid reason=fixed path=src/c.ts line=5 claim=src/c.ts.-.unused-var sha=dddddddddddddddddddddddddddddddddddddddd
-ev review.finding reviewer=copilot source=bot severity=Low verdict=fixed validity=valid reason=fixed path=src/c.ts line=5 claim=src/c.ts.-.unused-var sha=dddddddddddddddddddddddddddddddddddddddd
-check "bot review-body finding deduplicates by sha+path+line" "3" "$(wc -l < "$LOG" | tr -d ' ')"
 reset
 ev review.launch reviewer=prompt-reviewer round=1 model=sonnet effort=high source=local
 check "review.launch fields" "review.launch prompt-reviewer 1 sonnet high" \

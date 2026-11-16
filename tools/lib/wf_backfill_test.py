@@ -389,6 +389,47 @@ class BotBackfillTests(unittest.TestCase):
             else:
                 os.environ["WF_TELEMETRY"] = old
 
+    def test_run_identity_matches_shell_resolver(self):
+        facts = os.path.join(HERE, "repo-facts.sh")
+        for branch in ("Is12+13-chain", "Is7-x", "42-slug", "sc-5-thing", "feature/sc-9/do-it", "sc-1+2-x"):
+            shell = subprocess.run(
+                ["bash", "-c", f'. "{facts}"; printf "%s %s" "$(gt::ticket_from_branch "$1")" "$(gt::ticket_scheme "$1")"',
+                 "_", branch], capture_output=True, text=True).stdout
+            run_id, _, ticket = bf.resolve_run_identity(branch, "o/r", [])
+            scheme = shell.split()[1]
+            want = f"sc-{ticket}" if scheme == "shortcut" else f"o/r#{ticket}"
+            self.assertEqual((shell.split()[0], run_id), (ticket, want), branch)
+
+    def test_live_warns_only_for_findings_without_verdicts(self):
+        pr = self._live_pr([self._c(1, "a.py"), self._c(2, "b.py")])
+        _, s = bf.plan_bot_pr(pr, [], "o/r", live=True, verdicts={"1": {"verdict": "fixed"}})
+        self.assertEqual(s["unjudged"], 1)
+
+    def test_live_skips_commit_file_fetch(self):
+        calls = []
+        orig = bf._gh_json
+
+        def fake(args):
+            calls.append(" ".join(args))
+            if args[0] == "pr":
+                return {"number": 9, "headRefName": "Is9-x"}
+            if args[0] == "api" and args[1].endswith("/comments"):
+                return [self._c(1, "a.py")]
+            return {} if "graphql" in args else []
+        bf._gh_json = fake
+        try:
+            bf.fetch_pr_bot_data(9, "o/r", with_commit_files=False)
+        finally:
+            bf._gh_json = orig
+        self.assertFalse(any("/commits" in c for c in calls))
+        calls.clear()
+        bf._gh_json = fake
+        try:
+            bf.fetch_pr_bot_data(9, "o/r")
+        finally:
+            bf._gh_json = orig
+        self.assertTrue(any("/commits" in c for c in calls))
+
 
 if __name__ == "__main__":
     unittest.main()
