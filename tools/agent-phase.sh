@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# agent-phase.sh — stamp a ticket's workflow phase onto its agent-view row.
+# agent-phase.sh — stamp a ticket's workflow phase onto .workstream.json and its agent-view row.
 #
-#   agent-phase.sh <PLAN|WIP|REVIEW|REVIEWED|MERGED|DONE>
-#   agent-phase.sh --pr          # add the [PR] tag (a PR has been issued)
-#   agent-phase.sh --no-review   # REVIEW -> REVIEWED, keep [PR] (review finished)
-#   agent-phase.sh --show
-#   agent-phase.sh --clear
+#   agent-phase.sh [--dir <path>] <PLAN|WIP|REVIEW|REVIEWED|MERGED|DONE>
+#   agent-phase.sh [--dir <path>] --pr          # add the [PR] tag (a PR has been issued)
+#   agent-phase.sh [--dir <path>] --no-review   # REVIEW -> REVIEWED, keep [PR] (review finished)
+#   agent-phase.sh [--dir <path>] --show
+#   agent-phase.sh [--dir <path>] --clear
 #
 # Claude Code's agent view (`claude agents`) shows two state axes already:
 # `status` (idle/busy — process level, set by the daemon) and `state`
@@ -37,21 +37,25 @@
 # used per-agent-type in `.claude/agents/*.md` frontmatter, so overloading it
 # would make a purple row ambiguous. Color stays free for a repo/project axis.
 #
-# Writes `~/.claude/jobs/<id>/state.json` directly. That file is Claude Code
-# internals rather than documented API, so this is deliberately defensive: it
-# no-ops (exit 0, silent) whenever it isn't looking at a background session it
-# understands. The alternative — the supported `/rename` command — can only be
-# driven by the model mid-conversation, not by a shell step in a hook or
-# script, which is exactly where the phase transitions happen.
+# Updates `.workstream.json` in the target worktree (`--dir`, default `.`) for
+# every session when a workstream record exists, and additionally writes
+# `~/.claude/jobs/<id>/state.json` inside a Claude background session. That
+# state file is Claude Code internals rather than documented API, so the
+# `state.json` step is deliberately defensive: it no-ops (exit 0, silent)
+# whenever it isn't looking at a background session it understands. The
+# alternative — the supported `/rename` command — can only be driven by the
+# model mid-conversation, not by a shell step in a hook or script, which is
+# exactly where the phase transitions happen.
 #
 # Nothing here is authoritative. The phase is self-reported, so a session that
 # dies mid-ticket keeps a stale prefix; `/board` recomputes true state from git
 # + the tracker and is the thing to trust when they disagree.
 #
 # Exit codes: 0 always on the happy path AND on every "not applicable" case
-#             (not a bg session, no job dir, unreadable state) — callers embed
-#             this in larger workflows and must not abort over a cosmetic label.
-#             1 usage error only (bad phase name).
+#             (no `.workstream.json`, not a bg session, no job dir, unreadable
+#             state) — callers embed this in larger workflows and must not abort
+#             over a cosmetic label.
+#             1 usage error only (bad phase name or option).
 
 set -euo pipefail
 
@@ -60,28 +64,50 @@ die() { printf 'agent-phase: %s\n' "$*" >&2; exit 1; }
 PHASES="PLAN WIP REVIEW REVIEWED MERGED DONE"
 
 usage() {
-  printf 'usage: agent-phase.sh <%s>\n       agent-phase.sh --pr | --no-review | --show | --clear\n' \
+  printf 'usage: agent-phase.sh [--dir <path>] <%s>\n       agent-phase.sh [--dir <path>] --pr | --no-review | --show | --clear\n' \
     "$(echo "$PHASES" | tr ' ' '|')" >&2
 }
 
 # ---- args -------------------------------------------------------------------
-phase="" action="set"
-case "${1:-}" in
-  --show)    action="show" ;;
-  --clear)   action="clear" ;;
-  --pr)      action="pr" ;;
-  --no-review) action="no-review" ;;
-  -h|--help) sed -n '2,/^set -euo/p' "$0" | sed '$d'; exit 0 ;;
-  "")        usage; exit 1 ;;
-  -*)        usage; die "unknown option: $1" ;;
-  *)
-    phase="$(printf '%s' "$1" | tr '[:lower:]' '[:upper:]')"
-    case " $PHASES " in
-      *" $phase "*) ;;
-      *) usage; die "unknown phase '$1' (expected one of: $PHASES)" ;;
-    esac
-    ;;
-esac
+dir="."
+phase="" action=""
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --dir)
+      [ "$#" -ge 2 ] && [ -n "$2" ] || { usage; die "--dir requires a path"; }
+      dir="$2"
+      shift 2
+      ;;
+    --dir=*)
+      dir="${1#--dir=}"
+      [ -n "$dir" ] || { usage; die "--dir requires a path"; }
+      shift
+      ;;
+    --show|--clear|--pr|--no-review)
+      [ -z "$action" ] || { usage; die "unexpected extra argument: $1"; }
+      action="${1#--}"
+      shift
+      ;;
+    -h|--help)
+      sed -n '2,/^set -euo/p' "$0" | sed '$d'
+      exit 0
+      ;;
+    -*)
+      usage; die "unknown option: $1"
+      ;;
+    *)
+      [ -z "$action" ] || { usage; die "unexpected extra argument: $1"; }
+      action="set"
+      phase="$(printf '%s' "$1" | tr '[:lower:]' '[:upper:]')"
+      case " $PHASES " in
+        *" $phase "*) ;;
+        *) usage; die "unknown phase '$1' (expected one of: $PHASES)" ;;
+      esac
+      shift
+      ;;
+  esac
+done
+[ -n "$action" ] || { usage; exit 1; }
 
 # ---- telemetry --------------------------------------------------------------
 # Recorded for every session, not just background ones: the phase change is
@@ -105,13 +131,13 @@ if [ -x "$SCRIPT_DIR/workstream.sh" ]; then
   case "$action" in
     show)
       if [ -z "${CLAUDE_JOB_DIR:-}" ]; then
-        "$SCRIPT_DIR/workstream.sh" phase --show 2>/dev/null || true
+        "$SCRIPT_DIR/workstream.sh" phase --dir "$dir" --show 2>/dev/null || true
       fi
       ;;
-    clear)     "$SCRIPT_DIR/workstream.sh" phase --clear >/dev/null 2>&1 || true ;;
-    pr)        "$SCRIPT_DIR/workstream.sh" phase --pr >/dev/null 2>&1 || true ;;
-    no-review) "$SCRIPT_DIR/workstream.sh" phase --no-review >/dev/null 2>&1 || true ;;
-    set)       "$SCRIPT_DIR/workstream.sh" phase "$phase" >/dev/null 2>&1 || true ;;
+    clear)     "$SCRIPT_DIR/workstream.sh" phase --dir "$dir" --clear >/dev/null 2>&1 || true ;;
+    pr)        "$SCRIPT_DIR/workstream.sh" phase --dir "$dir" --pr >/dev/null 2>&1 || true ;;
+    no-review) "$SCRIPT_DIR/workstream.sh" phase --dir "$dir" --no-review >/dev/null 2>&1 || true ;;
+    set)       "$SCRIPT_DIR/workstream.sh" phase --dir "$dir" "$phase" >/dev/null 2>&1 || true ;;
   esac
 fi
 
@@ -119,7 +145,8 @@ fi
 # CLAUDE_JOB_DIR is exported into every tool call of a background session and
 # names that session's own job dir. Its absence means we're in an interactive
 # session (iTerm launcher, plain `claude`), where there is no agent-view row to
-# label — not an error, just nothing to do.
+# label (`.workstream.json` was already updated above) — not an error, just
+# nothing to do for `state.json`.
 job_dir="${CLAUDE_JOB_DIR:-}"
 [ -n "$job_dir" ] || exit 0
 

@@ -47,6 +47,10 @@ check "non-bg MERGED drops PR" "[MERGED]" "$(cd "$REPO" && env -u CLAUDE_JOB_DIR
 (cd "$REPO" && env -u CLAUDE_JOB_DIR "$TOOLS_DIR/agent-phase.sh" --clear)
 check "non-bg --clear" "" "$(cd "$REPO" && env -u CLAUDE_JOB_DIR "$TOOLS_DIR/agent-phase.sh" --show)"
 
+# --dir targets a worktree from a different cwd
+(cd "$TMP" && env -u CLAUDE_JOB_DIR "$TOOLS_DIR/agent-phase.sh" --dir "$REPO" REVIEW)
+check "--dir from outside repo" "[REVIEW]" "$(cd "$TMP" && env -u CLAUDE_JOB_DIR "$TOOLS_DIR/agent-phase.sh" --dir "$REPO" --show)"
+
 # Inside background session: updates BOTH state.json and .workstream.json
 JOB_DIR="$TMP/job"
 mkdir -p "$JOB_DIR"
