@@ -310,5 +310,53 @@ check "print-title is read-only and never guarded" "0" "$rc"
 check "missing guard script does not block" "0" "$rc"
 has "missing guard script is reported" "launching without a memory check" "$ROOT/mem.err"
 
+# ---- agy-tmux launcher & auto-selection ---------------------------------------
+AT_STUB="$ROOT/stub-agy-tmux.sh"
+printf '#!/bin/sh\nprintf "%%s\\n" "$*" > "%s/agy-tmux.args"\n' "$ROOT" > "$AT_STUB"
+chmod +x "$AT_STUB"
+
+TMUX_DASH_STUB="$ROOT/stub-tmux-dash.sh"
+printf '#!/bin/sh\necho 1\n' > "$TMUX_DASH_STUB"
+chmod +x "$TMUX_DASH_STUB"
+
+TMUX_PLAIN_STUB="$ROOT/stub-tmux-plain.sh"
+printf '#!/bin/sh\necho ""\n' > "$TMUX_PLAIN_STUB"
+chmod +x "$TMUX_PLAIN_STUB"
+
+rm -f "$ROOT/agy-tmux.args" "$ROOT/claude.args"
+(cd "$ROOT/widgets" && START_TICKET_AGY_TMUX="$AT_STUB" PATH="$ROOT/stubbin:$PATH" \
+  "$ST" --tab-only "$ROOT/wt" "$CB/kf" --launcher agy-tmux >/dev/null 2>&1)
+has "explicit --launcher agy-tmux calls --window" "--window $ROOT/wt $CB/kf" "$ROOT/agy-tmux.args"
+
+mkdir -p "$HOME/.config/start-ticket"
+printf 'launcher=bg\n' > "$HOME/.config/start-ticket/config"
+
+rm -f "$ROOT/agy-tmux.args" "$ROOT/claude.args"
+(cd "$ROOT/widgets" && ANTIGRAVITY_AGENT=1 TMUX="stub,1,0" TMUX_PANE="%1" \
+  AGY_TMUX_TMUX_BIN="$TMUX_DASH_STUB" START_TICKET_AGY_TMUX="$AT_STUB" PATH="$ROOT/stubbin:$PATH" \
+  "$ST" --tab-only "$ROOT/wt" "$CB/kf" >/dev/null 2>&1)
+has "agy inside @agy_dashboard=1 auto-selects agy-tmux over bg config" "--window $ROOT/wt $CB/kf" "$ROOT/agy-tmux.args"
+check "agy inside @agy_dashboard=1 does not invoke claude" "no" "$([ -e "$ROOT/claude.args" ] && echo yes || echo no)"
+
+rm -f "$ROOT/agy-tmux.args" "$ROOT/claude.args"
+(cd "$ROOT/widgets" && env -u ANTIGRAVITY_AGENT TMUX="stub,1,0" TMUX_PANE="%1" \
+  AGY_TMUX_TMUX_BIN="$TMUX_DASH_STUB" START_TICKET_AGY_TMUX="$AT_STUB" PATH="$ROOT/stubbin:$PATH" \
+  "$ST" --tab-only "$ROOT/wt" "$CB/kf" >/dev/null 2>&1)
+check "claude inside @agy_dashboard=1 keeps bg launcher" "yes" "$([ -e "$ROOT/claude.args" ] && echo yes || echo no)"
+check "claude inside @agy_dashboard=1 does not invoke agy-tmux" "no" "$([ -e "$ROOT/agy-tmux.args" ] && echo yes || echo no)"
+
+rm -f "$ROOT/agy-tmux.args" "$ROOT/claude.args"
+(cd "$ROOT/widgets" && ANTIGRAVITY_AGENT=1 TMUX="stub,1,0" TMUX_PANE="%1" \
+  AGY_TMUX_TMUX_BIN="$TMUX_PLAIN_STUB" START_TICKET_AGY_TMUX="$AT_STUB" PATH="$ROOT/stubbin:$PATH" \
+  "$ST" --tab-only "$ROOT/wt" "$CB/kf" >/dev/null 2>&1)
+check "agy in non-dashboard tmux does not auto-select agy-tmux" "no" "$([ -e "$ROOT/agy-tmux.args" ] && echo yes || echo no)"
+
+rm -f "$ROOT/agy-tmux.args" "$HOME/.config/start-ticket/config"
+(cd "$ROOT/widgets" && MEM_GUARD_HOST_FIXTURE="level=critical free_pct=3" \
+  START_TICKET_AGY_TMUX="$AT_STUB" PATH="$ROOT/stubbin:$PATH" \
+  "$ST" --tab-only "$ROOT/wt" "$CB/kf" --launcher agy-tmux >/dev/null 2>"$ROOT/mem.err"); rc=$?
+check "mem-guard blocks agy-tmux launcher" "1" "$rc"
+check "blocked agy-tmux never invokes agy-tmux.sh" "no" "$([ -e "$ROOT/agy-tmux.args" ] && echo yes || echo no)"
+
 printf '%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
