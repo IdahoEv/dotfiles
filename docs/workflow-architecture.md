@@ -85,7 +85,7 @@ flowchart TD
 | PR opened, bot comments arrived | `/github-review-comments` → Automatic (agent round), Quick (one agent turn), Slow (ask me per comment) |
 | Review of the prompt corpus itself | `/prompt-audit`, `/prompt-review` |
 | Several ready tickets to start | `/pick` (groups them into chains), then paste its `/start` line |
-| Upcoming tickets lack ACs, estimate, or decided design | `/groom` |
+| Upcoming tickets lack ACs or decided design | `/groom` |
 | Topic to discuss with no ticket | `/discuss` (opens a `[TALK]` session) |
 | Merged | `/finalize` (every ticket in a chain) |
 
