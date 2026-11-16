@@ -227,7 +227,60 @@ class TestHelpers(unittest.TestCase):
             mock.patch.object(curses, "wrapper") as wrapper_mock,
         ):
             dash.main(["--session", "agy-dotfiles"])
-        wrapper_mock.assert_called_once_with(dash._curses_loop, "agy-dotfiles", None, 2.0, "/env/tmux")
+        wrapper_mock.assert_called_once_with(dash._curses_loop, "agy-dotfiles", None, 2.0, "/env/tmux", "")
+
+
+class TestMemoryColumn(unittest.TestCase):
+    def _row(self, mem=""):
+        return dash.WorkstreamRow("1", "Is5", "%1", "/x", "Is5", "desc", "b", "running", "out", mem=mem)
+
+    def test_render_shows_mem_and_host_line(self):
+        lines = dash.render_lines([self._row("~1.2 GB")], 0, 120, "s", host_line="host pressure: warn  [WARN]")
+        self.assertIn("host pressure: warn", lines[0])
+        self.assertIn("Mem", lines[2])
+        self.assertIn("~1.2 GB", lines[3])
+
+    def test_unmeasured_row_shows_dash(self):
+        lines = dash.render_lines([self._row()], 0, 120, "s")
+        self.assertIn(" - ", lines[3])
+
+    def _provider(self, payload, rc=0):
+        import subprocess as sp
+        out = payload if isinstance(payload, str) else json.dumps(payload)
+        return mock.patch.object(dash.subprocess, "run", return_value=sp.CompletedProcess([], rc, out, ""))
+
+    def test_no_provider_means_no_memory_column(self):
+        self.assertEqual(dash.fetch_memory(""), ({}, ""))
+
+    def test_fetch_memory_never_raises(self):
+        with mock.patch.object(dash.subprocess, "run", side_effect=OSError("missing")):
+            self.assertEqual(dash.fetch_memory("nope report"), ({}, ""))
+        with self._provider("not json"):
+            self.assertEqual(dash.fetch_memory("x"), ({}, ""))
+        with self._provider({}, rc=3):
+            self.assertEqual(dash.fetch_memory("x"), ({}, ""))
+        with self._provider({"sessions": [{"source": "tmux"}]}):  # missing key is ignored, not a crash
+            self.assertEqual(dash.fetch_memory("x"), ({}, ""))
+
+    def test_fetch_memory_maps_tmux_windows_and_flags_pressure(self):
+        data = {
+            "host_line": "host pressure: critical, ~5% free",
+            "verdict": {"status": "block"},
+            "process_table_ok": True,
+            "sessions": [
+                {"source": "tmux", "key": "1", "mem": "~2.0 GB"},
+                {"source": "unmanaged", "key": "", "mem": "~9.0 GB"},
+            ],
+        }
+        with self._provider(data):
+            by_win, line = dash.fetch_memory("mem-guard report --json")
+        self.assertEqual(by_win, {"1": "~2.0 GB"})
+        self.assertIn("[BLOCK]", line)
+
+    def test_dashboard_does_not_import_the_memory_module(self):
+        self.assertFalse(hasattr(dash, "mem_guard"))
+        src = Path(dash.__file__).read_text()
+        self.assertNotIn("import mem_guard", src)
 
 
 if __name__ == "__main__":
