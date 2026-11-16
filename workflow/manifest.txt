@@ -53,7 +53,7 @@ bddf25616fa63f0ca8ac5b4930003b30deab97b5058a623c8a88320938a8d6a7  644  dot_claud
 620422885b927180f9a5aa8be24e988ca6f21dcbefe231b5068a90da1e059d72  644  dot_claude/skills/workflow/delivery.md
 337f1a99f921ac9c485bd1f25a6b9b50393f3898ef9bd793896cfada59e336e3  755  dot_claude/skills/workflow/executable_wf-context.sh
 13c7edab5aa922e6b2bce52f156701032bfc8144a22e79e461fb6b90d272d814  755  tools/agent-phase.sh
-d7a87d2eb56a357fd41e9a9c89366e8d5cd23095faac302ab1c9737b7c7d4fc6  755  tools/agy-tmux.sh
+c8797dce111bbcfcf66eda3d7861ebec5a5629fd48d0f0db49d716c3ab8fd953  755  tools/agy-tmux.sh
 392b86f6854e4e3ffa1dcbd28904afa1c15536a1dea48039be0e3b69a5d35d71  644  tools/bootstrap-linux.sh
 56642e1c7439303b525d6b594ec2420f598feabe330d846e7420d4dad0f0e5d8  644  tools/bootstrap-mac.sh
 2005d23e14e09fec069d999bc58813745b711e65c14c50d22787e9f769f801b2  644  tools/cloud-gh-shim.py
