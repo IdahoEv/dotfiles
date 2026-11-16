@@ -135,7 +135,17 @@ Run this command?
   4. No, cancel
 ```
 
+Also explain this one to me, I was not aware we were using sqlite anywhere
+
 ```
+Requesting permission for:
+   sqlite3 ~/.gemini/antigravity-cli/conversation_summaries.db ".schema"
+
+Run this command?
+> 1. Yes, run command
+  2. Yes, and always allow in this conversation for commands that start with 'sqlite3'
+  3. Yes, and always allow for commands that start with 'sqlite3' (Persist to settings.json)
+  4. No, cancel
 ```
 
 ```
