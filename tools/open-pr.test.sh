@@ -31,6 +31,7 @@ cat > "$ROOT/bin/gh" <<'STUB'
 #!/usr/bin/env bash
 case "$1 $2" in
   "auth status") exit 0 ;;
+  "repo view")   exit 1 ;;
   "pr list")     [ -n "${GH_EXISTING_PR:-}" ] && echo "$GH_EXISTING_PR"; exit 0 ;;
   "pr create")
     shift 2
@@ -208,7 +209,7 @@ new_repo 42-foo 'openpr_provider=kardashev'; run --title "T" --review none >/dev
 check "kardashev: Is<NNN> title"       "Is42: T" "$(title)"
 check "kardashev: Closes body"         "Closes #42" "$(body)"
 check "start-ticket provider=github"   "github" "$(resolved 42-foo 'provider=github')"
-check "start-ticket provider=shortcut" "github" "$(resolved 42-foo 'provider=shortcut')"
+check "start-ticket provider=shortcut" "shortcut" "$(resolved 42-foo 'provider=shortcut')"
 check "openpr_provider beats provider" "kardashev" "$(resolved 42-foo $'provider=github\nopenpr_provider=kardashev')"
 check "--provider beats conf"          "github" "$(resolved 42-foo 'openpr_provider=kardashev' --provider github)"
 
@@ -259,8 +260,25 @@ cat > "$ROOT/repo/.workstream.json" <<'EOF'
 {"version":1,"kind":"ticket","tickets":[{"id":"88"}],"ticket_provider":"github"}
 EOF
 out="$(run --title "Custom branch fix" --review none)"
-check "single-ticket .workstream.json: PR title prefixed" "Shipped Is88: Custom branch fix" "$(grep '^Shipped ' <<<"$out")"
+check "single-ticket .workstream.json: PR title from resolver" "Shipped Is88: custom branch fix" "$(grep '^Shipped ' <<<"$out")"
 check "single-ticket .workstream.json: Closes footer" "Closes #88" "$(cat "$GH_LOG.body")"
+
+# .workstream.json without --title uses stored desc; chain uses full key.
+new_repo Is42+43-chain-fix
+cat > "$ROOT/repo/.workstream.json" <<'EOF'
+{"version":1,"kind":"ticket","tickets":[{"id":"42","url":""},{"id":"43","url":""}],"ticket_provider":"github","key":"Is42+43","desc":"chain fix","tags":["WIP"]}
+EOF
+out="$(run --review none)"
+check "chain .workstream.json without --title: PR title from resolver" "Shipped Is42+43: chain fix" "$(grep '^Shipped ' <<<"$out")"
+
+# Shortcut open-pr provider: sc-<id> branch, --issue sc-<id>, Story footer (no Closes #).
+new_repo sc-7435-add-cache 'provider=shortcut'
+out="$(run --title "Add cache" --review none)"
+check "shortcut: PR title prefixed" "Shipped sc-7435: Add cache" "$(grep '^Shipped ' <<<"$out")"
+check "shortcut: Story footer, no Closes" "Story: [sc-7435]" "$(cat "$GH_LOG.body")"
+new_repo custom-branch 'provider=shortcut'
+out="$(run --title "Add cache" --issue sc-7435 --review none)"
+check "shortcut: non-integer --issue sc-7435 accepted" "Shipped sc-7435: Add cache" "$(grep '^Shipped ' <<<"$out")"
 
 # bug/Is88-foo and Is88/foo branches extract the issue number even without .workstream.json.
 new_repo bug/Is88-foo

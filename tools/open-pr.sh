@@ -146,7 +146,7 @@ esac
 if [ -n "$issue" ]; then
   IFS=, read -ra _ids <<<"$issue"
   for _i in "${_ids[@]}"; do
-    [[ "$_i" =~ ^[1-9][0-9]*$ ]] || die "--issue must be positive integers, comma-separated (got '$issue')"
+    [[ "$_i" =~ ^[A-Za-z0-9][A-Za-z0-9_-]*$ ]] || die "--issue must be ticket ids, comma-separated (got '$issue')"
   done
 fi
 
@@ -211,6 +211,13 @@ source "$pf"
 provider::available || die "provider '$provider' unavailable (CLI missing or not authed)"
 : "${PROVIDER_TRIGGER_MODE:=manual}"
 
+if [ -n "$issue" ] && declare -f provider::validate_issue >/dev/null; then
+  IFS=, read -ra _ids <<<"$issue"
+  for _i in "${_ids[@]}"; do
+    provider::validate_issue "$_i" || die "invalid --issue '$_i' for provider '$provider'"
+  done
+fi
+
 # ---- PR: reuse if one already exists for this branch, else create ---------
 # Decide (and validate inputs) before pushing, so a usage error can't leave a
 # published branch behind as a side effect.
@@ -219,7 +226,10 @@ provider::available || die "provider '$provider' unavailable (CLI missing or not
 # validation) via set -e instead of being swallowed like a || true.
 existing_pr="$(gh pr list --head "$branch" --json number --jq '.[0].number // empty')"
 create_pr=""
-if [ -z "$existing_pr" ]; then
+if [ -z "$existing_pr" ] && [ -z "$title" ]; then
+  if [ -f .workstream.json ] && [ -x "$SCRIPT_DIR/workstream.sh" ]; then
+    title="$("$SCRIPT_DIR/workstream.sh" render base --dir . 2>/dev/null || true)"
+  fi
   [ -n "$title" ] || die "no existing PR for '$branch' and no --title given"
 fi
 # Committed before the body is assembled: the body's Risk and diff stat read HEAD.
@@ -254,27 +264,50 @@ else
   # the default body, as the old inline version did.
   # A chain's membership (.workstream.json or legacy <git-dir>/chain) is the
   # fallback ahead of the branch name: the branch only carries the head ticket.
+  issue_explicit="$issue"
   ws_chain_ids="$("$SCRIPT_DIR/workstream.sh" chain-ids --dir .)" \
     || die "workstream.sh chain-ids failed; cannot determine the chain's tickets"
   if [ -z "$issue" ] && [ -n "$draft" ] && [[ "$ws_chain_ids" == *,* ]]; then
     die "a draft PR on a chained branch must name the completed tickets with --issue <a,b>"
   fi
-  if [ -z "$issue" ] && [ -n "$ws_chain_ids" ] && [ "$(gt::ticket_scheme "$branch" .)" != "shortcut" ]; then
+  if [ -z "$issue" ] && [ -n "$ws_chain_ids" ]; then
     issue="$ws_chain_ids"
   fi
   if [ -z "$issue" ]; then
     issue="$(provider::issue_from_branch "$branch")"
   fi
+  issue_csv="$issue"
   issues=()
   if [ -n "$issue" ]; then
     IFS=, read -ra issues <<<"$issue"
     for _i in "${issues[@]}"; do
-      [[ "$_i" =~ ^[1-9][0-9]*$ ]] || die "issue number '$_i' isn't a positive integer"
+      if declare -f provider::validate_issue >/dev/null; then
+        provider::validate_issue "$_i" || die "issue id '$_i' is invalid for provider '$provider'"
+      else
+        [[ "$_i" =~ ^[A-Za-z0-9][A-Za-z0-9_-]*$ ]] || die "issue id '$_i' is invalid"
+      fi
     done
     issue="${issues[0]}"
   fi
 
-  title="$(provider::pr_title "$issue" "$title")"
+  used_resolver=""
+  if [ -f .workstream.json ] && [ -x "$SCRIPT_DIR/workstream.sh" ]; then
+    bare_title="$title"
+    while [[ "$bare_title" =~ ^(Is[0-9]+(\+[0-9]+)*|sc-[0-9]+(\+[0-9]+)*)(:?)[[:space:]]+(.*)$ ]]; do
+      bare_title="${BASH_REMATCH[5]}"
+    done
+    ws_pr_title="$("$SCRIPT_DIR/workstream.sh" render pr --dir . \
+      ${issue_explicit:+--ids "$issue_csv"} \
+      ${provider:+--provider "$provider"} \
+      ${bare_title:+--desc "$bare_title"} 2>/dev/null || true)"
+    if [ -n "$ws_pr_title" ]; then
+      title="$ws_pr_title"
+      used_resolver=1
+    fi
+  fi
+  if [ -z "$used_resolver" ]; then
+    title="$(provider::pr_title "$issue" "$title")"
+  fi
 
   if [ -n "$body_file" ]; then
     # The caller drafted a real summary. Any tracker-linking convention
@@ -344,7 +377,7 @@ pr_url="$(gh pr view "$pr_number" --json url --jq '.url')"
 # `sc-73237: Is73237: …` case). Repair it here and say so.
 pr_title_now="$(gh pr view "$pr_number" --json title --jq '.title')"
 pr_title_fixed=""
-if [ -n "$create_pr" ] && [ -n "${issue:-}" ]; then
+if [ -n "$create_pr" ] && [ -n "${issue:-}" ] && [ -z "${used_resolver:-}" ]; then
   expected="$(provider::pr_title "$issue" "")"
   expected="${expected% }"                     # bare prefix, e.g. "Is42:" / "sc-42:"
   if [ -n "$expected" ]; then
@@ -357,7 +390,7 @@ if [ -n "$create_pr" ] && [ -n "${issue:-}" ]; then
     while :; do
       if [ "${rest#"$expected"}" != "$rest" ]; then
         rest="${rest#"$expected"}"
-      elif [[ "$rest" =~ ^(Is[0-9]+|sc-[0-9]+)(:?)[[:space:]] ]]; then
+      elif [[ "$rest" =~ ^(Is[0-9+]+|sc-[0-9+]+)(:?)[[:space:]] ]]; then
         rest="${rest#"${BASH_REMATCH[1]}${BASH_REMATCH[2]}"}"
       else
         break

@@ -866,27 +866,35 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.cmd == "render":
+        rec = load_record(args.dir)
         if args.ids:
             ids = [i.strip() for i in args.ids.split(",") if i.strip()]
             sanitized = repo_facts.sanitize_label(args.desc) if args.desc else ""
             if sanitized:
                 desc = format_text(sanitized, "words")
-            else:
+            elif args.title:
                 desc = format_text(_slug_phrase(args.title), "words")
+            elif rec is not None and rec.desc:
+                desc = rec.desc
+            else:
+                desc = ""
             rec = WorkstreamRecord(
                 version=1,
                 kind="ticket",
                 tickets=[{"id": tid, "url": ""} for tid in ids],
-                ticket_provider=args.provider or "github",
+                ticket_provider=args.provider or (rec.ticket_provider if rec else "") or "github",
                 desc=desc,
-                type=args.type_,
-                tags=["PLAN"],
+                type=args.type_ or (rec.type if rec else ""),
+                tags=list(rec.tags) if rec else ["PLAN"],
             )
             rec.key = derive_key(rec, args.dir)
         else:
-            rec = load_record(args.dir)
             if rec is None:
                 return 1
+            if args.desc:
+                sanitized = repo_facts.sanitize_label(args.desc)
+                if sanitized:
+                    rec.desc = format_text(sanitized, "words")
         sys.stdout.write(render_surface(rec, args.surface, args.dir))
         return 0
 
