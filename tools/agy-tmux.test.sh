@@ -91,11 +91,27 @@ unset MEM_GUARD_OVERRIDE
 help_out="$("$TOOLS/agy-tmux.sh" --help)"
 has "--help prints usage" "Usage: agy-tmux.sh" "$help_out"
 
-# ---- 2. no-args re-attach on missing session fails -------------------------
-if "$TOOLS/agy-tmux.sh" --session "missing-ws" --no-attach >/dev/null 2>&1; then
-  fail "no-args on missing session should exit non-zero"
-fi
-printf 'PASS no-args on missing session exits non-zero\n'
+# ---- 2. no-args on missing session launches governor in main worktree ---------
+"$TOOLS/agy-tmux.sh" --session "gov-ws" --no-attach >/dev/null
+gov_wins="$(tmux -L "$SOCK" list-windows -t '=gov-ws' -F '#{window_index}:#{window_name}')"
+has "no-args creates dashboard in window 0" "0:dashboard" "$gov_wins"
+has "no-args creates governor in window 1" "1:governor" "$gov_wins"
+gov_roe="$(tmux -L "$SOCK" show-window-options -t '=gov-ws:1' -v remain-on-exit)"
+check "governor window sets remain-on-exit on" "on" "$gov_roe"
+for _ in 1 2 3 4 5; do
+  [ -f "$ROOT/agy-calls.log" ] && [ "$(wc -l < "$ROOT/agy-calls.log")" -ge 1 ] && break
+  sleep 0.2
+done
+gov_calls="$(cat "$ROOT/agy-calls.log")"
+has "governor invokes agy with /governor" "--mode plan --prompt-interactive /governor" "$gov_calls"
+rm -f "$ROOT/agy-calls.log"
+
+# Re-running no-args on existing session re-attaches without adding another governor window.
+"$TOOLS/agy-tmux.sh" --session "gov-ws" --no-attach >/dev/null
+gov_wins_re="$(tmux -L "$SOCK" list-windows -t '=gov-ws' -F '#{window_index}:#{window_name}')"
+check "no-args on existing session does not duplicate governor" "2" "$(printf '%s\n' "$gov_wins_re" | wc -l | tr -d ' ')"
+tmux -L "$SOCK" kill-session -t "=gov-ws"
+sleep 0.2
 
 # ---- 3. preserve existing C-z binding & launch chain + single ticket -------
 tmux -L "$SOCK" new-session -d -s "other-ws" "sleep 30"
@@ -214,6 +230,22 @@ if tmux -L "$SOCK" has-session -t '=mem-block-ws' 2>/dev/null; then
   fail "blocked launch should not create a session"
 fi
 printf 'PASS blocked launch creates no tmux session\n'
+
+rc=0
+MEM_GUARD_HOST_FIXTURE="level=critical free_pct=4" "$TOOLS/agy-tmux.sh" --session "mem-block-gov-ws" --no-attach >"$ROOT/mem.out" 2>"$ROOT/mem.err" || rc=$?
+check "blocked governor launch exits non-zero" "1" "$rc"
+has "blocked governor launch names mem-guard" "blocked by mem-guard" "$(cat "$ROOT/mem.err")"
+if tmux -L "$SOCK" has-session -t '=mem-block-gov-ws' 2>/dev/null; then
+  fail "blocked governor launch should not create a session"
+fi
+printf 'PASS blocked governor launch creates no tmux session\n'
+
+rm -f "$ROOT/agy-env.log"
+MEM_GUARD_HOST_FIXTURE="level=critical free_pct=4" "$TOOLS/agy-tmux.sh" --session "mem-force-gov-ws" --no-attach --force >/dev/null 2>"$ROOT/mem.err"
+for _ in 1 2 3 4 5; do [ -s "$ROOT/agy-env.log" ] && break; sleep 0.2; done
+check "--force governor never reaches the agent pane" "override=unset" "$(cat "$ROOT/agy-env.log")"
+has "--force overrides governor block" "1:governor" "$(tmux -L "$SOCK" list-windows -t '=mem-force-gov-ws' -F '#{window_index}:#{window_name}')"
+tmux -L "$SOCK" kill-session -t "=mem-force-gov-ws"
 
 rm -f "$ROOT/agy-env.log" "$ROOT/start-ticket-env.log"
 MEM_GUARD_HOST_FIXTURE="level=critical free_pct=4" "$TOOLS/agy-tmux.sh" --session "mem-force-ws" --no-attach --force 14 >/dev/null 2>"$ROOT/mem.err"
