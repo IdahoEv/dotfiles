@@ -40,6 +40,9 @@ flowchart TD
 | `agents/github-review-repair-agent.md` | Agent | Fresh context with edit tools; never commits/pushes/writes to GitHub. |
 | `skills/reviewer-contract/SKILL.md` | Skill | Shared contract loaded into every reviewer; avoids per-agent duplication. |
 | `skills/review-lens-contract/SKILL.md` | Skill | Contract for periodic project-review lenses (snapshot-scoped, not diff-scoped) and their discovery rules; mirrors `/local-review-cycle` tiers. |
+| `commands/project-review.md` | Command | Thin launcher for periodic project review: resolves repo, default branch, and cwd, then launches `project-review-manager` and prints its report unaltered. |
+| `agents/project-review-manager.md` | Agent | Fresh read-only orchestrator for periodic project review: activity gate, shared snapshot, tracker pull with truncation abort, lens fan-out, central synthesis, inline report, and cleanup. |
+| `skills/project-review-procedure/SKILL.md` | Skill | Periodic project-review procedure loaded by `project-review-manager`; not user-invocable. |
 | `agents/review-triage.md` | Agent | Periodic `Lens: triage` agent: duplicates, ticket-state consistency, tech-debt priority, work clusters. Reads tickets only through `tracker.sh list`; proposes actions as text and never edits a ticket. |
 | `tools/tracker.sh`, `tools/start-ticket-providers/*.sh` (`provider::list_issues`) | Script | Read-only tracker listing for lenses: JSON with a `truncated` flag; exit 2 when the provider cannot list (Shortcut is stubbed), so callers fall back to report-only. No write subcommands. |
 | `tools/pending-actions.sh`, `tools/lib/pending_actions.py` | Script | Pending-actions file protocol: markdown table keyed `(issue, action)`, upsert replaces in place so reruns never duplicate a queued action. Queues only; the apply step (#137) executes. |
@@ -84,6 +87,7 @@ flowchart TD
 | Non-trivial change committed, pre-PR | `/local-review-cycle` (auto-invoked by CLAUDE.md after ticket implementation; launches `local-review-cycle-manager`) |
 | PR opened, bot comments arrived | `/github-review-comments` → Automatic (agent round), Quick (one agent turn), Slow (ask me per comment) |
 | Review of the prompt corpus itself | `/prompt-audit`, `/prompt-review` |
+| Periodic read-only review of the default branch | `/project-review` (`[--force] [--window N]`) |
 | Several ready tickets to start | `/pick` (groups them into chains), then paste its `/start` line |
 | Upcoming tickets lack ACs or decided design | `/groom` |
 | Topic to discuss with no ticket | `/discuss` (opens a `[TALK]` session) |
