@@ -23,6 +23,7 @@ import workstream  # noqa: E402
 ACTIVE_THRESHOLD_SECS = 5
 PALETTE = ("red", "blue", "green", "yellow", "purple", "orange", "pink", "cyan")
 _DEFAULT_COLORS_FILE = _LIB_DIR.parent / "project-colors"
+_COLOR_CACHE: dict[tuple[str, str], str] = {}
 
 _BASE_CURSES_COLORS = {
     "red": curses.COLOR_RED,
@@ -127,6 +128,15 @@ def resolve_project_color(pane_path: str, colors_file: Path | None = None) -> st
     return _lookup_project_colors_file(proj, colors_file)
 
 
+def _cached_project_color(pane_path: str) -> str:
+    if not pane_path or not os.path.isdir(pane_path):
+        return ""
+    key = (pane_path, os.environ.get("SESSION_LABEL_COLORS_FILE", ""))
+    if key not in _COLOR_CACHE:
+        _COLOR_CACHE[key] = resolve_project_color(pane_path)
+    return _COLOR_CACHE[key]
+
+
 def load_workstream_meta(pane_path: str) -> tuple[str, str]:
     """Return (ticket_ref, desc) from <pane_path>/.workstream.json when present."""
     if not pane_path or not os.path.isdir(pane_path):
@@ -206,7 +216,7 @@ def fetch_windows(
                 branch=branch,
                 status=compute_status(pane_dead, last_activity, current_time),
                 last_line=extract_last_line(captured),
-                color=resolve_project_color(pane_path),
+                color=_cached_project_color(pane_path),
             )
         )
     return rows
@@ -390,6 +400,8 @@ def _curses_loop(
 
         ch = stdscr.getch()
         if ch == -1 or ch in (ord("r"), ord("R")):
+            if ch in (ord("r"), ord("R")):
+                _COLOR_CACHE.clear()
             needs_refresh = True
             continue
         if ch in (ord("q"), ord("Q")):

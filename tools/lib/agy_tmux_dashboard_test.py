@@ -285,6 +285,66 @@ class TestProjectColors(unittest.TestCase):
 
         self.assertEqual(dash.resolve_project_color("/nonexistent/path/for/test"), "")
 
+    def test_fetch_windows_caches_project_color_across_refreshes(self):
+        dash._COLOR_CACHE.clear()
+        with tempfile.TemporaryDirectory() as tmp:
+            wt = Path(tmp) / "wt"
+            wt.mkdir()
+            list_out = f"1\tIs187\t%1\t{wt}\t0\t1000\n"
+
+            def fake_run(cmd: list[str]) -> str:
+                if "list-windows" in cmd:
+                    return list_out
+                if "capture-pane" in cmd:
+                    return "ok\n"
+                return ""
+
+            with (
+                mock.patch.object(dash, "_run_cmd", side_effect=fake_run),
+                mock.patch.object(dash, "_git_branch", return_value="Is187-test"),
+                mock.patch.object(dash, "resolve_project_color", return_value="cyan") as color_mock,
+            ):
+                rows1 = dash.fetch_windows("agy-dotfiles", now=1000)
+                rows2 = dash.fetch_windows("agy-dotfiles", now=1002)
+                dash._COLOR_CACHE.clear()
+                rows3 = dash.fetch_windows("agy-dotfiles", now=1004)
+
+            self.assertEqual(color_mock.call_count, 2)
+            self.assertEqual([r.color for r in (rows1[0], rows2[0], rows3[0])], ["cyan", "cyan", "cyan"])
+
+    def test_curses_loop_clears_color_cache_only_on_manual_refresh(self):
+        dash._COLOR_CACHE.clear()
+        dash._COLOR_CACHE[("/tmp/wt", "")] = "green"
+        keys = [-1, ord("r")]
+        cache_sizes_at_fetch: list[int] = []
+
+        class FakeStdscr:
+            def keypad(self, _flag): pass
+            def timeout(self, _ms): pass
+            def getmaxyx(self): return (24, 100)
+            def erase(self): pass
+            def addnstr(self, *_args): pass
+            def refresh(self): pass
+            def getch(self):
+                if keys:
+                    return keys.pop(0)
+                raise StopIteration
+
+        def fake_fetch(*_args, **_kwargs):
+            cache_sizes_at_fetch.append(len(dash._COLOR_CACHE))
+            return []
+
+        with (
+            mock.patch.object(curses, "curs_set"),
+            mock.patch.object(curses, "has_colors", return_value=False),
+            mock.patch.object(dash, "fetch_windows", side_effect=fake_fetch),
+        ):
+            with self.assertRaises(StopIteration):
+                dash._curses_loop(FakeStdscr(), "agy-dotfiles", None, 2.0)
+
+        # Initial fetch + timeout (-1) preserve cache; manual 'r' clears it before fetch.
+        self.assertEqual(cache_sizes_at_fetch, [1, 1, 0])
+
 
 class TestColorRendering(unittest.TestCase):
     def test_init_color_pairs_without_color_support_returns_empty(self):
