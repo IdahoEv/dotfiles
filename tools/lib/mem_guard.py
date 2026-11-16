@@ -28,6 +28,7 @@ from __future__ import annotations
 import argparse
 import dataclasses
 import json
+import math
 import os
 import re
 import subprocess
@@ -68,7 +69,7 @@ class Config:
 def _num(raw: str, default: float, key: str, notes: list[str]) -> float:
     try:
         val = float(raw)
-        if val < 0:
+        if not math.isfinite(val) or val < 0:
             raise ValueError
         return val
     except ValueError:
@@ -294,7 +295,7 @@ def resolve_cwds(pids: list[int], runner: Runner = run) -> dict[int, str]:
 def workstream_label(cwd: str) -> str:
     """Workstream key for the nearest .workstream.json at or above cwd; '' if none."""
     cur = Path(cwd)
-    for _ in range(8):
+    while True:
         if (cur / workstream.RECORD_FILENAME).is_file():
             try:
                 rec = workstream.load_record(str(cur))
@@ -358,7 +359,7 @@ def tmux_roots(
 
 @dataclasses.dataclass
 class Host:
-    level: str            # normal | warn | critical | unknown (OS verdict; "unknown" off macOS)
+    level: str            # normal | warn | critical | unknown (OS level unreadable) | n/a (platform has none)
     free_pct: float | None
     source: str
     detail: str = ""
@@ -393,7 +394,7 @@ def read_host(runner: Runner = run, platform: str | None = None) -> Host:
             text = Path("/proc/meminfo").read_text()
             total = int(re.search(r"MemTotal:\s+(\d+)", text).group(1))  # type: ignore[union-attr]
             avail = int(re.search(r"MemAvailable:\s+(\d+)", text).group(1))  # type: ignore[union-attr]
-            return Host("unknown", 100.0 * avail / total, "/proc/meminfo MemAvailable", "no OS pressure level on Linux")
+            return Host("n/a", 100.0 * avail / total, "/proc/meminfo MemAvailable", "no OS pressure level on Linux")
         except (OSError, AttributeError, ValueError, ZeroDivisionError):
             return Host("unknown", None, "/proc/meminfo", "unreadable")
     return Host("unknown", None, plat, "unsupported platform")
@@ -414,6 +415,7 @@ def _worse(a: str, b: str) -> str:
 def evaluate(host: Host, sessions: list[SessionMem] | None, cfg: Config) -> Verdict:
     """Pure threshold logic. Only the host signal can block; per-session estimates only warn."""
     status = "ok"
+    degraded = False
     reasons: list[str] = []
     if host.level == "unknown" and host.free_pct is None:
         return Verdict("unknown", [f"host memory pressure unreadable ({host.source}{': ' + host.detail if host.detail else ''})"])
@@ -423,6 +425,11 @@ def evaluate(host: Host, sessions: list[SessionMem] | None, cfg: Config) -> Verd
     elif host.level == "warn":
         status = "warn"
         reasons.append("OS memory pressure is elevated")
+    if host.level == "unknown":
+        # OS verdict unreadable but free % is available: judge by it, yet remember the
+        # primary signal is missing so mem_fail=closed still applies if nothing else trips.
+        degraded = True
+        reasons.append(f"OS pressure level unreadable ({host.source}); relying on free memory only")
     if host.free_pct is not None:
         if host.free_pct <= cfg.block_free_pct:
             status = _worse(status, "block")
@@ -441,6 +448,8 @@ def evaluate(host: Host, sessions: list[SessionMem] | None, cfg: Config) -> Verd
         if total > cfg.agents_warn_mb:
             status = _worse(status, "warn")
             reasons.append(f"agent sessions total {fmt_mb(total)} (> {cfg.agents_warn_mb} MB)")
+    if degraded and status == "ok":
+        status = "unknown"  # free % looked fine, but the kernel's own verdict is missing
     return Verdict(status, reasons)
 
 

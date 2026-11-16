@@ -53,7 +53,7 @@ bddf25616fa63f0ca8ac5b4930003b30deab97b5058a623c8a88320938a8d6a7  644  dot_claud
 620422885b927180f9a5aa8be24e988ca6f21dcbefe231b5068a90da1e059d72  644  dot_claude/skills/workflow/delivery.md
 337f1a99f921ac9c485bd1f25a6b9b50393f3898ef9bd793896cfada59e336e3  755  dot_claude/skills/workflow/executable_wf-context.sh
 13c7edab5aa922e6b2bce52f156701032bfc8144a22e79e461fb6b90d272d814  755  tools/agent-phase.sh
-d876204e45f64bd5ac33ee95c1c4d8d201416923faa7bd0d8be3a56d014839ee  755  tools/agy-tmux.sh
+0349a0c19c0401f15daee81f3a6dbb1ae7cf94bc29603f5091e565d3bf30568b  755  tools/agy-tmux.sh
 392b86f6854e4e3ffa1dcbd28904afa1c15536a1dea48039be0e3b69a5d35d71  644  tools/bootstrap-linux.sh
 56642e1c7439303b525d6b594ec2420f598feabe330d846e7420d4dad0f0e5d8  644  tools/bootstrap-mac.sh
 2005d23e14e09fec069d999bc58813745b711e65c14c50d22787e9f769f801b2  644  tools/cloud-gh-shim.py
@@ -63,7 +63,7 @@ aba2b3934bec4b85ba04e090631da2057c981cac6059dec8ace4a8a3bd0fac9b  755  tools/fin
 7a2d4564b0be99bad80b7f1bef7c97ea93fa9d0221c9a620e406e1a6aa15d312  644  tools/lib/agy_tmux_dashboard.py
 f7673606e34113d3fbd15395094c7fdbfddce405964cc5f0f7222260c6d2282d  644  tools/lib/finalize_check.py
 f9a438f73d29326358262339d533f645052072c6740ce5724cc29ff9902273a2  644  tools/lib/finalize_run.py
-25f8a4a318f90b52e42f3d9bfd1e60bfc1ab686776dc577c97cea859d03961be  644  tools/lib/mem_guard.py
+461880369ea5c62b76372a01453948f683880764c5ac920baf449ba2c82d7393  644  tools/lib/mem_guard.py
 f2a76fa675abd9ec93f935a0a9673ea6bbfac857b3ff2db535140c32a166db1e  644  tools/lib/model-pricing.json
 136e5d15665f21c2b8dd43900955182dd6bd3528e666553f8dddfca081a151cb  644  tools/lib/packages.tsv
 2e90a770d81cefd171f97841d558726a6322dc03902d02184e5c3fa930d1f6d9  644  tools/lib/pending_actions.py

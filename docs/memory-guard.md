@@ -65,17 +65,17 @@ All settings resolve `env > project > machine > user conf > default`, via the sa
 | `mem_agent_names` | `claude,agy,codex` | Executable names treated as agents. |
 | `mem_enabled` | `on` | `off` disables the guard entirely (report still works). |
 
-**Override a block** (explicit, per launch): `agy-tmux.sh --force …`, `mem-guard.sh check --force`, or `MEM_GUARD_OVERRIDE=1 start-ticket.sh …`. An override is announced on stderr. A block prints the largest sessions and says nothing was killed. Agents running `/start` must **not** set the override themselves: report the block and let the user decide.
+**Override a block** (explicit, per launch): `agy-tmux.sh --force …`, `mem-guard.sh check --force`, or `MEM_GUARD_OVERRIDE=1 start-ticket.sh …`. An override is announced on stderr. `agy-tmux.sh --force` scopes the override to its own guard checks and the `start-ticket.sh` it calls; it is removed from the environment before tmux starts, so agent panes and any `/start` they run do not inherit it. A block prints the largest sessions and says nothing was killed. Agents running `/start` must **not** set the override themselves: report the block and let the user decide.
 
 ### Failure behaviour
 
 | Situation | Result |
 | --- | --- |
-| Host pressure unreadable (sysctl missing, unsupported OS) | Warn and launch (`mem_fail=open`) or block (`closed`); `--force` always wins. |
+| Host pressure unreadable (sysctl missing, unsupported OS), or the macOS pressure level unreadable while free % is still available | Free % is still judged against the thresholds; if nothing trips, warn and launch (`mem_fail=open`) or block (`closed`). `--force` always wins. Linux has no OS level by design (`n/a`) and is judged on free % alone. |
 | `ps` fails | Per-session figures omitted; host pressure still decides. Reported as "process table unreadable". |
 | `lsof`/`tmux` missing or failing | Sessions fall back to name-only matching / no tmux labels. |
-| `mem-guard.sh` missing or crashes (exit other than 0/3) | `start-ticket.sh` and `agy-tmux.sh` warn and launch. The guard is a safeguard, not a gate on a broken install. |
-| Invalid threshold value | Ignored with a message; the default is used. |
+| `mem-guard.sh` missing or crashes (exit other than 0/3) | `start-ticket.sh` and `agy-tmux.sh` both warn explicitly and launch. The guard is a safeguard, not a gate on a broken install. |
+| Invalid threshold value (non-numeric, negative, `nan`, `inf`) | Ignored with a message; the default is used. |
 
 ## Privacy and overhead
 

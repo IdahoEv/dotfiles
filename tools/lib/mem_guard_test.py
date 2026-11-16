@@ -140,6 +140,14 @@ class TestRoots(unittest.TestCase):
         self.assertEqual(by[400].source, "unmanaged")
         self.assertIn("pid 400", by[400].label)
 
+    def test_workstream_found_arbitrarily_deep_below_root(self):
+        with tempfile.TemporaryDirectory() as d:
+            deep = Path(d, *[f"d{i}" for i in range(15)])
+            deep.mkdir(parents=True)
+            (Path(d) / ".workstream.json").write_text(json.dumps({"version": 1, "key": "Is9"}))
+            self.assertEqual(mg.workstream_label(str(deep)), "Is9")
+            self.assertEqual(mg.workstream_label("/"), "")  # terminates at the filesystem root
+
     def test_lsof_missing_falls_back_to_unmanaged(self):
         roots = mg.build_roots_for_untracked(mg.parse_ps(PS), [], NAMES, lambda cmd: None)
         self.assertTrue(all(r.source == "unmanaged" for r in roots))
@@ -204,6 +212,17 @@ class TestEvaluate(unittest.TestCase):
         gone = mg.SessionMem("x", "tmux", -1, "", "-", 0, None, "gone", [])
         self.assertEqual(mg.evaluate(self.host("normal", 60), [gone], self.cfg).status, "ok")
 
+    def test_unreadable_os_level_with_free_pct_is_not_silently_ok(self):
+        # macOS sysctl failed but memory_pressure gave a healthy free %: fail-closed must still see it.
+        v = mg.evaluate(self.host("unknown", 70), [], self.cfg)
+        self.assertEqual(v.status, "unknown")
+        self.assertIn("unreadable", v.reasons[0])
+        # free % can still raise the status above "unknown"
+        self.assertEqual(mg.evaluate(self.host("unknown", 5), [], self.cfg).status, "block")
+
+    def test_linux_has_no_os_level_by_design_and_stays_ok(self):
+        self.assertEqual(mg.evaluate(self.host("n/a", 70), [], self.cfg).status, "ok")
+
     def test_unreadable_host_is_unknown(self):
         v = mg.evaluate(mg.Host("unknown", None, "sysctl"), [], self.cfg)
         self.assertEqual(v.status, "unknown")
@@ -220,6 +239,14 @@ class TestConfig(unittest.TestCase):
         self.assertTrue(cfg.fail_closed)
         self.assertFalse(cfg.guard)
         self.assertTrue(any("mem_block_free_pct" in n for n in cfg.notes))
+
+    def test_non_finite_thresholds_are_ignored_not_crashes(self):
+        for bad in ("nan", "inf", "-inf", "-1"):
+            with mock.patch.dict(os.environ, {"MEM_GUARD_SESSION_WARN_MB": bad, "MEM_GUARD_WARN_FREE_PCT": bad}):
+                cfg = mg.load_config("/nonexistent")
+            self.assertEqual(cfg.session_warn_mb, 4096, bad)
+            self.assertEqual(cfg.warn_free_pct, 20.0, bad)
+            self.assertTrue(cfg.notes, bad)
 
     def test_block_above_warn_is_normalised(self):
         with mock.patch.dict(os.environ, {"MEM_GUARD_BLOCK_FREE_PCT": "40"}):
@@ -278,6 +305,12 @@ class TestCheckCli(unittest.TestCase):
     def test_guard_off(self):
         rc, err = self.run_check("level=critical free_pct=1", env={"MEM_GUARD_ENABLED": "off"})
         self.assertEqual((rc, err), (0, ""))
+
+    def test_fail_closed_applies_when_only_the_os_level_is_missing(self):
+        rc, _ = self.run_check("level=unknown free_pct=70", env={"MEM_GUARD_FAIL": "closed"})
+        self.assertEqual(rc, mg.EXIT_BLOCKED)
+        rc, _ = self.run_check("level=unknown free_pct=70")
+        self.assertEqual(rc, 0)
 
     def test_unreadable_pressure_fail_open_and_closed(self):
         rc, err = self.run_check("level=unknown")

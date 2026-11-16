@@ -32,6 +32,7 @@ cat > "$ROOT/bin/mock-start-ticket.sh" <<EOF
 #!/usr/bin/env bash
 set -euo pipefail
 printf '%s\n' "\$*" >> "$ROOT/start-ticket-calls.log"
+printf 'override=%s\n' "\${MEM_GUARD_OVERRIDE:-unset}" >> "$ROOT/start-ticket-env.log"
 group="\$1"
 case "\$group" in
   12,13)
@@ -67,6 +68,7 @@ EOF
 cat > "$ROOT/bin/mock-agy" <<EOF
 #!/usr/bin/env bash
 printf '%s\n' "\$*" >> "$ROOT/agy-calls.log"
+printf 'override=%s\n' "\${MEM_GUARD_OVERRIDE:-unset}" >> "$ROOT/agy-env.log"
 sleep 30
 EOF
 
@@ -199,7 +201,12 @@ if tmux -L "$SOCK" has-session -t '=mem-block-ws' 2>/dev/null; then
 fi
 printf 'PASS blocked launch creates no tmux session\n'
 
+rm -f "$ROOT/agy-env.log" "$ROOT/start-ticket-env.log"
 MEM_GUARD_HOST_FIXTURE="level=critical free_pct=4" "$TOOLS/agy-tmux.sh" --session "mem-force-ws" --no-attach --force 14 >/dev/null 2>"$ROOT/mem.err"
+for _ in 1 2 3 4 5; do [ -s "$ROOT/agy-env.log" ] && break; sleep 0.2; done
+check "--force reaches start-ticket's own guard" "override=1" "$(cat "$ROOT/start-ticket-env.log")"
+check "--force never reaches the agent pane" "override=unset" "$(cat "$ROOT/agy-env.log")"
+check "--force never enters the tmux server environment" "no" "$(tmux -L "$SOCK" show-environment -g 2>/dev/null | grep -q MEM_GUARD_OVERRIDE && echo yes || echo no)"
 has "--force overrides the block" "1:Is14" "$(tmux -L "$SOCK" list-windows -t '=mem-force-ws' -F '#{window_index}:#{window_name}')"
 has "override is announced" "OVERRIDE" "$(cat "$ROOT/mem.err")"
 
@@ -211,3 +218,10 @@ AGY_TMUX_MEM_GUARD="$ROOT/bin/does-not-exist" "$TOOLS/agy-tmux.sh" --session "me
 has "missing guard script warns and launches" "launching without a memory check" "$(cat "$ROOT/mem.err")"
 has "missing guard script still launches" "1:Is15" "$(tmux -L "$SOCK" list-windows -t '=mem-missing-ws' -F '#{window_index}:#{window_name}')"
 for s in mem-force-ws mem-warn-ws mem-missing-ws; do tmux -L "$SOCK" kill-session -t "=$s"; done
+
+# A crashing guard (any exit other than 0/3) warns and launches rather than silently proceeding.
+printf '#!/bin/sh\nexit 7\n' > "$ROOT/bin/crash-guard"; chmod +x "$ROOT/bin/crash-guard"
+AGY_TMUX_MEM_GUARD="$ROOT/bin/crash-guard" "$TOOLS/agy-tmux.sh" --session "mem-crash-ws" --no-attach 15 >/dev/null 2>"$ROOT/mem.err"
+has "crashing guard is reported" "mem-guard failed (exit 7)" "$(cat "$ROOT/mem.err")"
+has "crashing guard still launches" "1:Is15" "$(tmux -L "$SOCK" list-windows -t '=mem-crash-ws' -F '#{window_index}:#{window_name}')"
+tmux -L "$SOCK" kill-session -t "=mem-crash-ws"

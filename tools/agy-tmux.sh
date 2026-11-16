@@ -132,6 +132,10 @@ ensure_session() {
   install_cz_binding
 }
 
+# The override applies to this invocation's guard checks only. Capture it, then drop it from
+# the environment so the tmux server, the agent panes and any /start they run never inherit it.
+force_override="${MEM_GUARD_OVERRIDE:-}"
+unset MEM_GUARD_OVERRIDE
 session=""
 provider=""
 no_attach=0
@@ -148,7 +152,7 @@ while [ "$#" -gt 0 ]; do
     --no-attach)
       no_attach=1; shift ;;
     --force)
-      export MEM_GUARD_OVERRIDE=1; shift ;;
+      force_override=1; shift ;;
     -h|--help)
       usage; exit 0 ;;
     --)
@@ -207,11 +211,13 @@ launch_group() {  # <group>
   # are skipped (not killed, nothing created); --force / MEM_GUARD_OVERRIDE=1 overrides.
   if [ -x "$MEM_GUARD_BIN" ] || command -v "$MEM_GUARD_BIN" >/dev/null 2>&1; then
     local grc=0
-    "$MEM_GUARD_BIN" check --context "agy-tmux $group" || grc=$?
-    if [ "$grc" -eq 3 ]; then
-      printf 'agy-tmux: skipped %s: blocked by mem-guard (override with --force)\n' "$group" >&2
-      return 1
-    fi
+    MEM_GUARD_OVERRIDE="$force_override" "$MEM_GUARD_BIN" check --context "agy-tmux $group" || grc=$?
+    case "$grc" in
+      0) ;;
+      3) printf 'agy-tmux: skipped %s: blocked by mem-guard (override with --force)\n' "$group" >&2
+         return 1 ;;
+      *) printf 'agy-tmux: mem-guard failed (exit %s); launching without a memory check\n' "$grc" >&2 ;;
+    esac
   else
     printf 'agy-tmux: mem-guard.sh not found (%s); launching without a memory check\n' "$MEM_GUARD_BIN" >&2
   fi
@@ -220,7 +226,7 @@ launch_group() {  # <group>
   [ -z "$provider" ] || st_args+=(--provider "$provider")
 
   local out
-  if ! out="$("$START_TICKET_BIN" "${st_args[@]}")"; then
+  if ! out="$(MEM_GUARD_OVERRIDE="$force_override" "$START_TICKET_BIN" "${st_args[@]}")"; then
     printf 'agy-tmux: start-ticket.sh failed for %s\n' "$group" >&2
     return 1
   fi
