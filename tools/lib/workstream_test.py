@@ -13,7 +13,9 @@ import sys
 import tempfile
 import time
 import unittest
+from contextlib import contextmanager
 from pathlib import Path
+from unittest import mock
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
@@ -115,6 +117,57 @@ class SettingsLayeringTests(WorkstreamTestBase):
 
 
 class RecordPersistenceTests(WorkstreamTestBase):
+    def test_record_writers_read_and_write_under_shared_lock(self) -> None:
+        repo = self.make_repo("widgets")
+        record = workstream.init_ticket_record(
+            repo,
+            provider="github",
+            tickets=[{"id": "312"}],
+            title="Record locking",
+        )
+
+        original_lock = workstream._record_lock
+        original_load = workstream.load_record
+        original_save = workstream._save_record_locked
+        lock_held = False
+
+        @contextmanager
+        def tracked_lock(worktree: str):
+            nonlocal lock_held
+            with original_lock(worktree) as root:
+                lock_held = True
+                try:
+                    yield root
+                finally:
+                    lock_held = False
+
+        def assert_locked() -> None:
+            self.assertTrue(lock_held, "record read or write must hold the shared lock")
+
+        def tracked_load(*args, **kwargs):
+            assert_locked()
+            return original_load(*args, **kwargs)
+
+        def tracked_save(*args, **kwargs):
+            assert_locked()
+            return original_save(*args, **kwargs)
+
+        with (
+            mock.patch.object(workstream, "_record_lock", tracked_lock),
+            mock.patch.object(workstream, "load_record", tracked_load),
+            mock.patch.object(workstream, "_save_record_locked", tracked_save),
+        ):
+            workstream.init_ticket_record(
+                repo,
+                provider="github",
+                tickets=[{"id": "312"}],
+                title="Record locking",
+            )
+            workstream.update_phase(repo, phase="WIP")
+            workstream.update_pr(repo, 42)
+            workstream.update_reviews(repo, local="1")
+            workstream.save_record(repo, record)
+
     def test_save_and_load_record_and_exclude(self) -> None:
         repo = self.make_repo("widgets")
         rec = workstream.WorkstreamRecord(

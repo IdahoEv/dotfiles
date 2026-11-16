@@ -25,7 +25,7 @@ import sys
 import tempfile
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterator
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import repo_facts  # noqa: E402
@@ -201,12 +201,15 @@ def ensure_excluded(worktree: str) -> None:
 
 
 @contextmanager
-def _record_lock(worktree: str):
+def _record_lock(worktree: str) -> Iterator[str]:
+    """Lock the worktree record while reading or writing it."""
     root = _worktree_root(worktree)
     git_dir = repo_facts.git(root, "rev-parse", "--absolute-git-dir")
-    lock_dir = git_dir or root
-    lock_path = os.path.join(lock_dir, "workstream-record.lock")
-    fd = os.open(lock_path, os.O_CREAT | os.O_RDWR, 0o600)
+    if git_dir:
+        lock_path = os.path.join(git_dir, "workstream-record.lock")
+        fd = os.open(lock_path, os.O_CREAT | os.O_RDWR, 0o600)
+    else:
+        fd = os.open(root, os.O_RDONLY)
     try:
         fcntl.flock(fd, fcntl.LOCK_EX)
         yield root
@@ -214,8 +217,7 @@ def _record_lock(worktree: str):
         os.close(fd)
 
 
-def _save_record_locked(worktree: str, record: WorkstreamRecord) -> str:
-    root = _worktree_root(worktree)
+def _save_record_locked(root: str, record: WorkstreamRecord) -> str:
     ensure_excluded(root)
     target = os.path.join(root, RECORD_FILENAME)
     payload = json.dumps(record.to_dict(), indent=2) + "\n"
@@ -375,8 +377,7 @@ def update_phase(
     actions = int(phase is not None) + int(bool(pr)) + int(bool(no_review)) + int(bool(clear))
     if actions != 1:
         raise ValueError("specify exactly one of phase, pr, no_review, or clear")
-    root = _worktree_root(worktree)
-    with _record_lock(root) as root:
+    with _record_lock(worktree) as root:
         path = Path(root) / RECORD_FILENAME
         if not path.is_file():
             return None
@@ -532,8 +533,7 @@ def init_ticket_record(
     tags: list[str] | None = None,
 ) -> WorkstreamRecord:
     """Create or update .workstream.json in <worktree> for a ticket or chain."""
-    root = _worktree_root(worktree)
-    with _record_lock(root) as root:
+    with _record_lock(worktree) as root:
         existing = load_record(root)
 
         # Single-ticket re-run on an existing chain worktree keeps the chain membership
