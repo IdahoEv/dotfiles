@@ -10,7 +10,7 @@ From inside a repository:
 agy-tmux.sh 12,13 14 15        # chain 12+13, plus tickets 14 and 15
 agy-tmux.sh --session my-work 183
 agy-tmux.sh --force 12 13       # launch even if mem-guard blocks on memory pressure
-agy-tmux.sh                     # re-attach to an existing session
+agy-tmux.sh                     # re-attach to an existing session, or launch governor if none exists
 ```
 
 Before each group launches, `mem-guard.sh check` runs; under dangerous memory pressure that group is skipped (nothing is killed) unless `--force`. See `docs/memory-guard.md`.
@@ -62,7 +62,7 @@ The dashboard and `mem-guard.sh` track every non-`0` window in `agy-<repo>`, inc
   ```bash
   tmux new-window -t =agy-<repo>: -n <label> -c <worktree-path> "agy --mode plan --prompt-interactive '/remind'"
   ```
-- **Run a governor session in the dashboard:**
+- **Run a governor session in the dashboard:** running `agy-tmux.sh` with no arguments when `agy-<repo>` does not exist creates the session with the dashboard and a `governor` window in the repo's main worktree (guarded by `mem-guard.sh check`). To add a governor window to an already-running session:
   ```bash
   tmux new-window -t =agy-<repo>: -n governor -c <main-worktree-path> "agy --mode plan --prompt-interactive '/governor'"
   ```
