@@ -6,4 +6,15 @@
 .claude/commands/review-comments.md
 .claude/skills/review-comments-procedure
 .claude/agents/review-repair-agent.md
+.claude/agents/architecture-reviewer.md
+.claude/agents/correctness-reviewer.md
+.claude/agents/prompt-reviewer.md
+.claude/agents/robustness-reviewer.md
+.claude/agents/security-reviewer.md
+.claude/agents/supply-chain-reviewer.md
+.claude/agents/review-architecture.md
+.claude/agents/review-docs.md
+.claude/agents/review-plan.md
+.claude/agents/review-quality.md
+.claude/agents/review-triage.md
 .shell_modules/git-tools-freshness

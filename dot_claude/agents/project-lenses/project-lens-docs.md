@@ -1,5 +1,5 @@
 ---
-name: review-docs
+name: project-lens-docs
 use_when: periodic project review.
 description: Periodic project-review lens for document consistency of a default-branch snapshot — docs vs code, docs vs docs, review-state files, naming and placement. Read-only.
 tools: Read, Glob, Grep, Bash
@@ -22,4 +22,4 @@ Method, run against the snapshot:
 
 Split output in two. A fix that is mechanical (a wrong path, a stale count, a dead link, a renamed command) starts its `minimal fix` field with `mechanical:` and states the exact replacement text. Anything needing a decision is an ordinary finding. Do not apply either.
 
-Leave code conventions to `review-quality` and roadmap fit to `review-plan`.
+Leave code conventions to `project-lens-quality` and roadmap fit to `project-lens-plan`.
