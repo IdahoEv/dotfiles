@@ -28,12 +28,12 @@ contains() {  # <description> <needle> <haystack>
 ROOT="$(cd -P "$(mktemp -d "${TMPDIR:-/tmp}/reviewer-model-test.XXXXXX")" && pwd)"
 trap 'rm -rf "$ROOT"' EXIT
 export HOME="$ROOT/home"
-mkdir -p "$HOME/bin" "$ROOT/src/dot_claude/agents"
+mkdir -p "$HOME/bin" "$ROOT/src/dot_claude/agents/pr-reviewers"
 export REVIEWER_MODEL_SOURCE="$ROOT/src"
 export REVIEWER_MODEL_SKIP_APPLY=1
 
-AGENTS="correctness-reviewer architecture-reviewer robustness-reviewer \
-security-reviewer supply-chain-reviewer prompt-reviewer \
+AGENTS="pr-reviewers/pr-reviewer-correctness pr-reviewers/pr-reviewer-architecture pr-reviewers/pr-reviewer-robustness \
+pr-reviewers/pr-reviewer-security pr-reviewers/pr-reviewer-supply-chain pr-reviewers/pr-reviewer-prompt \
 local-review-cycle-manager github-review-repair-agent"
 
 for name in $AGENTS; do
@@ -82,16 +82,16 @@ check "idempotent run skips chezmoi" "0" "$(wc -l < "$chezmoi_log" | tr -d ' ')"
 out="$(run auto)"
 check "real flip invokes chezmoi once" "1" "$(wc -l < "$chezmoi_log" | tr -d ' ')"
 contains "chezmoi gets -S <source root>" "-S $ROOT/src" "$(cat "$chezmoi_log")"
-contains "chezmoi names a target file" "$HOME/.claude/agents/correctness-reviewer.md" "$(cat "$chezmoi_log")"
+contains "chezmoi names a target file" "$HOME/.claude/agents/pr-reviewers/pr-reviewer-correctness.md" "$(cat "$chezmoi_log")"
 run sonnet >/dev/null   # leave the sandbox on the committed default
 
 # --- drift detection ---
-sed -i '' 's/^model:.*/model: opus/' "$ROOT/src/dot_claude/agents/prompt-reviewer.md"
+sed -i '' 's/^model:.*/model: opus/' "$ROOT/src/dot_claude/agents/pr-reviewers/pr-reviewer-prompt.md"
 before="$(models)"
 out="$(run auto)"; rc=$?
 check "drift exits non-zero" "yes" "$([ "$rc" -ne 0 ] && echo yes || echo no)"
 contains "drift message names file and value" \
-  "prompt-reviewer.md has model: opus" "$out"
+  "pr-reviewer-prompt.md has model: opus" "$out"
 check "drift modifies nothing" "$before" "$(models)"
 
 # --- usage errors ---

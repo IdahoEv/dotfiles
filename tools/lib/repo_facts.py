@@ -420,8 +420,16 @@ def overlay_claude_files(kind: str = "", dir_: str = ".") -> list[str]:
     out: list[str] = []
     for sub in subs:
         # pathlib globs match leading dots; the shell globs never did.
-        out += collated([str(p) for p in (root / sub).glob("*.md")
-                          if p.is_file() and not p.name.startswith(".")])
+        if sub == "agents":
+            out += collated([
+                str(p) for p in (root / sub).rglob("*.md")
+                if p.is_file() and not any(
+                    part.startswith(".") for part in p.relative_to(root / sub).parts
+                )
+            ])
+        else:
+            out += collated([str(p) for p in (root / sub).glob("*.md")
+                              if p.is_file() and not p.name.startswith(".")])
         if sub == "skills":
             out += collated(
                 [str(p) for p in (root / "skills").glob("*/SKILL.md")

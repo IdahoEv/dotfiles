@@ -19,7 +19,9 @@ At most the findings cap the caller or your agent file sets, most severe first. 
 
 Use Critical, High, Medium, or Low. Include only findings with evidence and a credible failure path, meaningful test gap, or material design cost. Say `no findings` when appropriate — a clean review is a real result. No praise or general summary.
 
-Specialist focus, evidence bars, and any verdict header your agent defines (e.g. a DESIGN gate) come from your agent file; this contract does not override them. If your agent file or another preloaded skill specifies a different output format or review mode — `prompt-reviewer` follows the `prompt-review` rubric's format and may run in corpus mode, outside any single diff — follow that instead of the line above.
+Specialist focus, evidence bars, and any verdict header your agent defines (e.g. a DESIGN gate) come from your agent file; this contract does not override them. If your agent file or another preloaded skill specifies a different output format or review mode — `pr-reviewer-prompt` follows the `prompt-review` rubric's format and may run in corpus mode, outside any single diff — follow that instead of the line above.
+
+*Terminology:* PR/workstream diff reviewers use `pr-reviewer-*` under this contract (`dot_claude/agents/pr-reviewers/`); periodic whole-project snapshot reviewers use `project-lens-*` under `review-lens-contract` (`dot_claude/agents/project-lenses/`).
 
 ## Read-only
 
