@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # start-ticket.sh — spin up a worktree + Claude session for a tracker ticket.
 #
-#   start-ticket.sh <id>[,<id>…] [--provider github|shortcut] [--no-tab] [--launcher iterm|bg|none]
+#   start-ticket.sh <id>[,<id>…] [--provider github|shortcut] [--no-tab] [--launcher iterm|bg|agy-tmux|none]
 #   start-ticket.sh <id> --print-title            # read-only: title + proposed label
 #   start-ticket.sh <id> --in-place --no-tab      # no worktree: check out the ticket branch here
-#   start-ticket.sh --tab-only <worktree> <kickoff> [--launcher iterm|bg|none]
-#   start-ticket.sh --session [<topic>] [--about <text>] [--launcher iterm|bg|none]
+#   start-ticket.sh --tab-only <worktree> <kickoff> [--launcher iterm|bg|agy-tmux|none]
+#   start-ticket.sh --session [<topic>] [--about <text>] [--launcher iterm|bg|agy-tmux|none]
 #
 # --session opens a non-ticket discussion session (/discuss): no ticket, branch
 # or worktree. It launches in the main checkout (for a bare repo, the worktree
@@ -22,10 +22,15 @@
 #                    (`claude agents`): claude --bg --name "<label>" "<kickoff>".
 #                    The kickoff is SUBMITTED immediately, so it starts in plan
 #                    mode by default to keep a review gate (see bg_permission_mode).
+#   agy-tmux         a tmux window in the active `agy-tmux` dashboard session
+#                    (`agy --mode plan --prompt-interactive`, `remain-on-exit on`),
+#                    opened without stealing focus from the caller window.
 #   none             worktree + kickoff only (same as --no-tab).
 #
 # Launcher is chosen by, in order: --launcher flag → $START_TICKET_LAUNCHER →
-# `launcher=` in .start-ticket.conf / ~/.config/start-ticket/config → iterm (none off macOS).
+# `agy-tmux` (auto-selected when running in an `agy` session inside an
+# `@agy_dashboard=1` tmux session) → `launcher=` in .start-ticket.conf /
+# ~/.config/start-ticket/config → iterm (none off macOS).
 # Put `launcher=bg` in the per-machine ~/.config/start-ticket/config to opt in.
 #
 # A comma list (`12,13,14`, github only) is a chain: one worktree and
@@ -389,12 +394,21 @@ mem_guard() {  # <context>
   esac
 }
 
+open_agy_tmux() {  # <worktree> <kickoff>
+  local wt="$1" kf="$2"
+  local agy_tmux="${START_TICKET_AGY_TMUX:-$SCRIPT_DIR/agy-tmux.sh}"
+  [ -x "$agy_tmux" ] || command -v "$agy_tmux" >/dev/null 2>&1 \
+    || die "agy-tmux.sh not found ($agy_tmux)"
+  "$agy_tmux" --window "$wt" "$kf" >&2
+}
+
 launch_session() {  # <worktree> <kickoff> [<label>] — uses the resolved $launcher
   local tab_label="${3:-}"
   case "$launcher" in
-    iterm) open_tab "$1" "$2" "${tab_label#\[TALK\] }" ;;
-    bg)    open_bg  "$1" "$2" "${3:-}" ;;
-    none)  : ;;
+    iterm)    open_tab "$1" "$2" "${tab_label#\[TALK\] }" ;;
+    bg)       open_bg  "$1" "$2" "${3:-}" ;;
+    agy-tmux) open_agy_tmux "$1" "$2" ;;
+    none)     : ;;
   esac
 }
 
@@ -520,13 +534,28 @@ if [ "$mode" = "tab-only" ]; then
   cd "$tab_wt" || die "worktree not found: $tab_wt"
 fi
 
+is_agy_tmux_session() {
+  [ "${ANTIGRAVITY_AGENT:-}" = 1 ] && [ -n "${TMUX:-}" ] || return 1
+  local tmux_bin="${AGY_TMUX_TMUX_BIN:-tmux}" dash=""
+  local args=()
+  [ -z "${AGY_TMUX_SOCKET:-}" ] || args+=(-L "$AGY_TMUX_SOCKET")
+  args+=(display-message)
+  [ -z "${TMUX_PANE:-}" ] || args+=(-t "$TMUX_PANE")
+  dash="$("$tmux_bin" "${args[@]}" -p '#{@agy_dashboard}' 2>/dev/null || true)"
+  [ "$dash" = 1 ]
+}
+
 launcher="$launcher_flag"
+[ -n "$launcher" ] || launcher="${START_TICKET_LAUNCHER:-}"
+if [ -z "$launcher" ] && is_agy_tmux_session; then
+  launcher=agy-tmux
+fi
 default_launcher=iterm
 [ "$(uname)" = Darwin ] || default_launcher=none
 [ -n "$launcher" ] || launcher="$(setting launcher START_TICKET_LAUNCHER "$default_launcher")"
 case "$launcher" in
-  iterm|bg|none) ;;
-  *) die "unknown launcher '$launcher' (expected iterm, bg, or none)" ;;
+  iterm|bg|agy-tmux|none) ;;
+  *) die "unknown launcher '$launcher' (expected iterm, bg, agy-tmux, or none)" ;;
 esac
 
 # shellcheck source=lib/telemetry.sh
@@ -565,7 +594,7 @@ if [ "$mode" = "session" ]; then
   exit 0
 fi
 
-[ -n "$id" ] || die "usage: start-ticket.sh <id>[,<id>…] [--provider github|shortcut] [--no-tab|--print-title] [--launcher iterm|bg|none]"
+[ -n "$id" ] || die "usage: start-ticket.sh <id>[,<id>…] [--provider github|shortcut] [--no-tab|--print-title] [--launcher iterm|bg|agy-tmux|none]"
 # Guard before any worktree or tracker write, so a blocked launch leaves no half-started ticket.
 # --no-tab and --print-title launch nothing: the later --tab-only call is the gate for /start,
 # and agy-tmux.sh guards each group itself, so guarding here would only check twice.

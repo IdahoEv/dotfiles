@@ -4,16 +4,17 @@
     mem_guard.py report [--session <tmux-session>] [--tmux-bin B] [--socket S] [--json]
     mem_guard.py check  [--force] [--quiet] [--context <name>]
 
-`report` attributes resident memory (RSS, summed over each session's process
-tree) to workstreams and prints the host-wide pressure signal beside it.
+`report` attributes memory (`phys_footprint` on macOS via `top -l 1 -stats pid,mem`,
+with `ps` RSS fallback, summed over each session's process tree) to workstreams
+and prints the host-wide pressure signal beside it.
 `check` is the launch guard: exit 0 = go (possibly with warnings), exit 3 =
 blocked. It never kills a process or touches a worktree.
 
 Measurement model (see docs/memory-guard.md for the long version):
 
-* Per-session figures are *estimates*: RSS counts a shared page once in every
-  process mapping it (over-count) and omits compressed/swapped pages on macOS
-  (under-count). Output rounds and prefixes them with "~".
+* Per-session figures are *estimates*: on macOS they sum `phys_footprint`
+  (including compressed/swapped pages) over tracked session trees, falling back
+  to RSS when footprint is unavailable. Output rounds and prefixes them with "~".
 * The *decision* to warn or block rests on the host signal, not the estimates:
   macOS `kern.memorystatus_vm_pressure_level` (the kernel's own verdict), plus
   free-memory percent where it can be read.
@@ -46,6 +47,7 @@ EXIT_BLOCKED = 3
 LEVELS = ("ok", "warn", "block")
 DEFAULT_AGENT_NAMES = ("claude", "agy", "codex")
 PS_CMD = ["ps", "-axo", "pid=,ppid=,rss=,comm="]
+TOP_CMD = ["top", "-l", "1", "-stats", "pid,mem"]
 
 Runner = Callable[[list[str]], "str | None"]
 
@@ -156,6 +158,44 @@ def sample_processes(runner: Runner = run) -> dict[int, Proc] | None:
     return procs or None
 
 
+_TOP_MEM_RE = re.compile(r"^(\d+(?:\.\d+)?)([BKMGT])[+-]?$", re.IGNORECASE)
+_TOP_UNIT_KB = {
+    "B": 1.0 / 1024.0,
+    "K": 1.0,
+    "M": 1024.0,
+    "G": 1024.0 * 1024.0,
+    "T": 1024.0 * 1024.0 * 1024.0,
+}
+
+
+def parse_top_mem(text: str) -> dict[int, int]:
+    """Parse `top -l 1 -stats pid,mem` into {pid: footprint_kb}."""
+    out: dict[int, int] = {}
+    for line in text.splitlines():
+        parts = line.split()
+        if len(parts) != 2 or not parts[0].isdigit():
+            continue
+        m = _TOP_MEM_RE.match(parts[1])
+        if not m:
+            continue
+        val, unit = float(m.group(1)), m.group(2).upper()
+        out[int(parts[0])] = max(0, int(val * _TOP_UNIT_KB[unit]))
+    return out
+
+
+def sample_footprint(
+    pids: set[int], runner: Runner = run, platform: str | None = None
+) -> dict[int, int]:
+    """Per-pid phys_footprint in KB on macOS for tracked session pids; {} when unavailable."""
+    if not pids or (platform or sys.platform) != "darwin":
+        return {}
+    out = runner(TOP_CMD)
+    if out is None:
+        return {}
+    parsed = parse_top_mem(out)
+    return {pid: kb for pid, kb in parsed.items() if pid in pids}
+
+
 def _basename(name: str) -> str:
     return name.rstrip("/").rsplit("/", 1)[-1].lower()
 
@@ -206,13 +246,13 @@ class SessionMem:
     key: str
     backend: str
     procs: int
-    rss_kb: int | None  # None: root process gone or ps unreadable
+    mem_kb: int | None  # None: root process gone or ps unreadable
     state: str  # live | gone | unknown
     pids: list[int]
 
     @property
     def mb(self) -> float | None:
-        return None if self.rss_kb is None else self.rss_kb / 1024.0
+        return None if self.mem_kb is None else self.mem_kb / 1024.0
 
 
 def _owner(pid: int, root_pids: set[int], procs: dict[int, Proc]) -> int | None:
@@ -255,14 +295,19 @@ def discover_agent_roots(
 
 
 def attribute(
-    procs: dict[int, Proc], roots: list[Root], agent_names: tuple[str, ...] = DEFAULT_AGENT_NAMES
+    procs: dict[int, Proc],
+    roots: list[Root],
+    agent_names: tuple[str, ...] = DEFAULT_AGENT_NAMES,
+    footprint_kb: dict[int, int] | None = None,
 ) -> list[SessionMem]:
-    """Assign every process to its nearest root and total each root's RSS.
+    """Assign every process to its nearest root and total each root's memory.
 
+    Uses footprint_kb when available for a pid, falling back to ps rss_kb.
     A process belongs to exactly one session, so overlapping trees (a root that
     is itself under another root) cannot be double counted. A root whose pid is
     no longer in the snapshot reports state "gone" and no figure rather than 0.
     """
+    fp = footprint_kb or {}
     root_pids = {r.pid for r in roots}
     members: dict[int, list[Proc]] = {r.pid: [] for r in roots}
     for proc in procs.values():
@@ -281,7 +326,7 @@ def attribute(
                 key=root.key,
                 backend=backend_of([p.name for p in sorted(group, key=lambda p: p.pid)], agent_names),
                 procs=len(group),
-                rss_kb=sum(p.rss_kb for p in group) if live else None,
+                mem_kb=sum(fp.get(p.pid, p.rss_kb) for p in group) if live else None,
                 state="live" if live else "gone",
                 pids=sorted(p.pid for p in group),
             )
@@ -449,7 +494,7 @@ def evaluate(host: Host, sessions: list[SessionMem] | None, cfg: Config) -> Verd
         elif host.free_pct < cfg.warn_free_pct:
             status = _worse(status, "warn")
             reasons.append(f"free memory {host.free_pct:.0f}% < warn threshold {cfg.warn_free_pct:g}%")
-    live = [s for s in (sessions or []) if s.rss_kb is not None]
+    live = [s for s in (sessions or []) if s.mem_kb is not None]
     if cfg.session_warn_mb:
         for s in live:
             if s.mb is not None and s.mb > cfg.session_warn_mb:
@@ -482,8 +527,8 @@ def host_line(host: Host) -> str:
 
 
 ESTIMATE_NOTE = (
-    "Mem is summed RSS per process tree: shared pages count in every process that maps them "
-    "(over-count) and macOS compressed/swapped pages are missing (under-count). "
+    "Mem is summed phys_footprint per process tree (includes macOS compressed/swapped pages, "
+    "excludes most shared pages; falls back to ps RSS when unavailable). "
     "Trust the host pressure line over these figures."
 )
 
@@ -492,7 +537,7 @@ def render_report(sessions: list[SessionMem], host: Host, procs_ok: bool = True)
     lines = [host_line(host)]
     if not procs_ok:
         lines.append("process table unreadable (ps failed); no per-session figures")
-    rows = sorted(sessions, key=lambda s: -(s.rss_kb or -1))
+    rows = sorted(sessions, key=lambda s: -(s.mem_kb or -1))
     if rows:
         lines.append(f"{'Session':<34} {'Backend':<8} {'Procs':>5} {'Mem':>10}  State")
         for s in rows:
@@ -517,6 +562,7 @@ def collect(
     tmux_bin: str = "tmux",
     socket: str | None = None,
     runner: Runner = run,
+    platform: str | None = None,
 ) -> tuple[list[SessionMem], bool]:
     """(sessions, procs_ok). Never raises; a failed ps yields ([], False)."""
     procs = sample_processes(runner)
@@ -524,7 +570,12 @@ def collect(
         return ([], False)
     roots = tmux_roots(session, tmux_bin, socket, runner) if session else []
     roots += build_roots_for_untracked(procs, roots, cfg.agent_names, run_lenient if runner is run else runner)
-    return (attribute(procs, roots, cfg.agent_names), True)
+    sessions = attribute(procs, roots, cfg.agent_names)
+    tracked_pids = {pid for s in sessions for pid in s.pids}
+    footprint_kb = sample_footprint(tracked_pids, runner=runner, platform=platform)
+    if footprint_kb:
+        sessions = attribute(procs, roots, cfg.agent_names, footprint_kb=footprint_kb)
+    return (sessions, True)
 
 
 # ---- CLI ----------------------------------------------------------------------
@@ -559,7 +610,7 @@ def _cmd_check(args: argparse.Namespace) -> int:
     sessions, _ = collect(cfg)
     verdict = evaluate(host, sessions, cfg)
     ctx = f" ({args.context})" if args.context else ""
-    top = sorted((s for s in sessions if s.rss_kb), key=lambda s: -(s.rss_kb or 0))[:3]
+    top = sorted((s for s in sessions if s.mem_kb), key=lambda s: -(s.mem_kb or 0))[:3]
     detail = "; ".join(f"{s.label} {fmt_mb(s.mb)}" for s in top)
 
     def explain() -> None:

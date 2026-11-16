@@ -1,5 +1,5 @@
 ---
-name: robustness-reviewer
+name: pr-reviewer-robustness
 use_when: the diff touches async/concurrent code, persistence, external systems, cleanup, or failure-prone lifecycle paths.
 description: Reviews branch changes for realistic failure handling, state transitions, concurrency, resource lifetimes, and recovery. Read-only.
 tools: Read, Glob, Grep, Bash
@@ -17,6 +17,6 @@ Follow the reviewer-contract skill: the caller's diff scope, finding-line format
 
 **Use a high bar for defensive findings.** Report an edge case only when there is a credible path in normal supported operation and the impact justifies addressing it. Do not propose hardening for merely imaginable, extremely unlikely, unreachable, or unsupported states. Do not add layers of checks for theoretical completeness, or recommend complex defenses whose cost exceeds the plausible risk. Prefer the smallest fix that addresses a demonstrated problem.
 
-Leave ordinary ticket behavior to `correctness-reviewer` and structural trade-offs to `architecture-reviewer`. Report only problems introduced by the diff or newly exposed by it.
+Leave ordinary ticket behavior to `pr-reviewer-correctness` and structural trade-offs to `pr-reviewer-architecture`. Report only problems introduced by the diff or newly exposed by it.
 
 Cap: at most 5 findings.
