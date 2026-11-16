@@ -50,7 +50,7 @@ MANAGED = json.loads(r"""
       "command(short)",
       "command(grep)",
       "command(dotnet)",
-      "command(regex:^{{ .chezmoi.homeDir }}/\\.local/bin/(start-ticket|open-pr|pr-body|wf-event|wf-backfill|repo-facts|project-config|review-unattended|request-review|workflow-manifest|agent-phase)\\.sh([ \\t]+[^;|&`$()\\r\\n]+)?$)",
+      "command(regex:^{{ .chezmoi.homeDir }}/\\.local/bin/(start-ticket|open-pr|pr-body|wf-event|wf-backfill|repo-facts|project-config|review-unattended|request-review|workflow-manifest|agent-phase)\\.sh([ \\t]+[^;|&`$()<>\\r\\n]+)?$)",
       "command(regex:^(bash )?({{ .chezmoi.homeDir }}/Documents/Development/[Dd]otfiles/[^/\\s]+/)?tools/[^\\s/]+\\.test\\.sh([ \\t]+[^;|&`$()\\r\\n]+)?$)",
       "command(regex:^python3 -m (unittest|pytest)([ \\t]+[^;|&`$()\\r\\n]+)?$)",
       "command(regex:yarn (live|install|db|tsc).*)",
