@@ -97,6 +97,16 @@ def resolve_project(pane_path: str) -> str:
     return "other"
 
 
+def _populate_projects(rows: list[WorkstreamRow], cache: dict[str, str]) -> None:
+    """Resolve and cache row.project per pane_path for project grouping."""
+    for row in rows:
+        if row.project:
+            continue
+        if row.pane_path not in cache:
+            cache[row.pane_path] = resolve_project(row.pane_path)
+        row.project = cache[row.pane_path]
+
+
 def extract_last_line(captured_text: str) -> str:
     """Return the last non-empty line from captured pane output, single-line."""
     for line in reversed(captured_text.splitlines()):
@@ -245,7 +255,6 @@ def fetch_windows(
                 branch=branch,
                 status=status,
                 last_line=extract_last_line(captured),
-                project=resolve_project(pane_path),
             )
         )
     return rows
@@ -434,6 +443,7 @@ def _curses_loop(
     view_mode = VIEW_MODES[0]
     rows: list[WorkstreamRow] = []
     items: list[DisplayItem] = []
+    project_cache: dict[str, str] = {}
     host_line = ""
     sampler = MemorySampler(mem_cmd)
     needs_refresh = True
@@ -449,6 +459,8 @@ def _curses_loop(
             mem_by_window, host_line = sampler.latest()
             for row in rows:
                 row.mem = mem_by_window.get(row.window_index, "")
+            if view_mode == "project":
+                _populate_projects(rows, project_cache)
             items = build_display_items(rows, view_mode)
             selected = first_selectable_index(items, prev_pane_id)
             needs_refresh = False
@@ -504,6 +516,8 @@ def _curses_loop(
                 else None
             )
             view_mode = next_view_mode(view_mode)
+            if view_mode == "project":
+                _populate_projects(rows, project_cache)
             items = build_display_items(rows, view_mode)
             selected = first_selectable_index(items, prev_pane_id)
         elif ch in (curses.KEY_UP, ord("k")) and items:

@@ -418,6 +418,61 @@ class TestGroupingAndNavigation(unittest.TestCase):
 
         switch_mock.assert_called_once_with(["tmux"], "agy-dotfiles", "2")
 
+    def test_fetch_windows_defers_project_resolution(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            wt = Path(tmp) / "wt"
+            wt.mkdir()
+            list_out = f"1\tIs189\t%1\t{wt}\t0\t1000\n"
+
+            def fake_run(cmd: list[str]) -> str:
+                if "list-windows" in cmd:
+                    return list_out
+                if "capture-pane" in cmd:
+                    return "ok\n"
+                return ""
+
+            with (
+                mock.patch.object(dash, "_run_cmd", side_effect=fake_run),
+                mock.patch.object(dash, "_git_branch", return_value="main"),
+                mock.patch.object(dash, "resolve_project") as proj_mock,
+            ):
+                rows = dash.fetch_windows("agy-dotfiles", now=1000)
+
+            proj_mock.assert_not_called()
+            self.assertEqual(rows[0].project, "")
+
+    def test_curses_loop_lazily_resolves_and_caches_projects(self):
+        def make_rows():
+            return [
+                self._row("1", status="running", project="", pane_path="/tmp/alpha/wt1"),
+                self._row("2", status="running", project="", pane_path="/tmp/beta/wt2"),
+            ]
+
+        # flat (initial) -> 'r' (still flat, no resolve) -> 'g' (project, resolves 2) -> 'r' (project, cached)
+        keys = [ord("r"), ord("g"), ord("r")]
+
+        class FakeStdscr:
+            def keypad(self, _flag): pass
+            def timeout(self, _ms): pass
+            def getmaxyx(self): return (24, 100)
+            def erase(self): pass
+            def addnstr(self, *_args): pass
+            def refresh(self): pass
+            def getch(self):
+                if keys:
+                    return keys.pop(0)
+                raise StopIteration
+
+        with (
+            mock.patch.object(curses, "curs_set"),
+            mock.patch.object(dash, "fetch_windows", side_effect=lambda *_a, **_kw: make_rows()),
+            mock.patch.object(dash, "resolve_project", side_effect=lambda p: Path(p).parent.name) as proj_mock,
+        ):
+            with self.assertRaises(StopIteration):
+                dash._curses_loop(FakeStdscr(), "agy-dotfiles", None, 2.0)
+
+        self.assertEqual(proj_mock.call_count, 2)
+
 
 if __name__ == "__main__":
     unittest.main()
