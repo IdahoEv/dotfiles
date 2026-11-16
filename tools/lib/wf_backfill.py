@@ -420,7 +420,7 @@ def parse_suppressed_review_body(body):
         if not m:
             continue
         path, line_s, rest = m.group(1), m.group(2), m.group(3)
-        if "." not in path and "/" not in path:
+        if not line_s and "." not in path and "/" not in path:
             continue
         resolved = "[RESOLVED]" in rest
         rest = rest.replace("[RESOLVED]", "").strip()
@@ -699,7 +699,7 @@ def run_bot(args):
     if args.verdicts:
         try:
             with open(args.verdicts) as fh:
-                verdicts = {str(k): v for k, v in json.load(fh).items()}
+                verdicts = {str(k): v for k, v in json.load(fh).items() if isinstance(v, dict)}
         except (OSError, ValueError, AttributeError) as e:
             if not args.live:
                 raise

@@ -404,9 +404,10 @@ class BotBackfillTests(unittest.TestCase):
             self.assertEqual(again, [])
 
     def test_non_path_bold_bullets_in_review_body_are_not_findings(self):
-        body = "Overview\n- **Note**: tests added\n1. **Summary** of changes\n- **a.py:3** — Real one."
+        body = ("Overview\n- **Note**: tests added\n1. **Summary** of changes\n"
+                "- **a.py:3** — Real one.\n- **Dockerfile:12** — pin the base image.")
         items = bf.parse_suppressed_review_body(body)
-        self.assertEqual([i["path"] for i in items], ["a.py"])
+        self.assertEqual([i["path"] for i in items], ["a.py", "Dockerfile"])
 
     def test_main_live_exits_zero_on_gh_or_verdicts_failure(self):
         def boom(repo=None):
@@ -431,6 +432,12 @@ class BotBackfillTests(unittest.TestCase):
                 with redirect_stdout(io.StringIO()):
                     self.assertEqual(bf.main(["--live", "--pr", "9", "--verdicts", bad, "--log", log]), 0)
                 self.assertEqual(sum(e["event"] == "review.finding" for e in bf.load_log(log)), 1)
+                with open(bad, "w") as fh:
+                    json.dump({"1": "fixed"}, fh)
+                log2 = os.path.join(d, "events2.jsonl")
+                with redirect_stdout(io.StringIO()):
+                    self.assertEqual(bf.main(["--live", "--pr", "9", "--verdicts", bad, "--log", log2]), 0)
+                self.assertEqual(sum(e["event"] == "review.finding" for e in bf.load_log(log2)), 1)
         finally:
             bf.resolve_repo_slug = orig
             bf.fetch_pr_bot_data = orig_fetch
