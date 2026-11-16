@@ -20,9 +20,29 @@ _LIB_DIR = Path(__file__).resolve().parent
 if str(_LIB_DIR) not in sys.path:
     sys.path.insert(0, str(_LIB_DIR))
 
+import repo_facts  # noqa: E402
 import workstream  # noqa: E402
 
 ACTIVE_THRESHOLD_SECS = 5
+PALETTE = ("red", "blue", "green", "yellow", "purple", "orange", "pink", "cyan")
+_DEFAULT_COLORS_FILE = _LIB_DIR.parent / "project-colors"
+_COLOR_CACHE: dict[tuple[str, str], str] = {}
+
+_BASE_CURSES_COLORS = {
+    "red": curses.COLOR_RED,
+    "blue": curses.COLOR_BLUE,
+    "green": curses.COLOR_GREEN,
+    "yellow": curses.COLOR_YELLOW,
+    "purple": curses.COLOR_MAGENTA,
+    "orange": curses.COLOR_YELLOW,
+    "pink": curses.COLOR_MAGENTA,
+    "cyan": curses.COLOR_CYAN,
+}
+_EXTENDED_256_COLORS = {
+    "purple": 141,
+    "orange": 208,
+    "pink": 205,
+}
 
 
 @dataclasses.dataclass
@@ -36,6 +56,7 @@ class WorkstreamRow:
     branch: str
     status: str
     last_line: str
+    color: str = ""
     mem: str = ""  # estimate for the window's process tree ("~1.2 GB"), "" when not measured
 
 
@@ -68,6 +89,56 @@ def extract_last_line(captured_text: str) -> str:
         if stripped:
             return stripped
     return ""
+
+
+def _lookup_project_colors_file(project: str, colors_file: Path) -> str:
+    """Return the palette color for <project> from <colors_file>, or ''."""
+    if not project or not colors_file.is_file():
+        return ""
+    target = project.lower()
+    try:
+        text = colors_file.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return ""
+    for raw in text.splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        parts = line.split()
+        if len(parts) >= 2 and parts[0].lower() == target:
+            candidate = parts[1].lower()
+            return candidate if candidate in PALETTE else ""
+    return ""
+
+
+def resolve_project_color(pane_path: str, colors_file: Path | None = None) -> str:
+    """Resolve a workstream's project color via .start-ticket.conf then project-colors."""
+    if not pane_path or not os.path.isdir(pane_path):
+        return ""
+    conf_val = repo_facts.conf_get("color", pane_path)
+    if conf_val is not None:
+        candidate = conf_val.strip().lower()
+        if candidate:
+            return candidate if candidate in PALETTE else ""
+
+    main = repo_facts.main_root(pane_path)
+    proj = Path(main).name if main else ""
+    if not proj:
+        return ""
+
+    if colors_file is None:
+        env_file = os.environ.get("SESSION_LABEL_COLORS_FILE")
+        colors_file = Path(env_file) if env_file else _DEFAULT_COLORS_FILE
+    return _lookup_project_colors_file(proj, colors_file)
+
+
+def _cached_project_color(pane_path: str) -> str:
+    if not pane_path or not os.path.isdir(pane_path):
+        return ""
+    key = (pane_path, os.environ.get("SESSION_LABEL_COLORS_FILE", ""))
+    if key not in _COLOR_CACHE:
+        _COLOR_CACHE[key] = resolve_project_color(pane_path)
+    return _COLOR_CACHE[key]
 
 
 def load_workstream_meta(pane_path: str) -> tuple[str, str]:
@@ -209,6 +280,7 @@ def fetch_windows(
                 branch=branch,
                 status=status,
                 last_line=extract_last_line(captured),
+                color=_cached_project_color(pane_path),
             )
         )
     return rows
@@ -293,6 +365,67 @@ def _detach_client(base: list[str]) -> None:
     subprocess.run([*base, "detach-client"], check=False)
 
 
+def init_color_pairs() -> dict[str, int]:
+    """Initialize curses color pairs for PALETTE; return {} when unsupported."""
+    try:
+        if not curses.has_colors():
+            return {}
+        curses.start_color()
+        try:
+            curses.use_default_colors()
+            bg = -1
+        except curses.error:
+            bg = curses.COLOR_BLACK
+        use_256 = getattr(curses, "COLORS", 0) >= 256
+        pairs: dict[str, int] = {}
+        for idx, name in enumerate(PALETTE, start=1):
+            fg = _EXTENDED_256_COLORS[name] if (use_256 and name in _EXTENDED_256_COLORS) else _BASE_CURSES_COLORS[name]
+            try:
+                curses.init_pair(idx, fg, bg)
+            except curses.error:
+                break
+            pairs[name] = idx
+        return pairs
+    except curses.error:
+        return {}
+
+
+def _draw_row(
+    stdscr: Any,
+    y: int,
+    text: str,
+    max_width: int,
+    row: WorkstreamRow | None,
+    is_selected: bool,
+    color_pairs: dict[str, int],
+) -> None:
+    """Draw one dashboard line, colorizing the ticket and title columns when supported."""
+    if y == 0:
+        base_attr = curses.A_BOLD
+    elif is_selected:
+        base_attr = curses.A_REVERSE
+    else:
+        base_attr = curses.A_NORMAL
+    try:
+        stdscr.addnstr(y, 0, text, max_width, base_attr)
+    except curses.error:
+        return
+
+    if row is None or row.color not in color_pairs:
+        return
+    color_attr = base_attr | curses.color_pair(color_pairs[row.color])
+    limit = min(len(text), max_width)
+    for start, end in ((6, 18), (42, 70)):
+        if start >= limit:
+            continue
+        seg = text[start : min(end, limit)]
+        if seg:
+            try:
+                stdscr.addnstr(y, start, seg, len(seg), color_attr)
+            except curses.error:
+                pass
+
+
 def _curses_loop(
     stdscr: Any,
     session: str,
@@ -304,6 +437,7 @@ def _curses_loop(
     curses.curs_set(0)
     stdscr.keypad(True)
     stdscr.timeout(int(refresh_sec * 1000))
+    color_pairs = init_color_pairs()
     base = _tmux_base(tmux_bin, socket)
     selected = 0
     rows: list[WorkstreamRow] = []
@@ -325,22 +459,24 @@ def _curses_loop(
 
         height, width = stdscr.getmaxyx()
         max_rows = max(1, height - 6)
-        start, _ = visible_slice(len(rows), selected, max_rows)
-        selected_line = 3 + (selected - start)
-        lines = render_lines(rows, selected, width - 1, session, max_rows=max_rows, host_line=host_line)
+        start, end = visible_slice(len(rows), selected, max_rows)
+        visible_rows = rows[start:end]
+        lines = render_lines(
+            rows, selected, width - 1, session, max_rows=max_rows, host_line=host_line
+        )
+        max_width = max(1, width - 1)
         stdscr.erase()
         for y, text in enumerate(lines[: max(1, height - 1)]):
-            attr = curses.A_REVERSE if (rows and y == selected_line) else curses.A_NORMAL
-            if y == 0:
-                attr = curses.A_BOLD
-            try:
-                stdscr.addnstr(y, 0, text, max(1, width - 1), attr)
-            except curses.error:
-                pass
+            row_idx = y - 3
+            row = visible_rows[row_idx] if (rows and 0 <= row_idx < len(visible_rows)) else None
+            is_selected = bool(rows and row is not None and (start + row_idx) == selected)
+            _draw_row(stdscr, y, text, max_width, row, is_selected, color_pairs)
         stdscr.refresh()
 
         ch = stdscr.getch()
         if ch == -1 or ch in (ord("r"), ord("R")):
+            if ch in (ord("r"), ord("R")):
+                _COLOR_CACHE.clear()
             needs_refresh = True
             continue
         if ch in (ord("q"), ord("Q")):
