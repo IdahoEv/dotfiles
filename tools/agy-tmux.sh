@@ -26,7 +26,7 @@ Options:
 Examples:
   agy-tmux.sh 12,13 14 15
   agy-tmux.sh --session my-work 183
-  agy-tmux.sh                  # re-attach to existing session
+  agy-tmux.sh                  # attach to existing session, or launch governor if none exists
 EOF
 }
 
@@ -178,15 +178,90 @@ command -v python3 >/dev/null 2>&1 || die "python3 not found"
 [ -n "$session" ] || session="$(default_session_name)"
 session="${session//[.:]/-}"
 
+main_worktree_dir() {
+  local config_root=""
+  config_root="$(git config --get worktreeManager.configRoot 2>/dev/null || true)"
+  if [ -n "$config_root" ] && [ -d "$config_root" ]; then
+    printf '%s' "$config_root"
+    return 0
+  fi
+
+  local wt=""
+  wt="$(git worktree list --porcelain 2>/dev/null | awk '
+    function flush() {
+      if (path == "" || bare || prunable) return
+      if (first == "") first = path
+      if (primary == "" && (branch == "refs/heads/main" || branch == "refs/heads/master" || branch == "refs/heads/development")) primary = path
+    }
+    /^worktree / { flush(); path = substr($0, 10); bare = 0; prunable = 0; branch = "" }
+    /^bare$/ { bare = 1 }
+    /^prunable/ { prunable = 1 }
+    /^branch / { branch = substr($0, 8) }
+    END { flush(); print (primary != "" ? primary : first) }
+  ' || true)"
+  if [ -n "$wt" ] && [ -d "$wt" ]; then
+    printf '%s' "$wt"
+    return 0
+  fi
+
+  local top=""
+  top="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+  if [ -n "$top" ] && [ -d "$top" ]; then
+    printf '%s' "$top"
+    return 0
+  fi
+
+  pwd
+}
+
+check_mem_guard() {  # <label>
+  local label="$1"
+  # Each launched agent changes memory pressure. Blocked launches are skipped
+  # (not killed, nothing created); --force / MEM_GUARD_OVERRIDE=1 overrides.
+  if [ -x "$MEM_GUARD_BIN" ] || command -v "$MEM_GUARD_BIN" >/dev/null 2>&1; then
+    local grc=0
+    MEM_GUARD_OVERRIDE="$force_override" "$MEM_GUARD_BIN" check --context "agy-tmux $label" || grc=$?
+    case "$grc" in
+      0) ;;
+      3) printf 'agy-tmux: skipped %s: blocked by mem-guard (override with --force)\n' "$label" >&2
+         return 1 ;;
+      *) printf 'agy-tmux: mem-guard failed (exit %s); launching without a memory check\n' "$grc" >&2 ;;
+    esac
+  else
+    printf 'agy-tmux: mem-guard.sh not found (%s); launching without a memory check\n' "$MEM_GUARD_BIN" >&2
+  fi
+}
+
+open_agent_window() {  # <win_name> <dir> <agent_cmd> -> prints window index
+  local win_name="$1" dir="$2" agent_cmd="$3" win_idx
+  win_idx="$(tmux_cmd new-window -d -P -F '#{window_index}' -t "=$session:" -n "$win_name" -c "$dir" "sleep 60")"
+  tmux_cmd set-window-option -t "=$session:$win_idx" remain-on-exit on
+  tmux_cmd respawn-pane -k -t "=$session:$win_idx" "$agent_cmd"
+  printf '%s' "$win_idx"
+}
+
+launch_governor() {
+  command -v "$AGY_BIN" >/dev/null 2>&1 || die "agy CLI not found ($AGY_BIN)"
+  check_mem_guard "governor" || return 1
+
+  local gov_dir agent_cmd win_idx
+  gov_dir="$(main_worktree_dir)"
+  ensure_session
+
+  agent_cmd="$(printf 'cd %q && exec %q --mode plan --prompt-interactive %q' "$gov_dir" "$AGY_BIN" "/governor")"
+  win_idx="$(open_agent_window "governor" "$gov_dir" "$agent_cmd")"
+  printf 'agy-tmux: launched [governor] in %s (window %s)\n' "$gov_dir" "$win_idx"
+}
+
 if [ "${#groups[@]}" -eq 0 ]; then
   if tmux_cmd has-session -t "=$session" 2>/dev/null; then
     ensure_session
-    tmux_cmd select-window -t "=$session:0"
-    attach_session
-    exit 0
+  else
+    launch_governor || exit 1
   fi
-  usage >&2
-  exit 1
+  tmux_cmd select-window -t "=$session:0"
+  attach_session
+  exit 0
 fi
 
 [ -x "$START_TICKET_BIN" ] || command -v "$START_TICKET_BIN" >/dev/null 2>&1 \
@@ -214,20 +289,7 @@ window_label_for() {  # <group> <branch> [<worktree>]
 
 launch_group() {  # <group>
   local group="$1"
-  # Per-group, not once: each launched agent changes memory pressure. Blocked groups
-  # are skipped (not killed, nothing created); --force / MEM_GUARD_OVERRIDE=1 overrides.
-  if [ -x "$MEM_GUARD_BIN" ] || command -v "$MEM_GUARD_BIN" >/dev/null 2>&1; then
-    local grc=0
-    MEM_GUARD_OVERRIDE="$force_override" "$MEM_GUARD_BIN" check --context "agy-tmux $group" || grc=$?
-    case "$grc" in
-      0) ;;
-      3) printf 'agy-tmux: skipped %s: blocked by mem-guard (override with --force)\n' "$group" >&2
-         return 1 ;;
-      *) printf 'agy-tmux: mem-guard failed (exit %s); launching without a memory check\n' "$grc" >&2 ;;
-    esac
-  else
-    printf 'agy-tmux: mem-guard.sh not found (%s); launching without a memory check\n' "$MEM_GUARD_BIN" >&2
-  fi
+  check_mem_guard "$group" || return 1
 
   local st_args=("$group" --no-tab)
   [ -z "$provider" ] || st_args+=(--provider "$provider")
@@ -261,10 +323,7 @@ launch_group() {  # <group>
   local win_name agent_cmd win_idx
   win_name="$(window_label_for "$group" "$branch" "$wt")"
   agent_cmd="$(printf 'cd %q && exec %q --mode plan --prompt-interactive "$(cat %q)"' "$wt" "$AGY_BIN" "$kf")"
-
-  win_idx="$(tmux_cmd new-window -d -P -F '#{window_index}' -t "=$session:" -n "$win_name" -c "$wt" "sleep 60")"
-  tmux_cmd set-window-option -t "=$session:$win_idx" remain-on-exit on
-  tmux_cmd respawn-pane -k -t "=$session:$win_idx" "$agent_cmd"
+  win_idx="$(open_agent_window "$win_name" "$wt" "$agent_cmd")"
   printf 'agy-tmux: launched [%s] %s in %s (window %s)\n' "$win_name" "$branch" "$wt" "$win_idx"
 }
 

@@ -155,6 +155,7 @@ class TestHelpers(unittest.TestCase):
             with (
                 mock.patch.object(dash, "_run_cmd", side_effect=fake_run),
                 mock.patch.object(dash, "_git_branch") as git_mock,
+                mock.patch.object(dash, "resolve_project_color", return_value="green"),
             ):
                 rows = dash.fetch_windows("agy-dotfiles", now=1000)
 
@@ -164,6 +165,7 @@ class TestHelpers(unittest.TestCase):
             self.assertEqual(rows[0].ticket_ref, "Is183")
             self.assertEqual(rows[0].status, "idle (50s)")
             self.assertEqual(rows[0].last_line, "Ready for review?")
+            self.assertEqual(rows[0].color, "green")
 
     def test_fetch_windows_pane_dead_and_missing_workstream(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -210,6 +212,7 @@ class TestHelpers(unittest.TestCase):
 
         with (
             mock.patch.object(curses, "curs_set"),
+            mock.patch.object(curses, "has_colors", return_value=False),
             mock.patch.object(dash, "fetch_windows", return_value=rows) as fetch_mock,
             mock.patch.object(dash, "_kill_window") as kill_mock,
         ):
@@ -476,6 +479,219 @@ class TestGroupingAndNavigation(unittest.TestCase):
                 dash._curses_loop(FakeStdscr(), "agy-dotfiles", None, 2.0)
 
         self.assertEqual(proj_mock.call_count, 2)
+
+
+class TestProjectColors(unittest.TestCase):
+    def test_resolve_color_conf_override_beats_project_colors(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            wt = Path(tmp) / "My-Project" / "wt1"
+            wt.mkdir(parents=True)
+            colors_file = Path(tmp) / "project-colors"
+            colors_file.write_text("# comment\nMy-Project purple\n", encoding="utf-8")
+
+            with (
+                mock.patch.object(dash.repo_facts, "conf_get", return_value="  Cyan \r"),
+                mock.patch.object(dash.repo_facts, "main_root", return_value=str(Path(tmp) / "My-Project")),
+            ):
+                self.assertEqual(dash.resolve_project_color(str(wt), colors_file=colors_file), "cyan")
+
+    def test_resolve_color_falls_back_to_project_colors_when_conf_unset_or_blank(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            wt = Path(tmp) / "My-Project" / "wt1"
+            wt.mkdir(parents=True)
+            colors_file = Path(tmp) / "project-colors"
+            colors_file.write_text(
+                "# header\n\ndotfiles green\nmy-project Purple\n",
+                encoding="utf-8",
+            )
+
+            for conf_val in (None, "   "):
+                with (
+                    mock.patch.object(dash.repo_facts, "conf_get", return_value=conf_val),
+                    mock.patch.object(dash.repo_facts, "main_root", return_value=str(Path(tmp) / "My-Project")),
+                ):
+                    self.assertEqual(dash.resolve_project_color(str(wt), colors_file=colors_file), "purple")
+
+    def test_resolve_color_unknown_project_and_invalid_color_return_empty(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            wt = Path(tmp) / "unknown-repo"
+            wt.mkdir()
+            colors_file = Path(tmp) / "project-colors"
+            colors_file.write_text("dotfiles green\n", encoding="utf-8")
+
+            with (
+                mock.patch.object(dash.repo_facts, "conf_get", return_value=None),
+                mock.patch.object(dash.repo_facts, "main_root", return_value=str(wt)),
+            ):
+                self.assertEqual(dash.resolve_project_color(str(wt), colors_file=colors_file), "")
+
+            with (
+                mock.patch.object(dash.repo_facts, "conf_get", return_value="teal"),
+                mock.patch.object(dash.repo_facts, "main_root", return_value=str(wt)),
+            ):
+                self.assertEqual(dash.resolve_project_color(str(wt), colors_file=colors_file), "")
+
+        self.assertEqual(dash.resolve_project_color("/nonexistent/path/for/test"), "")
+
+    def test_fetch_windows_caches_project_color_across_refreshes(self):
+        dash._COLOR_CACHE.clear()
+        with tempfile.TemporaryDirectory() as tmp:
+            wt = Path(tmp) / "wt"
+            wt.mkdir()
+            list_out = f"1\tIs187\t%1\t{wt}\t0\t1000\n"
+
+            def fake_run(cmd: list[str]) -> str:
+                if "list-windows" in cmd:
+                    return list_out
+                if "capture-pane" in cmd:
+                    return "ok\n"
+                return ""
+
+            with (
+                mock.patch.object(dash, "_run_cmd", side_effect=fake_run),
+                mock.patch.object(dash, "_git_branch", return_value="Is187-test"),
+                mock.patch.object(dash, "resolve_project_color", return_value="cyan") as color_mock,
+            ):
+                rows1 = dash.fetch_windows("agy-dotfiles", now=1000)
+                rows2 = dash.fetch_windows("agy-dotfiles", now=1002)
+                dash._COLOR_CACHE.clear()
+                rows3 = dash.fetch_windows("agy-dotfiles", now=1004)
+
+            self.assertEqual(color_mock.call_count, 2)
+            self.assertEqual([r.color for r in (rows1[0], rows2[0], rows3[0])], ["cyan", "cyan", "cyan"])
+
+    def test_curses_loop_clears_color_cache_only_on_manual_refresh(self):
+        dash._COLOR_CACHE.clear()
+        dash._COLOR_CACHE[("/tmp/wt", "")] = "green"
+        keys = [-1, ord("r")]
+        cache_sizes_at_fetch: list[int] = []
+
+        class FakeStdscr:
+            def keypad(self, _flag): pass
+            def timeout(self, _ms): pass
+            def getmaxyx(self): return (24, 100)
+            def erase(self): pass
+            def addnstr(self, *_args): pass
+            def refresh(self): pass
+            def getch(self):
+                if keys:
+                    return keys.pop(0)
+                raise StopIteration
+
+        def fake_fetch(*_args, **_kwargs):
+            cache_sizes_at_fetch.append(len(dash._COLOR_CACHE))
+            return []
+
+        with (
+            mock.patch.object(curses, "curs_set"),
+            mock.patch.object(curses, "has_colors", return_value=False),
+            mock.patch.object(dash, "fetch_windows", side_effect=fake_fetch),
+        ):
+            with self.assertRaises(StopIteration):
+                dash._curses_loop(FakeStdscr(), "agy-dotfiles", None, 2.0)
+
+        # Initial fetch + timeout (-1) preserve cache; manual 'r' clears it before fetch.
+        self.assertEqual(cache_sizes_at_fetch, [1, 1, 0])
+
+
+class TestColorRendering(unittest.TestCase):
+    def test_init_color_pairs_without_color_support_returns_empty(self):
+        with mock.patch.object(curses, "has_colors", return_value=False):
+            self.assertEqual(dash.init_color_pairs(), {})
+
+        with (
+            mock.patch.object(curses, "has_colors", return_value=True),
+            mock.patch.object(curses, "start_color", side_effect=curses.error),
+        ):
+            self.assertEqual(dash.init_color_pairs(), {})
+
+    def test_init_color_pairs_initializes_all_palette_colors(self):
+        with (
+            mock.patch.object(curses, "has_colors", return_value=True),
+            mock.patch.object(curses, "start_color"),
+            mock.patch.object(curses, "use_default_colors"),
+            mock.patch.object(curses, "init_pair") as init_pair_mock,
+            mock.patch.object(curses, "COLORS", 256, create=True),
+        ):
+            pairs = dash.init_color_pairs()
+
+        self.assertEqual(set(pairs.keys()), set(dash.PALETTE))
+        self.assertEqual(init_pair_mock.call_count, len(dash.PALETTE))
+
+    def test_init_color_pairs_keeps_valid_pairs_when_pair_limit_reached(self):
+        def fake_init_pair(idx, _fg, _bg):
+            if idx >= 8:
+                raise curses.error("pair limit")
+
+        with (
+            mock.patch.object(curses, "has_colors", return_value=True),
+            mock.patch.object(curses, "start_color"),
+            mock.patch.object(curses, "use_default_colors"),
+            mock.patch.object(curses, "init_pair", side_effect=fake_init_pair),
+            mock.patch.object(curses, "COLORS", 8, create=True),
+        ):
+            pairs = dash.init_color_pairs()
+
+        self.assertEqual(set(pairs.keys()), set(dash.PALETTE[:7]))
+
+    def test_draw_row_colorizes_ticket_and_title_with_color_support(self):
+        calls: list[tuple[int, int, str, int, int]] = []
+
+        class FakeStdscr:
+            def addnstr(self, y, x, text, n, attr):
+                calls.append((y, x, text, n, attr))
+
+        row = dash.WorkstreamRow(
+            window_index="1",
+            window_name="Is187",
+            pane_id="%1",
+            pane_path="/tmp/wt1",
+            ticket_ref="Is187",
+            desc="Port project colors",
+            branch="",
+            status="running",
+            last_line="ok",
+            color="green",
+        )
+        line = dash.render_lines([row], selected=0, width=100, session="agy-dotfiles")[3]
+
+        with mock.patch.object(curses, "color_pair", return_value=0x200) as cp_mock:
+            dash._draw_row(FakeStdscr(), 3, line, 100, row, is_selected=True, color_pairs={"green": 3})
+
+        cp_mock.assert_called_once_with(3)
+        self.assertEqual(calls[0][1], 0)
+        self.assertEqual(calls[0][4], curses.A_REVERSE)
+        # Ticket column (x=6) and Title column (x=42) get color_pair | A_REVERSE
+        self.assertEqual([(c[1], c[4]) for c in calls[1:]], [(6, curses.A_REVERSE | 0x200), (42, curses.A_REVERSE | 0x200)])
+        self.assertEqual(calls[2][2].strip(), "Port project colors")
+
+    def test_draw_row_falls_back_to_unstyled_without_color_support(self):
+        calls: list[tuple[int, int, str, int, int]] = []
+
+        class FakeStdscr:
+            def addnstr(self, y, x, text, n, attr):
+                calls.append((y, x, text, n, attr))
+
+        row = dash.WorkstreamRow(
+            window_index="1",
+            window_name="Is187",
+            pane_id="%1",
+            pane_path="/tmp/wt1",
+            ticket_ref="Is187",
+            desc="Port project colors",
+            branch="",
+            status="running",
+            last_line="ok",
+            color="green",
+        )
+        line = dash.render_lines([row], selected=0, width=100, session="agy-dotfiles")[3]
+
+        with mock.patch.object(curses, "color_pair") as cp_mock:
+            dash._draw_row(FakeStdscr(), 3, line, 100, row, is_selected=False, color_pairs={})
+
+        cp_mock.assert_not_called()
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(calls[0][4], curses.A_NORMAL)
 
 
 if __name__ == "__main__":
