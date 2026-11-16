@@ -8,6 +8,7 @@ import curses
 import dataclasses
 import json
 import os
+import re
 import shlex
 import subprocess
 import sys
@@ -25,7 +26,7 @@ import workstream  # noqa: E402
 
 ACTIVE_THRESHOLD_SECS = 5
 VIEW_MODES = ("flat", "project", "state")
-STATE_ORDER = ("running", "idle", "exited")
+STATE_ORDER = ("waiting", "working", "idle", "exited")
 PALETTE = ("red", "blue", "green", "yellow", "purple", "orange", "pink", "cyan")
 _DEFAULT_COLORS_FILE = _LIB_DIR.parent / "project-colors"
 _COLOR_CACHE: dict[tuple[str, str], str] = {}
@@ -85,25 +86,118 @@ def format_age(seconds: int) -> str:
     return f"{s // 3600}h"
 
 
-def compute_status(pane_dead: bool, last_activity: int | None, now: int) -> str:
-    """Derive a concise agent status from pane liveness and tmux activity timestamp."""
+_STATUSLINE_STATE_RE = re.compile(
+    r"\|\s*\[(thinking|working|running|tool_use|idle|waiting|permission|question|error)\](?:\s*\||\s*$)",
+    re.IGNORECASE,
+)
+_WAITING_PROMPT_RE = re.compile(
+    r"(?:^|\s)(?:"
+    r"enter to select|space to select|allow once|allow for this session|always allow|"
+    r"yes,\s*allow|no,\s*deny|do you want to (?:proceed|run|allow|continue)|"
+    r"\[[yY]/[nN]\]"
+    r")",
+    re.IGNORECASE,
+)
+_WAITING_MENU_RE = re.compile(r"^\s*[❯>]\s*1\.\s+\S")
+_SUBAGENT_ACTIVE_RE = re.compile(r"^\s*●\s+Agent\(")
+_SPINNER_RE = re.compile(r"^\s*[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏⣾⣽⣻⢿⡿⣟⣯⣷]\s+\w")
+_INTERRUPT_HINT_RE = re.compile(r"\besc to interrupt\b", re.IGNORECASE)
+_RULE_LINE_RE = re.compile(r"^─{10,}$")
+_PROMPT_LINE_RE = re.compile(r"^>\s*(?:$|Plan mode:|Auto mode:)")
+
+
+def _extract_statusline_state(lines: list[str]) -> tuple[str | None, list[str]]:
+    """Return (statusline_state, body_lines) by inspecting the bottom statusline region."""
+    tail = lines[-6:]
+    state: str | None = None
+    cut = len(lines)
+    for idx in range(len(tail) - 1, -1, -1):
+        m = _STATUSLINE_STATE_RE.search(tail[idx])
+        if m:
+            state = m.group(1).lower()
+            cut = len(lines) - len(tail) + idx
+            break
+    return state, lines[:cut]
+
+
+def _has_prompt_box(lines: list[str]) -> bool:
+    """Return True when the tail contains agy's horizontal-rule input box."""
+    for i, line in enumerate(lines):
+        if _PROMPT_LINE_RE.match(line):
+            has_rule_above = i > 0 and bool(_RULE_LINE_RE.match(lines[i - 1]))
+            has_rule_below = i + 1 < len(lines) and bool(_RULE_LINE_RE.match(lines[i + 1]))
+            if has_rule_above or has_rule_below:
+                return True
+    return False
+
+
+def _classify_pane_state(captured: str) -> str | None:
+    """Classify an agy pane's attention state from captured output, or None if unknown."""
+    if not captured:
+        return None
+    non_empty = [ln.strip() for ln in captured.splitlines() if ln.strip()]
+    if not non_empty:
+        return None
+
+    sl_state, body_lines = _extract_statusline_state(non_empty)
+    if sl_state in ("waiting", "permission", "question"):
+        return "waiting"
+
+    recent_body = body_lines[-8:] if body_lines else non_empty[-8:]
+    for line in recent_body:
+        if _WAITING_PROMPT_RE.search(line) or _WAITING_MENU_RE.match(line):
+            return "waiting"
+
+    if sl_state in ("thinking", "working", "running", "tool_use"):
+        return "working"
+
+    for line in recent_body:
+        if _SUBAGENT_ACTIVE_RE.match(line) or _SPINNER_RE.match(line) or _INTERRUPT_HINT_RE.search(line):
+            return "working"
+
+    if sl_state == "idle" or _has_prompt_box(non_empty[-6:]):
+        return "idle"
+
+    return None
+
+
+def compute_status(
+    pane_dead: bool,
+    last_activity: int | None,
+    now: int,
+    captured: str = "",
+) -> str:
+    """Derive agent attention status from pane liveness, pane output, and activity age."""
     if pane_dead:
         return "exited"
+
+    pane_state = _classify_pane_state(captured)
+    if pane_state == "waiting":
+        return "waiting"
+    if pane_state == "working":
+        return "working"
+    if pane_state == "idle":
+        if last_activity is not None and last_activity > 0:
+            return f"idle ({format_age(max(0, now - last_activity))})"
+        return "idle"
+
     if last_activity is None or last_activity <= 0:
-        return "running"
+        return "working"
     age = max(0, now - last_activity)
     if age <= ACTIVE_THRESHOLD_SECS:
-        return "running"
+        return "working"
     return f"idle ({format_age(age)})"
 
 
 def row_state(status: str) -> str:
-    """Normalize a WorkstreamRow status string into running, idle, or exited."""
+    """Normalize a WorkstreamRow status string into waiting, working, idle, or exited."""
     if status == "exited":
         return "exited"
+    if status == "waiting":
+        return "waiting"
     if status.startswith("idle"):
         return "idle"
-    return "running"
+    return "working"
 
 
 def resolve_project(pane_path: str) -> str:
@@ -312,7 +406,7 @@ def fetch_windows(
         ticket_ref, desc, tags = load_workstream_meta(pane_path)
         branch = "" if desc else _git_branch(pane_path)
         captured = _run_cmd([*base, "capture-pane", "-p", "-t", pane_id, "-S", "-30"])
-        status = compute_status(pane_dead, last_activity, current_time)
+        status = compute_status(pane_dead, last_activity, current_time, captured=captured)
         rows.append(
             WorkstreamRow(
                 window_index=win_idx,
@@ -524,6 +618,23 @@ def init_color_pairs() -> dict[str, int]:
         return {}
 
 
+def _status_attr(status: str, base_attr: int, color_pairs: dict[str, int]) -> int:
+    """Return curses attributes for the Status column based on attention state."""
+    state = row_state(status)
+    if state == "waiting":
+        pair = color_pairs.get("yellow")
+        return base_attr | curses.A_BOLD | (curses.color_pair(pair) if pair else 0)
+    if state == "working":
+        pair = color_pairs.get("green")
+        return base_attr | (curses.color_pair(pair) if pair else 0)
+    if state == "idle":
+        return base_attr | curses.A_DIM
+    if state == "exited":
+        pair = color_pairs.get("red")
+        return base_attr | (curses.color_pair(pair) if pair else 0)
+    return base_attr
+
+
 def _draw_row(
     stdscr: Any,
     y: int,
@@ -533,7 +644,7 @@ def _draw_row(
     is_selected: bool,
     color_pairs: dict[str, int],
 ) -> None:
-    """Draw one dashboard line, colorizing the ticket and title columns when supported."""
+    """Draw one dashboard line, colorizing status by attention state and ticket/title by project."""
     if y == 0:
         base_attr = curses.A_BOLD
     elif is_selected:
@@ -545,10 +656,21 @@ def _draw_row(
     except curses.error:
         return
 
-    if row is None or row.color not in color_pairs:
+    if row is None:
+        return
+    limit = min(len(text), max_width)
+    status_attr = _status_attr(row.status, base_attr, color_pairs)
+    if 34 < limit and status_attr != base_attr:
+        seg = text[34 : min(46, limit)]
+        if seg:
+            try:
+                stdscr.addnstr(y, 34, seg, len(seg), status_attr)
+            except curses.error:
+                pass
+
+    if row.color not in color_pairs:
         return
     color_attr = base_attr | curses.color_pair(color_pairs[row.color])
-    limit = min(len(text), max_width)
     for start, end in ((6, 18), (57, 85)):
         if start >= limit:
             continue

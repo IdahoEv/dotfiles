@@ -31,6 +31,19 @@ You land directly on **window `0` (dashboard)**:
 
 The `Mem` column is an estimate of each window's process tree (`~1.2 GB`; `-` = not measured or exited), and the title line shows host memory pressure (`[WARN]`/`[BLOCK]` when thresholds are crossed). Details and limits: `docs/memory-guard.md`.
 
+### Status Indicators
+
+The `Status` column inspects captured pane output (statusline state, active subagents, spinners, and permission/question prompts) and falls back to tmux activity age for non-`agy` panes:
+
+| Status | Styling | Meaning |
+| --- | --- | --- |
+| `waiting` | Bold yellow | Waiting on user response (question or permission/approval prompt) |
+| `working` | Green | Actively running (turn in progress, tool call, or background subagent) |
+| `idle (<age>)` | Dim | Finished turn, sitting at the input prompt |
+| `exited` | Red | Pane process has exited (`x` to close) |
+
+In `state` grouping mode (`g`), rows sort in the order above (`waiting` first).
+
 ## Essential Tmux Keys
 
 Tmux's **prefix** is `Ctrl-b` (press `Ctrl-b`, release, then press the next key):

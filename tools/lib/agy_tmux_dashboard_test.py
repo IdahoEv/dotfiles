@@ -29,11 +29,79 @@ class TestHelpers(unittest.TestCase):
         self.assertEqual(dash.format_age(125), "2m")
         self.assertEqual(dash.format_age(7200), "2h")
 
-    def test_compute_status(self):
+    def test_compute_status_fallback_without_agy_signals(self):
         self.assertEqual(dash.compute_status(True, 1000, 1001), "exited")
-        self.assertEqual(dash.compute_status(False, 1000, 1003), "running")
+        self.assertEqual(dash.compute_status(False, 1000, 1003), "working")
         self.assertEqual(dash.compute_status(False, 1000, 1045), "idle (45s)")
-        self.assertEqual(dash.compute_status(False, None, 1045), "running")
+        self.assertEqual(dash.compute_status(False, None, 1045), "working")
+        self.assertEqual(dash.compute_status(False, 1000, 1045, captured="plain shell\n$ "), "idle (45s)")
+
+    def test_compute_status_from_agy_pane_signals(self):
+        # pane_dead always wins over captured output
+        self.assertEqual(
+            dash.compute_status(True, 1000, 1001, captured="dotfiles | main | [tool_use]\n"),
+            "exited",
+        )
+
+        # working: statusline states
+        for tag in ("tool_use", "thinking", "working", "running"):
+            cap = f"──────\n> Plan mode:\n──────\ndotfiles | main | [{tag}]\nGemini 4 | 5%\n"
+            self.assertEqual(dash.compute_status(False, 900, 1000, captured=cap), "working")
+
+        # working: spinner / interrupt hint without statusline
+        self.assertEqual(
+            dash.compute_status(False, 900, 1000, captured="⣟  Waiting...\n└ Tip: Use /btw\n"),
+            "working",
+        )
+        self.assertEqual(
+            dash.compute_status(False, 900, 1000, captured="Running tests (esc to interrupt)\n"),
+            "working",
+        )
+
+        # working: active subagent even when main statusline says [idle]
+        subagent_cap = (
+            "──────\n>\n──────\n"
+            "  ● Agent(local-review-cycle-manager: Local Review Cycle Manager) · 14s\n"
+            "──────\n"
+            "dotfiles | Is180 | [idle]\n"
+            "Gemini 4 | 14% | tasks: 1\n"
+        )
+        self.assertEqual(dash.compute_status(False, 900, 1000, captured=subagent_cap), "working")
+
+        # waiting: permission / approval / question prompts override [tool_use] or [idle]
+        perm_cap = (
+            "Run command: rm -rf build?\n"
+            "❯ 1. Allow once\n"
+            "  2. Deny\n"
+            "Enter to select · Esc to cancel\n"
+            "dotfiles | main | [tool_use]\n"
+        )
+        self.assertEqual(dash.compute_status(False, 999, 1000, captured=perm_cap), "waiting")
+
+        question_cap = (
+            "Which approach?\n"
+            "❯ 1. Option A (Recommended)\n"
+            "  2. Option B\n"
+            "dotfiles | main | [idle]\n"
+        )
+        self.assertEqual(dash.compute_status(False, 999, 1000, captured=question_cap), "waiting")
+
+        self.assertEqual(
+            dash.compute_status(False, 999, 1000, captured="Continue? [y/N]\n"),
+            "waiting",
+        )
+        self.assertEqual(
+            dash.compute_status(False, 999, 1000, captured="dotfiles | main | [waiting]\n"),
+            "waiting",
+        )
+
+        # idle: statusline [idle] or bare prompt box, even when last_activity is very recent
+        idle_cap = "──────\n>\n──────\ndotfiles | main | [idle]\nGemini 4 | 15%\n"
+        self.assertEqual(dash.compute_status(False, 998, 1000, captured=idle_cap), "idle (2s)")
+        self.assertEqual(dash.compute_status(False, None, 1000, captured=idle_cap), "idle")
+
+        bare_prompt = "Some response\n────────────\n>\n────────────\n"
+        self.assertEqual(dash.compute_status(False, 998, 1000, captured=bare_prompt), "idle (2s)")
 
     def test_extract_last_line(self):
         text = "line one\n\n   line   two  \n   \n"
@@ -328,8 +396,10 @@ class TestGroupingAndNavigation(unittest.TestCase):
         self.assertEqual(dash.resolve_project(""), "other")
 
     def test_row_state_and_next_view_mode(self):
-        self.assertEqual(dash.row_state("running"), "running")
+        self.assertEqual(dash.row_state("waiting"), "waiting")
+        self.assertEqual(dash.row_state("working"), "working")
         self.assertEqual(dash.row_state("idle (15s)"), "idle")
+        self.assertEqual(dash.row_state("idle"), "idle")
         self.assertEqual(dash.row_state("exited"), "exited")
         self.assertEqual(dash.next_view_mode("flat"), "project")
         self.assertEqual(dash.next_view_mode("project"), "state")
@@ -339,30 +409,31 @@ class TestGroupingAndNavigation(unittest.TestCase):
     def test_build_display_items_flat_project_and_state(self):
         rows = [
             self._row("1", status="exited", project="beta"),
-            self._row("2", status="running", project="alpha"),
+            self._row("2", status="working", project="alpha"),
             self._row("3", status="idle (5m)", project="beta"),
+            self._row("4", status="waiting", project="alpha"),
         ]
         flat = dash.build_display_items(rows, "flat")
-        self.assertEqual([item.row.window_index for item in flat if item.row], ["1", "2", "3"])
+        self.assertEqual([item.row.window_index for item in flat if item.row], ["1", "2", "3", "4"])
         self.assertFalse(any(item.is_header for item in flat))
 
         by_project = dash.build_display_items(rows, "project")
         self.assertEqual(
             [item.header if item.is_header else item.row.window_index for item in by_project],
-            ["── alpha (1)", "2", "── beta (2)", "1", "3"],
+            ["── alpha (2)", "2", "4", "── beta (2)", "1", "3"],
         )
 
         by_state = dash.build_display_items(rows, "state")
         self.assertEqual(
             [item.header if item.is_header else item.row.window_index for item in by_state],
-            ["── running (1)", "2", "── idle (1)", "3", "── exited (1)", "1"],
+            ["── waiting (1)", "4", "── working (1)", "2", "── idle (1)", "3", "── exited (1)", "1"],
         )
 
         # Empty state groups are omitted.
-        only_running = dash.build_display_items([self._row("1", status="running")], "state")
+        only_working = dash.build_display_items([self._row("1", status="working")], "state")
         self.assertEqual(
-            [item.header if item.is_header else item.row.window_index for item in only_running],
-            ["── running (1)", "1"],
+            [item.header if item.is_header else item.row.window_index for item in only_working],
+            ["── working (1)", "1"],
         )
 
     def test_step_selection_skips_headers_and_wraps(self):
@@ -657,7 +728,7 @@ class TestColorRendering(unittest.TestCase):
             ticket_ref="Is187",
             desc="Port project colors",
             branch="",
-            status="running",
+            status="working",
             last_line="ok",
             color="green",
         )
@@ -666,12 +737,15 @@ class TestColorRendering(unittest.TestCase):
         with mock.patch.object(curses, "color_pair", return_value=0x200) as cp_mock:
             dash._draw_row(FakeStdscr(), 3, line, 100, row, is_selected=True, color_pairs={"green": 3})
 
-        cp_mock.assert_called_once_with(3)
+        self.assertEqual(cp_mock.call_count, 2)
         self.assertEqual(calls[0][1], 0)
         self.assertEqual(calls[0][4], curses.A_REVERSE)
-        # Ticket column (x=6) and Title column (x=57) get color_pair | A_REVERSE
-        self.assertEqual([(c[1], c[4]) for c in calls[1:]], [(6, curses.A_REVERSE | 0x200), (57, curses.A_REVERSE | 0x200)])
-        self.assertEqual(calls[2][2].strip(), "Port project colors")
+        # Status (x=34), Ticket (x=6), and Title (x=57) get color_pair | A_REVERSE
+        self.assertEqual(
+            [(c[1], c[4]) for c in calls[1:]],
+            [(34, curses.A_REVERSE | 0x200), (6, curses.A_REVERSE | 0x200), (57, curses.A_REVERSE | 0x200)],
+        )
+        self.assertEqual(calls[3][2].strip(), "Port project colors")
 
     def test_draw_row_falls_back_to_unstyled_without_color_support(self):
         calls: list[tuple[int, int, str, int, int]] = []
@@ -688,7 +762,7 @@ class TestColorRendering(unittest.TestCase):
             ticket_ref="Is187",
             desc="Port project colors",
             branch="",
-            status="running",
+            status="working",
             last_line="ok",
             color="green",
         )
@@ -700,6 +774,14 @@ class TestColorRendering(unittest.TestCase):
         cp_mock.assert_not_called()
         self.assertEqual(len(calls), 1)
         self.assertEqual(calls[0][4], curses.A_NORMAL)
+
+    def test_status_attr_styles_each_attention_state(self):
+        pairs = {"yellow": 4, "green": 3, "red": 1}
+        with mock.patch.object(curses, "color_pair", side_effect=lambda p: p * 0x100):
+            self.assertEqual(dash._status_attr("waiting", 0, pairs), curses.A_BOLD | 0x400)
+            self.assertEqual(dash._status_attr("working", 0, pairs), 0x300)
+            self.assertEqual(dash._status_attr("idle (5s)", 0, pairs), curses.A_DIM)
+            self.assertEqual(dash._status_attr("exited", 0, pairs), 0x100)
 
 
 if __name__ == "__main__":
