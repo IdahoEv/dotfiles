@@ -92,12 +92,18 @@ help_out="$("$TOOLS/agy-tmux.sh" --help)"
 has "--help prints usage" "Usage: agy-tmux.sh" "$help_out"
 
 # ---- 2. no-args on missing session launches governor in main worktree ---------
-"$TOOLS/agy-tmux.sh" --session "gov-ws" --no-attach >/dev/null
+git init -q "$ROOT/gov-repo"
+git -C "$ROOT/gov-repo" checkout -q -B main
+git -C "$ROOT/gov-repo" -c user.name=test -c user.email=test@example.com commit -q --allow-empty -m "init"
+git -C "$ROOT/gov-repo" worktree add -q -b feat "$ROOT/gov-linked"
+(cd "$ROOT/gov-linked" && "$TOOLS/agy-tmux.sh" --session "gov-ws" --no-attach >/dev/null)
 gov_wins="$(tmux -L "$SOCK" list-windows -t '=gov-ws' -F '#{window_index}:#{window_name}')"
 has "no-args creates dashboard in window 0" "0:dashboard" "$gov_wins"
 has "no-args creates governor in window 1" "1:governor" "$gov_wins"
 gov_roe="$(tmux -L "$SOCK" show-window-options -t '=gov-ws:1' -v remain-on-exit)"
 check "governor window sets remain-on-exit on" "on" "$gov_roe"
+gov_path="$(tmux -L "$SOCK" display-message -t '=gov-ws:1' -p '#{pane_current_path}')"
+check "governor window opens in main worktree" "$(cd "$ROOT/gov-repo" && pwd -P)" "$gov_path"
 for _ in 1 2 3 4 5; do
   [ -f "$ROOT/agy-calls.log" ] && [ "$(wc -l < "$ROOT/agy-calls.log")" -ge 1 ] && break
   sleep 0.2
