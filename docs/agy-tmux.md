@@ -54,10 +54,12 @@ agy-tmux.sh
 The dashboard and `mem-guard.sh` track every non-`0` window in `agy-<repo>`, including windows added manually.
 
 - **Add a new workstream to a running session:**
-  ```bash
-  agy-tmux.sh <id>                # appends window to agy-<repo> and attaches
-  agy-tmux.sh --no-attach <id>    # appends without attaching
-  ```
+  - From inside an `agy` window (e.g., `/governor`) in an `@agy_dashboard=1` session, `/start <id>` automatically routes to `start-ticket.sh --launcher agy-tmux` (`agy-tmux.sh --window`), appending the new workstream window without stealing focus.
+  - From a shell:
+    ```bash
+    agy-tmux.sh <id>                # appends window to agy-<repo> and attaches
+    agy-tmux.sh --no-attach <id>    # appends without attaching
+    ```
 - **Resume an orphaned workstream (after a crash/reboot):** `agy-tmux.sh <id>` reuses the existing worktree and commits without resetting them, but regenerates the original ticket kickoff (so tell the new session to inspect `git status`/`git log`/`gh pr view`). For workstreams already in review or ready for a PR, open a window with `/remind` instead once `agy-<repo>` exists:
   ```bash
   tmux new-window -t =agy-<repo>: -n <label> -c <worktree-path> "agy --mode plan --prompt-interactive '/remind'"

@@ -239,3 +239,20 @@ AGY_TMUX_MEM_GUARD="$ROOT/bin/crash-guard" "$TOOLS/agy-tmux.sh" --session "mem-c
 has "crashing guard is reported" "mem-guard failed (exit 7)" "$(cat "$ROOT/mem.err")"
 has "crashing guard still launches" "1:Is15" "$(tmux -L "$SOCK" list-windows -t '=mem-crash-ws' -F '#{window_index}:#{window_name}')"
 tmux -L "$SOCK" kill-session -t "=mem-crash-ws"
+
+# ---- 10. --window opens a pane in active @agy_dashboard without stealing focus ----
+"$TOOLS/agy-tmux.sh" --session "win-ws" --no-attach 14 >/dev/null
+tmux -L "$SOCK" select-window -t "=win-ws:1"
+caller_pane="$(tmux -L "$SOCK" display-message -t "=win-ws:1" -p '#{pane_id}')"
+mkdir -p "$ROOT/win_wt"
+git -C "$ROOT/win_wt" init -q -b Is198-window-test
+printf 'Kickoff 198\n' > "$ROOT/win_kf.md"
+rm -f "$ROOT/agy-calls.log"
+TMUX="stub,1,0" TMUX_PANE="$caller_pane" "$TOOLS/agy-tmux.sh" --window "$ROOT/win_wt" "$ROOT/win_kf.md" >/dev/null
+win_ws_list="$(tmux -L "$SOCK" list-windows -t '=win-ws' -F '#{window_index}:#{window_name}:#{window_active}:#{remain-on-exit}')"
+has "--window appends Is198 with remain-on-exit" "2:Is198:0:on" "$win_ws_list"
+active_win="$(tmux -L "$SOCK" list-windows -t '=win-ws' -F '#{window_active}:#{window_index}' | sed -n 's/^1://p')"
+check "--window does not steal focus from caller window" "1" "$active_win"
+for _ in 1 2 3 4 5; do [ -s "$ROOT/agy-calls.log" ] && break; sleep 0.2; done
+has "--window invokes agy in plan mode" "--mode plan --prompt-interactive Kickoff 198" "$(cat "$ROOT/agy-calls.log")"
+tmux -L "$SOCK" kill-session -t "=win-ws"

@@ -2,11 +2,14 @@
 # agy-tmux.sh — launch parallel /start workstreams in a tmux session with a live dashboard.
 #
 #   agy-tmux.sh [--session <name>] [--provider github|shortcut] [--no-attach] [<ticket-group> ...]
+#   agy-tmux.sh --window <worktree> <kickoff> [--session <name>]
 #
 # Each <ticket-group> is a single ticket ID (183) or comma-separated chain (12,13).
 # Runs `start-ticket.sh <group> --no-tab` for each, opens a tmux window running
 # `agy --mode plan --prompt-interactive` with the generated kickoff, and opens a
 # dashboard in window 0. Pressing Ctrl-z in any agent window returns to window 0.
+# --window appends a single agent window for an existing worktree + kickoff
+# without stealing focus from the caller window.
 
 set -euo pipefail
 
@@ -15,10 +18,12 @@ die() { printf 'agy-tmux: %s\n' "$*" >&2; exit 1; }
 usage() {
   cat <<'EOF'
 Usage: agy-tmux.sh [options] [<ticket-group> ...]
+       agy-tmux.sh --window <worktree> <kickoff> [--session <name>]
 
 Options:
-  --session <name>       Tmux session name (default: agy-<repo>)
+  --session <name>       Tmux session name (default: active @agy_dashboard session or agy-<repo>)
   --provider <provider>  Forward --provider to start-ticket.sh (github|shortcut)
+  --window <wt> <kf>     Open one agent window for an existing worktree + kickoff without stealing focus
   --no-attach            Create/update the session without attaching
   --force                Launch even if mem-guard blocks on memory pressure
   -h, --help             Show this help
@@ -66,6 +71,16 @@ default_session_name() {
   [ -n "$root" ] && name="agy-$(basename "$root")"
   # tmux forbids '.' and ':' in session names
   printf '%s' "${name//[.:]/-}"
+}
+
+active_dashboard_session() {
+  [ -n "${TMUX:-}" ] || return 1
+  local info=""
+  info="$(tmux_cmd display-message ${TMUX_PANE:+-t "$TMUX_PANE"} -p '#{@agy_dashboard}:#{session_name}' 2>/dev/null || true)"
+  case "$info" in
+    1:*) printf '%s' "${info#1:}"; return 0 ;;
+    *)   return 1 ;;
+  esac
 }
 
 attach_session() {
@@ -146,6 +161,8 @@ unset MEM_GUARD_OVERRIDE
 session=""
 provider=""
 no_attach=0
+window_wt=""
+window_kf=""
 groups=()
 
 while [ "$#" -gt 0 ]; do
@@ -156,6 +173,9 @@ while [ "$#" -gt 0 ]; do
     --provider)
       [ "$#" -ge 2 ] || die "--provider requires a value"
       provider="$2"; shift 2 ;;
+    --window)
+      [ "$#" -ge 3 ] || die "--window requires <worktree> <kickoff>"
+      window_wt="$2"; window_kf="$3"; shift 3 ;;
     --no-attach)
       no_attach=1; shift ;;
     --force)
@@ -175,23 +195,13 @@ command -v "$TMUX_BIN" >/dev/null 2>&1 || die "tmux not found"
 command -v python3 >/dev/null 2>&1 || die "python3 not found"
 [ -f "$DASHBOARD_PY" ] || die "dashboard script not found at $DASHBOARD_PY"
 
-[ -n "$session" ] || session="$(default_session_name)"
-session="${session//[.:]/-}"
-
-if [ "${#groups[@]}" -eq 0 ]; then
-  if tmux_cmd has-session -t "=$session" 2>/dev/null; then
-    ensure_session
-    tmux_cmd select-window -t "=$session:0"
-    attach_session
-    exit 0
-  fi
-  usage >&2
-  exit 1
+if [ -n "$window_wt" ]; then
+  [ "${#groups[@]}" -eq 0 ] || die "--window cannot be combined with ticket groups"
+  [ -n "$session" ] || session="$(active_dashboard_session || default_session_name)"
+else
+  [ -n "$session" ] || session="$(default_session_name)"
 fi
-
-[ -x "$START_TICKET_BIN" ] || command -v "$START_TICKET_BIN" >/dev/null 2>&1 \
-  || die "start-ticket.sh not found ($START_TICKET_BIN)"
-command -v "$AGY_BIN" >/dev/null 2>&1 || die "agy CLI not found ($AGY_BIN)"
+session="${session//[.:]/-}"
 
 window_label_for() {  # <group> <branch> [<worktree>]
   local group="$1" branch="$2" wt="${3:-}"
@@ -211,6 +221,48 @@ window_label_for() {  # <group> <branch> [<worktree>]
     printf '%s' "${group//,/+}"
   fi
 }
+
+open_agent_window() {  # <worktree> <kickoff> [<branch> [<group>]]
+  local wt="$1" kf="$2" branch="${3:-}" group="${4:-}"
+  if [ "$#" -lt 3 ]; then
+    branch="$(git -C "$wt" branch --show-current 2>/dev/null || basename "$wt")"
+  fi
+  ensure_session
+
+  local win_name agent_cmd win_idx
+  win_name="$(window_label_for "$group" "$branch" "$wt")"
+  agent_cmd="$(printf 'cd %q && exec %q --mode plan --prompt-interactive "$(cat %q)"' "$wt" "$AGY_BIN" "$kf")"
+
+  win_idx="$(tmux_cmd new-window -d -P -F '#{window_index}' -t "=$session:" -n "$win_name" -c "$wt" "sleep 60")"
+  tmux_cmd set-window-option -t "=$session:$win_idx" remain-on-exit on
+  tmux_cmd respawn-pane -k -t "=$session:$win_idx" "$agent_cmd"
+  printf 'agy-tmux: launched [%s] %s in %s (window %s)\n' "$win_name" "$branch" "$wt" "$win_idx"
+}
+
+if [ -n "$window_wt" ]; then
+  command -v "$AGY_BIN" >/dev/null 2>&1 || die "agy CLI not found ($AGY_BIN)"
+  [ -d "$window_wt" ] || die "worktree not found: $window_wt"
+  [ -f "$window_kf" ] || die "kickoff not found: $window_kf"
+  window_wt="$(cd "$window_wt" && pwd)"
+  window_kf="$(cd "$(dirname "$window_kf")" && pwd)/$(basename "$window_kf")"
+  open_agent_window "$window_wt" "$window_kf"
+  exit 0
+fi
+
+if [ "${#groups[@]}" -eq 0 ]; then
+  if tmux_cmd has-session -t "=$session" 2>/dev/null; then
+    ensure_session
+    tmux_cmd select-window -t "=$session:0"
+    attach_session
+    exit 0
+  fi
+  usage >&2
+  exit 1
+fi
+
+[ -x "$START_TICKET_BIN" ] || command -v "$START_TICKET_BIN" >/dev/null 2>&1 \
+  || die "start-ticket.sh not found ($START_TICKET_BIN)"
+command -v "$AGY_BIN" >/dev/null 2>&1 || die "agy CLI not found ($AGY_BIN)"
 
 launch_group() {  # <group>
   local group="$1"
@@ -256,16 +308,7 @@ launch_group() {  # <group>
     return 1
   fi
 
-  ensure_session
-
-  local win_name agent_cmd win_idx
-  win_name="$(window_label_for "$group" "$branch" "$wt")"
-  agent_cmd="$(printf 'cd %q && exec %q --mode plan --prompt-interactive "$(cat %q)"' "$wt" "$AGY_BIN" "$kf")"
-
-  win_idx="$(tmux_cmd new-window -d -P -F '#{window_index}' -t "=$session:" -n "$win_name" -c "$wt" "sleep 60")"
-  tmux_cmd set-window-option -t "=$session:$win_idx" remain-on-exit on
-  tmux_cmd respawn-pane -k -t "=$session:$win_idx" "$agent_cmd"
-  printf 'agy-tmux: launched [%s] %s in %s (window %s)\n' "$win_name" "$branch" "$wt" "$win_idx"
+  open_agent_window "$wt" "$kf" "$branch" "$group"
 }
 
 launched=0
