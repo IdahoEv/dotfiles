@@ -89,11 +89,9 @@ def resolve_project(pane_path: str) -> str:
     """Derive a project name from pane_path's git main root, falling back to basename."""
     if pane_path and os.path.isdir(pane_path):
         root = repo_facts.main_root(pane_path)
-        if root:
-            return Path(root).name or root
-        return Path(pane_path).name or pane_path
+        return Path(root or pane_path).name or "other"
     if pane_path:
-        return Path(pane_path).name or pane_path
+        return Path(pane_path).name or "other"
     return "other"
 
 

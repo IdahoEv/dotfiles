@@ -310,6 +310,10 @@ class TestGroupingAndNavigation(unittest.TestCase):
                 self.assertEqual(dash.resolve_project(tmp), "dotfiles")
             with mock.patch.object(dash.repo_facts, "main_root", return_value=""):
                 self.assertEqual(dash.resolve_project(tmp), Path(tmp).name)
+        with mock.patch.object(dash.repo_facts, "main_root", return_value=""):
+            self.assertEqual(dash.resolve_project("/"), "other")
+        with mock.patch.object(dash.os.path, "isdir", return_value=False):
+            self.assertEqual(dash.resolve_project("/"), "other")
         self.assertEqual(dash.resolve_project(""), "other")
 
     def test_row_state_and_next_view_mode(self):
