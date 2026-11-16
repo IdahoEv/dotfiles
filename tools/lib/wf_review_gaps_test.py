@@ -303,6 +303,26 @@ class TestEndToEndReport(unittest.TestCase):
         self.assertIn("line1 line2 \\| pipe", md)
         self.assertIn("first second \\| third", md)
 
+    def test_since_queries_closed_prs_including_unmerged(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            _init_git_repo(repo)
+            args = gaps.argparse.Namespace(no_gh=False, repo=None, pr=None, since="2026-11-10", dir=str(repo))
+
+            def fake_gh(cmd):
+                self.assertEqual(cmd[:5], ["pr", "list", "--repo", "example/sample-app", "--state"])
+                self.assertEqual(cmd[5], "closed")
+                return [
+                    {"number": 20, "closedAt": "2026-11-11T00:00:00Z"},
+                    {"number": 19, "closedAt": "2026-11-09T23:59:59Z"},
+                ]
+
+            with mock.patch.object(gaps.wf_backfill, "_gh_json", side_effect=fake_gh), \
+                 mock.patch.object(gaps, "_fetch_pr_meta", return_value={"number": 20, "title": "Closed", "url": "u", "state": "CLOSED", "headRefName": "b"}), \
+                 mock.patch.object(gaps.wf_backfill, "fetch_pr_bot_data", return_value={"branch": "b", "comments": [], "reviews": [], "threads": [], "commit_files": []}):
+                recs = gaps._collect_pr_records(args, [])
+            self.assertEqual([r["number"] for r in recs], [20])
+
 
 if __name__ == "__main__":
     unittest.main()

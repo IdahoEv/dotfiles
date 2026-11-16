@@ -313,6 +313,14 @@ def _fetch_pr_meta(number, repo):
     ])
 
 
+def _list_closed_prs_since(repo, since):
+    prs = wf_backfill._gh_json([
+        "pr", "list", "--repo", repo, "--state", "closed", "--limit", "1000",
+        "--json", "number,closedAt",
+    ])
+    return sorted(p["number"] for p in prs if (p.get("closedAt") or "") >= since)
+
+
 def _index_events(events):
     """Group telemetry events by run_id and index pr_number -> run_id."""
     by_run = defaultdict(list)
@@ -597,7 +605,7 @@ def _collect_pr_records(args, events):
     for repo in repos:
         pr_nums = list(args.pr or [])
         if args.since:
-            pr_nums = sorted(set(pr_nums) | set(wf_backfill.list_merged_prs_since(repo, args.since)))
+            pr_nums = sorted(set(pr_nums) | set(_list_closed_prs_since(repo, args.since)))
         for num in pr_nums:
             try:
                 meta = _fetch_pr_meta(num, repo)
@@ -622,7 +630,7 @@ def _collect_pr_records(args, events):
 def main(argv=None):
     ap = argparse.ArgumentParser(description="Pair closed PR Copilot findings with local review telemetry.")
     ap.add_argument("--pr", type=int, action="append", help="Closed/merged PR number (repeatable)")
-    ap.add_argument("--since", help="Analyze merged PRs on or after YYYY-MM-DD")
+    ap.add_argument("--since", help="Analyze closed/merged PRs on or after YYYY-MM-DD")
     ap.add_argument("--repo", action="append", help="GitHub owner/repo (repeatable; defaults to current repo)")
     ap.add_argument("--dir", default=".", help="Local repo directory for git diff and project-config overlay lookup")
     ap.add_argument("--out", help="Output path for the uncommitted markdown report")
