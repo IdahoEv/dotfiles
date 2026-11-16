@@ -16,7 +16,9 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import dataclasses
+import fcntl
 import json
 import os
 import re
@@ -181,6 +183,32 @@ def detect_template_source(dir_: str = ".") -> str:
 def _worktree_root(dir_: str = ".") -> str:
     top = repo_facts.git(dir_, "rev-parse", "--show-toplevel")
     return top if top else os.path.abspath(dir_)
+
+
+@contextlib.contextmanager
+def _record_lock(worktree: str):
+    """Serialize read-modify-write updates to .workstream.json via flock."""
+    root = _worktree_root(worktree)
+    git_dir = repo_facts.git(root, "rev-parse", "--absolute-git-dir")
+    lock_dir = git_dir if git_dir else root
+    os.makedirs(lock_dir, exist_ok=True)
+    lock_path = os.path.join(lock_dir, "workstream.lock")
+    fd = os.open(lock_path, os.O_CREAT | os.O_RDWR, 0o644)
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX)
+        yield root
+    finally:
+        try:
+            fcntl.flock(fd, fcntl.LOCK_UN)
+        finally:
+            os.close(fd)
+
+
+def _normalize_ticket_id(tid: str, provider: str) -> str:
+    s = tid.strip()
+    if provider == "shortcut" and s.startswith("sc-"):
+        return s[3:]
+    return s
 
 
 def ensure_excluded(worktree: str) -> None:
@@ -354,53 +382,53 @@ def update_phase(
     actions = int(phase is not None) + int(bool(pr)) + int(bool(no_review)) + int(bool(clear))
     if actions != 1:
         raise ValueError("specify exactly one of phase, pr, no_review, or clear")
-    root = _worktree_root(worktree)
-    path = Path(root) / RECORD_FILENAME
-    if not path.is_file():
-        return None
-    rec = load_record(root)
-    if rec is None:
-        return None
+    with _record_lock(worktree) as root:
+        path = Path(root) / RECORD_FILENAME
+        if not path.is_file():
+            return None
+        rec = load_record(root)
+        if rec is None:
+            return None
 
-    other_tags: list[str] = []
-    cur_phase: str | None = None
-    cur_pr = False
-    for raw in rec.tags:
-        clean = raw.strip().strip("[]").upper()
-        if clean in VALID_PHASES:
-            cur_phase = clean
-        elif clean == "PR":
-            cur_pr = True
-        elif raw.strip():
-            other_tags.append(raw.strip())
+        other_tags: list[str] = []
+        cur_phase: str | None = None
+        cur_pr = False
+        for raw in rec.tags:
+            clean = raw.strip().strip("[]").upper()
+            if clean in VALID_PHASES:
+                cur_phase = clean
+            elif clean == "PR":
+                cur_pr = True
+            elif raw.strip():
+                other_tags.append(raw.strip())
 
-    new_phase, new_pr = cur_phase, cur_pr
-    if clear:
-        new_phase, new_pr = None, False
-    elif pr:
-        new_pr = True
-    elif no_review:
-        if cur_phase == "REVIEW":
-            new_phase = "REVIEWED"
-    elif phase is not None:
-        norm = phase.strip().upper()
-        if norm not in VALID_PHASES:
-            raise ValueError(f"unknown phase: {phase}")
-        new_phase = norm
-        if norm in ("MERGED", "DONE"):
-            new_pr = False
+        new_phase, new_pr = cur_phase, cur_pr
+        if clear:
+            new_phase, new_pr = None, False
+        elif pr:
+            new_pr = True
+        elif no_review:
+            if cur_phase == "REVIEW":
+                new_phase = "REVIEWED"
+        elif phase is not None:
+            norm = phase.strip().upper()
+            if norm not in VALID_PHASES:
+                raise ValueError(f"unknown phase: {phase}")
+            new_phase = norm
+            if norm in ("MERGED", "DONE"):
+                new_pr = False
 
-    new_tags: list[str] = []
-    if new_phase:
-        new_tags.append(new_phase)
-    if new_pr:
-        new_tags.append("PR")
-    new_tags.extend(other_tags)
+        new_tags: list[str] = []
+        if new_phase:
+            new_tags.append(new_phase)
+        if new_pr:
+            new_tags.append("PR")
+        new_tags.extend(other_tags)
 
-    if new_tags != rec.tags:
-        rec.tags = new_tags
-        save_record(root, rec)
-    return rec
+        if new_tags != rec.tags:
+            rec.tags = new_tags
+            save_record(root, rec)
+        return rec
 
 
 def _clean_rendered(text: str, form: str) -> str:
@@ -599,20 +627,21 @@ def update_pr(
     state: str = "",
 ) -> WorkstreamRecord | None:
     """Record PR metadata in <worktree>/.workstream.json when present."""
-    loaded = _load_record_file(worktree)
-    if loaded is None:
-        return None
-    root, rec = loaded
-    pr_data: dict[str, Any] = dict(rec.pr) if isinstance(rec.pr, dict) else {}
-    pr_data["number"] = int(number)
-    if url:
-        pr_data["url"] = url
-    if state:
-        pr_data["state"] = state
-    if pr_data != rec.pr:
-        rec.pr = pr_data
-        save_record(root, rec)
-    return rec
+    with _record_lock(worktree) as root:
+        loaded = _load_record_file(root)
+        if loaded is None:
+            return None
+        _, rec = loaded
+        pr_data: dict[str, Any] = dict(rec.pr) if isinstance(rec.pr, dict) else {}
+        pr_data["number"] = int(number)
+        if url:
+            pr_data["url"] = url
+        if state:
+            pr_data["state"] = state
+        if pr_data != rec.pr:
+            rec.pr = pr_data
+            save_record(root, rec)
+        return rec
 
 
 def _parse_review_count(raw: str) -> tuple[int, bool]:
@@ -634,29 +663,30 @@ def update_reviews(
     """Update local/remote review counts in <worktree>/.workstream.json when present."""
     if local is None and remote is None:
         raise ValueError("specify at least one of local or remote")
-    loaded = _load_record_file(worktree)
-    if loaded is None:
-        return None
-    root, rec = loaded
-    reviews: dict[str, Any] = dict(rec.reviews or {"local": 0, "remote": 0})
-    if local is not None:
-        cnt, running = _parse_review_count(local)
-        reviews["local"] = cnt
-        if running:
-            reviews["local_running"] = True
-        else:
-            reviews.pop("local_running", None)
-    if remote is not None:
-        cnt, running = _parse_review_count(remote)
-        reviews["remote"] = cnt
-        if running:
-            reviews["remote_running"] = True
-        else:
-            reviews.pop("remote_running", None)
-    if reviews != rec.reviews:
-        rec.reviews = reviews
-        save_record(root, rec)
-    return rec
+    with _record_lock(worktree) as root:
+        loaded = _load_record_file(root)
+        if loaded is None:
+            return None
+        _, rec = loaded
+        reviews: dict[str, Any] = dict(rec.reviews or {"local": 0, "remote": 0})
+        if local is not None:
+            cnt, running = _parse_review_count(local)
+            reviews["local"] = cnt
+            if running:
+                reviews["local_running"] = True
+            else:
+                reviews.pop("local_running", None)
+        if remote is not None:
+            cnt, running = _parse_review_count(remote)
+            reviews["remote"] = cnt
+            if running:
+                reviews["remote_running"] = True
+            else:
+                reviews.pop("remote_running", None)
+        if reviews != rec.reviews:
+            rec.reviews = reviews
+            save_record(root, rec)
+        return rec
 
 
 def _project_name(worktree: str) -> str:
@@ -868,7 +898,8 @@ def main(argv: list[str] | None = None) -> int:
     if args.cmd == "render":
         rec = load_record(args.dir)
         if args.ids:
-            ids = [i.strip() for i in args.ids.split(",") if i.strip()]
+            eff_provider = args.provider or (rec.ticket_provider if rec else "") or "github"
+            ids = [_normalize_ticket_id(i, eff_provider) for i in args.ids.split(",") if i.strip()]
             sanitized = repo_facts.sanitize_label(args.desc) if args.desc else ""
             if sanitized:
                 desc = format_text(sanitized, "words")
@@ -882,7 +913,7 @@ def main(argv: list[str] | None = None) -> int:
                 version=1,
                 kind="ticket",
                 tickets=[{"id": tid, "url": ""} for tid in ids],
-                ticket_provider=args.provider or (rec.ticket_provider if rec else "") or "github",
+                ticket_provider=eff_provider,
                 desc=desc,
                 type=args.type_ or (rec.type if rec else ""),
                 tags=list(rec.tags) if rec else ["PLAN"],
