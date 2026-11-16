@@ -64,6 +64,24 @@ class TestMatchingAndDiffMapping(unittest.TestCase):
             bot = {"path": "mod.py", "line": 24, "sha": sha2, "claim": "mod.py: d has wrong behavior"}
             self.assertIsNotNone(gaps.match_finding(bot, local, {1: sha1}, repo_dir=str(repo)))
 
+    def test_pure_insertion_hunk_does_not_shift_preceding_line(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            _init_git_repo(repo)
+            f = repo / "mod.py"
+            f.write_text("l1\nl2\nl3\nl4\nl5\n")
+            _git(repo, "add", "mod.py")
+            _git(repo, "commit", "-q", "-m", "r1")
+            sha1 = subprocess.check_output(["git", "-C", str(repo), "rev-parse", "HEAD"], text=True).strip()
+
+            inserted = "".join(f"ins{i}\n" for i in range(20))
+            f.write_text("l1\nl2\nl3\nl4\n" + inserted + "l5\n")
+            _git(repo, "commit", "-q", "-am", "r2")
+            sha2 = subprocess.check_output(["git", "-C", str(repo), "rev-parse", "HEAD"], text=True).strip()
+
+            self.assertEqual(gaps._map_line_via_diff(str(repo), sha1, sha2, "mod.py", 4), 4)
+            self.assertEqual(gaps._map_line_via_diff(str(repo), sha1, sha2, "mod.py", 5), 25)
+
 
 class TestDiffCoverageAndOverlay(unittest.TestCase):
     def test_diff_coverage_detects_post_review_commit_vs_in_reviewed_diff(self):
@@ -89,6 +107,50 @@ class TestDiffCoverageAndOverlay(unittest.TestCase):
             in_bot = {"path": "calc.py", "line": 2, "sha": sha1, "claim": "calc.py: add overflow"}
             status2, _ = gaps.check_diff_coverage(in_bot, run_info, repo_dir=str(repo))
             self.assertEqual(status2, "in reviewed diff")
+
+            unknown_bot = {"path": "calc.py", "line": 2, "sha": "deadbeef" * 5, "claim": "calc.py: unknown sha"}
+            status3, _ = gaps.check_diff_coverage(unknown_bot, run_info, repo_dir=str(repo))
+            self.assertEqual(status3, "in reviewed diff (SHA unverified)")
+
+    def test_analyze_prs_isolates_repos_on_shared_branch_and_mismatched_dir(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            _init_git_repo(repo)
+            (repo / "a.py").write_text("x = 1\n")
+            _git(repo, "add", "a.py")
+            _git(repo, "commit", "-q", "-m", "init")
+            sha = subprocess.check_output(["git", "-C", str(repo), "rev-parse", "HEAD"], text=True).strip()
+
+            events = [
+                {"v": 1, "event": "review.round", "run_id": "other/repo#1", "repo": "other/repo",
+                 "branch": "fix-tests", "round": 1, "state": "start", "sha": sha},
+                {"v": 1, "event": "review.finding", "run_id": "other/repo#1", "repo": "other/repo",
+                 "branch": "fix-tests", "source": "local", "reviewer": "correctness-reviewer",
+                 "round": 1, "path": "a.py", "line": 1, "claim": "a.py: wrong"},
+            ]
+            records = [{
+                "repo": "another/repo", "number": 50, "branch": "fix-tests", "run_id": None,
+                "bot_findings": [{"comment_id": 1, "path": "a.py", "line": 1, "sha": sha,
+                                  "severity": "High", "verdict": "fixed", "validity": "valid", "claim": "a.py: wrong"}],
+            }]
+            out = gaps.analyze_prs(records, events, {"candidates": {}}, repo_dir=str(repo))
+            self.assertIsNone(out["prs"][0]["run_id"])
+            self.assertEqual(out["prs"][0]["local_finding_count"], 0)
+            self.assertEqual(out["prs"][0]["missed"][0]["diff_status"], "no local review recorded")
+
+            # Mismatched --dir (example/sample-app) vs PR repo (other/repo) must not use local git SHAs
+            out2 = gaps.analyze_prs(
+                [{**records[0], "repo": "other/repo", "run_id": "other/repo#1"}],
+                events, {"candidates": {}}, repo_dir=str(repo),
+            )
+            self.assertEqual(len(out2["prs"][0]["matched"]), 1)
+            records_miss = [{
+                "repo": "other/repo", "number": 50, "branch": "fix-tests", "run_id": "other/repo#1",
+                "bot_findings": [{"comment_id": 2, "path": "a.py", "line": 50, "sha": sha,
+                                  "severity": "High", "verdict": "fixed", "validity": "valid", "claim": "a.py: missing timeout"}],
+            }]
+            out3 = gaps.analyze_prs(records_miss, events, {"candidates": {}}, repo_dir=str(repo))
+            self.assertEqual(out3["prs"][0]["missed"][0]["diff_status"], "in reviewed diff (SHA unverified)")
 
     def test_loads_overlay_candidates_via_project_config(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -169,6 +231,77 @@ class TestEndToEndReport(unittest.TestCase):
                  mock.patch("sys.stdout"):
                 rc = gaps.main(["--pr", "70", "--repo", "ex/r", "--log", str(log_path), "--json", "--dir", str(tmp_path)])
             self.assertEqual(rc, 0)
+
+    def test_extract_copilot_findings_review_body_and_logged_override(self):
+        pr_data = {
+            "number": 71, "branch": "Is71-x",
+            "comments": [{
+                "id": 601, "user": {"login": "copilot-pull-request-reviewer[bot]"},
+                "path": "app.py", "line": 10, "commit_id": "aaa", "created_at": "2026-11-12T11:00:00Z",
+                "body": "Style nit only",
+            }],
+            "reviews": [{
+                "user": {"login": "copilot-pull-request-reviewer[bot]"},
+                "submitted_at": "2026-11-12T11:00:00Z", "commit_id": "aaa",
+                "body": (
+                    "<details><summary>Suppressed comments (1)</summary>\n\n"
+                    "- **app.py:22** — Missing null guard\n"
+                    "</details>"
+                ),
+            }],
+            "threads": [], "commit_files": [],
+        }
+        logged_bot = [{
+            "event": "review.finding", "source": "bot", "comment_id": 601,
+            "path": "app.py", "line": 10, "sha": "aaa",
+            "verdict": "dismissed", "validity": "rejected", "reason": "false positive",
+        }]
+        extracted = gaps._extract_copilot_findings(pr_data, logged_bot)
+        self.assertEqual(len(extracted), 2)
+        self.assertEqual(extracted[0]["validity"], "rejected")
+        self.assertEqual(extracted[1]["comment_id"], None)
+        self.assertEqual(extracted[1]["line"], 22)
+
+    def test_collect_pr_records_uses_dir_remote_and_skips_failed_pr(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            _init_git_repo(repo)
+            args = gaps.argparse.Namespace(no_gh=False, repo=None, pr=[10, 11], since=None, dir=str(repo))
+
+            def fake_meta(num, slug):
+                self.assertEqual(slug, "example/sample-app")
+                if num == 10:
+                    raise SystemExit("gh error")
+                return {"number": 11, "title": "OK", "url": "u", "state": "MERGED", "headRefName": "b"}
+
+            with mock.patch.object(gaps, "_fetch_pr_meta", side_effect=fake_meta), \
+                 mock.patch.object(gaps.wf_backfill, "fetch_pr_bot_data", return_value={"branch": "b", "comments": [], "reviews": [], "threads": [], "commit_files": []}):
+                recs = gaps._collect_pr_records(args, [])
+            self.assertEqual(len(recs), 1)
+            self.assertEqual(recs[0]["number"], 11)
+
+    def test_render_markdown_collapses_newlines_in_table_cells(self):
+        analysis = {
+            "prs": [{
+                "repo": "ex/r", "pr": 1, "branch": "b", "run_id": "r1",
+                "local_finding_count": 1, "ran_reviewers": ["correctness-reviewer"],
+                "launches": [], "bot_total": 1, "bot_valid": 1, "bot_rejected": 0,
+                "matched": [],
+                "missed": [{
+                    "bot": {"path": "a.py", "line": 5, "severity": "High", "validity": "valid", "claim": "line1\nline2 | pipe"},
+                    "diff_status": "in reviewed diff", "diff_evidence": "covered",
+                    "same_file_local": [{"line": 2, "reviewers": ["correctness-reviewer"], "claim": "foo\nbar"}],
+                }],
+            }],
+            "model_stats": [],
+            "candidates": [{"name": "r", "tier": "global", "model": "sonnet", "use_when": "first\nsecond | third"}],
+            "overlay_dir": "",
+        }
+        md = gaps.render_markdown(analysis)
+        for row in [ln for ln in md.splitlines() if ln.startswith("|")]:
+            self.assertNotIn("\n", row)
+        self.assertIn("line1 line2 \\| pipe", md)
+        self.assertIn("first second \\| third", md)
 
 
 if __name__ == "__main__":

@@ -483,25 +483,8 @@ def _batch_key(findings):
     return hashlib.sha1("\n".join(ids).encode()).hexdigest()[:12]
 
 
-def plan_bot_pr(pr_data, existing, repo, live=False, verdicts=None):
-    """Reconstruct bot review.finding and review.result events from fetched PR data.
-
-    pr_data keys: number, branch, comments, reviews, threads, commit_files
-      where commit_files is [(ts_str, set_of_paths)].
-    live=True is the per-round emit: events are not marked backfill, `verdicts`
-    ({comment_id or "path:line": {verdict, validity, reason}}) overrides what the
-    thread implies, and the review.result covers only findings not yet logged.
-    Returns (new_events, summary).
-    """
-    branch = pr_data["branch"]
-    pr_num = pr_data["number"]
-    run_id, canon_repo, ticket = resolve_run_identity(branch, repo, existing)
-    summary = {"pr": pr_num, "branch": branch, "run_id": run_id, "copilot_comments": 0,
-               "inline": 0, "review_body": 0, "unjudged": 0, "notes": []}
-    if not run_id:
-        summary["notes"].append("no ticket id in branch: skipped")
-        return [], summary
-
+def extract_bot_findings(pr_data):
+    """Extract normalized Copilot findings from fetched PR data."""
     comments = pr_data.get("comments") or []
     reviews = pr_data.get("reviews") or []
     threads = pr_data.get("threads") or []
@@ -525,12 +508,7 @@ def plan_bot_pr(pr_data, existing, repo, live=False, verdicts=None):
         if pid is not None:
             replies_by_parent[pid].append(c)
 
-    base = {"v": 1, "run_id": run_id, "repo": canon_repo, "ticket": ticket,
-            "branch": branch, "source": "bot", "reviewer": "copilot"}
-    if not live:
-        base["backfill"] = True
-    new = []
-
+    findings = []
     for c in comments:
         login = (c.get("user") or {}).get("login") or ""
         if login not in _COPILOT_LOGINS or c.get("in_reply_to_id") is not None:
@@ -541,25 +519,20 @@ def plan_bot_pr(pr_data, existing, repo, live=False, verdicts=None):
         replies = replies_by_parent.get(cid) or thread_replies_by_cid.get(cid) or []
         resolved = resolved_by_cid.get(cid, False)
         later_touched = any(ts > created_at and path in files for ts, files in commit_files)
-        verdict, validity, reason = _override(verdicts, cid, infer_bot_verdict(replies, resolved, later_touched))
-        ev = {
-            **base,
+        verdict, validity, reason = infer_bot_verdict(replies, resolved, later_touched)
+        findings.append({
+            "kind": "inline",
+            "comment_id": cid,
+            "path": path,
+            "line": c.get("original_line") or c.get("line"),
+            "sha": c.get("original_commit_id") or c.get("commit_id") or "",
             "ts": created_at,
-            "event": "review.finding",
             "severity": parse_bot_severity(c.get("body")),
             "verdict": verdict,
             "validity": validity,
             "reason": reason,
-            "path": path,
             "claim": clean_bot_claim(path, c.get("body")),
-            "comment_id": cid,
-            "sha": c.get("original_commit_id") or c.get("commit_id") or "",
-        }
-        line = c.get("original_line") or c.get("line")
-        if line is not None:
-            ev["line"] = line
-        new.append(ev)
-        summary["inline"] += 1
+        })
 
     for rv in reviews:
         login = (rv.get("user") or {}).get("login") or ""
@@ -570,24 +543,70 @@ def plan_bot_pr(pr_data, existing, repo, live=False, verdicts=None):
         for item in parse_suppressed_review_body(rv.get("body")):
             path = item["path"]
             later_touched = any(ts > submitted_at and path in files for ts, files in commit_files)
-            verdict, validity, reason = _override(
-                verdicts, f"{path}:{item['line']}", infer_bot_verdict([], item["resolved"], later_touched))
-            ev = {
-                **base,
+            verdict, validity, reason = infer_bot_verdict([], item["resolved"], later_touched)
+            findings.append({
+                "kind": "review_body",
+                "comment_id": None,
+                "path": path,
+                "line": item["line"],
+                "sha": rv_sha,
                 "ts": submitted_at,
-                "event": "review.finding",
                 "severity": parse_bot_severity(item["text"]),
                 "verdict": verdict,
                 "validity": validity,
                 "reason": reason,
-                "path": path,
                 "claim": clean_bot_claim(path, item["text"]),
-                "sha": rv_sha,
-            }
-            if item["line"] is not None:
-                ev["line"] = item["line"]
-            new.append(ev)
-            summary["review_body"] += 1
+            })
+    return findings
+
+
+def plan_bot_pr(pr_data, existing, repo, live=False, verdicts=None):
+    """Reconstruct bot review.finding and review.result events from fetched PR data.
+
+    pr_data keys: number, branch, comments, reviews, threads, commit_files
+      where commit_files is [(ts_str, set_of_paths)].
+    live=True is the per-round emit: events are not marked backfill, `verdicts`
+    ({comment_id or "path:line": {verdict, validity, reason}}) overrides what the
+    thread implies, and the review.result covers only findings not yet logged.
+    Returns (new_events, summary).
+    """
+    branch = pr_data["branch"]
+    pr_num = pr_data["number"]
+    run_id, canon_repo, ticket = resolve_run_identity(branch, repo, existing)
+    summary = {"pr": pr_num, "branch": branch, "run_id": run_id, "copilot_comments": 0,
+               "inline": 0, "review_body": 0, "unjudged": 0, "notes": []}
+    if not run_id:
+        summary["notes"].append("no ticket id in branch: skipped")
+        return [], summary
+
+    base = {"v": 1, "run_id": run_id, "repo": canon_repo, "ticket": ticket,
+            "branch": branch, "source": "bot", "reviewer": "copilot"}
+    if not live:
+        base["backfill"] = True
+    new = []
+
+    for bf in extract_bot_findings(pr_data):
+        inferred = (bf["verdict"], bf["validity"], bf["reason"])
+        override_key = bf["comment_id"] if bf["comment_id"] is not None else f"{bf['path']}:{bf['line']}"
+        verdict, validity, reason = _override(verdicts, override_key, inferred)
+        ev = {
+            **base,
+            "ts": bf["ts"],
+            "event": "review.finding",
+            "severity": bf["severity"],
+            "verdict": verdict,
+            "validity": validity,
+            "reason": reason,
+            "path": bf["path"],
+            "claim": bf["claim"],
+            "sha": bf["sha"],
+        }
+        if bf["comment_id"] is not None:
+            ev["comment_id"] = bf["comment_id"]
+        if bf["line"] is not None:
+            ev["line"] = bf["line"]
+        new.append(ev)
+        summary[bf["kind"]] += 1
 
     summary["copilot_comments"] = summary["inline"] + summary["review_body"]
     if live:

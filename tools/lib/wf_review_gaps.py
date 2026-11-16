@@ -147,10 +147,14 @@ def _map_line_via_diff(repo_dir, sha_from, sha_to, path, line):
         old_start = int(m.group(1))
         old_len = int(m.group(2) or "1")
         new_len = int(m.group(4) or "1")
-        if line < old_start:
-            break
-        if old_start <= line < old_start + max(old_len, 1):
-            return int(m.group(3))
+        if old_len == 0:
+            if line <= old_start:
+                break
+        else:
+            if line < old_start:
+                break
+            if line < old_start + old_len:
+                return int(m.group(3))
         offset += new_len - old_len
     return line + offset
 
@@ -212,84 +216,30 @@ def _extract_copilot_findings(pr_data, logged_bot_events):
     by_cid = {e.get("comment_id"): e for e in logged_bot_events if e.get("comment_id") is not None}
     by_loc = {(norm_path(e.get("path")), e.get("line"), e.get("sha") or ""): e for e in logged_bot_events}
 
-    comments = pr_data.get("comments") or []
-    reviews = pr_data.get("reviews") or []
-    threads = pr_data.get("threads") or []
-    commit_files = pr_data.get("commit_files") or []
-
-    resolved_by_cid = {}
-    thread_replies_by_cid = defaultdict(list)
-    for th in threads:
-        nodes = (th.get("comments") or {}).get("nodes") or []
-        if not nodes:
-            continue
-        root_id = nodes[0].get("databaseId")
-        if root_id is not None:
-            resolved_by_cid[root_id] = bool(th.get("isResolved"))
-            thread_replies_by_cid[root_id].extend(nodes[1:])
-
-    replies_by_parent = defaultdict(list)
-    for c in comments:
-        pid = c.get("in_reply_to_id")
-        if pid is not None:
-            replies_by_parent[pid].append(c)
-
     out = []
-    for c in comments:
-        login = (c.get("user") or {}).get("login") or ""
-        if login not in wf_backfill._COPILOT_LOGINS or c.get("in_reply_to_id") is not None:
-            continue
-        cid = c["id"]
-        path = norm_path(c.get("path"))
-        line = c.get("original_line") or c.get("line")
-        sha = c.get("original_commit_id") or c.get("commit_id") or ""
-        created_at = c.get("created_at") or ""
-        logged = by_cid.get(cid) or by_loc.get((path, line, sha))
+    for bf in wf_backfill.extract_bot_findings(pr_data):
+        cid = bf["comment_id"]
+        path = norm_path(bf["path"])
+        line = bf["line"]
+        sha = bf["sha"]
+        logged = (by_cid.get(cid) if cid is not None else None) or by_loc.get((path, line, sha))
         if logged:
             verdict = logged.get("verdict") or "deferred"
             validity = logged.get("validity") or "valid"
             reason = logged.get("reason") or ""
-            claim = logged.get("claim") or wf_backfill.clean_bot_claim(path, c.get("body"))
-            severity = logged.get("severity") or wf_backfill.parse_bot_severity(c.get("body"))
+            claim = logged.get("claim") or bf["claim"]
+            severity = logged.get("severity") or bf["severity"]
         else:
-            replies = replies_by_parent.get(cid) or thread_replies_by_cid.get(cid) or []
-            resolved = resolved_by_cid.get(cid, False)
-            later = any(ts > created_at and path in files for ts, files in commit_files)
-            verdict, validity, reason = wf_backfill.infer_bot_verdict(replies, resolved, later)
-            claim = wf_backfill.clean_bot_claim(path, c.get("body"))
-            severity = wf_backfill.parse_bot_severity(c.get("body"))
+            verdict = bf["verdict"]
+            validity = bf["validity"]
+            reason = bf["reason"]
+            claim = bf["claim"]
+            severity = bf["severity"]
         out.append({
             "comment_id": cid, "path": path, "line": line, "sha": sha,
             "severity": severity, "verdict": verdict, "validity": validity,
             "reason": reason, "claim": claim,
         })
-
-    for rv in reviews:
-        login = (rv.get("user") or {}).get("login") or ""
-        if login not in wf_backfill._COPILOT_LOGINS:
-            continue
-        submitted_at = rv.get("submitted_at") or ""
-        rv_sha = rv.get("commit_id") or ""
-        for item in wf_backfill.parse_suppressed_review_body(rv.get("body")):
-            path = norm_path(item["path"])
-            line = item["line"]
-            logged = by_loc.get((path, line, rv_sha))
-            if logged:
-                verdict = logged.get("verdict") or "deferred"
-                validity = logged.get("validity") or "valid"
-                reason = logged.get("reason") or ""
-                claim = logged.get("claim") or wf_backfill.clean_bot_claim(path, item["text"])
-                severity = logged.get("severity") or wf_backfill.parse_bot_severity(item["text"])
-            else:
-                later = any(ts > submitted_at and path in files for ts, files in commit_files)
-                verdict, validity, reason = wf_backfill.infer_bot_verdict([], item["resolved"], later)
-                claim = wf_backfill.clean_bot_claim(path, item["text"])
-                severity = wf_backfill.parse_bot_severity(item["text"])
-            out.append({
-                "comment_id": None, "path": path, "line": line, "sha": rv_sha,
-                "severity": severity, "verdict": verdict, "validity": validity,
-                "reason": reason, "claim": claim,
-            })
     return out
 
 
@@ -338,13 +288,20 @@ def check_diff_coverage(bot_f, run_info, repo_dir=None):
     if round_shas and b_sha and repo_dir:
         last_round = max(round_shas)
         last_sha = round_shas[last_round]
-        if last_sha and b_sha != last_sha and _changed_in_range(repo_dir, last_sha, b_sha, path, line):
-            return (
-                "code not in the diff the reviewer saw",
-                f"modified after local R{last_round} SHA {last_sha[:7]} (Copilot saw {b_sha[:7]})",
-            )
         if last_sha:
-            return "in reviewed diff", f"covered by R{last_round} SHA {last_sha[:7]}"
+            ok_last, _ = _git_ok(repo_dir, "cat-file", "-e", f"{last_sha}^{{commit}}")
+            ok_bot, _ = _git_ok(repo_dir, "cat-file", "-e", f"{b_sha}^{{commit}}")
+            if ok_last and ok_bot:
+                if b_sha == last_sha:
+                    return "in reviewed diff", f"covered by R{last_round} SHA {last_sha[:7]}"
+                ok_anc, _ = _git_ok(repo_dir, "merge-base", "--is-ancestor", last_sha, b_sha)
+                if ok_anc:
+                    if _changed_in_range(repo_dir, last_sha, b_sha, path, line):
+                        return (
+                            "code not in the diff the reviewer saw",
+                            f"modified after local R{last_round} SHA {last_sha[:7]} (Copilot saw {b_sha[:7]})",
+                        )
+                    return "in reviewed diff", f"covered by R{last_round} SHA {last_sha[:7]}"
 
     return "in reviewed diff (SHA unverified)", "local review ran; git SHA comparison unavailable"
 
@@ -399,9 +356,17 @@ def _build_run_info(run_events):
     }
 
 
+def _repo_slug_for_dir(repo_dir):
+    if not repo_dir or not os.path.isdir(repo_dir):
+        return ""
+    remote = repo_facts.git(repo_dir, "remote", "get-url", "origin")
+    return repo_facts.repo_key(remote) if remote else ""
+
+
 def analyze_prs(pr_records, events, project_cfg, repo_dir=None):
     """Join PR Copilot findings with local telemetry and factual diff/reviewer context."""
     by_run, pr_to_run = _index_events(events)
+    local_repo = _repo_slug_for_dir(repo_dir)
     results = []
     model_stats = defaultdict(lambda: {"launches": 0, "runs": set()})
 
@@ -411,8 +376,13 @@ def analyze_prs(pr_records, events, project_cfg, repo_dir=None):
         branch = rec["branch"]
         run_id = rec.get("run_id") or pr_to_run.get((repo.lower(), pr_num))
         if not run_id:
-            run_id, _, _ = wf_backfill.resolve_run_identity(branch, repo, events)
+            repo_events = [
+                e for e in events
+                if not e.get("repo") or e.get("repo", "").lower() == repo.lower()
+            ]
+            run_id, _, _ = wf_backfill.resolve_run_identity(branch, repo, repo_events)
 
+        effective_dir = repo_dir if (repo_dir and (not local_repo or not repo or local_repo.lower() == repo.lower())) else None
         run_events = by_run.get(run_id, []) if run_id else []
         run_info = _build_run_info(run_events)
         logged_bot = [e for e in run_events if e.get("event") == "review.finding" and e.get("source") == "bot"]
@@ -427,11 +397,11 @@ def analyze_prs(pr_records, events, project_cfg, repo_dir=None):
 
         matched, missed = [], []
         for bf in valid_bot:
-            m = match_finding(bf, run_info["local_findings"], run_info["round_shas"], repo_dir=repo_dir)
+            m = match_finding(bf, run_info["local_findings"], run_info["round_shas"], repo_dir=effective_dir)
             if m:
                 matched.append({"bot": bf, "local": m})
             else:
-                diff_status, diff_evidence = check_diff_coverage(bf, run_info, repo_dir=repo_dir)
+                diff_status, diff_evidence = check_diff_coverage(bf, run_info, repo_dir=effective_dir)
                 same_file_local = [
                     {"line": lf["line"], "reviewers": lf["reviewers"], "claim": lf["claim"]}
                     for lf in run_info["local_findings"] if lf["path"] == bf["path"]
@@ -483,6 +453,10 @@ def analyze_prs(pr_records, events, project_cfg, repo_dir=None):
     }
 
 
+def _md_cell(text):
+    return re.sub(r"\s+", " ", text or "").strip().replace("|", "\\|")
+
+
 def render_markdown(analysis):
     prs = analysis["prs"]
     total_valid = sum(p["bot_valid"] for p in prs)
@@ -514,7 +488,7 @@ def render_markdown(analysis):
             "| --- | --- | --- | --- |",
         ]
         for c in analysis["candidates"]:
-            uw = (c.get("use_when") or "").replace("|", "\\|")
+            uw = _md_cell(c.get("use_when"))
             lines.append(f"| {c['name']} | {c['tier']} | {c.get('model') or ''} | {uw} |")
 
     if analysis["model_stats"]:
@@ -546,12 +520,12 @@ def render_markdown(analysis):
             for ms in p["missed"]:
                 bf = ms["bot"]
                 loc = f"`{bf['path']}:{bf['line']}`" if bf.get("line") else f"`{bf['path']}`"
-                claim = (bf.get("claim") or "").replace("|", "\\|")
-                diff_col = f"{ms['diff_status']} ({ms['diff_evidence']})".replace("|", "\\|")
-                same_file = "; ".join(
+                claim = _md_cell(bf.get("claim"))
+                diff_col = _md_cell(f"{ms['diff_status']} ({ms['diff_evidence']})")
+                same_file = _md_cell("; ".join(
                     f"L{lf['line']} ({','.join(lf['reviewers'])}): {lf['claim']}"
                     for lf in ms["same_file_local"]
-                ).replace("|", "\\|") or "none"
+                )) or "none"
                 lines.append(
                     f"| {loc} | {bf.get('severity', '')} | {bf.get('validity', '')} | {diff_col} | {same_file} | {claim} |"
                 )
@@ -619,16 +593,20 @@ def _collect_pr_records(args, events):
             })
         return records
 
-    repos = args.repo or [wf_backfill.resolve_repo_slug()]
+    repos = args.repo or [_repo_slug_for_dir(args.dir) or wf_backfill.resolve_repo_slug()]
     for repo in repos:
         pr_nums = list(args.pr or [])
         if args.since:
             pr_nums = sorted(set(pr_nums) | set(wf_backfill.list_merged_prs_since(repo, args.since)))
         for num in pr_nums:
-            meta = _fetch_pr_meta(num, repo)
-            if meta.get("state") not in ("CLOSED", "MERGED"):
+            try:
+                meta = _fetch_pr_meta(num, repo)
+                if meta.get("state") not in ("CLOSED", "MERGED"):
+                    continue
+                pr_data = wf_backfill.fetch_pr_bot_data(num, repo, with_commit_files=True)
+            except SystemExit as exc:
+                print(f"warning: skipping {repo}#{num}: {exc}", file=sys.stderr)
                 continue
-            pr_data = wf_backfill.fetch_pr_bot_data(num, repo, with_commit_files=True)
             records.append({
                 "repo": repo,
                 "number": num,
