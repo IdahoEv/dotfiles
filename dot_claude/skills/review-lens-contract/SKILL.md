@@ -44,7 +44,7 @@ Agent file with `name`, `use_when: periodic project review.` directly above `des
 
 ## Discovery
 
-Same tiers and name-dedup as `/local-review-cycle` (`local-review-cycle-procedure` §2). Subdirectories under `.claude/agents/`, `dot_claude/agents/`, and `~/.claude/agents/` (such as `project-lenses/`) are scanned recursively; `name:` must remain unique across the entire `agents/` tree. An earlier tier wins when names collide, so a project lens overrides a global lens of the same `name`. Map legacy `review-<role>` names to `project-lens-<role>` during dedup, still load them, and migrate committed tier-1 `.claude/agents/` lenses to `.claude/agents/project-lenses/project-lens-<role>.md` on next use.
+Same tiers and name-dedup as `/local-review-cycle` (`local-review-cycle-procedure` §2). Subdirectories under `.claude/agents/`, `dot_claude/agents/`, and `~/.claude/agents/` (such as `project-lenses/`) are scanned recursively; `name:` must remain unique across the entire `agents/` tree. An earlier tier wins when names collide, so a project lens overrides a global lens of the same `name`. Map legacy `review-<role>` names to `project-lens-<role>` during dedup, still load them, and report unmigrated tier-1 `.claude/agents/` lenses in the `/project-review` report for manual or ticketed migration to `.claude/agents/project-lenses/project-lens-<role>.md` (never edit repo files during a read-only review).
 
 1. Repo `.claude/agents/` (and `dot_claude/agents/` in a chezmoi dotfiles repo).
 2. Personal `docs/local/reviewers/*.md` and overlay `claude/agents/` (`project-config.sh list agents`).
