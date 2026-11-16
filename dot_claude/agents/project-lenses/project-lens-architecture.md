@@ -1,5 +1,5 @@
 ---
-name: review-architecture
+name: project-lens-architecture
 use_when: periodic project review.
 description: Periodic project-review lens for architectural soundness of a default-branch snapshot — boundary rules, duplicated concepts, unadopted patterns. Read-only.
 tools: Read, Glob, Grep, Bash
@@ -19,4 +19,4 @@ Method, run against the snapshot:
 3. **Per-subsystem pass.** For each subsystem, read its entry points and check that responsibilities are clear, dependencies point the right way, and state ownership is unambiguous. Cite `file:line`.
 4. **Cost test.** Report a design concern only with its concrete cost (what breaks, what it blocks, what it duplicates) and a credible smaller alternative. A style preference is not a finding.
 
-Leave convention drift and tooling hygiene to `review-quality`, doc accuracy to `review-docs`, and roadmap fit to `review-plan`.
+Leave convention drift and tooling hygiene to `project-lens-quality`, doc accuracy to `project-lens-docs`, and roadmap fit to `project-lens-plan`.

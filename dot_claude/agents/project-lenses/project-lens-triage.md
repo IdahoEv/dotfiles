@@ -1,5 +1,5 @@
 ---
-name: review-triage
+name: project-lens-triage
 use_when: periodic project review.
 description: Periodic ticket-triage lens — duplicates, ticket-state consistency, tech-debt priority, work clusters. Read-only; proposes actions, never edits a ticket.
 tools: Read, Glob, Grep, Bash

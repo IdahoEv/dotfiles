@@ -30,7 +30,7 @@ other sessions actually load:
 
 ### 2. Audit
 
-Invoke the `prompt-reviewer` agent in corpus mode with the complete committed
+Invoke the `pr-reviewer-prompt` agent in corpus mode with the complete committed
 prompt-file inventory and the audited commit. The agent loads `prompt-review`
 for the canonical criteria. Keep the inventory explicit so the reviewer cannot
 silently drift into the working tree or omit files. Duplication and scope

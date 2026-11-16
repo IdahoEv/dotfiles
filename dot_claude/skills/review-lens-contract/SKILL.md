@@ -5,7 +5,7 @@ description: Shared contract for periodic project-review lens agents — snapsho
 
 # Review Lens Contract
 
-A lens reviews a read-only snapshot of the default branch, not a diff. `reviewer-contract` does not apply.
+A **lens** (`project-lens-*`) reviews a read-only snapshot of the default branch, not a diff — each lens examines one dimension of the same whole-project snapshot (`Lens: collect` or `Lens: triage`). Its diff-scoped counterpart for PR/workstream reviews is `pr-reviewer-*` under `reviewer-contract`; `reviewer-contract` does not apply here.
 
 ## Inputs
 
@@ -44,10 +44,10 @@ Agent file with `name`, `use_when: periodic project review.` directly above `des
 
 ## Discovery
 
-Same tiers and name-dedup as `/local-review-cycle` (`local-review-cycle-procedure` §2). An earlier tier wins when names collide, so a project lens overrides a global lens of the same `name`.
+Same tiers and name-dedup as `/local-review-cycle` (`local-review-cycle-procedure` §2). Subdirectories under `.claude/agents/`, `dot_claude/agents/`, and `~/.claude/agents/` (such as `project-lenses/`) are scanned recursively; `name:` must remain unique across the entire `agents/` tree. An earlier tier wins when names collide, so a project lens overrides a global lens of the same `name`. Map legacy `review-<role>` names to `project-lens-<role>` during dedup, still load them, and report unmigrated tier-1 `.claude/agents/` lenses in the `/project-review` report for manual or ticketed migration to `.claude/agents/project-lenses/project-lens-<role>.md` (never edit repo files during a read-only review).
 
 1. Repo `.claude/agents/` (and `dot_claude/agents/` in a chezmoi dotfiles repo).
-2. Personal `docs/local/reviewers/*.md` and overlay `claude/agents/*.md` (`project-config.sh list agents`).
+2. Personal `docs/local/reviewers/*.md` and overlay `claude/agents/` (`project-config.sh list agents`).
 3. Global `~/.claude/agents/`.
 
 Then:
