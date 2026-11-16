@@ -9,6 +9,7 @@ Fields no source holds are reported as unknown, never as zero.
 """
 
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -141,7 +142,7 @@ def event_id(e):
     ev = e["event"]
     if e.get("source") == "bot":
         if ev == "review.result":
-            return (ev, "bot", e.get("run_id"))
+            return (ev, "bot", e.get("run_id"), e.get("batch"))
         if e.get("comment_id") is not None:
             return (ev, "bot", e.get("run_id"), e.get("comment_id"))
         return (ev, "bot", e.get("run_id"), e.get("sha"), e.get("path"), e.get("line"))
@@ -467,11 +468,27 @@ def resolve_run_identity(branch, repo, existing):
     return run_id, repo, ticket
 
 
-def plan_bot_pr(pr_data, existing, repo):
+def _override(verdicts, key, inferred):
+    """(verdict, validity, reason) from the caller's triage when it has one, else inferred."""
+    v = (verdicts or {}).get(str(key))
+    if not v:
+        return inferred
+    return (v.get("verdict") or inferred[0], v.get("validity") or inferred[1], v.get("reason") or inferred[2])
+
+
+def _batch_key(findings):
+    ids = sorted(str(e.get("comment_id") or f"{e.get('path')}:{e.get('line')}") for e in findings)
+    return hashlib.sha1("\n".join(ids).encode()).hexdigest()[:12]
+
+
+def plan_bot_pr(pr_data, existing, repo, live=False, verdicts=None):
     """Reconstruct bot review.finding and review.result events from fetched PR data.
 
     pr_data keys: number, branch, comments, reviews, threads, commit_files
       where commit_files is [(ts_str, set_of_paths)].
+    live=True is the per-round emit: events are not marked backfill, `verdicts`
+    ({comment_id or "path:line": {verdict, validity, reason}}) overrides what the
+    thread implies, and the review.result covers only findings not yet logged.
     Returns (new_events, summary).
     """
     branch = pr_data["branch"]
@@ -507,9 +524,10 @@ def plan_bot_pr(pr_data, existing, repo):
             replies_by_parent[pid].append(c)
 
     base = {"v": 1, "run_id": run_id, "repo": canon_repo, "ticket": ticket,
-            "branch": branch, "source": "bot", "reviewer": "copilot", "backfill": True}
+            "branch": branch, "source": "bot", "reviewer": "copilot"}
+    if not live:
+        base["backfill"] = True
     new = []
-    counts = Counter()
 
     for c in comments:
         login = (c.get("user") or {}).get("login") or ""
@@ -521,7 +539,7 @@ def plan_bot_pr(pr_data, existing, repo):
         replies = replies_by_parent.get(cid) or thread_replies_by_cid.get(cid) or []
         resolved = resolved_by_cid.get(cid, False)
         later_touched = any(ts > created_at and path in files for ts, files in commit_files)
-        verdict, validity, reason = infer_bot_verdict(replies, resolved, later_touched)
+        verdict, validity, reason = _override(verdicts, cid, infer_bot_verdict(replies, resolved, later_touched))
         ev = {
             **base,
             "ts": created_at,
@@ -539,7 +557,6 @@ def plan_bot_pr(pr_data, existing, repo):
         if line is not None:
             ev["line"] = line
         new.append(ev)
-        counts[verdict] += 1
         summary["inline"] += 1
 
     for rv in reviews:
@@ -551,7 +568,8 @@ def plan_bot_pr(pr_data, existing, repo):
         for item in parse_suppressed_review_body(rv.get("body")):
             path = item["path"]
             later_touched = any(ts > submitted_at and path in files for ts, files in commit_files)
-            verdict, validity, reason = infer_bot_verdict([], item["resolved"], later_touched)
+            verdict, validity, reason = _override(
+                verdicts, f"{path}:{item['line']}", infer_bot_verdict([], item["resolved"], later_touched))
             ev = {
                 **base,
                 "ts": submitted_at,
@@ -567,11 +585,16 @@ def plan_bot_pr(pr_data, existing, repo):
             if item["line"] is not None:
                 ev["line"] = item["line"]
             new.append(ev)
-            counts[verdict] += 1
             summary["review_body"] += 1
 
     summary["copilot_comments"] = summary["inline"] + summary["review_body"]
-    if summary["copilot_comments"] > 0:
+    if live:
+        have = {event_id(e) for e in existing if e.get("source") == "bot"}
+        new = [e for e in new if event_id(e) not in have]
+    counts = Counter(e["verdict"] for e in new)
+    result_logged = any(e.get("event") == "review.result" and e.get("source") == "bot"
+                        and e.get("run_id") == run_id for e in existing)
+    if new and (live or not result_logged):
         latest_ts = max((e["ts"] for e in new if e.get("ts")), default="")
         new.append({
             **{k: v for k, v in base.items() if k != "reviewer"},
@@ -581,6 +604,7 @@ def plan_bot_pr(pr_data, existing, repo):
             "dismissed": counts["dismissed"],
             "deferred": counts["deferred"],
             "reviewers": "copilot",
+            **({"batch": _batch_key(new)} if live else {}),
         })
     return new, summary
 
@@ -664,11 +688,16 @@ def main(argv=None):
     ap.add_argument("--projects", default=None, help="transcripts root (default: WF_CLAUDE_PROJECTS or ~/.claude/projects)")
     ap.add_argument("--bot", action="store_true", help="backfill bot findings from GitHub PR reviews/comments")
     ap.add_argument("--since", help="backfill bot findings for merged PRs on/after YYYY-MM-DD (implies --bot)")
+    ap.add_argument("--live", action="store_true",
+                    help="per-round emit for an open PR (implies --bot): events are not marked backfill")
+    ap.add_argument("--verdicts", help="JSON file {comment_id or path:line: {verdict, validity, reason}} overriding inference (--live)")
     ap.add_argument("--dry-run", action="store_true", help="report only; append nothing")
     args = ap.parse_args(argv)
 
-    if args.since:
+    if args.since or args.live:
         args.bot = True
+    if args.live and os.environ.get("WF_TELEMETRY") == "0":
+        return 0
     if args.bot:
         repo = resolve_repo_slug(args.repo)
         pr_nums = list(args.pr)
@@ -680,9 +709,19 @@ def main(argv=None):
             print(f"No merged PRs found in {repo} since {args.since or 'always'}.")
             return 0
         existing = load_log(args.log)
+        verdicts = None
+        if args.verdicts:
+            with open(args.verdicts) as fh:
+                verdicts = {str(k): v for k, v in json.load(fh).items()}
         for n in pr_nums:
-            pr_data = fetch_pr_bot_data(n, repo)
-            new, summary = plan_bot_pr(pr_data, existing, repo)
+            try:
+                pr_data = fetch_pr_bot_data(n, repo)
+            except SystemExit as e:
+                if not args.live:
+                    raise
+                print(f"telemetry: bot findings for PR {n} not recorded: {e}", file=sys.stderr)
+                continue
+            new, summary = plan_bot_pr(pr_data, existing, repo, live=args.live, verdicts=verdicts)
             written, skipped = append_new(args.log, new, existing, args.dry_run)
             print(format_bot_summary(summary, written, skipped))
             if not args.dry_run and written:

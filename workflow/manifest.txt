@@ -22,7 +22,7 @@ c3c02fec04bfb82a8070f0da0dc957ae81a3ef0727bd2329a8129678a660ece6  644  dot_claud
 92a5a8af85fb042c621cbd142156c5cc976cc1e449b7a93b3a8e3f0b01462a3c  644  dot_claude/commands/discuss.md
 8998b38bc79c43a9a0ed46b71cd239544d630001837e917275a7da64231f51c2  644  dot_claude/commands/finalize.md
 30f03e48c2f2bc6cc60d74195f3da6af3d7f868160a11f43daf759611194b83c  644  dot_claude/commands/generate_prd.md
-78179bdd4daf75226126f8c028120140d3c2f7150184777f45f1f52c1735a3e4  644  dot_claude/commands/github-review-comments.md
+8ca6f1b239a9d536f92bdbe5d8801cd8ad1e523e2acc6245c38ff3b6c86032e5  644  dot_claude/commands/github-review-comments.md
 d980ad1c2a292434faccbe8f1d76c2db32f08694a09ff1474b85ed82620baef3  644  dot_claude/commands/governor.md
 ee447a7392a65c8de415ed450a6ed9492b2f119a89918b182722e507b1a023a4  644  dot_claude/commands/groom.md
 1ad7374ab13385f8487312affce31905d6c01af1256fd6e6c4a6168d168039f8  644  dot_claude/commands/implement.md
@@ -34,7 +34,7 @@ d28421c38f12d9a255bfdc6dbd1e5abc42ffde49f8d682f84fc1b0c13d363ce6  644  dot_claud
 51367b2883763ed4354e9f51f596d3ed865982d0f57e2c1a8502c96b645b97de  644  dot_claude/commands/remind.md
 36451ca7b0c0afb4b6877b075d92dd555afe76658fa3ad409d4fa40e27a0a41c  644  dot_claude/commands/research_codebase.md
 746936f197ebe7da1f6351361e47e1949d1b3e280280faa11f3e4f3854640547  644  dot_claude/commands/start.md
-8566fc69c99a8c3b4495d35a5ff56d156e48ed0eaa0f31f7f9a1fb1e248349ce  644  dot_claude/skills/github-review-procedure/SKILL.md
+f6517753f6c4a157dd97f7f252d705a73725f336bb0b2659fe3ae444a51a98c1  644  dot_claude/skills/github-review-procedure/SKILL.md
 ee70fb1a401ed104231eb6f9ea72334263ca35b579f030d27946692cc57776be  644  dot_claude/skills/github-review-procedure/executable_github-review-poll.sh
 5ba50893bf0b8cccaaf6ce33095b9a8b7f673680eed702c57409ecebfbb163bf  644  dot_claude/skills/github-review-procedure/executable_github-review-state.sh
 d7e038f28424138783361121b0871809c7c700703b459ee28d63928497f470e1  644  dot_claude/skills/local-review-cycle-procedure/SKILL.md
@@ -53,14 +53,14 @@ bddf25616fa63f0ca8ac5b4930003b30deab97b5058a623c8a88320938a8d6a7  644  dot_claud
 620422885b927180f9a5aa8be24e988ca6f21dcbefe231b5068a90da1e059d72  644  dot_claude/skills/workflow/delivery.md
 337f1a99f921ac9c485bd1f25a6b9b50393f3898ef9bd793896cfada59e336e3  755  dot_claude/skills/workflow/executable_wf-context.sh
 13c7edab5aa922e6b2bce52f156701032bfc8144a22e79e461fb6b90d272d814  755  tools/agent-phase.sh
-77d094f34bb5ab2ad592ce0a97da2610fbe00bf05b7e3ef7e3e82b541de6a46a  755  tools/agy-tmux.sh
+388dbe73bae762595ec039b1f83f4742f5f2d83bbcd035e4f0aa70b5f678b93f  755  tools/agy-tmux.sh
 392b86f6854e4e3ffa1dcbd28904afa1c15536a1dea48039be0e3b69a5d35d71  644  tools/bootstrap-linux.sh
 56642e1c7439303b525d6b594ec2420f598feabe330d846e7420d4dad0f0e5d8  644  tools/bootstrap-mac.sh
 2005d23e14e09fec069d999bc58813745b711e65c14c50d22787e9f769f801b2  644  tools/cloud-gh-shim.py
 60a99a97d37a74b7198c608731c56dab7afd893af18bbe93a4faad173a5735db  644  tools/cloud-workflow-bootstrap.sh
 aba2b3934bec4b85ba04e090631da2057c981cac6059dec8ace4a8a3bd0fac9b  755  tools/finalize-check.sh
 2b0879df07b0123f330bd67e06e860453e229f422385f0c6da19e88277d855c9  755  tools/finalize-run.sh
-d340ad802d5b46f37a85dda5d45d991a0bed5d0e5ca1c2f9feca7ae94271fd40  644  tools/lib/agy_tmux_dashboard.py
+9573e199092fa838ad754749b832d10a6e0e74a1520e016902b09ada385341d0  644  tools/lib/agy_tmux_dashboard.py
 f7673606e34113d3fbd15395094c7fdbfddce405964cc5f0f7222260c6d2282d  644  tools/lib/finalize_check.py
 f9a438f73d29326358262339d533f645052072c6740ce5724cc29ff9902273a2  644  tools/lib/finalize_run.py
 06127d9b52fa4eac4a6a64fb8f05e91b6c8d05cc2fa2f695cf08c43760349c24  644  tools/lib/mem_guard.py
@@ -73,9 +73,9 @@ ac8c0f92f9527fbb17c12a660565f1359150725ea34531f6e556cd0ff056a941  644  tools/lib
 0d3c21eccab00c8f4fdce929fe2c239d3cf46d5996270f6e3b4e2276674fe3a4  644  tools/lib/repo-facts.sh
 653468db5625a65c762c5fb264f6729a6e45e26b263ea55781bdaa5c231dd41d  644  tools/lib/repo_facts.py
 d86aa76659afb858f4f235ed3e222d4359072437ad4c817efef4076a4c4ed9e9  644  tools/lib/sibling_worktrees.py
-cc250687e95e2e4f392e1cf7fffc5487575466535c86659309b8428284d17a09  644  tools/lib/telemetry.sh
-42aa7a9a88efd1f56e57f044d71d0d9f7aec4a378fbd315d7359555af489ce13  644  tools/lib/wf_backfill.py
-8b380209965a1e2c19bd8770a9e3cd037ee8cfc28a5d7c0c0edf21087b7345d2  644  tools/lib/wf_report.py
+965871b7da8e051da78e4d60f7b2b11093a5b1ec9b4d37bbe9a6080e97b949ee  644  tools/lib/telemetry.sh
+b8700974f2be44dea0ff99f3547be7c4549089da3e1c35d4609ba76cc8f3b134  644  tools/lib/wf_backfill.py
+d6c45d70d96c21971b022ea65a73f2b0fd4af0dd0b8abb524a9fd34cfd7a43df  644  tools/lib/wf_report.py
 3c46a31599092ceabb336ccd81b8e9a03631dbd0e8942152e8bbc420a74180fc  644  tools/lib/wf_tokens.py
 3b1a0716083c8f92ab94a60d59ecee59a1716e54cca16dd6cf25f77e2abfe41f  644  tools/lib/wf_usage.py
 53f4a1ac8192f13c557b4e1dc9fcf85184d80a466ec48b7d7aab56791c38929b  644  tools/lib/workstream.py
@@ -106,7 +106,7 @@ fe34a71d2260c726846a0eef9673688185d019036e0c9e55df3e918030f06ae1  644  tools/sta
 ae4e93d3a0d38815b1c929d3ff237054c71a8a46dd01e30e2cd23c2ed9343fee  644  tools/start-ticket-providers/shortcut.sh
 c2090545e06289ae569deacbd90426ad247c7ca47d003b4cb498a51a31441d12  755  tools/start-ticket.sh
 242a517c6322f8dd47a053c459dec7aed2b7b8a803b5f3b4e08e681bbe9b3af7  755  tools/tracker.sh
-b8083091fae3b43f91ae088836762a8116f45021b72d87be197adb98adde21e8  755  tools/wf-backfill.sh
+0c067601b72958d6cc81c6c057e25fb68ef5100e630ef216284d13c45e5ef51f  755  tools/wf-backfill.sh
 c1ab6c8c8f800a23622ec35d2b13d9e9bc25f252b67ba785490d23c661e2e34b  755  tools/wf-event.sh
 080bf3233e51fd1e86ee7392d43f73481806b9101716f9c0bff4cd24bb25b500  755  tools/wf-report.sh
 f15dd098841d7963da09693fafbb3bf3f713952434c4c4b8a40dec6cb7cb0fcd  755  tools/workflow-manifest.sh

@@ -331,6 +331,64 @@ class BotBackfillTests(unittest.TestCase):
             w2, s2 = bf.append_new(log, new, existing2)
             self.assertEqual((w2, s2), (0, 3))
 
+    def _live_pr(self, comments):
+        return {"number": 9, "branch": "Is9-live", "comments": comments, "reviews": [],
+                "threads": [], "commit_files": []}
+
+    @staticmethod
+    def _c(cid, path):
+        return {"id": cid, "user": {"login": "Copilot"}, "path": path, "original_line": 3,
+                "original_commit_id": "d" * 40, "created_at": "2026-11-12T01:00:00Z", "body": "Fix this."}
+
+    def test_live_uses_caller_verdicts_and_is_not_marked_backfill(self):
+        pr = self._live_pr([self._c(1, "a.py"), self._c(2, "b.py")])
+        verdicts = {"1": {"verdict": "fixed", "validity": "partial", "reason": "half"},
+                    "2": {"verdict": "dismissed", "validity": "rejected", "reason": "intended"}}
+        new, _ = bf.plan_bot_pr(pr, [], "o/r", live=True, verdicts=verdicts)
+        self.assertFalse(any("backfill" in e for e in new))
+        f = {e["comment_id"]: e for e in new if e["event"] == "review.finding"}
+        self.assertEqual((f[1]["verdict"], f[1]["validity"]), ("fixed", "partial"))
+        self.assertEqual((f[2]["verdict"], f[2]["reason"]), ("dismissed", "intended"))
+        result = next(e for e in new if e["event"] == "review.result")
+        self.assertEqual((result["fixed"], result["dismissed"], result["deferred"]), (1, 1, 0))
+
+    def test_live_rounds_emit_each_comment_once_and_a_result_per_round(self):
+        with tempfile.TemporaryDirectory() as d:
+            log = os.path.join(d, "events.jsonl")
+
+            def round_(comments):
+                existing = bf.load_log(log)
+                new, _ = bf.plan_bot_pr(self._live_pr(comments), existing, "o/r", live=True)
+                return bf.append_new(log, new, existing)[0]
+
+            self.assertEqual(round_([self._c(1, "a.py")]), 2)
+            self.assertEqual(round_([self._c(1, "a.py")]), 0)  # re-run
+            self.assertEqual(round_([self._c(1, "a.py"), self._c(2, "b.py")]), 2)  # next round: new comment only
+            events = bf.load_log(log)
+            self.assertEqual(sum(e["event"] == "review.finding" for e in events), 2)
+            self.assertEqual(sum(e["event"] == "review.result" for e in events), 2)
+
+    def test_backfill_after_live_adds_nothing(self):
+        with tempfile.TemporaryDirectory() as d:
+            log = os.path.join(d, "events.jsonl")
+            pr = self._live_pr([self._c(1, "a.py")])
+            live, _ = bf.plan_bot_pr(pr, [], "o/r", live=True)
+            bf.append_new(log, live, [])
+            existing = bf.load_log(log)
+            back, _ = bf.plan_bot_pr(pr, existing, "o/r")
+            self.assertEqual(bf.append_new(log, back, existing), (0, 1))
+
+    def test_main_live_respects_telemetry_off(self):
+        old = os.environ.get("WF_TELEMETRY")
+        os.environ["WF_TELEMETRY"] = "0"
+        try:
+            self.assertEqual(bf.main(["--live", "--pr", "1", "--log", os.devnull]), 0)
+        finally:
+            if old is None:
+                del os.environ["WF_TELEMETRY"]
+            else:
+                os.environ["WF_TELEMETRY"] = old
+
 
 if __name__ == "__main__":
     unittest.main()
