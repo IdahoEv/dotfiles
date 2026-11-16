@@ -37,6 +37,9 @@ while [ $# -gt 0 ]; do
       sha="$(git rev-parse HEAD 2>/dev/null || true)"
       [ -z "$sha" ] || wf_args+=("sha=$sha")
       if command -v wf-event.sh >/dev/null; then wf-event.sh "${wf_args[@]}" || true; fi
+      if command -v workstream.sh >/dev/null 2>&1; then
+        workstream.sh set-reviews --dir . --local "$v" >/dev/null 2>&1 || true
+      fi
       exit 0 ;;
     *) echo "usage: github-review-state.sh [--pr N] [--local N[*]] [--bare] | --set-local N[*]" >&2; exit 1 ;;
   esac
@@ -79,6 +82,10 @@ if [ -n "$pr" ]; then
   answered="$(printf '%s\n%s\n' "$rows" "$notices" | awk -F'\t' '$1 ~ /^[Cc]opilot/ && $2 > m {m = $2} END {print m}')"
   if [ -n "$requested_at" ] && [[ "$requested_at" > "$answered" ]]; then star_c="*"; fi
   if [ "$rabbit" -gt 0 ] && [[ "$head_at" > "$(last '^coderabbitai')" ]]; then star_r="*"; fi
+  if command -v workstream.sh >/dev/null 2>&1; then
+    remote_star=""; [ -n "$star_c" ] || [ -n "$star_r" ] && remote_star="*"
+    workstream.sh set-reviews --dir . --remote "$((copilot + rabbit))${remote_star}" >/dev/null 2>&1 || true
+  fi
 fi
 
 star_l=""

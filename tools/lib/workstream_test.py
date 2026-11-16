@@ -572,6 +572,42 @@ class CliTests(WorkstreamTestBase):
         with self.assertRaises(ValueError):
             workstream.update_phase(repo, phase="WIP", pr=True)
 
+    def test_pr_reviews_and_statusline(self) -> None:
+        repo = self.make_repo("dotfiles")
+        # No record yet -> no-op / None
+        self.assertIsNone(workstream.update_pr(repo, 10, url="https://example/10"))
+        self.assertIsNone(workstream.update_reviews(repo, local="1"))
+        self.assertIsNone(workstream.statusline_fields(repo, project="proj"))
+
+        workstream.init_ticket_record(
+            repo,
+            provider="github",
+            tickets=[{"id": "162", "url": ""}, {"id": "163", "url": ""}],
+            desc="agent row statusline",
+        )
+        # Initial statusline: project | name | [PLAN]
+        self.assertEqual(
+            workstream.format_statusline_line1(repo, project="dotfiles"),
+            "dotfiles | Is162+163 agent row statusline | [PLAN]",
+        )
+
+        # Running local review
+        workstream.update_reviews(repo, local="1*")
+        self.assertEqual(
+            workstream.format_statusline_line1(repo, project="dotfiles"),
+            "dotfiles | Is162+163 agent row statusline | [PLAN] | reviews: 1* local",
+        )
+
+        # Completed local review + PR + remote review
+        workstream.update_reviews(repo, local="2", remote="1")
+        workstream.update_pr(repo, 205, url="https://github.com/IdahoEv/dotfiles/pull/205", state="APPROVED")
+        workstream.update_phase(repo, "REVIEWED")
+        workstream.update_phase(repo, pr=True)
+        self.assertEqual(
+            workstream.format_statusline_line1(repo, project="dotfiles"),
+            "dotfiles | Is162+163 agent row statusline | [REVIEWED][PR] | PR #205 APPROVED | reviews: 2 local, 1 remote",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

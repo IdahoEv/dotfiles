@@ -9,7 +9,7 @@ This session is for discussion, research, and brainstorming, with no ticket and 
 1. Draft the ticket (concrete acceptance criteria and an estimate) and get approval through `AskUserQuestion`, with the full draft in the question. File it with the repo's tracker (`gh issue create` on GitHub, the Shortcut MCP tools on Shortcut).
 2. `start-ticket.sh <id> --print-title`, choose a 3–4-word label, then `GT_LABEL_OVERRIDE="<label>" start-ticket.sh <id> --no-tab`. This creates the worktree and branch and marks the ticket in progress; it opens no second session.
 3. `EnterWorktree` with `path=<worktree>` from step 2.
-4. `session-label.sh --title "[PLAN] <Is|Sc><id> <label>"` (`Is` for GitHub, `Sc` for Shortcut).
+4. `agent-phase.sh PLAN` (mirrors the workstream record onto the agent-view row).
 5. Present an implementation plan. From here the normal ticket rules apply.
 
 Never create a worktree with raw `git worktree add`, and never edit before step 3.

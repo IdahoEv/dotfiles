@@ -398,6 +398,9 @@ if [ "$review" != "none" ] || [ "${PROVIDER_TRIGGER_MODE:-manual}" = "auto" ]; t
   "$SCRIPT_DIR/agent-phase.sh" REVIEW >/dev/null 2>&1 || true
 fi
 "$SCRIPT_DIR/agent-phase.sh" --pr >/dev/null 2>&1 || true
+if [ -x "$SCRIPT_DIR/workstream.sh" ]; then
+  "$SCRIPT_DIR/workstream.sh" set-pr --dir . --number "$pr_number" --url "$pr_url" >/dev/null 2>&1 || true
+fi
 
 printf 'pr_number=%s\npr_url=%s\npr_action=%s\n' "$pr_number" "$pr_url" "$pr_action"
 # Reported so /open-pr can describe reviews accurately without re-reading the

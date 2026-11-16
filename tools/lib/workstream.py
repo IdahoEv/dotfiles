@@ -8,6 +8,9 @@
     workstream.py chain-tag [--dir <wt>]
     workstream.py render <surface> [--dir <wt>]
     workstream.py setting <key> [--dir <wt>] [--env <VAR>] [--default <val>] [--with-source]
+    workstream.py set-pr [--dir <wt>] --number <N> [--url <url>] [--state <state>]
+    workstream.py set-reviews [--dir <wt>] [--local <N[*]>] [--remote <N[*]>]
+    workstream.py statusline [--dir <wt>] [--project <name>] [--format text|json]
 """
 
 from __future__ import annotations
@@ -79,12 +82,20 @@ class WorkstreamRecord:
     template_source: str = "default"
     tags: list[str] = dataclasses.field(default_factory=list)
     pr: dict[str, Any] | None = None
-    reviews: dict[str, int] = dataclasses.field(
+    reviews: dict[str, Any] = dataclasses.field(
         default_factory=lambda: {"local": 0, "remote": 0}
     )
     claude_sessions: list[str] = dataclasses.field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
+        reviews_out: dict[str, Any] = {
+            "local": int((self.reviews or {}).get("local", 0)),
+            "remote": int((self.reviews or {}).get("remote", 0)),
+        }
+        if (self.reviews or {}).get("local_running"):
+            reviews_out["local_running"] = True
+        if (self.reviews or {}).get("remote_running"):
+            reviews_out["remote_running"] = True
         return {
             "version": self.version,
             "kind": self.kind,
@@ -97,20 +108,21 @@ class WorkstreamRecord:
             "template_source": self.template_source,
             "tags": list(self.tags),
             "pr": dict(self.pr) if isinstance(self.pr, dict) else None,
-            "reviews": {
-                "local": int((self.reviews or {}).get("local", 0)),
-                "remote": int((self.reviews or {}).get("remote", 0)),
-            },
+            "reviews": reviews_out,
             "claude_sessions": list(self.claude_sessions),
         }
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> WorkstreamRecord:
         reviews_raw = data.get("reviews")
-        reviews = {"local": 0, "remote": 0}
+        reviews: dict[str, Any] = {"local": 0, "remote": 0}
         if isinstance(reviews_raw, dict):
             reviews["local"] = int(reviews_raw.get("local", 0) or 0)
             reviews["remote"] = int(reviews_raw.get("remote", 0) or 0)
+            if reviews_raw.get("local_running"):
+                reviews["local_running"] = True
+            if reviews_raw.get("remote_running"):
+                reviews["remote_running"] = True
         tickets_raw = data.get("tickets") or []
         tickets = [
             {"id": str(t.get("id", "")), "url": str(t.get("url", ""))}
@@ -525,6 +537,9 @@ def init_ticket_record(
             desc = existing.desc
         else:
             desc = format_text(_slug_phrase(title), "words")
+    else:
+        sanitized = repo_facts.sanitize_label(desc)
+        desc = format_text(sanitized, "words") if sanitized else format_text(_slug_phrase(title), "words")
 
     rec = WorkstreamRecord(
         version=1,
@@ -564,6 +579,147 @@ def chain_tag(worktree: str = ".") -> str:
     if len(ids) >= 4:
         return f"{ids[0]}+{ids[-1]}"
     return "+".join(ids)
+
+
+def _load_record_file(worktree: str = ".") -> tuple[str, WorkstreamRecord] | None:
+    root = _worktree_root(worktree)
+    path = Path(root) / RECORD_FILENAME
+    if not path.is_file():
+        return None
+    rec = load_record(root)
+    if rec is None:
+        return None
+    return root, rec
+
+
+def update_pr(
+    worktree: str,
+    number: int,
+    url: str = "",
+    state: str = "",
+) -> WorkstreamRecord | None:
+    """Record PR metadata in <worktree>/.workstream.json when present."""
+    loaded = _load_record_file(worktree)
+    if loaded is None:
+        return None
+    root, rec = loaded
+    pr_data: dict[str, Any] = dict(rec.pr) if isinstance(rec.pr, dict) else {}
+    pr_data["number"] = int(number)
+    if url:
+        pr_data["url"] = url
+    if state:
+        pr_data["state"] = state
+    if pr_data != rec.pr:
+        rec.pr = pr_data
+        save_record(root, rec)
+    return rec
+
+
+def _parse_review_count(raw: str) -> tuple[int, bool]:
+    s = raw.strip()
+    running = s.endswith("*")
+    if running:
+        s = s[:-1]
+    if not s.isdigit():
+        raise ValueError(f"invalid review count '{raw}' (expected N or N*)")
+    return int(s), running
+
+
+def update_reviews(
+    worktree: str,
+    *,
+    local: str | None = None,
+    remote: str | None = None,
+) -> WorkstreamRecord | None:
+    """Update local/remote review counts in <worktree>/.workstream.json when present."""
+    if local is None and remote is None:
+        raise ValueError("specify at least one of local or remote")
+    loaded = _load_record_file(worktree)
+    if loaded is None:
+        return None
+    root, rec = loaded
+    reviews: dict[str, Any] = dict(rec.reviews or {"local": 0, "remote": 0})
+    if local is not None:
+        cnt, running = _parse_review_count(local)
+        reviews["local"] = cnt
+        if running:
+            reviews["local_running"] = True
+        else:
+            reviews.pop("local_running", None)
+    if remote is not None:
+        cnt, running = _parse_review_count(remote)
+        reviews["remote"] = cnt
+        if running:
+            reviews["remote_running"] = True
+        else:
+            reviews.pop("remote_running", None)
+    if reviews != rec.reviews:
+        rec.reviews = reviews
+        save_record(root, rec)
+    return rec
+
+
+def _project_name(worktree: str) -> str:
+    common = repo_facts.git(worktree, "rev-parse", "--path-format=absolute", "--git-common-dir")
+    if common:
+        return os.path.basename(os.path.dirname(common))
+    return os.path.basename(os.path.abspath(worktree))
+
+
+def statusline_fields(worktree: str = ".", project: str = "") -> dict[str, str] | None:
+    """Return statusline line-1 fields derived from .workstream.json alone, or None."""
+    loaded = _load_record_file(worktree)
+    if loaded is None:
+        return None
+    root, rec = loaded
+    proj = project or _project_name(root)
+    ws_name = render_surface(rec, "base", dir_=root)
+    tags = format_phase_tags(rec)
+
+    pr_num = ""
+    pr_url = ""
+    pr_state = ""
+    if isinstance(rec.pr, dict) and rec.pr.get("number"):
+        pr_num = str(rec.pr["number"])
+        pr_url = str(rec.pr.get("url", "") or "")
+        pr_state = str(rec.pr.get("state", "") or "")
+
+    rev = rec.reviews or {}
+    local_n = int(rev.get("local", 0) or 0)
+    remote_n = int(rev.get("remote", 0) or 0)
+    local_star = "*" if rev.get("local_running") else ""
+    remote_star = "*" if rev.get("remote_running") else ""
+
+    reviews_str = ""
+    if local_n > 0 or local_star or remote_n > 0 or remote_star or pr_num:
+        parts = [f"{local_n}{local_star} local"]
+        if remote_n > 0 or remote_star or pr_num:
+            parts.append(f"{remote_n}{remote_star} remote")
+        reviews_str = ", ".join(parts)
+
+    return {
+        "project": proj,
+        "name": ws_name,
+        "tags": tags,
+        "pr_num": pr_num,
+        "pr_url": pr_url,
+        "pr_state": pr_state,
+        "reviews": reviews_str,
+    }
+
+
+def format_statusline_line1(worktree: str = ".", project: str = "") -> str:
+    """Format statusline line 1 from .workstream.json alone."""
+    fields = statusline_fields(worktree, project=project)
+    if fields is None:
+        return ""
+    pr_seg = ""
+    if fields["pr_num"]:
+        state = fields["pr_state"].replace("_", " ")
+        pr_seg = f"PR #{fields['pr_num']}" + (f" {state}" if state else "")
+    rev_seg = f"reviews: {fields['reviews']}" if fields["reviews"] else ""
+    segs = [fields["project"], fields["name"], fields["tags"], pr_seg, rev_seg]
+    return " | ".join(s for s in segs if s)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -614,6 +770,22 @@ def build_parser() -> argparse.ArgumentParser:
     p_set.add_argument("--env", default="")
     p_set.add_argument("--default", default="")
     p_set.add_argument("--with-source", action="store_true")
+
+    p_pr = sub.add_parser("set-pr")
+    p_pr.add_argument("--dir", default=".")
+    p_pr.add_argument("--number", required=True, type=int)
+    p_pr.add_argument("--url", default="")
+    p_pr.add_argument("--state", default="")
+
+    p_rev = sub.add_parser("set-reviews")
+    p_rev.add_argument("--dir", default=".")
+    p_rev.add_argument("--local", default=None)
+    p_rev.add_argument("--remote", default=None)
+
+    p_sl = sub.add_parser("statusline")
+    p_sl.add_argument("--dir", default=".")
+    p_sl.add_argument("--project", default="")
+    p_sl.add_argument("--format", dest="fmt", choices=("text", "json"), default="text")
 
     return p
 
@@ -724,6 +896,28 @@ def main(argv: list[str] | None = None) -> int:
             sys.stdout.write(f"{val}\t{src}")
         else:
             sys.stdout.write(val)
+        return 0
+
+    if args.cmd == "set-pr":
+        rec = update_pr(args.dir, args.number, url=args.url, state=args.state)
+        return 0 if rec is not None else 1
+
+    if args.cmd == "set-reviews":
+        try:
+            rec = update_reviews(args.dir, local=args.local, remote=args.remote)
+        except ValueError as exc:
+            sys.stderr.write(f"workstream: {exc}\n")
+            return 1
+        return 0 if rec is not None else 1
+
+    if args.cmd == "statusline":
+        fields = statusline_fields(args.dir, project=args.project)
+        if fields is None:
+            return 1
+        if args.fmt == "json":
+            sys.stdout.write(json.dumps(fields) + "\n")
+        else:
+            sys.stdout.write(format_statusline_line1(args.dir, project=args.project) + "\n")
         return 0
 
     return 2

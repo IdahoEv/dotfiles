@@ -193,15 +193,15 @@ has "chain: record write failure is explained" "workstream record not written" "
 mkdir -p "$ROOT/stubbin"
 printf '#!/bin/sh\nprintf "%%s\\n" "$@" > "%s/claude.args"\n' "$ROOT" > "$ROOT/stubbin/claude"; chmod +x "$ROOT/stubbin/claude"
 (cd "$ROOT/widgets" && PATH="$ROOT/stubbin:$PATH" START_TICKET_PROVIDER_DIR="$CP" "$ST" 7,8 --provider fake --launcher bg >/dev/null 2>&1)
-has "chain: session name joins the ids" "[PLAN] Is7+8 Ticket 7" "$ROOT/claude.args"
+has "chain: session name joins the ids" "[PLAN] fake-7+8 ticket 7" "$ROOT/claude.args"
 git -C "$ROOT/widgets" worktree add -q "$ROOT/swt" -b 7-single
 (cd "$ROOT/widgets" && FAKE_WT="$ROOT/swt" PATH="$ROOT/stubbin:$PATH" START_TICKET_PROVIDER_DIR="$CP" "$ST" 7 --provider fake --launcher bg >/dev/null 2>&1)
-has "single id: session name unchanged" "[PLAN] Is7 Ticket 7" "$ROOT/claude.args"
+has "single id: session name unchanged" "[PLAN] fake-7 ticket 7" "$ROOT/claude.args"
 (cd "$ROOT/widgets" && PATH="$ROOT/stubbin:$PATH" START_TICKET_PROVIDER_DIR="$CP" FAKE_WT="$ROOT/cwt4" "$ST" 7,8,9,10 --provider fake --launcher bg >/dev/null 2>&1)
-has "long chain: label collapses to first+last" "[PLAN] Is7+10 Ticket 7" "$ROOT/claude.args"
+has "long chain: session name keeps chain ids" "[PLAN] fake-7+8+9+10 ticket 7" "$ROOT/claude.args"
 git -C "$ROOT/widgets" worktree add -q "$ROOT/swt_is" -b Is160-workstream-record
 (cd "$ROOT/widgets" && FAKE_WT="$ROOT/swt_is" PATH="$ROOT/stubbin:$PATH" START_TICKET_PROVIDER_DIR="$CP" "$ST" 160 --provider fake --launcher bg >/dev/null 2>&1)
-has "Is<N> branch: session name uses Is<N> prefix" "[PLAN] Is160 Ticket 160" "$ROOT/claude.args"
+has "Is<N> branch: session name uses resolver key" "[PLAN] fake-160 ticket 160" "$ROOT/claude.args"
 
 # ---- --in-place (cloud sessions: one fixed checkout, no worktree) ---------------
 IP="$ROOT/inplaceproviders"; mkdir -p "$IP"
@@ -309,6 +309,16 @@ check "print-title is read-only and never guarded" "0" "$rc"
 (cd "$ROOT/widgets" && START_TICKET_MEM_GUARD="$ROOT/nope" PATH="$ROOT/stubbin:$PATH" "$ST" --tab-only "$ROOT/wt" "$CB/kf" --launcher bg >/dev/null 2>"$ROOT/mem.err"); rc=$?
 check "missing guard script does not block" "0" "$rc"
 has "missing guard script is reported" "launching without a memory check" "$ROOT/mem.err"
+
+# ---- --no-tab + --tab-only preserves GT_LABEL_OVERRIDE from .workstream.json ----
+rm -f "$ROOT/claude.args"
+out_lbl="$(cd "$ROOT/widgets" && FAKE_WT="$ROOT/swt" GT_LABEL_OVERRIDE="Custom Row Label" \
+  START_TICKET_PROVIDER_DIR="$CP" "$ST" 7 --provider fake --no-tab 2>/dev/null)"
+wt_lbl="$(printf '%s\n' "$out_lbl" | awk -F= '$1=="worktree"{print $2}')"
+kf_lbl="$(printf '%s\n' "$out_lbl" | awk -F= '$1=="kickoff"{print $2}')"
+(cd "$ROOT/widgets" && env -u GT_LABEL_OVERRIDE MEM_GUARD_OVERRIDE=1 \
+  PATH="$ROOT/stubbin:$PATH" "$ST" --tab-only "$wt_lbl" "$kf_lbl" --launcher bg >/dev/null 2>&1)
+has "--tab-only preserves model-written label" "[PLAN] fake-7 custom row label" "$ROOT/claude.args"
 
 printf '%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
