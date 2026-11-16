@@ -11,6 +11,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from pathlib import Path
 
@@ -191,6 +192,44 @@ class RecordPersistenceTests(WorkstreamTestBase):
             check=True,
         ).stdout.strip()
         self.assertEqual(st, "")
+
+    def test_concurrent_record_updates_preserve_each_others_fields(self) -> None:
+        repo = self.make_repo("widgets")
+        workstream.init_ticket_record(
+            repo, provider="github", tickets=[{"id": "7", "url": ""}], title="Ticket 7"
+        )
+        script = """
+import sys, time
+sys.path.insert(0, sys.argv[1])
+import workstream
+mode, root = sys.argv[2:]
+load_record = workstream.load_record
+def slow_load_record(worktree="."):
+    record = load_record(worktree)
+    time.sleep(0.005)
+    return record
+workstream.load_record = slow_load_record
+for i in range(20):
+    if mode == "pr":
+        workstream.update_pr(root, i + 1)
+    else:
+        workstream.update_reviews(root, local=str(i % 2 + 1), remote="7")
+"""
+        writers = [
+            subprocess.Popen(
+                [sys.executable, "-c", script, HERE, mode, repo],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+            )
+            for mode in ("pr", "reviews")
+        ]
+        results = [writer.communicate() for writer in writers]
+        self.assertEqual([writer.returncode for writer in writers], [0, 0], results)
+
+        record = workstream.load_record(repo)
+        self.assertEqual(record.pr["number"], 20)
+        self.assertEqual(record.reviews, {"local": 2, "remote": 7})
 
     def test_save_record_fails_closed_when_exclude_unwritable(self) -> None:
         if os.geteuid() == 0:
