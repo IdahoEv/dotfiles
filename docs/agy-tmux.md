@@ -9,8 +9,11 @@ From inside a repository:
 ```bash
 agy-tmux.sh 12,13 14 15        # chain 12+13, plus tickets 14 and 15
 agy-tmux.sh --session my-work 183
-agy-tmux.sh                     # re-attach to an existing session
+agy-tmux.sh --force 12 13       # launch even if mem-guard blocks on memory pressure
+agy-tmux.sh                     # re-attach to an existing session, or launch governor if none exists
 ```
+
+Before each group launches, `mem-guard.sh check` runs; under dangerous memory pressure that group is skipped (nothing is killed) unless `--force`. See `docs/memory-guard.md`.
 
 ## Dashboard & Switching
 
@@ -20,10 +23,13 @@ You land directly on **window `0` (dashboard)**:
 | --- | --- |
 | `↑` / `↓` or `j` / `k` | Select a workstream |
 | `Enter` (or `1`–`9`) | Switch into that `agy` window |
+| `g` | Cycle grouping mode (`flat` → `project` → `state`) |
 | `Ctrl-z` *(inside any agent)* | Return to the dashboard (no prefix; scoped to `agy-tmux` sessions) |
 | `r` | Force refresh |
 | `x` | Close an `exited` workstream window |
 | `q` | Detach from tmux (agents keep running in the background) |
+
+The `Mem` column is an estimate of each window's process tree (`~1.2 GB`; `-` = not measured or exited), and the title line shows host memory pressure (`[WARN]`/`[BLOCK]` when thresholds are crossed). Details and limits: `docs/memory-guard.md`.
 
 ## Essential Tmux Keys
 
@@ -43,3 +49,21 @@ tmux attach -t agy-<repo>
 # or simply:
 agy-tmux.sh
 ```
+
+## Adding, Resuming, and Governor Windows
+
+The dashboard and `mem-guard.sh` track every non-`0` window in `agy-<repo>`, including windows added manually.
+
+- **Add a new workstream to a running session:**
+  ```bash
+  agy-tmux.sh <id>                # appends window to agy-<repo> and attaches
+  agy-tmux.sh --no-attach <id>    # appends without attaching
+  ```
+- **Resume an orphaned workstream (after a crash/reboot):** `agy-tmux.sh <id>` reuses the existing worktree and commits without resetting them, but regenerates the original ticket kickoff (so tell the new session to inspect `git status`/`git log`/`gh pr view`). For workstreams already in review or ready for a PR, open a window with `/remind` instead once `agy-<repo>` exists:
+  ```bash
+  tmux new-window -t =agy-<repo>: -n <label> -c <worktree-path> "agy --mode plan --prompt-interactive '/remind'"
+  ```
+- **Run a governor session in the dashboard:** running `agy-tmux.sh` with no arguments when `agy-<repo>` does not exist creates the session with the dashboard and a `governor` window in the repo's main worktree (guarded by `mem-guard.sh check`). To add a governor window to an already-running session:
+  ```bash
+  tmux new-window -t =agy-<repo>: -n governor -c <main-worktree-path> "agy --mode plan --prompt-interactive '/governor'"
+  ```

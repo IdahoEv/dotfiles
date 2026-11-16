@@ -162,6 +162,7 @@ class TestHelpers(unittest.TestCase):
             with (
                 mock.patch.object(dash, "_run_cmd", side_effect=fake_run),
                 mock.patch.object(dash, "_git_branch") as git_mock,
+                mock.patch.object(dash, "resolve_project_color", return_value="green"),
             ):
                 rows = dash.fetch_windows("agy-dotfiles", now=1000)
 
@@ -172,6 +173,7 @@ class TestHelpers(unittest.TestCase):
             self.assertEqual(rows[0].tags, "[PLAN]")
             self.assertEqual(rows[0].status, "idle (50s)")
             self.assertEqual(rows[0].last_line, "Ready for review?")
+            self.assertEqual(rows[0].color, "green")
 
     def test_fetch_windows_pane_dead_and_missing_workstream(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -218,6 +220,7 @@ class TestHelpers(unittest.TestCase):
 
         with (
             mock.patch.object(curses, "curs_set"),
+            mock.patch.object(curses, "has_colors", return_value=False),
             mock.patch.object(dash, "fetch_windows", return_value=rows) as fetch_mock,
             mock.patch.object(dash, "_kill_window") as kill_mock,
         ):
@@ -235,7 +238,468 @@ class TestHelpers(unittest.TestCase):
             mock.patch.object(curses, "wrapper") as wrapper_mock,
         ):
             dash.main(["--session", "agy-dotfiles"])
-        wrapper_mock.assert_called_once_with(dash._curses_loop, "agy-dotfiles", None, 2.0, "/env/tmux")
+        wrapper_mock.assert_called_once_with(dash._curses_loop, "agy-dotfiles", None, 2.0, "/env/tmux", "")
+
+
+class TestMemoryColumn(unittest.TestCase):
+    def _row(self, mem=""):
+        return dash.WorkstreamRow("1", "Is5", "%1", "/x", "Is5", "desc", "b", "running", "out", mem=mem)
+
+    def test_render_shows_mem_and_host_line(self):
+        lines = dash.render_lines([self._row("~1.2 GB")], 0, 120, "s", host_line="host pressure: warn  [WARN]")
+        self.assertIn("host pressure: warn", lines[0])
+        self.assertIn("Mem", lines[2])
+        self.assertIn("~1.2 GB", lines[3])
+
+    def test_unmeasured_row_shows_dash(self):
+        lines = dash.render_lines([self._row()], 0, 120, "s")
+        self.assertIn(" - ", lines[3])
+
+    def _provider(self, payload, rc=0):
+        import subprocess as sp
+        out = payload if isinstance(payload, str) else json.dumps(payload)
+        return mock.patch.object(dash.subprocess, "run", return_value=sp.CompletedProcess([], rc, out, ""))
+
+    def test_no_provider_means_no_memory_column(self):
+        self.assertEqual(dash.fetch_memory(""), ({}, ""))
+
+    def test_fetch_memory_never_raises(self):
+        with mock.patch.object(dash.subprocess, "run", side_effect=OSError("missing")):
+            self.assertEqual(dash.fetch_memory("nope report"), ({}, ""))
+        with self._provider("not json"):
+            self.assertEqual(dash.fetch_memory("x"), ({}, ""))
+        with self._provider({}, rc=3):
+            self.assertEqual(dash.fetch_memory("x"), ({}, ""))
+        with self._provider({"sessions": [{"source": "tmux"}]}):  # missing key is ignored, not a crash
+            self.assertEqual(dash.fetch_memory("x"), ({}, ""))
+
+    def test_fetch_memory_maps_tmux_windows_and_flags_pressure(self):
+        data = {
+            "host_line": "host pressure: critical, ~5% free",
+            "verdict": {"status": "block"},
+            "process_table_ok": True,
+            "sessions": [
+                {"source": "tmux", "key": "1", "mem": "~2.0 GB"},
+                {"source": "unmanaged", "key": "", "mem": "~9.0 GB"},
+            ],
+        }
+        with self._provider(data):
+            by_win, line = dash.fetch_memory("mem-guard report --json")
+        self.assertEqual(by_win, {"1": "~2.0 GB"})
+        self.assertIn("[BLOCK]", line)
+
+    def test_dashboard_does_not_import_the_memory_module(self):
+        self.assertFalse(hasattr(dash, "mem_guard"))
+        src = Path(dash.__file__).read_text()
+        self.assertNotIn("import mem_guard", src)
+
+
+class TestGroupingAndNavigation(unittest.TestCase):
+    def _row(
+        self,
+        idx: str,
+        status: str = "running",
+        project: str = "alpha",
+        pane_path: str = "/tmp/alpha/wt",
+    ) -> dash.WorkstreamRow:
+        return dash.WorkstreamRow(
+            window_index=idx,
+            window_name=f"Is{idx}",
+            pane_id=f"%{idx}",
+            pane_path=pane_path,
+            ticket_ref=f"Is{idx}",
+            desc=f"Task {idx}",
+            branch="",
+            status=status,
+            last_line="ok",
+            project=project,
+        )
+
+    def test_resolve_project_uses_main_root_and_fallbacks(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            with mock.patch.object(dash.repo_facts, "main_root", return_value="/repos/dotfiles"):
+                self.assertEqual(dash.resolve_project(tmp), "dotfiles")
+            with mock.patch.object(dash.repo_facts, "main_root", return_value=""):
+                self.assertEqual(dash.resolve_project(tmp), Path(tmp).name)
+        with mock.patch.object(dash.repo_facts, "main_root", return_value=""):
+            self.assertEqual(dash.resolve_project("/"), "other")
+        with mock.patch.object(dash.os.path, "isdir", return_value=False):
+            self.assertEqual(dash.resolve_project("/"), "other")
+        self.assertEqual(dash.resolve_project(""), "other")
+
+    def test_row_state_and_next_view_mode(self):
+        self.assertEqual(dash.row_state("running"), "running")
+        self.assertEqual(dash.row_state("idle (15s)"), "idle")
+        self.assertEqual(dash.row_state("exited"), "exited")
+        self.assertEqual(dash.next_view_mode("flat"), "project")
+        self.assertEqual(dash.next_view_mode("project"), "state")
+        self.assertEqual(dash.next_view_mode("state"), "flat")
+        self.assertEqual(dash.next_view_mode("unknown"), "flat")
+
+    def test_build_display_items_flat_project_and_state(self):
+        rows = [
+            self._row("1", status="exited", project="beta"),
+            self._row("2", status="running", project="alpha"),
+            self._row("3", status="idle (5m)", project="beta"),
+        ]
+        flat = dash.build_display_items(rows, "flat")
+        self.assertEqual([item.row.window_index for item in flat if item.row], ["1", "2", "3"])
+        self.assertFalse(any(item.is_header for item in flat))
+
+        by_project = dash.build_display_items(rows, "project")
+        self.assertEqual(
+            [item.header if item.is_header else item.row.window_index for item in by_project],
+            ["── alpha (1)", "2", "── beta (2)", "1", "3"],
+        )
+
+        by_state = dash.build_display_items(rows, "state")
+        self.assertEqual(
+            [item.header if item.is_header else item.row.window_index for item in by_state],
+            ["── running (1)", "2", "── idle (1)", "3", "── exited (1)", "1"],
+        )
+
+        # Empty state groups are omitted.
+        only_running = dash.build_display_items([self._row("1", status="running")], "state")
+        self.assertEqual(
+            [item.header if item.is_header else item.row.window_index for item in only_running],
+            ["── running (1)", "1"],
+        )
+
+    def test_step_selection_skips_headers_and_wraps(self):
+        rows = [
+            self._row("1", status="running", project="alpha"),
+            self._row("2", status="exited", project="beta"),
+            self._row("3", status="exited", project="beta"),
+        ]
+        items = dash.build_display_items(rows, "project")
+        # items: 0:H(alpha), 1:row1, 2:H(beta), 3:row2, 4:row3
+        self.assertEqual(dash.step_selection(items, 1, 1), 3)
+        self.assertEqual(dash.step_selection(items, 3, 1), 4)
+        self.assertEqual(dash.step_selection(items, 4, 1), 1)
+        self.assertEqual(dash.step_selection(items, 1, -1), 4)
+        self.assertEqual(dash.step_selection(items, 3, -1), 1)
+        self.assertEqual(dash.step_selection(items, 0, 1), 1)
+
+    def test_viewport_scrolling_with_group_headers_keeps_selected_visible(self):
+        rows = [
+            self._row(str(i + 1), status="running" if i < 4 else "exited", project=f"p{i // 2}")
+            for i in range(8)
+        ]
+        items = dash.build_display_items(rows, "project")
+        # 4 project headers + 8 rows = 12 display items; test every selectable index with max_rows=4
+        for idx, item in enumerate(items):
+            if item.is_header:
+                continue
+            start, end = dash.visible_slice(len(items), idx, max_rows=4, items=items)
+            self.assertLessEqual(start, idx)
+            self.assertLess(idx, end)
+            self.assertEqual(end - start, 4)
+
+            lines = dash.render_lines(rows, selected=idx, width=100, session="agy-dotfiles", max_rows=4, view_mode="project")
+            joined = "\n".join(lines)
+            self.assertIn("[project]", lines[0])
+            self.assertIn("g: group", lines[-1])
+            self.assertIn(f"> {item.row.window_index}", joined)
+            self.assertEqual(len(lines), 9)  # 3 header + 4 display items + 2 footer
+
+    def test_curses_loop_cycles_modes_and_skips_headers(self):
+        rows = [
+            self._row("1", status="exited", project="beta"),
+            self._row("2", status="running", project="alpha"),
+        ]
+        # Start on row 1 (flat idx 0). 'g' -> project mode (items: H(alpha), row2, H(beta), row1; selected=3).
+        # 'k' -> skips H(beta), lands on row2 (idx 1). Enter -> switches to window 2.
+        keys = [ord("g"), ord("k"), 10]
+
+        class FakeStdscr:
+            def keypad(self, _flag): pass
+            def timeout(self, _ms): pass
+            def getmaxyx(self): return (24, 100)
+            def erase(self): pass
+            def addnstr(self, *_args): pass
+            def refresh(self): pass
+            def getch(self):
+                if keys:
+                    return keys.pop(0)
+                raise StopIteration
+
+        with (
+            mock.patch.object(curses, "curs_set"),
+            mock.patch.object(dash, "fetch_windows", return_value=rows),
+            mock.patch.object(dash, "_switch_to_window") as switch_mock,
+        ):
+            with self.assertRaises(StopIteration):
+                dash._curses_loop(FakeStdscr(), "agy-dotfiles", None, 2.0)
+
+        switch_mock.assert_called_once_with(["tmux"], "agy-dotfiles", "2")
+
+    def test_fetch_windows_defers_project_resolution(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            wt = Path(tmp) / "wt"
+            wt.mkdir()
+            list_out = f"1\tIs189\t%1\t{wt}\t0\t1000\n"
+
+            def fake_run(cmd: list[str]) -> str:
+                if "list-windows" in cmd:
+                    return list_out
+                if "capture-pane" in cmd:
+                    return "ok\n"
+                return ""
+
+            with (
+                mock.patch.object(dash, "_run_cmd", side_effect=fake_run),
+                mock.patch.object(dash, "_git_branch", return_value="main"),
+                mock.patch.object(dash, "resolve_project") as proj_mock,
+            ):
+                rows = dash.fetch_windows("agy-dotfiles", now=1000)
+
+            proj_mock.assert_not_called()
+            self.assertEqual(rows[0].project, "")
+
+    def test_curses_loop_lazily_resolves_and_caches_projects(self):
+        def make_rows():
+            return [
+                self._row("1", status="running", project="", pane_path="/tmp/alpha/wt1"),
+                self._row("2", status="running", project="", pane_path="/tmp/beta/wt2"),
+            ]
+
+        # flat (initial) -> 'r' (still flat, no resolve) -> 'g' (project, resolves 2) -> 'r' (project, cached)
+        keys = [ord("r"), ord("g"), ord("r")]
+
+        class FakeStdscr:
+            def keypad(self, _flag): pass
+            def timeout(self, _ms): pass
+            def getmaxyx(self): return (24, 100)
+            def erase(self): pass
+            def addnstr(self, *_args): pass
+            def refresh(self): pass
+            def getch(self):
+                if keys:
+                    return keys.pop(0)
+                raise StopIteration
+
+        with (
+            mock.patch.object(curses, "curs_set"),
+            mock.patch.object(dash, "fetch_windows", side_effect=lambda *_a, **_kw: make_rows()),
+            mock.patch.object(dash, "resolve_project", side_effect=lambda p: Path(p).parent.name) as proj_mock,
+        ):
+            with self.assertRaises(StopIteration):
+                dash._curses_loop(FakeStdscr(), "agy-dotfiles", None, 2.0)
+
+        self.assertEqual(proj_mock.call_count, 2)
+
+
+class TestProjectColors(unittest.TestCase):
+    def test_resolve_color_conf_override_beats_project_colors(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            wt = Path(tmp) / "My-Project" / "wt1"
+            wt.mkdir(parents=True)
+            colors_file = Path(tmp) / "project-colors"
+            colors_file.write_text("# comment\nMy-Project purple\n", encoding="utf-8")
+
+            with (
+                mock.patch.object(dash.repo_facts, "conf_get", return_value="  Cyan \r"),
+                mock.patch.object(dash.repo_facts, "main_root", return_value=str(Path(tmp) / "My-Project")),
+            ):
+                self.assertEqual(dash.resolve_project_color(str(wt), colors_file=colors_file), "cyan")
+
+    def test_resolve_color_falls_back_to_project_colors_when_conf_unset_or_blank(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            wt = Path(tmp) / "My-Project" / "wt1"
+            wt.mkdir(parents=True)
+            colors_file = Path(tmp) / "project-colors"
+            colors_file.write_text(
+                "# header\n\ndotfiles green\nmy-project Purple\n",
+                encoding="utf-8",
+            )
+
+            for conf_val in (None, "   "):
+                with (
+                    mock.patch.object(dash.repo_facts, "conf_get", return_value=conf_val),
+                    mock.patch.object(dash.repo_facts, "main_root", return_value=str(Path(tmp) / "My-Project")),
+                ):
+                    self.assertEqual(dash.resolve_project_color(str(wt), colors_file=colors_file), "purple")
+
+    def test_resolve_color_unknown_project_and_invalid_color_return_empty(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            wt = Path(tmp) / "unknown-repo"
+            wt.mkdir()
+            colors_file = Path(tmp) / "project-colors"
+            colors_file.write_text("dotfiles green\n", encoding="utf-8")
+
+            with (
+                mock.patch.object(dash.repo_facts, "conf_get", return_value=None),
+                mock.patch.object(dash.repo_facts, "main_root", return_value=str(wt)),
+            ):
+                self.assertEqual(dash.resolve_project_color(str(wt), colors_file=colors_file), "")
+
+            with (
+                mock.patch.object(dash.repo_facts, "conf_get", return_value="teal"),
+                mock.patch.object(dash.repo_facts, "main_root", return_value=str(wt)),
+            ):
+                self.assertEqual(dash.resolve_project_color(str(wt), colors_file=colors_file), "")
+
+        self.assertEqual(dash.resolve_project_color("/nonexistent/path/for/test"), "")
+
+    def test_fetch_windows_caches_project_color_across_refreshes(self):
+        dash._COLOR_CACHE.clear()
+        with tempfile.TemporaryDirectory() as tmp:
+            wt = Path(tmp) / "wt"
+            wt.mkdir()
+            list_out = f"1\tIs187\t%1\t{wt}\t0\t1000\n"
+
+            def fake_run(cmd: list[str]) -> str:
+                if "list-windows" in cmd:
+                    return list_out
+                if "capture-pane" in cmd:
+                    return "ok\n"
+                return ""
+
+            with (
+                mock.patch.object(dash, "_run_cmd", side_effect=fake_run),
+                mock.patch.object(dash, "_git_branch", return_value="Is187-test"),
+                mock.patch.object(dash, "resolve_project_color", return_value="cyan") as color_mock,
+            ):
+                rows1 = dash.fetch_windows("agy-dotfiles", now=1000)
+                rows2 = dash.fetch_windows("agy-dotfiles", now=1002)
+                dash._COLOR_CACHE.clear()
+                rows3 = dash.fetch_windows("agy-dotfiles", now=1004)
+
+            self.assertEqual(color_mock.call_count, 2)
+            self.assertEqual([r.color for r in (rows1[0], rows2[0], rows3[0])], ["cyan", "cyan", "cyan"])
+
+    def test_curses_loop_clears_color_cache_only_on_manual_refresh(self):
+        dash._COLOR_CACHE.clear()
+        dash._COLOR_CACHE[("/tmp/wt", "")] = "green"
+        keys = [-1, ord("r")]
+        cache_sizes_at_fetch: list[int] = []
+
+        class FakeStdscr:
+            def keypad(self, _flag): pass
+            def timeout(self, _ms): pass
+            def getmaxyx(self): return (24, 100)
+            def erase(self): pass
+            def addnstr(self, *_args): pass
+            def refresh(self): pass
+            def getch(self):
+                if keys:
+                    return keys.pop(0)
+                raise StopIteration
+
+        def fake_fetch(*_args, **_kwargs):
+            cache_sizes_at_fetch.append(len(dash._COLOR_CACHE))
+            return []
+
+        with (
+            mock.patch.object(curses, "curs_set"),
+            mock.patch.object(curses, "has_colors", return_value=False),
+            mock.patch.object(dash, "fetch_windows", side_effect=fake_fetch),
+        ):
+            with self.assertRaises(StopIteration):
+                dash._curses_loop(FakeStdscr(), "agy-dotfiles", None, 2.0)
+
+        # Initial fetch + timeout (-1) preserve cache; manual 'r' clears it before fetch.
+        self.assertEqual(cache_sizes_at_fetch, [1, 1, 0])
+
+
+class TestColorRendering(unittest.TestCase):
+    def test_init_color_pairs_without_color_support_returns_empty(self):
+        with mock.patch.object(curses, "has_colors", return_value=False):
+            self.assertEqual(dash.init_color_pairs(), {})
+
+        with (
+            mock.patch.object(curses, "has_colors", return_value=True),
+            mock.patch.object(curses, "start_color", side_effect=curses.error),
+        ):
+            self.assertEqual(dash.init_color_pairs(), {})
+
+    def test_init_color_pairs_initializes_all_palette_colors(self):
+        with (
+            mock.patch.object(curses, "has_colors", return_value=True),
+            mock.patch.object(curses, "start_color"),
+            mock.patch.object(curses, "use_default_colors"),
+            mock.patch.object(curses, "init_pair") as init_pair_mock,
+            mock.patch.object(curses, "COLORS", 256, create=True),
+        ):
+            pairs = dash.init_color_pairs()
+
+        self.assertEqual(set(pairs.keys()), set(dash.PALETTE))
+        self.assertEqual(init_pair_mock.call_count, len(dash.PALETTE))
+
+    def test_init_color_pairs_keeps_valid_pairs_when_pair_limit_reached(self):
+        def fake_init_pair(idx, _fg, _bg):
+            if idx >= 8:
+                raise curses.error("pair limit")
+
+        with (
+            mock.patch.object(curses, "has_colors", return_value=True),
+            mock.patch.object(curses, "start_color"),
+            mock.patch.object(curses, "use_default_colors"),
+            mock.patch.object(curses, "init_pair", side_effect=fake_init_pair),
+            mock.patch.object(curses, "COLORS", 8, create=True),
+        ):
+            pairs = dash.init_color_pairs()
+
+        self.assertEqual(set(pairs.keys()), set(dash.PALETTE[:7]))
+
+    def test_draw_row_colorizes_ticket_and_title_with_color_support(self):
+        calls: list[tuple[int, int, str, int, int]] = []
+
+        class FakeStdscr:
+            def addnstr(self, y, x, text, n, attr):
+                calls.append((y, x, text, n, attr))
+
+        row = dash.WorkstreamRow(
+            window_index="1",
+            window_name="Is187",
+            pane_id="%1",
+            pane_path="/tmp/wt1",
+            ticket_ref="Is187",
+            desc="Port project colors",
+            branch="",
+            status="running",
+            last_line="ok",
+            color="green",
+        )
+        line = dash.render_lines([row], selected=0, width=100, session="agy-dotfiles")[3]
+
+        with mock.patch.object(curses, "color_pair", return_value=0x200) as cp_mock:
+            dash._draw_row(FakeStdscr(), 3, line, 100, row, is_selected=True, color_pairs={"green": 3})
+
+        cp_mock.assert_called_once_with(3)
+        self.assertEqual(calls[0][1], 0)
+        self.assertEqual(calls[0][4], curses.A_REVERSE)
+        # Ticket column (x=6) and Title column (x=57) get color_pair | A_REVERSE
+        self.assertEqual([(c[1], c[4]) for c in calls[1:]], [(6, curses.A_REVERSE | 0x200), (57, curses.A_REVERSE | 0x200)])
+        self.assertEqual(calls[2][2].strip(), "Port project colors")
+
+    def test_draw_row_falls_back_to_unstyled_without_color_support(self):
+        calls: list[tuple[int, int, str, int, int]] = []
+
+        class FakeStdscr:
+            def addnstr(self, y, x, text, n, attr):
+                calls.append((y, x, text, n, attr))
+
+        row = dash.WorkstreamRow(
+            window_index="1",
+            window_name="Is187",
+            pane_id="%1",
+            pane_path="/tmp/wt1",
+            ticket_ref="Is187",
+            desc="Port project colors",
+            branch="",
+            status="running",
+            last_line="ok",
+            color="green",
+        )
+        line = dash.render_lines([row], selected=0, width=100, session="agy-dotfiles")[3]
+
+        with mock.patch.object(curses, "color_pair") as cp_mock:
+            dash._draw_row(FakeStdscr(), 3, line, 100, row, is_selected=False, color_pairs={})
+
+        cp_mock.assert_not_called()
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(calls[0][4], curses.A_NORMAL)
 
 
 if __name__ == "__main__":

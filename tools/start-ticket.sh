@@ -352,6 +352,25 @@ open_bg() {  # <worktree> <kickoff> [<label>]
   fi
 }
 
+# Launch guard (docs/memory-guard.md): refuse to start more agent work while the
+# host is under dangerous memory pressure. Skipped when nothing would be launched
+# (launcher none). Override: MEM_GUARD_OVERRIDE=1. An unusable guard warns, never blocks.
+mem_guard() {  # <context>
+  [ "$launcher" != none ] || return 0
+  local guard="${START_TICKET_MEM_GUARD:-$SCRIPT_DIR/mem-guard.sh}"
+  if [ ! -x "$guard" ]; then
+    printf 'start-ticket: mem-guard.sh not found (%s); launching without a memory check\n' "$guard" >&2
+    return 0
+  fi
+  local rc=0
+  "$guard" check --context "$1" >&2 || rc=$?
+  case "$rc" in
+    0) ;;
+    3) die "launch blocked by mem-guard (override: MEM_GUARD_OVERRIDE=1 $0 ...)" ;;
+    *) printf 'start-ticket: mem-guard failed (exit %s); launching without a memory check\n' "$rc" >&2 ;;
+  esac
+}
+
 launch_session() {  # <worktree> <kickoff> [<label>] — uses the resolved $launcher
   local tab_label="${3:-}"
   case "$launcher" in
@@ -517,16 +536,22 @@ case "$mode" in
 esac
 
 if [ "$mode" = "tab-only" ]; then
+  mem_guard "session launch"
   launch_session "$tab_wt" "$tab_kf"
   exit 0
 fi
 
 if [ "$mode" = "session" ]; then
+  mem_guard "discussion session"
   run_session "$id" "$about"
   exit 0
 fi
 
 [ -n "$id" ] || die "usage: start-ticket.sh <id>[,<id>…] [--provider github|shortcut] [--no-tab|--print-title] [--launcher iterm|bg|none]"
+# Guard before any worktree or tracker write, so a blocked launch leaves no half-started ticket.
+# --no-tab and --print-title launch nothing: the later --tab-only call is the gate for /start,
+# and agy-tmux.sh guards each group itself, so guarding here would only check twice.
+[ "$mode" = "print-title" ] || [ "$mode" = "no-tab" ] || mem_guard "ticket $id"
 
 # ---- chain ids -------------------------------------------------------------
 # `12,13` → head 12 plus the rest. `id` stays the head, so everything that names

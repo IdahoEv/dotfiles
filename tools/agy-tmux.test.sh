@@ -32,6 +32,7 @@ cat > "$ROOT/bin/mock-start-ticket.sh" <<EOF
 #!/usr/bin/env bash
 set -euo pipefail
 printf '%s\n' "\$*" >> "$ROOT/start-ticket-calls.log"
+printf 'override=%s\n' "\${MEM_GUARD_OVERRIDE:-unset}" >> "$ROOT/start-ticket-env.log"
 group="\$1"
 case "\$group" in
   12,13)
@@ -67,6 +68,7 @@ EOF
 cat > "$ROOT/bin/mock-agy" <<EOF
 #!/usr/bin/env bash
 printf '%s\n' "\$*" >> "$ROOT/agy-calls.log"
+printf 'override=%s\n' "\${MEM_GUARD_OVERRIDE:-unset}" >> "$ROOT/agy-env.log"
 sleep 30
 EOF
 
@@ -80,16 +82,42 @@ chmod +x "$ROOT/bin/mock-start-ticket.sh" "$ROOT/bin/mock-agy" "$ROOT/bin/mock-a
 export AGY_TMUX_START_TICKET="$ROOT/bin/mock-start-ticket.sh"
 export AGY_TMUX_AGY_BIN="$ROOT/bin/mock-agy"
 export AGY_TMUX_SOCKET="$SOCK"
+# Never measure the real host: pin a healthy memory reading (guard tests override it).
+export MEM_GUARD_HOST_FIXTURE="level=normal free_pct=80"
+export MEM_GUARD_PS_FIXTURE="$ROOT/no-ps"
+unset MEM_GUARD_OVERRIDE
 
 # ---- 1. help output --------------------------------------------------------
 help_out="$("$TOOLS/agy-tmux.sh" --help)"
 has "--help prints usage" "Usage: agy-tmux.sh" "$help_out"
 
-# ---- 2. no-args re-attach on missing session fails -------------------------
-if "$TOOLS/agy-tmux.sh" --session "missing-ws" --no-attach >/dev/null 2>&1; then
-  fail "no-args on missing session should exit non-zero"
-fi
-printf 'PASS no-args on missing session exits non-zero\n'
+# ---- 2. no-args on missing session launches governor in main worktree ---------
+git init -q "$ROOT/gov-repo"
+git -C "$ROOT/gov-repo" checkout -q -B main
+git -C "$ROOT/gov-repo" -c user.name=test -c user.email=test@example.com commit -q --allow-empty -m "init"
+git -C "$ROOT/gov-repo" worktree add -q -b feat "$ROOT/gov-linked"
+(cd "$ROOT/gov-linked" && "$TOOLS/agy-tmux.sh" --session "gov-ws" --no-attach >/dev/null)
+gov_wins="$(tmux -L "$SOCK" list-windows -t '=gov-ws' -F '#{window_index}:#{window_name}')"
+has "no-args creates dashboard in window 0" "0:dashboard" "$gov_wins"
+has "no-args creates governor in window 1" "1:governor" "$gov_wins"
+gov_roe="$(tmux -L "$SOCK" show-window-options -t '=gov-ws:1' -v remain-on-exit)"
+check "governor window sets remain-on-exit on" "on" "$gov_roe"
+gov_path="$(tmux -L "$SOCK" display-message -t '=gov-ws:1' -p '#{pane_current_path}')"
+check "governor window opens in main worktree" "$(cd "$ROOT/gov-repo" && pwd -P)" "$gov_path"
+for _ in 1 2 3 4 5; do
+  [ -f "$ROOT/agy-calls.log" ] && [ "$(wc -l < "$ROOT/agy-calls.log")" -ge 1 ] && break
+  sleep 0.2
+done
+gov_calls="$(cat "$ROOT/agy-calls.log")"
+has "governor invokes agy with /governor" "--mode plan --prompt-interactive /governor" "$gov_calls"
+rm -f "$ROOT/agy-calls.log"
+
+# Re-running no-args on existing session re-attaches without adding another governor window.
+"$TOOLS/agy-tmux.sh" --session "gov-ws" --no-attach >/dev/null
+gov_wins_re="$(tmux -L "$SOCK" list-windows -t '=gov-ws' -F '#{window_index}:#{window_name}')"
+check "no-args on existing session does not duplicate governor" "2" "$(printf '%s\n' "$gov_wins_re" | wc -l | tr -d ' ')"
+tmux -L "$SOCK" kill-session -t "=gov-ws"
+sleep 0.2
 
 # ---- 3. preserve existing C-z binding & launch chain + single ticket -------
 tmux -L "$SOCK" new-session -d -s "other-ws" "sleep 30"
@@ -182,3 +210,70 @@ if printf '%s' "$restored_cz" | grep -qF '@agy_dashboard'; then
   fail "C-z binding still contains @agy_dashboard after cleanup"
 fi
 printf 'PASS C-z @agy_dashboard wrapper cleaned up\n'
+
+# ---- 8b. dashboard gets the memory provider as an opaque command ---------------
+"$TOOLS/agy-tmux.sh" --session "mem-cmd-ws" --no-attach 15 >/dev/null
+dash_cmd="$(tmux -L "$SOCK" list-windows -t '=mem-cmd-ws' -F '#{window_index} #{pane_start_command}' | grep '^0 ')"
+has "dashboard is given --mem-cmd" "--mem-cmd" "$dash_cmd"
+has "provider is mem-guard.sh" "mem-guard.sh" "$dash_cmd"
+has "provider asks for JSON" "--json" "$dash_cmd"
+has "provider is scoped to the session" "mem-cmd-ws" "$(printf '%s' "$dash_cmd" | sed 's/.*--mem-cmd//')"
+tmux -L "$SOCK" kill-session -t "=mem-cmd-ws"
+AGY_TMUX_MEM_GUARD="$ROOT/bin/does-not-exist" "$TOOLS/agy-tmux.sh" --session "no-mem-ws" --no-attach 15 >/dev/null 2>&1
+dash_cmd="$(tmux -L "$SOCK" list-windows -t '=no-mem-ws' -F '#{window_index} #{pane_start_command}' | grep '^0 ')"
+if printf '%s' "$dash_cmd" | grep -qF -- '--mem-cmd'; then fail "dashboard should have no memory provider when the guard is absent"; fi
+printf 'PASS dashboard has no memory provider when mem-guard is absent\n'
+tmux -L "$SOCK" kill-session -t "=no-mem-ws"
+
+# ---- 9. mem-guard blocks launches under dangerous memory pressure ----------
+rm -f "$ROOT/start-ticket-calls.log"
+rc=0
+MEM_GUARD_HOST_FIXTURE="level=critical free_pct=4" "$TOOLS/agy-tmux.sh" --session "mem-block-ws" --no-attach 14 >"$ROOT/mem.out" 2>"$ROOT/mem.err" || rc=$?
+check "blocked launch exits non-zero" "1" "$rc"
+has "blocked launch names mem-guard" "blocked by mem-guard" "$(cat "$ROOT/mem.err")"
+check "blocked launch never runs start-ticket" "no" "$([ -s "$ROOT/start-ticket-calls.log" ] && echo yes || echo no)"
+if tmux -L "$SOCK" has-session -t '=mem-block-ws' 2>/dev/null; then
+  fail "blocked launch should not create a session"
+fi
+printf 'PASS blocked launch creates no tmux session\n'
+
+rc=0
+MEM_GUARD_HOST_FIXTURE="level=critical free_pct=4" "$TOOLS/agy-tmux.sh" --session "mem-block-gov-ws" --no-attach >"$ROOT/mem.out" 2>"$ROOT/mem.err" || rc=$?
+check "blocked governor launch exits non-zero" "1" "$rc"
+has "blocked governor launch names mem-guard" "blocked by mem-guard" "$(cat "$ROOT/mem.err")"
+if tmux -L "$SOCK" has-session -t '=mem-block-gov-ws' 2>/dev/null; then
+  fail "blocked governor launch should not create a session"
+fi
+printf 'PASS blocked governor launch creates no tmux session\n'
+
+rm -f "$ROOT/agy-env.log"
+MEM_GUARD_HOST_FIXTURE="level=critical free_pct=4" "$TOOLS/agy-tmux.sh" --session "mem-force-gov-ws" --no-attach --force >/dev/null 2>"$ROOT/mem.err"
+for _ in 1 2 3 4 5; do [ -s "$ROOT/agy-env.log" ] && break; sleep 0.2; done
+check "--force governor never reaches the agent pane" "override=unset" "$(cat "$ROOT/agy-env.log")"
+has "--force overrides governor block" "1:governor" "$(tmux -L "$SOCK" list-windows -t '=mem-force-gov-ws' -F '#{window_index}:#{window_name}')"
+tmux -L "$SOCK" kill-session -t "=mem-force-gov-ws"
+
+rm -f "$ROOT/agy-env.log" "$ROOT/start-ticket-env.log"
+MEM_GUARD_HOST_FIXTURE="level=critical free_pct=4" "$TOOLS/agy-tmux.sh" --session "mem-force-ws" --no-attach --force 14 >/dev/null 2>"$ROOT/mem.err"
+for _ in 1 2 3 4 5; do [ -s "$ROOT/agy-env.log" ] && break; sleep 0.2; done
+check "--force reaches start-ticket's own guard" "override=1" "$(cat "$ROOT/start-ticket-env.log")"
+check "--force never reaches the agent pane" "override=unset" "$(cat "$ROOT/agy-env.log")"
+check "--force never enters the tmux server environment" "no" "$(tmux -L "$SOCK" show-environment -g 2>/dev/null | grep -q MEM_GUARD_OVERRIDE && echo yes || echo no)"
+has "--force overrides the block" "1:Is14" "$(tmux -L "$SOCK" list-windows -t '=mem-force-ws' -F '#{window_index}:#{window_name}')"
+has "override is announced" "OVERRIDE" "$(cat "$ROOT/mem.err")"
+
+MEM_GUARD_HOST_FIXTURE="level=warn free_pct=12" "$TOOLS/agy-tmux.sh" --session "mem-warn-ws" --no-attach 15 >/dev/null 2>"$ROOT/mem.err"
+has "warning level still launches" "1:Is15" "$(tmux -L "$SOCK" list-windows -t '=mem-warn-ws' -F '#{window_index}:#{window_name}')"
+has "warning level warns" "WARNING" "$(cat "$ROOT/mem.err")"
+
+AGY_TMUX_MEM_GUARD="$ROOT/bin/does-not-exist" "$TOOLS/agy-tmux.sh" --session "mem-missing-ws" --no-attach 15 >/dev/null 2>"$ROOT/mem.err"
+has "missing guard script warns and launches" "launching without a memory check" "$(cat "$ROOT/mem.err")"
+has "missing guard script still launches" "1:Is15" "$(tmux -L "$SOCK" list-windows -t '=mem-missing-ws' -F '#{window_index}:#{window_name}')"
+for s in mem-force-ws mem-warn-ws mem-missing-ws; do tmux -L "$SOCK" kill-session -t "=$s"; done
+
+# A crashing guard (any exit other than 0/3) warns and launches rather than silently proceeding.
+printf '#!/bin/sh\nexit 7\n' > "$ROOT/bin/crash-guard"; chmod +x "$ROOT/bin/crash-guard"
+AGY_TMUX_MEM_GUARD="$ROOT/bin/crash-guard" "$TOOLS/agy-tmux.sh" --session "mem-crash-ws" --no-attach 15 >/dev/null 2>"$ROOT/mem.err"
+has "crashing guard is reported" "mem-guard failed (exit 7)" "$(cat "$ROOT/mem.err")"
+has "crashing guard still launches" "1:Is15" "$(tmux -L "$SOCK" list-windows -t '=mem-crash-ws' -F '#{window_index}:#{window_name}')"
+tmux -L "$SOCK" kill-session -t "=mem-crash-ws"
