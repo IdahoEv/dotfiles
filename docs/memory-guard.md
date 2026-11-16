@@ -16,14 +16,12 @@ The `agy-tmux` dashboard shows the same figures: a `Mem` column per window and t
 | Signal | Source | Used for |
 | --- | --- | --- |
 | **Host pressure** | macOS: `sysctl kern.memorystatus_vm_pressure_level` (1 normal, 2 warn, 4 critical — the kernel's own verdict) plus the free-memory percentage from `memory_pressure`. Linux: `MemAvailable / MemTotal` from `/proc/meminfo` (no OS level). | **Warning and blocking decisions.** |
-| **Per-session memory** | One `ps -axo pid=,ppid=,rss=,comm=` snapshot; RSS summed over the session's process tree. | Attribution and per-session *warnings* only. Never blocks. |
+| **Per-session memory** | `ps -axo pid=,ppid=,rss=,comm=` for process trees, plus `top -l 1 -stats pid,mem` (`phys_footprint`) on macOS for tracked session PIDs (falling back to RSS). | Attribution and per-session *warnings* only. Never blocks. |
 
 ### Why the per-session figures are estimates
 
-- RSS counts a shared page once in every process that maps it, so a tree of node/python subprocesses **over-counts**.
-- macOS compressed and swapped pages are not in RSS, so under pressure it **under-counts** — exactly when it matters most.
+- On macOS, `top -l 1 -stats pid,mem` reports `phys_footprint` (matching Activity Monitor's Memory column, including compressed/swapped pages and excluding most shared pages); on Linux or when `top` fails, it falls back to `ps` RSS.
 - Figures are rounded and prefixed with `~` (`~340 MB`, `~1.4 GB`). Trust the host pressure line over them.
-- `footprint`/`vmmap` give better per-process numbers on macOS but cost seconds per process and need permissions; they are not used. Follow-up if the estimate proves too coarse.
 
 ### No double counting
 
@@ -82,7 +80,7 @@ All settings resolve `env > project > machine > user conf > default`, via the sa
 ## Privacy and overhead
 
 - Only the executable name from `ps comm=` is read — never command-line arguments, so prompts, tokens and flags cannot reach the output. Labels are workstream keys, pids and the working directory's basename.
-- Cost: one `ps`, one `sysctl`, one `memory_pressure` (macOS), and one `lsof` only when agents exist outside the managed tmux session. The dashboard samples at most every 10 s even though it redraws every 2 s.
+- Cost: one `ps`, one `top` (macOS, when tracked agent sessions exist), one `sysctl`, one `memory_pressure` (macOS), and one `lsof` only when agents exist outside the managed tmux session. The dashboard samples at most every 10 s even though it redraws every 2 s.
 
 ## Validation status
 

@@ -86,9 +86,9 @@ class TestAttribution(unittest.TestCase):
         self.assertEqual(roots, [300, 400, 600])  # 303 is a claude under claude 300
         sessions = mg.attribute(self.procs, [mg.Root(p, str(p), "unmanaged") for p in roots], NAMES)
         by = {s.root_pid: s for s in sessions}
-        self.assertEqual(by[300].rss_kb, 300000 + 100000 + 50000 + 200000)
+        self.assertEqual(by[300].mem_kb, 300000 + 100000 + 50000 + 200000)
         self.assertEqual(by[300].pids, [300, 301, 302, 303])
-        self.assertEqual(by[400].rss_kb, 120000)
+        self.assertEqual(by[400].mem_kb, 120000)
         self.assertEqual(by[300].backend, "claude")
         # every pid lands in at most one session
         all_pids = [pid for s in sessions for pid in s.pids]
@@ -108,11 +108,11 @@ class TestAttribution(unittest.TestCase):
         by = {s.label: s for s in mg.attribute(self.procs, roots, NAMES)}
         self.assertEqual(by["inner"].pids, [301, 302])
         self.assertEqual(by["outer"].pids, [300, 303])
-        self.assertEqual(sum(s.rss_kb for s in by.values()), 650000)
+        self.assertEqual(sum(s.mem_kb for s in by.values()), 650000)
 
     def test_exited_root_reports_gone_not_zero(self):
         s = mg.attribute(self.procs, [mg.Root(9999, "dead", "tmux")], NAMES)[0]
-        self.assertEqual((s.state, s.rss_kb, s.procs), ("gone", None, 0))
+        self.assertEqual((s.state, s.mem_kb, s.procs), ("gone", None, 0))
         self.assertEqual(mg.fmt_mb(s.mb), "-")
 
     def test_parent_cycle_does_not_hang(self):
@@ -125,6 +125,88 @@ class TestAttribution(unittest.TestCase):
         self.assertIsNone(mg.sample_processes(lambda cmd: None))
         sessions, ok = mg.collect(mg.Config(), runner=lambda cmd: None)
         self.assertEqual((sessions, ok), ([], False))
+
+
+TOP_OUT = """\
+Processes: 10 total, 1 running, 9 sleeping, 20 threads
+2026/11/15 23:00:00
+PhysMem: 15G used (2G wired, 5G compressor), 160M unused.
+
+PID    MEM
+300    6800M
+301    1.5G+
+302    512K-
+303    0B
+400    256M
+500    9.9G
+"""
+
+
+class TestFootprint(unittest.TestCase):
+    def test_parse_top_mem_units_and_skips_headers(self):
+        parsed = mg.parse_top_mem(TOP_OUT)
+        self.assertEqual(parsed[300], 6800 * 1024)
+        self.assertEqual(parsed[301], int(1.5 * 1024 * 1024))
+        self.assertEqual(parsed[302], 512)
+        self.assertEqual(parsed[303], 0)
+        self.assertEqual(parsed[400], 256 * 1024)
+        self.assertEqual(parsed[500], int(9.9 * 1024 * 1024))
+
+    def test_parse_top_mem_skips_malformed_lines(self):
+        parsed = mg.parse_top_mem("PID MEM\nbad line\n123 nope\n456 10X\n789 2M\n")
+        self.assertEqual(parsed, {789: 2048})
+
+    def test_sample_footprint_only_queries_when_needed_and_filters_to_tracked_pids(self):
+        calls = []
+
+        def runner(cmd):
+            calls.append(cmd)
+            return TOP_OUT
+
+        self.assertEqual(mg.sample_footprint(set(), runner=runner, platform="darwin"), {})
+        self.assertEqual(mg.sample_footprint({300}, runner=runner, platform="linux"), {})
+        self.assertEqual(calls, [])
+
+        fp = mg.sample_footprint({300, 301}, runner=runner, platform="darwin")
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(calls[0], mg.TOP_CMD)
+        self.assertEqual(fp, {300: 6800 * 1024, 301: int(1.5 * 1024 * 1024)})
+        self.assertNotIn(500, fp)
+
+    def test_attribute_uses_footprint_with_rss_fallback(self):
+        procs = mg.parse_ps(PS)
+        roots = [mg.Root(300, "c", "unmanaged")]
+        fp = {300: 7000 * 1024, 301: 1000 * 1024}  # 302, 303 missing -> fall back to ps rss
+        s = mg.attribute(procs, roots, NAMES, footprint_kb=fp)[0]
+        self.assertEqual(s.mem_kb, 7000 * 1024 + 1000 * 1024 + 50000 + 200000)
+
+    def test_collect_uses_footprint_and_degrades_to_rss_when_top_fails(self):
+        def runner(cmd):
+            if cmd[0] == "ps":
+                return PS
+            if cmd[0] == "top":
+                return TOP_OUT
+            return None
+
+        sessions, ok = mg.collect(mg.Config(), runner=runner, platform="darwin")
+        self.assertTrue(ok)
+        by = {s.root_pid: s for s in sessions}
+        self.assertEqual(
+            by[300].mem_kb,
+            6800 * 1024 + int(1.5 * 1024 * 1024) + 512 + 0,
+        )
+        self.assertEqual(by[400].mem_kb, 256 * 1024 + 40000)  # 401 missing from TOP_OUT -> ps rss fallback
+        self.assertEqual(by[600].mem_kb, 10000)  # missing from TOP_OUT -> ps rss fallback
+
+        # top failure degrades cleanly to ps rss
+        sessions_fb, ok_fb = mg.collect(
+            mg.Config(),
+            runner=lambda cmd: PS if cmd[0] == "ps" else None,
+            platform="darwin",
+        )
+        self.assertTrue(ok_fb)
+        by_fb = {s.root_pid: s for s in sessions_fb}
+        self.assertEqual(by_fb[300].mem_kb, 300000 + 100000 + 50000 + 200000)
 
 
 class TestRoots(unittest.TestCase):
@@ -289,7 +371,7 @@ class TestFormatting(unittest.TestCase):
         text = mg.render_report(mg.attribute(procs, roots, NAMES), mg.Host("normal", 50.0, "t"))
         self.assertIn("host pressure: normal, ~50% free", text)
         self.assertIn("started outside the launcher", text)
-        self.assertIn("over-count", text)
+        self.assertIn("phys_footprint", text)
 
 
 class TestCheckCli(unittest.TestCase):
