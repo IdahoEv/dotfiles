@@ -323,6 +323,53 @@ class TestEndToEndReport(unittest.TestCase):
                 recs = gaps._collect_pr_records(args, [])
             self.assertEqual([r["number"] for r in recs], [20])
 
+    def test_load_project_config_scans_supplied_worktree(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            main_repo = Path(tmp) / "main"
+            wt = Path(tmp) / "wt"
+            main_repo.mkdir()
+            _init_git_repo(main_repo)
+            (main_repo / "README.md").write_text("hi\n")
+            _git(main_repo, "add", "README.md")
+            _git(main_repo, "commit", "-q", "-m", "init")
+            _git(main_repo, "worktree", "add", "-q", "-b", "feat", str(wt))
+
+            agents_dir = wt / ".claude" / "agents"
+            agents_dir.mkdir(parents=True)
+            (agents_dir / "wt-only-reviewer.md").write_text(
+                "---\nname: wt-only-reviewer\nuse_when: always\n---\nCheck.\n"
+            )
+            with mock.patch.dict(os.environ, {"PROJECT_OVERLAYS_DIR": str(Path(tmp) / "overlays")}):
+                cfg = gaps.load_project_config(str(wt))
+            self.assertIn("wt-only-reviewer", cfg["candidates"])
+
+    def test_analyze_prs_skips_originless_dir_for_diff_evidence(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            _git(repo, "init", "-q")
+            _git(repo, "config", "user.email", "test@example.com")
+            _git(repo, "config", "user.name", "Test")
+            f = repo / "a.py"
+            f.write_text("x = 1\n")
+            _git(repo, "add", "a.py")
+            _git(repo, "commit", "-q", "-m", "c1")
+            sha1 = subprocess.check_output(["git", "-C", str(repo), "rev-parse", "HEAD"], text=True).strip()
+            f.write_text("x = 2\n")
+            _git(repo, "commit", "-q", "-am", "c2")
+            sha2 = subprocess.check_output(["git", "-C", str(repo), "rev-parse", "HEAD"], text=True).strip()
+
+            events = [
+                {"v": 1, "event": "review.round", "run_id": "other/repo#1", "repo": "other/repo",
+                 "branch": "b", "round": 1, "state": "start", "sha": sha1},
+            ]
+            records = [{
+                "repo": "other/repo", "number": 50, "branch": "b", "run_id": "other/repo#1",
+                "bot_findings": [{"comment_id": 1, "path": "a.py", "line": 1, "sha": sha2,
+                                  "severity": "High", "verdict": "fixed", "validity": "valid", "claim": "a.py: wrong"}],
+            }]
+            out = gaps.analyze_prs(records, events, {"candidates": {}}, repo_dir=str(repo))
+            self.assertEqual(out["prs"][0]["missed"][0]["diff_status"], "in reviewed diff (SHA unverified)")
+
 
 if __name__ == "__main__":
     unittest.main()

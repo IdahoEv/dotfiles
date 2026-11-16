@@ -97,7 +97,7 @@ def load_project_config(repo_dir="."):
                 "body": body,
             }
 
-    root = Path(repo_facts.main_root(repo_dir) or repo_dir)
+    root = Path(repo_facts.git(repo_dir, "rev-parse", "--show-toplevel") or repo_dir)
     for p in sorted((root / ".claude" / "agents").glob("*.md")):
         _add_file(p, "project")
     for p in sorted((root / "docs" / "local" / "reviewers").glob("*.md")):
@@ -390,7 +390,7 @@ def analyze_prs(pr_records, events, project_cfg, repo_dir=None):
             ]
             run_id, _, _ = wf_backfill.resolve_run_identity(branch, repo, repo_events)
 
-        effective_dir = repo_dir if (repo_dir and (not local_repo or not repo or local_repo.lower() == repo.lower())) else None
+        effective_dir = repo_dir if (repo_dir and local_repo and repo and local_repo.lower() == repo.lower()) else None
         run_events = by_run.get(run_id, []) if run_id else []
         run_info = _build_run_info(run_events)
         logged_bot = [e for e in run_events if e.get("event") == "review.finding" and e.get("source") == "bot"]
