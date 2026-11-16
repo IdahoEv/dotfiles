@@ -8,6 +8,7 @@ f3522de4dc0c92887d60d0b000c79c80cd724b6efae9cb09e2bed932c0bc4ad6  644  dot_claud
 1d3c68de8ea88fb5b801cf131541f45b9b0853134398a7dfef8eeace30739aa3  644  dot_claude/agents/github-review-repair-agent.md
 6cc2a0ed6667e8ba0c167e9e76213f0c1d53cc5a43fc5a6f7e441c3bfa3a1040  644  dot_claude/agents/local-review-cycle-manager.md
 efe28e6368f209f515635e5e6d24e27fa69a5ed8123fe1b3cf56e75668688342  644  dot_claude/agents/productivity-coach.md
+ea58bc9b9c8930c9319d82c98da9a91922efbcee227e7b55907f7490632d135a  644  dot_claude/agents/project-review-manager.md
 b007bc40f22d5239abea43d0bfa590fe309044f1abba0e80707b8704fedec3e8  644  dot_claude/agents/prompt-reviewer.md
 299726af9b2f53e259867fe3b88f6b58a7e702ed1292cd2334ed121808f314b8  644  dot_claude/agents/review-architecture.md
 f21f84c41715b24f7f21c68c51fe714fe7b30d85478231b88f1f15807dff09aa  644  dot_claude/agents/review-docs.md
@@ -23,13 +24,14 @@ c3c02fec04bfb82a8070f0da0dc957ae81a3ef0727bd2329a8129678a660ece6  644  dot_claud
 8998b38bc79c43a9a0ed46b71cd239544d630001837e917275a7da64231f51c2  644  dot_claude/commands/finalize.md
 30f03e48c2f2bc6cc60d74195f3da6af3d7f868160a11f43daf759611194b83c  644  dot_claude/commands/generate_prd.md
 8ca6f1b239a9d536f92bdbe5d8801cd8ad1e523e2acc6245c38ff3b6c86032e5  644  dot_claude/commands/github-review-comments.md
-d980ad1c2a292434faccbe8f1d76c2db32f08694a09ff1474b85ed82620baef3  644  dot_claude/commands/governor.md
-ee447a7392a65c8de415ed450a6ed9492b2f119a89918b182722e507b1a023a4  644  dot_claude/commands/groom.md
+bc2b6406e77b1c6c21ae0c11e43f41e7a9934c57dcc25d082d5cc505ee2cdc1f  644  dot_claude/commands/governor.md
+ee76f7a16ca1f673afb566ae8ca4ae8b57bca5f52bad5fd3099a001b31f60b61  644  dot_claude/commands/groom.md
 1ad7374ab13385f8487312affce31905d6c01af1256fd6e6c4a6168d168039f8  644  dot_claude/commands/implement.md
 aea92a98bed9188f79b921df6337530b891f045989d5db6494bcda4814d7fd09  644  dot_claude/commands/literal_create_plan.md
 a9688e7c6f0c8079a183b2327c4de0364245a3cda23f2cdd4ac94c8a0c64e07d  644  dot_claude/commands/local-review-cycle.md
 033a10a2c908fc064dee726b6a570b41dba97a72c962c10eed664283407169aa  644  dot_claude/commands/open-pr.md
-5f0a2dcfa1486e787e03283466d1e5345daab5fdbfb6f45aa72fea1cd22b6a9f  644  dot_claude/commands/pick.md
+e51e92b7f3f511248420a7a1f678bd6742fadc8e87f47eb9f4ede9238fd1e434  644  dot_claude/commands/pick.md
+ecfadd04ba6312298e060aaef496079f83d32dc809e39bc91089bf3101852ef1  644  dot_claude/commands/project-review.md
 d28421c38f12d9a255bfdc6dbd1e5abc42ffde49f8d682f84fc1b0c13d363ce6  644  dot_claude/commands/prompt-audit.md
 51367b2883763ed4354e9f51f596d3ed865982d0f57e2c1a8502c96b645b97de  644  dot_claude/commands/remind.md
 36451ca7b0c0afb4b6877b075d92dd555afe76658fa3ad409d4fa40e27a0a41c  644  dot_claude/commands/research_codebase.md
@@ -38,6 +40,7 @@ d28421c38f12d9a255bfdc6dbd1e5abc42ffde49f8d682f84fc1b0c13d363ce6  644  dot_claud
 ee70fb1a401ed104231eb6f9ea72334263ca35b579f030d27946692cc57776be  644  dot_claude/skills/github-review-procedure/executable_github-review-poll.sh
 5ba50893bf0b8cccaaf6ce33095b9a8b7f673680eed702c57409ecebfbb163bf  644  dot_claude/skills/github-review-procedure/executable_github-review-state.sh
 d7e038f28424138783361121b0871809c7c700703b459ee28d63928497f470e1  644  dot_claude/skills/local-review-cycle-procedure/SKILL.md
+4597438caefead6428c4b26404befe228b8c9c0e30ba7482a49fdd5a90d2ee6c  644  dot_claude/skills/project-review-procedure/SKILL.md
 3714ec7476254f20bec4e3d52e31d77f545e8860a82c609c98e48dc74e780172  644  dot_claude/skills/prompt-review/SKILL.md
 91f66b2780160f52a8cc5619c0659375c125a0070fbe7a8ec454a94190d8c413  644  dot_claude/skills/prompt-review/executable_prompt-metrics.sh
 66fa9b3dd23c8af427b204508d8d23c4101026a29a108593c8d5531ad2f0680f  644  dot_claude/skills/review-lens-contract/SKILL.md
@@ -53,7 +56,7 @@ bddf25616fa63f0ca8ac5b4930003b30deab97b5058a623c8a88320938a8d6a7  644  dot_claud
 620422885b927180f9a5aa8be24e988ca6f21dcbefe231b5068a90da1e059d72  644  dot_claude/skills/workflow/delivery.md
 337f1a99f921ac9c485bd1f25a6b9b50393f3898ef9bd793896cfada59e336e3  755  dot_claude/skills/workflow/executable_wf-context.sh
 7cb4e69a3133743803a02e323c69dda80eed96e3dbb797acfe65e169cf8128d4  755  tools/agent-phase.sh
-388dbe73bae762595ec039b1f83f4742f5f2d83bbcd035e4f0aa70b5f678b93f  755  tools/agy-tmux.sh
+c8797dce111bbcfcf66eda3d7861ebec5a5629fd48d0f0db49d716c3ab8fd953  755  tools/agy-tmux.sh
 392b86f6854e4e3ffa1dcbd28904afa1c15536a1dea48039be0e3b69a5d35d71  644  tools/bootstrap-linux.sh
 56642e1c7439303b525d6b594ec2420f598feabe330d846e7420d4dad0f0e5d8  644  tools/bootstrap-mac.sh
 2005d23e14e09fec069d999bc58813745b711e65c14c50d22787e9f769f801b2  644  tools/cloud-gh-shim.py
@@ -104,7 +107,7 @@ a394eba77efb25ef1f766806223ac4edf75c5eef0b4347084e6059b5fce9de68  755  tools/set
 e366a502be678c6fa82962d428bbdc9414457a32835de696989c42582e500eca  755  tools/sibling-worktrees.sh
 fe34a71d2260c726846a0eef9673688185d019036e0c9e55df3e918030f06ae1  644  tools/start-ticket-providers/github.sh
 ae4e93d3a0d38815b1c929d3ff237054c71a8a46dd01e30e2cd23c2ed9343fee  644  tools/start-ticket-providers/shortcut.sh
-c2090545e06289ae569deacbd90426ad247c7ca47d003b4cb498a51a31441d12  755  tools/start-ticket.sh
+034fcc268301c6b8d123e814e1ff3c6a9a34fdd290bb07031d9c136df4114ca2  755  tools/start-ticket.sh
 242a517c6322f8dd47a053c459dec7aed2b7b8a803b5f3b4e08e681bbe9b3af7  755  tools/tracker.sh
 0c067601b72958d6cc81c6c057e25fb68ef5100e630ef216284d13c45e5ef51f  755  tools/wf-backfill.sh
 c1ab6c8c8f800a23622ec35d2b13d9e9bc25f252b67ba785490d23c661e2e34b  755  tools/wf-event.sh
@@ -113,6 +116,6 @@ f15dd098841d7963da09693fafbb3bf3f713952434c4c4b8a40dec6cb7cb0fcd  755  tools/wor
 8b3c4fad15997740068b84ced54bf8395749d2b33b6700dd9af651b5047d0057  755  tools/workflow-session.sh
 0e8c1deefa52ec93b05c3e69b89f612adc5bb434d8c1ec8c8e98813313c92f44  755  tools/workstream.sh
 cb41af044928182975030d4ede61783b4c03acf1d5d766ae7890f0557efa64bd  755  tools/worktree-manager.sh
-0688a0771545dbe2b23f269eec405c88d964c03c78c2485b1f14f65c7d203044  644  workflow/adapters/agy.md
+86948defcfadbab370cdc9c62ca8f56bfc2f6a8fd6c5a580c44d19bf351ff1cc  644  workflow/adapters/agy.md
 717652c28f5729a760c568cc27dc288e36c182485a7c787d2404970fb2dd474e  644  workflow/adapters/claude-cloud.md
 e43c819e80c56184ab86d53eeb7e75024cc7e9c843598ad26c224948b1d46397  644  workflow/adapters/codex.md
