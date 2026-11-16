@@ -1,9 +1,10 @@
-"""Compare closed PR Copilot findings against local /local-review-cycle telemetry.
+"""Pair closed PR Copilot findings with local /local-review-cycle telemetry.
 
 Joins local review.finding, review.launch, review.round, and pr.open events
 with Copilot review comments from `gh` (or logged source=bot events under
---no-gh), matches Copilot-valid findings against local findings, classifies
-each miss, and writes a local uncommitted report with improvement proposals.
+--no-gh), matches Copilot-valid findings against local findings, checks git
+diff coverage against round SHAs, and writes an uncommitted LLM-ready report
+(or JSON) for qualitative classification and improvement proposals.
 """
 
 import argparse
@@ -21,13 +22,6 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import repo_facts  # noqa: E402
 import wf_backfill  # noqa: E402
 
-MISS_CLASSES = (
-    "code not in the diff the reviewer saw",
-    "reviewer not selected",
-    "outside reviewer scope",
-    "reviewer ran and missed",
-)
-
 _STOPWORDS = frozenset({
     "the", "and", "for", "that", "this", "with", "from", "are", "was", "were",
     "will", "can", "may", "not", "but", "when", "where", "which", "into",
@@ -35,57 +29,6 @@ _STOPWORDS = frozenset({
     "could", "there", "their", "them", "then", "than", "also", "only", "use",
     "using", "used", "file", "line", "code", "function", "method", "value",
 })
-
-_DEFAULT_REVIEWER_SIGNALS = {
-    "security-reviewer": {
-        "keywords": ("auth", "token", "secret", "password", "credential", "inject",
-                     "sql", "xss", "ssrf", "csrf", "traversal", "sanitize", "escape",
-                     "crypto", "permission", "privilege", "idor", "untrusted"),
-        "exts": (),
-    },
-    "supply-chain-reviewer": {
-        "keywords": ("workflow", "github-actions", "dockerfile", "dependency",
-                     "lockfile", "pin", "sha256", "checksum", "ci", "deploy",
-                     "secret", "env", "package"),
-        "exts": (".yml", ".yaml", ".toml", ".lock"),
-        "paths": (".github/workflows/", "Dockerfile", "package.json", "requirements"),
-    },
-    "prompt-reviewer": {
-        "keywords": ("prompt", "instruction", "frontmatter", "skill", "agent",
-                     "ambiguous", "contradict", "rubric", "use_when"),
-        "exts": (".md",),
-        "paths": ("dot_claude/", ".claude/", "agents/", "skills/", "commands/"),
-    },
-    "architecture-reviewer": {
-        "keywords": ("coupling", "layer", "abstraction", "boundary", "circular",
-                     "responsibility", "interface", "module", "dependency", "design"),
-        "exts": (),
-    },
-    "robustness-reviewer": {
-        "keywords": ("error", "exception", "retry", "timeout", "cleanup", "leak",
-                     "race", "concurrent", "concurrency", "lock", "deadlock", "null",
-                     "none", "empty", "crash", "panic", "dispose", "resource",
-                     "rollback", "partial"),
-        "exts": (),
-    },
-    "correctness-reviewer": {
-        "keywords": ("bug", "wrong", "incorrect", "off-by-one", "boundary", "edge",
-                     "condition", "return", "logic", "fail", "regression", "stale",
-                     "mismatch", "invalid", "missing", "never", "always", "check",
-                     "test", "assert"),
-        "exts": (),
-    },
-}
-
-_NON_CODE_EXTS = frozenset({".md", ".txt", ".rst", ".png", ".jpg", ".svg", ".json", ".csv"})
-_THEME_PATTERNS = (
-    ("null / empty / bounds checks", re.compile(r"\b(null|none|nil|empty|bound|range|index|overflow|zero)\b", re.I)),
-    ("error handling / resource cleanup", re.compile(r"\b(error|exception|catch|throw|cleanup|dispose|close|leak|timeout|retry)\b", re.I)),
-    ("concurrency / state ordering", re.compile(r"\b(race|lock|async|await|thread|concurr|order|stale|atomic)\b", re.I)),
-    ("input validation / security guards", re.compile(r"\b(validat|sanitiz|escape|inject|auth|permission|traversal|untrusted)\b", re.I)),
-    ("dead / unreachable / unused code or wiring", re.compile(r"\b(unused|dead|unreachable|never called|no caller|orphan)\b", re.I)),
-    ("test coverage / assertions", re.compile(r"\b(test|assert|mock|coverage|spec)\b", re.I)),
-)
 
 
 def norm_path(path):
@@ -100,28 +43,15 @@ def tokenize(text):
     return {w for w in words if w not in _STOPWORDS}
 
 
-def _strip_claim_prefix(claim, path=""):
-    text = (claim or "").strip()
-    p = norm_path(path)
-    if p:
-        for prefix in (f"{p}:", p):
-            if text.lower().startswith(prefix.lower()):
-                text = text[len(prefix):].lstrip(" :")
-                break
-    return text
-
-
 def claim_similarity(claim_a, claim_b, path=""):
     """Return (shared_token_count, similarity_ratio) between two claims."""
-    clean_a = _strip_claim_prefix(claim_a, path)
-    clean_b = _strip_claim_prefix(claim_b, path)
     p_toks = tokenize(path)
-    ta = tokenize(clean_a) - p_toks
-    tb = tokenize(clean_b) - p_toks
+    ta = tokenize(claim_a) - p_toks
+    tb = tokenize(claim_b) - p_toks
     shared = len(ta & tb)
     union = len(ta | tb)
     jaccard = (shared / union) if union else 0.0
-    seq = difflib.SequenceMatcher(None, clean_a.lower(), clean_b.lower()).ratio()
+    seq = difflib.SequenceMatcher(None, (claim_a or "").lower(), (claim_b or "").lower()).ratio()
     return shared, max(jaccard, seq)
 
 
@@ -142,22 +72,9 @@ def _parse_frontmatter(text):
     return meta, body
 
 
-def _overlay_dir_for_repo(repo_slug):
-    if not repo_slug:
-        return ""
-    key = repo_facts.repo_key(f"https://github.com/{repo_slug}")
-    return f"{repo_facts.overlays_root()}/{key}" if key else ""
-
-
-def load_project_config(repo_dir=".", repo_slug=None):
+def load_project_config(repo_dir="."):
     """Load candidate reviewers and optional overlay config via repo_facts / project-config.sh."""
-    dir_repo_key = ""
-    if repo_dir and os.path.isdir(repo_dir):
-        url = repo_facts.git(repo_dir, "remote", "get-url", "origin")
-        dir_repo_key = repo_facts.repo_key(url) if url else ""
-
-    same_repo = not repo_slug or (bool(dir_repo_key) and dir_repo_key.lower() == repo_slug.lower())
-    overlay = repo_facts.overlay_dir(repo_dir) if same_repo else _overlay_dir_for_repo(repo_slug)
+    overlay = repo_facts.overlay_dir(repo_dir)
     candidates = {}
 
     def _add_file(path, tier):
@@ -181,16 +98,12 @@ def load_project_config(repo_dir=".", repo_slug=None):
             }
 
     root = Path(repo_facts.main_root(repo_dir) or repo_dir)
-    if same_repo:
-        for p in sorted((root / ".claude" / "agents").glob("*.md")):
-            _add_file(p, "project")
-        for p in sorted((root / "docs" / "local" / "reviewers").glob("*.md")):
-            _add_file(p, "local")
-        for p in repo_facts.overlay_claude_files("agents", repo_dir):
-            _add_file(p, "overlay")
-    elif overlay:
-        for p in sorted((Path(overlay) / "claude" / "agents").glob("*.md")):
-            _add_file(p, "overlay")
+    for p in sorted((root / ".claude" / "agents").glob("*.md")):
+        _add_file(p, "project")
+    for p in sorted((root / "docs" / "local" / "reviewers").glob("*.md")):
+        _add_file(p, "local")
+    for p in repo_facts.overlay_claude_files("agents", repo_dir):
+        _add_file(p, "overlay")
     for base in (root / "dot_claude" / "agents", Path.home() / ".claude" / "agents"):
         for p in sorted(base.glob("*.md")):
             _add_file(p, "global")
@@ -243,14 +156,13 @@ def _map_line_via_diff(repo_dir, sha_from, sha_to, path, line):
 
 
 def _changed_in_range(repo_dir, sha_from, sha_to, path, line):
-    """Return True if path (and line if given) was modified between sha_from and sha_to."""
+    """Return True if path (and line if given) was modified in sha_from..sha_to."""
     if not sha_from or not sha_to or sha_from == sha_to:
         return False
-    ok_from, _ = _git_ok(repo_dir, "cat-file", "-e", f"{sha_from}^{{commit}}")
-    ok_to, _ = _git_ok(repo_dir, "cat-file", "-e", f"{sha_to}^{{commit}}")
-    if not ok_from or not ok_to:
+    ok_anc, _ = _git_ok(repo_dir, "merge-base", "--is-ancestor", sha_from, sha_to)
+    if not ok_anc:
         return False
-    ok, out = _git_ok(repo_dir, "diff", "-U0", sha_from, sha_to, "--", path)
+    ok, out = _git_ok(repo_dir, "diff", "-U0", f"{sha_from}..{sha_to}", "--", path)
     if not ok or not out.strip():
         return False
     if line is None:
@@ -409,61 +321,19 @@ def match_finding(bot_f, local_findings, round_shas, repo_dir=None):
     return best
 
 
-def _has_keyword(text, kw):
-    return bool(re.search(rf"\b{re.escape(kw.lower())}\b", text))
+def check_diff_coverage(bot_f, run_info, repo_dir=None):
+    """Determine factual git-diff coverage for a missed Copilot finding.
 
-
-def _reviewer_matches_finding(name, candidate, path, claim, overlay_cfg):
-    """Return True if reviewer `name` is relevant to (path, claim)."""
-    ext = Path(path).suffix.lower()
-    lower_claim = (claim or "").lower()
-    lower_path = path.lower()
-
-    ext_map = overlay_cfg.get("reviewer_extensions") or {}
-    if name in ext_map:
-        if ext in [e.lower() for e in ext_map[name]]:
-            return True
-
-    kw_map = overlay_cfg.get("reviewer_keywords") or {}
-    if name in kw_map:
-        if any(_has_keyword(lower_claim, k) or _has_keyword(lower_path, k) for k in kw_map[name]):
-            return True
-
-    sig = _DEFAULT_REVIEWER_SIGNALS.get(name)
-    if sig:
-        if any(lower_path.startswith(p.lower()) or p.lower() in lower_path for p in sig.get("paths", ())):
-            return True
-        if ext and ext in sig.get("exts", ()):
-            return True
-        if name == "correctness-reviewer" and ext not in _NON_CODE_EXTS:
-            return True
-        if any(_has_keyword(lower_claim, k) for k in sig["keywords"]):
-            return True
-
-    if candidate and candidate.get("use_when"):
-        uw_tokens = tokenize(candidate["use_when"])
-        finding_tokens = tokenize(f"{path} {claim}")
-        if len(uw_tokens & finding_tokens) >= 2:
-            return True
-    return False
-
-
-def classify_miss(bot_f, run_info, project_cfg, repo_dir=None):
-    """Classify a missed Copilot-valid finding into one of MISS_CLASSES.
-
-    Returns (classification, evidence_str).
+    Returns (diff_status, evidence) without guessing reviewer intent/scope.
     """
     round_shas = run_info["round_shas"]
     ran_reviewers = run_info["ran_reviewers"]
     path = bot_f["path"]
     line = bot_f["line"]
     b_sha = bot_f.get("sha") or ""
-    claim = bot_f.get("claim") or ""
-    overlay_cfg = project_cfg.get("overlay_config") or {}
-    candidates = project_cfg.get("candidates") or {}
 
     if not ran_reviewers and not round_shas:
-        return "code not in the diff the reviewer saw", "no local review rounds/launches recorded for run"
+        return "no local review recorded", "no review.round or review.launch events for run"
 
     if round_shas and b_sha and repo_dir:
         last_round = max(round_shas)
@@ -473,35 +343,10 @@ def classify_miss(bot_f, run_info, project_cfg, repo_dir=None):
                 "code not in the diff the reviewer saw",
                 f"modified after local R{last_round} SHA {last_sha[:7]} (Copilot saw {b_sha[:7]})",
             )
+        if last_sha:
+            return "in reviewed diff", f"covered by R{last_round} SHA {last_sha[:7]}"
 
-    for pat in overlay_cfg.get("outside_scope_patterns") or []:
-        if re.search(pat, path, re.I) or re.search(pat, claim, re.I):
-            return "outside reviewer scope", f"matched overlay outside_scope_patterns ({pat})"
-
-    # Check if an existing candidate reviewer that matches this finding did not run.
-    unselected = []
-    for name, cand in sorted(candidates.items()):
-        if name in ran_reviewers:
-            continue
-        if name == "correctness-reviewer" and Path(path).suffix.lower() in _NON_CODE_EXTS:
-            continue
-        if _reviewer_matches_finding(name, cand, path, claim, overlay_cfg):
-            # Only flag specialized reviewers (or correctness-reviewer if it didn't run at all)
-            if name != "architecture-reviewer" or any(k in claim.lower() for k in _DEFAULT_REVIEWER_SIGNALS["architecture-reviewer"]["keywords"]):
-                unselected.append(name)
-
-    if unselected:
-        return "reviewer not selected", f"ran={','.join(sorted(ran_reviewers)) or 'none'}; not selected={','.join(unselected)}"
-
-    # Check if any reviewer that ran actually covers this file/defect domain.
-    ran_relevant = [
-        r for r in sorted(ran_reviewers)
-        if _reviewer_matches_finding(r, candidates.get(r), path, claim, overlay_cfg)
-    ]
-    if not ran_relevant:
-        return "outside reviewer scope", f"ran={','.join(sorted(ran_reviewers)) or 'none'}; no running reviewer rubric covers {path}"
-
-    return "reviewer ran and missed", f"ran={','.join(ran_relevant)}"
+    return "in reviewed diff (SHA unverified)", "local review ran; git SHA comparison unavailable"
 
 
 def _fetch_pr_meta(number, repo):
@@ -554,59 +399,55 @@ def _build_run_info(run_events):
     }
 
 
-def analyze_prs(pr_records, events, project_cfg, repo_dir=None, project_cfgs=None, repo_dirs=None):
-    """Join PR Copilot findings with local telemetry and classify misses."""
+def analyze_prs(pr_records, events, project_cfg, repo_dir=None):
+    """Join PR Copilot findings with local telemetry and factual diff/reviewer context."""
     by_run, pr_to_run = _index_events(events)
     results = []
-    model_stats = defaultdict(lambda: {"launches": 0, "runs": set(), "missed_runs": set()})
+    model_stats = defaultdict(lambda: {"launches": 0, "runs": set()})
 
     for rec in pr_records:
         repo = rec["repo"]
-        repo_l = repo.lower()
         pr_num = rec["number"]
         branch = rec["branch"]
-        cfg = (project_cfgs or {}).get(repo_l, project_cfg)
-        r_dir = repo_dirs.get(repo_l) if repo_dirs is not None else repo_dir
-
-        run_id = rec.get("run_id")
+        run_id = rec.get("run_id") or pr_to_run.get((repo.lower(), pr_num))
         if not run_id:
-            run_id = pr_to_run.get((repo_l, pr_num))
-        if not run_id:
-            repo_events = [e for e in events if not e.get("repo") or e["repo"].lower() == repo_l]
-            run_id, _, _ = wf_backfill.resolve_run_identity(branch, repo, repo_events)
+            run_id, _, _ = wf_backfill.resolve_run_identity(branch, repo, events)
 
         run_events = by_run.get(run_id, []) if run_id else []
         run_info = _build_run_info(run_events)
         logged_bot = [e for e in run_events if e.get("event") == "review.finding" and e.get("source") == "bot"]
-        bot_findings = rec["bot_findings"] if rec.get("bot_findings") is not None else _extract_copilot_findings(rec["pr_data"], logged_bot)
+        bot_findings = (
+            rec["bot_findings"]
+            if rec.get("bot_findings") is not None
+            else _extract_copilot_findings(rec["pr_data"], logged_bot)
+        )
 
         valid_bot = [b for b in bot_findings if b.get("validity") in ("valid", "partial")]
         rejected_bot = [b for b in bot_findings if b.get("validity") == "rejected"]
 
         matched, missed = [], []
         for bf in valid_bot:
-            m = match_finding(bf, run_info["local_findings"], run_info["round_shas"], repo_dir=r_dir)
+            m = match_finding(bf, run_info["local_findings"], run_info["round_shas"], repo_dir=repo_dir)
             if m:
                 matched.append({"bot": bf, "local": m})
             else:
-                cls, evidence = classify_miss(bf, run_info, cfg, repo_dir=r_dir)
-                missed.append({"bot": bf, "classification": cls, "evidence": evidence})
-
-        miss_run_key = run_id or f"{repo_l}#{pr_num}"
-        missed_reviewers = set()
-        for ms in missed:
-            if ms["classification"] == "reviewer ran and missed" and ms["evidence"].startswith("ran="):
-                for rname in ms["evidence"].removeprefix("ran=").split(","):
-                    if rname:
-                        missed_reviewers.add(rname)
+                diff_status, diff_evidence = check_diff_coverage(bf, run_info, repo_dir=repo_dir)
+                same_file_local = [
+                    {"line": lf["line"], "reviewers": lf["reviewers"], "claim": lf["claim"]}
+                    for lf in run_info["local_findings"] if lf["path"] == bf["path"]
+                ]
+                missed.append({
+                    "bot": bf,
+                    "diff_status": diff_status,
+                    "diff_evidence": diff_evidence,
+                    "same_file_local": same_file_local,
+                })
 
         for ln in run_info["launches"]:
             key = (ln["reviewer"], ln["model"], ln["effort"])
             model_stats[key]["launches"] += 1
             if run_id:
                 model_stats[key]["runs"].add(run_id)
-            if ln["reviewer"] in missed_reviewers:
-                model_stats[key]["missed_runs"].add(miss_run_key)
 
         results.append({
             "repo": repo,
@@ -617,6 +458,7 @@ def analyze_prs(pr_records, events, project_cfg, repo_dir=None, project_cfgs=Non
             "run_id": run_id,
             "local_finding_count": len(run_info["local_findings"]),
             "ran_reviewers": sorted(run_info["ran_reviewers"]),
+            "launches": run_info["launches"],
             "bot_total": len(bot_findings),
             "bot_valid": len(valid_bot),
             "bot_rejected": len(rejected_bot),
@@ -626,142 +468,108 @@ def analyze_prs(pr_records, events, project_cfg, repo_dir=None, project_cfgs=Non
 
     model_rows = [
         {"reviewer": k[0], "model": k[1], "effort": k[2],
-         "launches": v["launches"], "runs": len(v["runs"]), "misses": len(v["missed_runs"])}
+         "launches": v["launches"], "runs": len(v["runs"])}
         for k, v in sorted(model_stats.items())
     ]
-    return {"prs": results, "model_stats": model_rows}
-
-
-def build_proposals(analysis):
-    """Generate prompt, focus-agent, and model/effort proposals from classified misses."""
-    all_misses = [
-        (pr, ms) for pr in analysis["prs"] for ms in pr["missed"]
+    candidates = [
+        {"name": c["name"], "tier": c["tier"], "model": c["model"], "use_when": c["use_when"]}
+        for c in sorted((project_cfg.get("candidates") or {}).values(), key=lambda x: x["name"])
     ]
-    ran_missed = [(pr, ms) for pr, ms in all_misses if ms["classification"] == "reviewer ran and missed"]
-    not_selected = [(pr, ms) for pr, ms in all_misses if ms["classification"] == "reviewer not selected"]
-    out_scope = [(pr, ms) for pr, ms in all_misses if ms["classification"] == "outside reviewer scope"]
-    not_in_diff = [(pr, ms) for pr, ms in all_misses if ms["classification"] == "code not in the diff the reviewer saw"]
-
-    prompt_proposals = []
-    theme_counts = Counter()
-    for _, ms in ran_missed:
-        claim = ms["bot"]["claim"]
-        matched_theme = False
-        for label, pat in _THEME_PATTERNS:
-            if pat.search(claim):
-                theme_counts[label] += 1
-                matched_theme = True
-        if not matched_theme:
-            theme_counts["general logic / contract verification"] += 1
-    for theme, count in theme_counts.most_common():
-        prompt_proposals.append(
-            f"Add explicit checklist item for **{theme}** ({count} `reviewer ran and missed` finding(s))."
-        )
-    if not prompt_proposals:
-        prompt_proposals.append("No `reviewer ran and missed` findings in this sample; no prompt changes indicated.")
-
-    agent_proposals = []
-    if not_selected:
-        missing_revs = Counter()
-        for _, ms in not_selected:
-            m = re.search(r"not selected=([^\s;]+)", ms["evidence"])
-            if m:
-                for r in m.group(1).split(","):
-                    missing_revs[r] += 1
-        for rev, count in missing_revs.most_common():
-            agent_proposals.append(
-                f"Broaden `use_when:` trigger for `{rev}` ({count} `reviewer not selected` miss(es))."
-            )
-    if out_scope:
-        ext_counts = Counter(Path(ms["bot"]["path"]).suffix or "(no ext)" for _, ms in out_scope)
-        exts = ", ".join(f"`{ext}` ({n})" for ext, n in ext_counts.most_common(5))
-        agent_proposals.append(
-            f"Consider a new focus agent (or project overlay reviewer via `project-config.sh`) for {exts} ({len(out_scope)} `outside reviewer scope` miss(es))."
-        )
-    if not agent_proposals:
-        agent_proposals.append("No `reviewer not selected` or `outside reviewer scope` misses in this sample.")
-
-    experiment_proposals = []
-    for row in analysis["model_stats"]:
-        if row["misses"] > 0:
-            experiment_proposals.append(
-                f"Test higher effort or a second model family on `{row['reviewer']}` (currently `model={row['model']}`, `effort={row['effort']}`, {row['misses']} missed run(s) across {row['runs']} run(s))."
-            )
-    if not_in_diff:
-        experiment_proposals.append(
-            f"Note: {len(not_in_diff)} miss(es) were `code not in the diff the reviewer saw` (post-local-review commits); consider re-running `/local-review-cycle` after late pre-PR edits."
-        )
-    if not experiment_proposals:
-        experiment_proposals.append("No model/effort miss hotspots observed in `review.launch` telemetry.")
-
     return {
-        "prompt_changes": prompt_proposals,
-        "new_focus_agents": agent_proposals,
-        "model_effort_experiments": experiment_proposals,
+        "prs": results,
+        "model_stats": model_rows,
+        "candidates": candidates,
+        "overlay_dir": project_cfg.get("overlay_dir") or "",
     }
 
 
-def render_markdown(analysis, proposals):
+def render_markdown(analysis):
     prs = analysis["prs"]
     total_valid = sum(p["bot_valid"] for p in prs)
     total_matched = sum(len(p["matched"]) for p in prs)
     total_missed = sum(len(p["missed"]) for p in prs)
     miss_rate = f"{(100.0 * total_missed / total_valid):.1f}%" if total_valid else "n/a"
 
-    class_counts = Counter(ms["classification"] for p in prs for ms in p["missed"])
+    diff_counts = Counter(ms["diff_status"] for p in prs for ms in p["missed"])
     lines = [
-        "# Review-Gap Report (Local Review vs Copilot)",
+        "# Review-Gap Data Report (Local Review vs Copilot)",
         "",
         f"- **PRs analyzed:** {len(prs)}",
         f"- **Copilot-valid findings:** {total_valid} (matched locally: {total_matched}, missed: {total_missed}, miss rate: {miss_rate})",
         "",
-        "## Miss Classification",
+        "## Diff Coverage of Missed Findings",
         "",
-        "| Classification | Count |",
+        "| Diff Status | Count |",
         "| --- | ---: |",
     ]
-    for cls in MISS_CLASSES:
-        lines.append(f"| {cls} | {class_counts[cls]} |")
+    for status, count in sorted(diff_counts.items()):
+        lines.append(f"| {status} | {count} |")
+
+    if analysis["candidates"]:
+        lines += [
+            "",
+            "## Candidate Reviewers Available",
+            "",
+            "| Reviewer | Tier | Model | `use_when` |",
+            "| --- | --- | --- | --- |",
+        ]
+        for c in analysis["candidates"]:
+            uw = (c.get("use_when") or "").replace("|", "\\|")
+            lines.append(f"| {c['name']} | {c['tier']} | {c.get('model') or ''} | {uw} |")
 
     if analysis["model_stats"]:
         lines += [
             "",
-            "## Reviewer Model & Effort Breakdown",
+            "## Reviewer Launches (Model & Effort)",
             "",
-            "| Reviewer | Model | Effort | Launches | Runs | Missed Runs |",
-            "| --- | --- | --- | ---: | ---: | ---: |",
+            "| Reviewer | Model | Effort | Launches | Runs |",
+            "| --- | --- | --- | ---: | ---: |",
         ]
         for r in analysis["model_stats"]:
-            lines.append(f"| {r['reviewer']} | {r['model']} | {r['effort']} | {r['launches']} | {r['runs']} | {r['misses']} |")
+            lines.append(f"| {r['reviewer']} | {r['model']} | {r['effort']} | {r['launches']} | {r['runs']} |")
 
     lines += ["", "## Missed Copilot-Valid Findings", ""]
     if total_missed == 0:
         lines.append("None.")
     else:
-        lines += [
-            "| PR | Location | Severity | Classification | Evidence | Claim |",
-            "| --- | --- | --- | --- | --- | --- |",
-        ]
         for p in prs:
+            if not p["missed"]:
+                continue
+            ran = ", ".join(p["ran_reviewers"]) if p["ran_reviewers"] else "none recorded"
+            lines += [
+                f"### {p['repo']}#{p['pr']} (`{p['branch']}`, run `{p['run_id'] or 'unknown'}`)",
+                f"- **Ran reviewers:** {ran} | **Local findings:** {p['local_finding_count']}",
+                "",
+                "| Location | Severity | Validity | Diff Status | Same-File Local Findings | Copilot Claim |",
+                "| --- | --- | --- | --- | --- | --- |",
+            ]
             for ms in p["missed"]:
                 bf = ms["bot"]
                 loc = f"`{bf['path']}:{bf['line']}`" if bf.get("line") else f"`{bf['path']}`"
                 claim = (bf.get("claim") or "").replace("|", "\\|")
-                ev = ms["evidence"].replace("|", "\\|")
-                lines.append(f"| {p['repo']}#{p['pr']} | {loc} | {bf.get('severity', '')} | {ms['classification']} | {ev} | {claim} |")
+                diff_col = f"{ms['diff_status']} ({ms['diff_evidence']})".replace("|", "\\|")
+                same_file = "; ".join(
+                    f"L{lf['line']} ({','.join(lf['reviewers'])}): {lf['claim']}"
+                    for lf in ms["same_file_local"]
+                ).replace("|", "\\|") or "none"
+                lines.append(
+                    f"| {loc} | {bf.get('severity', '')} | {bf.get('validity', '')} | {diff_col} | {same_file} | {claim} |"
+                )
+            lines.append("")
 
     lines += [
+        "## LLM Interpretation & Proposals Guide",
         "",
-        "## Proposals",
+        "Classify each missed finding above into one of:",
+        "- `code not in the diff the reviewer saw`",
+        "- `reviewer not selected`",
+        "- `outside reviewer scope`",
+        "- `reviewer ran and missed`",
         "",
-        "### Prompt Changes",
-        *[f"- {item}" for item in proposals["prompt_changes"]],
-        "",
-        "### New Focus Agents",
-        *[f"- {item}" for item in proposals["new_focus_agents"]],
-        "",
-        "### Multi-Model & Effort-Level Experiments",
-        *[f"- {item}" for item in proposals["model_effort_experiments"]],
+        "Then synthesize proposals across:",
+        "1. **Prompt changes** (for `reviewer ran and missed` patterns)",
+        "2. **New focus agents / `use_when:` updates** (for `outside reviewer scope` and `reviewer not selected`)",
+        "3. **Multi-model & effort-level experiments** (from the Reviewer Launches table)",
         "",
     ]
     return "\n".join(lines)
@@ -834,7 +642,7 @@ def _collect_pr_records(args, events):
 
 
 def main(argv=None):
-    ap = argparse.ArgumentParser(description="Analyze review gaps between local review telemetry and Copilot PR comments.")
+    ap = argparse.ArgumentParser(description="Pair closed PR Copilot findings with local review telemetry.")
     ap.add_argument("--pr", type=int, action="append", help="Closed/merged PR number (repeatable)")
     ap.add_argument("--since", help="Analyze merged PRs on or after YYYY-MM-DD")
     ap.add_argument("--repo", action="append", help="GitHub owner/repo (repeatable; defaults to current repo)")
@@ -855,39 +663,17 @@ def main(argv=None):
                         "workflow-telemetry", "events.jsonl")
     )
     events = wf_backfill.load_log(log_path)
-    default_cfg = load_project_config(args.dir)
+    project_cfg = load_project_config(args.dir)
     records = _collect_pr_records(args, events)
-
-    dir_repo_key = ""
-    if os.path.isdir(args.dir):
-        url = repo_facts.git(args.dir, "remote", "get-url", "origin")
-        dir_repo_key = (repo_facts.repo_key(url) if url else "").lower()
-
-    project_cfgs = {}
-    repo_dirs = {}
-    for rec in records:
-        rl = rec["repo"].lower()
-        if rl and rl not in project_cfgs:
-            project_cfgs[rl] = load_project_config(args.dir, repo_slug=rec["repo"])
-            repo_dirs[rl] = args.dir if dir_repo_key and rl == dir_repo_key else None
-
-    analysis = analyze_prs(
-        records,
-        events,
-        default_cfg,
-        repo_dir=args.dir if os.path.isdir(args.dir) else None,
-        project_cfgs=project_cfgs,
-        repo_dirs=repo_dirs,
-    )
-    proposals = build_proposals(analysis)
+    analysis = analyze_prs(records, events, project_cfg, repo_dir=args.dir if os.path.isdir(args.dir) else None)
 
     if args.json:
-        print(json.dumps({"analysis": analysis, "proposals": proposals}, indent=2))
+        print(json.dumps(analysis, indent=2))
         return 0
 
     out_path = args.out or _default_out_path(args.dir)
     os.makedirs(os.path.dirname(os.path.abspath(out_path)), exist_ok=True)
-    md = render_markdown(analysis, proposals)
+    md = render_markdown(analysis)
     Path(out_path).write_text(md)
     print(f"wrote {out_path}")
     return 0
