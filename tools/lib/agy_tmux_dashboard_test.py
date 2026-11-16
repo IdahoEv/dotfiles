@@ -52,13 +52,15 @@ class TestHelpers(unittest.TestCase):
                         "ticket_provider": "github",
                         "key": "Is12+13",
                         "desc": "Add OAuth flow",
+                        "tags": ["WIP", "PR"],
                     }
                 ),
                 encoding="utf-8",
             )
-            ref, desc = dash.load_workstream_meta(tmp)
+            ref, desc, tags = dash.load_workstream_meta(tmp)
             self.assertEqual(ref, "Is12+13")
             self.assertEqual(desc, "Add OAuth flow")
+            self.assertEqual(tags, "[WIP][PR]")
 
     def test_load_workstream_meta_fallback_from_tickets(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -76,9 +78,10 @@ class TestHelpers(unittest.TestCase):
                 ),
                 encoding="utf-8",
             )
-            ref, desc = dash.load_workstream_meta(tmp)
+            ref, desc, tags = dash.load_workstream_meta(tmp)
             self.assertEqual(ref, "sc-12+13")
             self.assertEqual(desc, "")
+            self.assertEqual(tags, "")
 
     def test_render_lines_includes_rows_and_footer(self):
         rows = [
@@ -92,11 +95,14 @@ class TestHelpers(unittest.TestCase):
                 branch="Is183-agy-tmux",
                 status="idle (12s)",
                 last_line="Waiting for plan approval?",
+                tags="[WIP][PR]",
             )
         ]
-        lines = dash.render_lines(rows, selected=0, width=100, session="agy-dotfiles")
+        lines = dash.render_lines(rows, selected=0, width=120, session="agy-dotfiles")
         joined = "\n".join(lines)
         self.assertIn("agy-dotfiles", joined)
+        self.assertIn("Tags", joined)
+        self.assertIn("[WIP][PR]", joined)
         self.assertIn("Is183", joined)
         self.assertIn("idle (12s)", joined)
         self.assertIn("Waiting for plan approval?", joined)
@@ -136,6 +142,7 @@ class TestHelpers(unittest.TestCase):
                         "ticket_provider": "github",
                         "key": "Is183",
                         "desc": "Dashboard",
+                        "tags": ["PLAN"],
                     }
                 ),
                 encoding="utf-8",
@@ -163,6 +170,7 @@ class TestHelpers(unittest.TestCase):
             self.assertEqual(len(rows), 1)
             self.assertEqual(rows[0].window_index, "1")
             self.assertEqual(rows[0].ticket_ref, "Is183")
+            self.assertEqual(rows[0].tags, "[PLAN]")
             self.assertEqual(rows[0].status, "idle (50s)")
             self.assertEqual(rows[0].last_line, "Ready for review?")
             self.assertEqual(rows[0].color, "green")
@@ -661,8 +669,8 @@ class TestColorRendering(unittest.TestCase):
         cp_mock.assert_called_once_with(3)
         self.assertEqual(calls[0][1], 0)
         self.assertEqual(calls[0][4], curses.A_REVERSE)
-        # Ticket column (x=6) and Title column (x=42) get color_pair | A_REVERSE
-        self.assertEqual([(c[1], c[4]) for c in calls[1:]], [(6, curses.A_REVERSE | 0x200), (42, curses.A_REVERSE | 0x200)])
+        # Ticket column (x=6) and Title column (x=57) get color_pair | A_REVERSE
+        self.assertEqual([(c[1], c[4]) for c in calls[1:]], [(6, curses.A_REVERSE | 0x200), (57, curses.A_REVERSE | 0x200)])
         self.assertEqual(calls[2][2].strip(), "Port project colors")
 
     def test_draw_row_falls_back_to_unstyled_without_color_support(self):

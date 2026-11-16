@@ -516,6 +516,62 @@ class CliTests(WorkstreamTestBase):
         )
         self.assertEqual(r.stdout.strip(), "Is160-invoice-totals")
 
+    def test_phase_transitions_and_persistence(self) -> None:
+        repo = self.make_repo("widgets")
+        workstream.init_ticket_record(
+            repo,
+            provider="github",
+            tickets=[{"id": "188"}],
+            title="Phase tags",
+            tags=["PLAN", "custom"],
+        )
+        rec = workstream.update_phase(repo, phase="WIP")
+        self.assertIsNotNone(rec)
+        self.assertEqual(rec.tags, ["WIP", "custom"])
+        self.assertEqual(workstream.format_phase_tags(rec), "[WIP][custom]")
+
+        rec = workstream.update_phase(repo, pr=True)
+        self.assertEqual(rec.tags, ["WIP", "PR", "custom"])
+        self.assertEqual(workstream.format_phase_tags(rec), "[WIP][PR][custom]")
+
+        rec = workstream.update_phase(repo, phase="REVIEW")
+        self.assertEqual(rec.tags, ["REVIEW", "PR", "custom"])
+
+        rec = workstream.update_phase(repo, no_review=True)
+        self.assertEqual(rec.tags, ["REVIEWED", "PR", "custom"])
+
+        rec = workstream.update_phase(repo, phase="MERGED")
+        self.assertEqual(rec.tags, ["MERGED", "custom"])
+
+        rec = workstream.update_phase(repo, clear=True)
+        self.assertEqual(rec.tags, ["custom"])
+        reloaded = workstream.load_record(repo)
+        self.assertEqual(reloaded.tags, ["custom"])
+
+    def test_cli_phase_subcommand(self) -> None:
+        repo = self.make_repo("widgets")
+        self.assertIsNone(workstream.update_phase(repo, phase="WIP"))
+        workstream.init_ticket_record(
+            repo,
+            provider="github",
+            tickets=[{"id": "188"}],
+            title="Phase tags",
+        )
+        r_wip = subprocess.run([CLI, "phase", "--dir", repo, "WIP"], capture_output=True, text=True, check=True)
+        self.assertEqual(r_wip.stdout.strip(), "[WIP]")
+        r_pr = subprocess.run([CLI, "phase", "--dir", repo, "--pr"], capture_output=True, text=True, check=True)
+        self.assertEqual(r_pr.stdout.strip(), "[WIP][PR]")
+        r_show = subprocess.run([CLI, "phase", "--dir", repo, "--show"], capture_output=True, text=True, check=True)
+        self.assertEqual(r_show.stdout.strip(), "[WIP][PR]")
+
+        for bad_args in ([], ["WIP", "--pr"], ["--pr", "--clear"], ["WIP", "--show"]):
+            r_bad = subprocess.run([CLI, "phase", "--dir", repo, *bad_args], capture_output=True, text=True)
+            self.assertNotEqual(r_bad.returncode, 0, f"expected failure for {bad_args}")
+        with self.assertRaises(ValueError):
+            workstream.update_phase(repo)
+        with self.assertRaises(ValueError):
+            workstream.update_phase(repo, phase="WIP", pr=True)
+
 
 if __name__ == "__main__":
     unittest.main()
