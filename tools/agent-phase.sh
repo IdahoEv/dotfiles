@@ -130,8 +130,8 @@ esac
 if [ -x "$SCRIPT_DIR/workstream.sh" ]; then
   case "$action" in
     show)
-      if [ -z "${CLAUDE_JOB_DIR:-}" ]; then
-        "$SCRIPT_DIR/workstream.sh" phase --dir "$dir" --show 2>/dev/null || true
+      if "$SCRIPT_DIR/workstream.sh" phase --dir "$dir" --show 2>/dev/null; then
+        exit 0
       fi
       ;;
     clear)     "$SCRIPT_DIR/workstream.sh" phase --dir "$dir" --clear >/dev/null 2>&1 || true ;;

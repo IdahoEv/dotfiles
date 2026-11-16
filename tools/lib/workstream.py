@@ -339,6 +339,9 @@ def update_phase(
     clear: bool = False,
 ) -> WorkstreamRecord | None:
     """Update workflow phase/PR tags in <worktree>/.workstream.json when present."""
+    actions = int(phase is not None) + int(bool(pr)) + int(bool(no_review)) + int(bool(clear))
+    if actions != 1:
+        raise ValueError("specify exactly one of phase, pr, no_review, or clear")
     root = _worktree_root(worktree)
     path = Path(root) / RECORD_FILENAME
     if not path.is_file():
@@ -583,10 +586,11 @@ def build_parser() -> argparse.ArgumentParser:
     p_phase = sub.add_parser("phase")
     p_phase.add_argument("phase", nargs="?", default=None)
     p_phase.add_argument("--dir", default=".")
-    p_phase.add_argument("--pr", action="store_true")
-    p_phase.add_argument("--no-review", action="store_true")
-    p_phase.add_argument("--clear", action="store_true")
-    p_phase.add_argument("--show", action="store_true")
+    p_phase_mx = p_phase.add_mutually_exclusive_group()
+    p_phase_mx.add_argument("--pr", action="store_true")
+    p_phase_mx.add_argument("--no-review", action="store_true")
+    p_phase_mx.add_argument("--clear", action="store_true")
+    p_phase_mx.add_argument("--show", action="store_true")
 
     p_cids = sub.add_parser("chain-ids")
     p_cids.add_argument("--dir", default=".")
@@ -617,7 +621,8 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     if sys.version_info < (3, 11):
         sys.exit("workstream: Python 3.11+ required")
-    args = build_parser().parse_args(argv)
+    parser = build_parser()
+    args = parser.parse_args(argv)
 
     if args.cmd == "init-ticket":
         ids = [i.strip() for i in args.ids.split(",") if i.strip()]
@@ -645,6 +650,11 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.cmd == "phase":
+        has_flag = args.pr or args.no_review or args.clear or args.show
+        if has_flag and args.phase is not None:
+            parser.error("phase: cannot combine positional PHASE with --pr/--no-review/--clear/--show")
+        if not has_flag and args.phase is None:
+            parser.error("phase: specify a PHASE or one of --pr, --no-review, --clear, --show")
         if args.show:
             rec = load_record(args.dir)
             if rec is None:

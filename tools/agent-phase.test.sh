@@ -58,6 +58,8 @@ printf '{"name": "[PLAN] Is188 Phase tags"}\n' > "$JOB_DIR/state.json"
 (cd "$REPO" && CLAUDE_JOB_DIR="$JOB_DIR" "$TOOLS_DIR/agent-phase.sh" WIP >/dev/null)
 check "bg state.json" "[WIP] Is188 Phase tags" "$(jq -r .name "$JOB_DIR/state.json")"
 check "bg .workstream.json" "[WIP]" "$("$TOOLS_DIR/workstream.sh" phase --dir "$REPO" --show)"
+check "bg --show" "[WIP]" "$(cd "$REPO" && CLAUDE_JOB_DIR="$JOB_DIR" "$TOOLS_DIR/agent-phase.sh" --show)"
+check "bg --show without state.json" "[WIP]" "$(cd "$REPO" && CLAUDE_JOB_DIR="$TMP/missing-job" "$TOOLS_DIR/agent-phase.sh" --show)"
 
 printf 'agent-phase.test.sh: %d passed, %d failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]

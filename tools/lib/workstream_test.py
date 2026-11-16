@@ -564,6 +564,14 @@ class CliTests(WorkstreamTestBase):
         r_show = subprocess.run([CLI, "phase", "--dir", repo, "--show"], capture_output=True, text=True, check=True)
         self.assertEqual(r_show.stdout.strip(), "[WIP][PR]")
 
+        for bad_args in ([], ["WIP", "--pr"], ["--pr", "--clear"], ["WIP", "--show"]):
+            r_bad = subprocess.run([CLI, "phase", "--dir", repo, *bad_args], capture_output=True, text=True)
+            self.assertNotEqual(r_bad.returncode, 0, f"expected failure for {bad_args}")
+        with self.assertRaises(ValueError):
+            workstream.update_phase(repo)
+        with self.assertRaises(ValueError):
+            workstream.update_phase(repo, phase="WIP", pr=True)
+
 
 if __name__ == "__main__":
     unittest.main()
