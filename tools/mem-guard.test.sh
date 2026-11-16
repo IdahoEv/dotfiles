@@ -43,7 +43,9 @@ MEM_GUARD_PS_FIXTURE="$ROOT/missing" "$MG" check >/dev/null 2>&1; check "unreada
 SECRET="sk-test-SECRET-ARGUMENT-123"
 # Daemonized so they are not children of whatever agent is running this test (a nested
 # agent is correctly attributed to its parent session, which would hide them from the report).
-spawn() { ( setsid "$@" >/dev/null 2>&1 & ); }
+spawn() {
+  python3 -c 'import subprocess, sys; subprocess.Popen(sys.argv[1:], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)' "$@"
+}
 spawn "$ROOT/bin/claude" 300
 spawn "$ROOT/bin/agy" -f /dev/null "/nonexistent/$SECRET"
 spawn "$ROOT/bin/codex" 300
@@ -51,6 +53,10 @@ sleep 0.5
 CLAUDE_PID="$(pgrep -f "$ROOT/bin/claude" | head -1)"
 AGY_PID="$(pgrep -f "$ROOT/bin/agy" | head -1)"
 CODEX_PID="$(pgrep -f "$ROOT/bin/codex" | head -1)"
+for pair in "claude:$CLAUDE_PID" "agy:$AGY_PID" "codex:$CODEX_PID"; do
+  name="${pair%%:*}"; pid="${pair#*:}"
+  check "report: $name spawned" 1 "$([ -n "$pid" ] && echo 1 || echo 0)"
+done
 out="$("$MG" report 2>&1)"
 has "report: host line" "host pressure: normal, ~70% free" "$out"
 has "report: finds the claude process" "claude pid $CLAUDE_PID" "$out"
