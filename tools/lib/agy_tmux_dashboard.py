@@ -6,9 +6,12 @@ from __future__ import annotations
 import argparse
 import curses
 import dataclasses
+import json
 import os
+import shlex
 import subprocess
 import sys
+import threading
 import time
 from pathlib import Path
 from typing import Any
@@ -54,6 +57,7 @@ class WorkstreamRow:
     status: str
     last_line: str
     color: str = ""
+    mem: str = ""  # estimate for the window's process tree ("~1.2 GB"), "" when not measured
 
 
 def format_age(seconds: int) -> str:
@@ -174,6 +178,65 @@ def _git_branch(path: str) -> str:
     return _run_cmd(["git", "-C", path, "branch", "--show-current"]).strip()
 
 
+MEM_REFRESH_SECS = 10.0
+MEM_CMD_TIMEOUT_SECS = 20.0
+
+
+def fetch_memory(mem_cmd: str) -> tuple[dict[str, str], str]:
+    """({window_index: "~1.2 GB"}, host line) from an optional memory provider.
+
+    The provider is any command that prints the `mem-guard.sh report --json` shape. The
+    dashboard knows only that JSON contract, not how memory is measured. Best effort: any
+    failure yields ({}, "") so a broken provider never affects the dashboard.
+    """
+    if not mem_cmd:
+        return ({}, "")
+    try:
+        res = subprocess.run(
+            shlex.split(mem_cmd), capture_output=True, text=True, check=False, timeout=MEM_CMD_TIMEOUT_SECS
+        )
+        if res.returncode != 0:
+            return ({}, "")
+        data = json.loads(res.stdout)
+        by_window = {
+            str(s["key"]): str(s.get("mem") or "-")
+            for s in data.get("sessions", [])
+            if s.get("source") == "tmux" and s.get("key")
+        }
+        line = str(data.get("host_line") or "")
+        status = str((data.get("verdict") or {}).get("status") or "")
+        if line and status in ("warn", "block"):
+            line += f"  [{status.upper()}]"
+        if line and not data.get("process_table_ok", True):
+            line += "  (process table unreadable)"
+        return (by_window, line)
+    except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError):
+        return ({}, "")
+
+
+class MemorySampler:
+    """Samples the memory provider on a background thread so slow `ps`/`lsof` never stall the UI."""
+
+    def __init__(self, mem_cmd: str, interval: float = MEM_REFRESH_SECS) -> None:
+        self._cmd = mem_cmd
+        self._interval = interval
+        self._lock = threading.Lock()
+        self._value: tuple[dict[str, str], str] = ({}, "")
+        if mem_cmd:
+            threading.Thread(target=self._loop, daemon=True).start()
+
+    def _loop(self) -> None:
+        while True:
+            value = fetch_memory(self._cmd)
+            with self._lock:
+                self._value = value
+            time.sleep(self._interval)
+
+    def latest(self) -> tuple[dict[str, str], str]:
+        with self._lock:
+            return self._value
+
+
 def fetch_windows(
     session: str,
     tmux_bin: str = "tmux",
@@ -205,6 +268,7 @@ def fetch_windows(
         ticket_ref, desc = load_workstream_meta(pane_path)
         branch = "" if desc else _git_branch(pane_path)
         captured = _run_cmd([*base, "capture-pane", "-p", "-t", pane_id, "-S", "-30"])
+        status = compute_status(pane_dead, last_activity, current_time)
         rows.append(
             WorkstreamRow(
                 window_index=win_idx,
@@ -214,7 +278,7 @@ def fetch_windows(
                 ticket_ref=ticket_ref or win_name,
                 desc=desc or branch or Path(pane_path).name,
                 branch=branch,
-                status=compute_status(pane_dead, last_activity, current_time),
+                status=status,
                 last_line=extract_last_line(captured),
                 color=_cached_project_color(pane_path),
             )
@@ -249,28 +313,31 @@ def render_lines(
     width: int,
     session: str,
     max_rows: int | None = None,
+    host_line: str = "",
 ) -> list[str]:
     """Render the dashboard header, workstream table, and footer into text lines."""
     w = max(40, width)
     lines: list[str] = []
-    lines.append(_clip(f"agy-tmux dashboard  [{session}]  ({len(rows)} workstreams)", w))
+    title = f"agy-tmux dashboard  [{session}]  ({len(rows)} workstreams)"
+    lines.append(_clip(f"{title}  {host_line}" if host_line else title, w))
     lines.append("─" * w)
 
     if not rows:
         lines.append("No active workstream windows. Launch tickets with: agy-tmux.sh <id> ...")
     else:
-        header = f"  {'#':<3} {'Ticket':<12} {'Status':<12} {'Title':<28} {'Last output'}"
+        header = f"  {'#':<3} {'Ticket':<12} {'Status':<12} {'Mem':<9} {'Title':<28} {'Last output'}"
         lines.append(_clip(header, w))
         start, end = visible_slice(len(rows), selected, max_rows)
         for idx in range(start, end):
             row = rows[idx]
             marker = ">" if idx == selected else " "
-            fixed_width = 2 + 4 + 13 + 13 + 29
+            fixed_width = 2 + 4 + 13 + 13 + 10 + 29
             rem = max(10, w - fixed_width)
             line = (
                 f"{marker} {row.window_index:<3} "
                 f"{_clip(row.ticket_ref, 12):<12} "
                 f"{_clip(row.status, 12):<12} "
+                f"{_clip(row.mem or '-', 9):<9} "
                 f"{_clip(row.desc, 28):<28} "
                 f"{_clip(row.last_line, rem)}"
             )
@@ -348,7 +415,7 @@ def _draw_row(
         return
     color_attr = base_attr | curses.color_pair(color_pairs[row.color])
     limit = min(len(text), max_width)
-    for start, end in ((6, 18), (32, 60)):
+    for start, end in ((6, 18), (42, 70)):
         if start >= limit:
             continue
         seg = text[start : min(end, limit)]
@@ -365,6 +432,7 @@ def _curses_loop(
     socket: str | None,
     refresh_sec: float,
     tmux_bin: str = "tmux",
+    mem_cmd: str = "",
 ) -> None:
     curses.curs_set(0)
     stdscr.keypad(True)
@@ -373,11 +441,16 @@ def _curses_loop(
     base = _tmux_base(tmux_bin, socket)
     selected = 0
     rows: list[WorkstreamRow] = []
+    host_line = ""
+    sampler = MemorySampler(mem_cmd)
     needs_refresh = True
 
     while True:
         if needs_refresh:
             rows = fetch_windows(session, tmux_bin=tmux_bin, socket=socket)
+            mem_by_window, host_line = sampler.latest()
+            for row in rows:
+                row.mem = mem_by_window.get(row.window_index, "")
             needs_refresh = False
         if rows:
             selected = max(0, min(selected, len(rows) - 1))
@@ -388,7 +461,9 @@ def _curses_loop(
         max_rows = max(1, height - 6)
         start, end = visible_slice(len(rows), selected, max_rows)
         visible_rows = rows[start:end]
-        lines = render_lines(rows, selected, width - 1, session, max_rows=max_rows)
+        lines = render_lines(
+            rows, selected, width - 1, session, max_rows=max_rows, host_line=host_line
+        )
         max_width = max(1, width - 1)
         stdscr.erase()
         for y, text in enumerate(lines[: max(1, height - 1)]):
@@ -436,9 +511,14 @@ def main(argv: list[str] | None = None) -> int:
         help="Path or name of the tmux binary",
     )
     parser.add_argument("--refresh", type=float, default=2.0, help="Refresh interval in seconds")
+    parser.add_argument(
+        "--mem-cmd",
+        default="",
+        help="Optional command printing `mem-guard.sh report --json`; enables the Mem column and host line",
+    )
     args = parser.parse_args(argv)
 
-    curses.wrapper(_curses_loop, args.session, args.socket, args.refresh, args.tmux_bin)
+    curses.wrapper(_curses_loop, args.session, args.socket, args.refresh, args.tmux_bin, args.mem_cmd)
     return 0
 
 

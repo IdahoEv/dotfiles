@@ -20,6 +20,7 @@ Options:
   --session <name>       Tmux session name (default: agy-<repo>)
   --provider <provider>  Forward --provider to start-ticket.sh (github|shortcut)
   --no-attach            Create/update the session without attaching
+  --force                Launch even if mem-guard blocks on memory pressure
   -h, --help             Show this help
 
 Examples:
@@ -43,6 +44,7 @@ WORKSTREAM_BIN="${AGY_TMUX_WORKSTREAM_BIN:-$SCRIPT_DIR/workstream.sh}"
 AGY_BIN="${AGY_TMUX_AGY_BIN:-agy}"
 TMUX_BIN="${AGY_TMUX_TMUX_BIN:-tmux}"
 DASHBOARD_PY="$SCRIPT_DIR/lib/agy_tmux_dashboard.py"
+MEM_GUARD_BIN="${AGY_TMUX_MEM_GUARD:-$SCRIPT_DIR/mem-guard.sh}"
 
 tmux_cmd() {
   if [ -n "${AGY_TMUX_SOCKET:-}" ]; then
@@ -106,6 +108,13 @@ ensure_session() {
   if [ -n "${AGY_TMUX_SOCKET:-}" ]; then
     dash_cmd="$dash_cmd --socket $(printf '%q' "$AGY_TMUX_SOCKET")"
   fi
+  # Optional memory column: the dashboard only sees this command's JSON, nothing else.
+  if [ -x "$MEM_GUARD_BIN" ] || command -v "$MEM_GUARD_BIN" >/dev/null 2>&1; then
+    local mem_cmd
+    mem_cmd="$(printf '%q' "$MEM_GUARD_BIN") report --json --session $(printf '%q' "$session") --tmux-bin $(printf '%q' "$TMUX_BIN")"
+    [ -z "${AGY_TMUX_SOCKET:-}" ] || mem_cmd="$mem_cmd --socket $(printf '%q' "$AGY_TMUX_SOCKET")"
+    dash_cmd="$dash_cmd --mem-cmd $(printf '%q' "$mem_cmd")"
+  fi
 
   local created_idx
   if ! tmux_cmd has-session -t "=$session" 2>/dev/null; then
@@ -130,6 +139,10 @@ ensure_session() {
   install_cz_binding
 }
 
+# The override applies to this invocation's guard checks only. Capture it, then drop it from
+# the environment so the tmux server, the agent panes and any /start they run never inherit it.
+force_override="${MEM_GUARD_OVERRIDE:-}"
+unset MEM_GUARD_OVERRIDE
 session=""
 provider=""
 no_attach=0
@@ -145,6 +158,8 @@ while [ "$#" -gt 0 ]; do
       provider="$2"; shift 2 ;;
     --no-attach)
       no_attach=1; shift ;;
+    --force)
+      force_override=1; shift ;;
     -h|--help)
       usage; exit 0 ;;
     --)
@@ -199,11 +214,26 @@ window_label_for() {  # <group> <branch> [<worktree>]
 
 launch_group() {  # <group>
   local group="$1"
+  # Per-group, not once: each launched agent changes memory pressure. Blocked groups
+  # are skipped (not killed, nothing created); --force / MEM_GUARD_OVERRIDE=1 overrides.
+  if [ -x "$MEM_GUARD_BIN" ] || command -v "$MEM_GUARD_BIN" >/dev/null 2>&1; then
+    local grc=0
+    MEM_GUARD_OVERRIDE="$force_override" "$MEM_GUARD_BIN" check --context "agy-tmux $group" || grc=$?
+    case "$grc" in
+      0) ;;
+      3) printf 'agy-tmux: skipped %s: blocked by mem-guard (override with --force)\n' "$group" >&2
+         return 1 ;;
+      *) printf 'agy-tmux: mem-guard failed (exit %s); launching without a memory check\n' "$grc" >&2 ;;
+    esac
+  else
+    printf 'agy-tmux: mem-guard.sh not found (%s); launching without a memory check\n' "$MEM_GUARD_BIN" >&2
+  fi
+
   local st_args=("$group" --no-tab)
   [ -z "$provider" ] || st_args+=(--provider "$provider")
 
   local out
-  if ! out="$("$START_TICKET_BIN" "${st_args[@]}")"; then
+  if ! out="$(MEM_GUARD_OVERRIDE="$force_override" "$START_TICKET_BIN" "${st_args[@]}")"; then
     printf 'agy-tmux: start-ticket.sh failed for %s\n' "$group" >&2
     return 1
   fi

@@ -5,7 +5,7 @@
 ## Architecture Boundary
 
 - **Core contract:** `<worktree>/.workstream.json` + tmux window options (`@ws_backend`, `@ws_dashboard`, `@ws_phase`).
-- **Dashboard isolation:** `agy_tmux_dashboard.py` (future `ws_tmux_dashboard.py`) depends only on tmux and `.workstream.json`—never on `start-ticket.sh`, `gh`, or a specific agent CLI.
+- **Dashboard isolation:** `agy_tmux_dashboard.py` (future `ws_tmux_dashboard.py`) depends only on tmux and `.workstream.json`—never on `start-ticket.sh`, `gh`, or a specific agent CLI. The one optional seam is `--mem-cmd`: any command printing the `mem-guard.sh report --json` shape adds a memory column, sampled on a background thread; without it the dashboard has no memory dependency.
 - **Canonical core vs. adapters:** Long-term, prompts/commands/agents/skills move from `dot_claude/` into a neutral workflow core, with thin per-backend bindings for `~/.claude`, `~/.gemini`, and `~/.codex`.
 
 ## Phases
