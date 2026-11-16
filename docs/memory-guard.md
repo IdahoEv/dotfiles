@@ -80,7 +80,7 @@ All settings resolve `env > project > machine > user conf > default`, via the sa
 ## Privacy and overhead
 
 - Only the executable name from `ps comm=` is read — never command-line arguments, so prompts, tokens and flags cannot reach the output. Labels are workstream keys, pids and the working directory's basename.
-- Cost: one `ps`, one `sysctl`, one `memory_pressure` (macOS), and one `lsof` only when agents exist outside the managed tmux session. The dashboard samples at most every 10 s even though it redraws every 2 s.
+- Cost: one `ps`, one `top` (macOS, when tracked agent sessions exist), one `sysctl`, one `memory_pressure` (macOS), and one `lsof` only when agents exist outside the managed tmux session. The dashboard samples at most every 10 s even though it redraws every 2 s.
 
 ## Validation status
 
