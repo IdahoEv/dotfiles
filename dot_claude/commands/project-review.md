@@ -15,7 +15,7 @@ This session is the launcher. It never inspects the snapshot or runs lenses itse
 
 ## 1. Preconditions
 
-Resolve the repository (`repo-facts.sh` or `gh repo view`), default branch (`repo-facts.sh default-branch`), and absolute working directory (`git rev-parse --show-toplevel` or `pwd`). If not inside a git repository or the default branch cannot be resolved, stop and say so.
+Resolve the repository (`gh repo view --json nameWithOwner -q .nameWithOwner`), default branch (`repo-facts.sh default-branch`), and absolute working directory (`git rev-parse --show-toplevel` or `pwd`). If not inside a git repository or the default branch cannot be resolved, stop and say so.
 
 ## 2. Launch the manager
 

@@ -11,7 +11,7 @@ Run a read-only periodic review of `origin/<default_branch>` using fresh lens ag
 ## 1. Preflight & config
 
 - Fetch `origin` (`git fetch origin`). Verify `origin/<default_branch>` resolves (`git rev-parse --verify "origin/<default_branch>"`); stop if not.
-- Locate `project-review.md` via `project-config.sh find project-review.md 2>/dev/null || true`.
+- Locate `project-review.md` via `project-config.sh find project-review.md 2>/dev/null | cut -f1 || true`.
   - If found, read it. Any value still in `<...>` placeholder form counts as unset.
   - If absent, proceed in report-only mode with defaults: `Window: 7`, no `Activity globs:`, no `Skip:`, `inline` delivery.
 - Resolve `Window` (positive integer days from § Cadence `Window:`, default `7`; overridden by `--window N` if passed in kickoff) and `Activity globs:` (non-placeholder globs from § Cadence).
@@ -35,7 +35,7 @@ Create one detached checkout of `origin/<default_branch>` shared by all lenses:
 1. Pick a gitignored scratch parent:
    - If `git check-ignore -q .scratch 2>/dev/null`, use `<cwd>/.scratch/project-review-<timestamp>-<pid>`.
    - Else if `git check-ignore -q .claude/scratch 2>/dev/null`, use `<cwd>/.claude/scratch/project-review-<timestamp>-<pid>`.
-   - Else create a temp dir with `mktemp -d -t project-review` (outside the repo so nothing can be committed).
+   - Else create a temp dir with `mktemp -d "${TMPDIR:-/tmp}/project-review.XXXXXX"` (outside the repo so nothing can be committed).
 2. Create the snapshot worktree and record its literal path:
    ```bash
    git worktree add --detach "<snapshot_dir>" "origin/<default_branch>"
@@ -69,14 +69,10 @@ Discover lenses following `review-lens-contract` § Discovery:
    ```bash
    rg -H --no-messages '^(name|use_when):|^Lens:\s*(collect|triage)' .claude/agents dot_claude/agents docs/local/reviewers ~/.claude/agents $(project-config.sh list agents 2>/dev/null)
    ```
-2. Deduplicate by `name` in tier order (1: repo `.claude/agents/` and `dot_claude/agents/` in a dotfiles repo; 2: `docs/local/reviewers/*.md` and overlay `claude/agents/*.md`; 3: `~/.claude/agents/`). An earlier tier wins on name collision.
-3. Filter to files declaring `Lens: collect` or `Lens: triage`. Never launch ordinary diff reviewers or other agents.
-4. Drop any lens whose `name` appears in `project-review.md` § Lenses `Skip:` (ignoring `<...>` placeholders).
+2. Deduplicate by `name` in tier order, filter to `Lens: collect` or `Lens: triage`, and drop any lens in `project-review.md` § Lenses `Skip:` (ignoring `<...>` placeholders), per `review-lens-contract` § Discovery.
 
-Launch all remaining lenses in parallel against the same `<snapshot_dir>`:
+Launch all remaining lenses in parallel against the same `<snapshot_dir>` (registered lenses by name; tier-2 lenses via `general-purpose` per `review-lens-contract` § Discovery):
 
-- **Registered lenses (tier 1 / 3):** invoke the named agent.
-- **Tier 2 lenses:** read the file, honor its `model` frontmatter, and launch as `general-purpose` with the file body prefixed by the contract inputs and an instruction to follow `review-lens-contract`.
 - **Inputs for every lens:**
   - Snapshot path: `<snapshot_dir>` (literal path)
   - `project-review.md` path: `<path>` or `none`
