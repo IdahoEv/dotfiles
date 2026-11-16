@@ -89,7 +89,7 @@ flowchart TD
 | Review of the prompt corpus itself | `/prompt-audit`, `/prompt-review` |
 | Periodic read-only review of the default branch | `/project-review` (`[--force] [--window N]`) |
 | Several ready tickets to start | `/pick` (groups them into chains), then paste its `/start` line |
-| Upcoming tickets lack ACs, estimate, or decided design | `/groom` |
+| Upcoming tickets lack ACs or decided design | `/groom` |
 | Topic to discuss with no ticket | `/discuss` (opens a `[TALK]` session) |
 | Merged | `/finalize` (every ticket in a chain) |
 
