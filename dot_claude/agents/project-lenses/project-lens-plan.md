@@ -1,5 +1,5 @@
 ---
-name: review-plan
+name: project-lens-plan
 use_when: periodic project review.
 description: Periodic project-review lens for plan compatibility of a default-branch snapshot — scope divergence, forward risk against open epics, scaling headroom, short-term shortcuts. Read-only.
 tools: Read, Glob, Grep, Bash
@@ -19,4 +19,4 @@ Method, run against the snapshot:
 3. **Headroom.** Compare `capacity-targets` (sizes, rates, counts) with what the code can handle today: limits, loops over unbounded sets, single-instance state, fixed-size structures. State the target, the current limit, and the evidence for it.
 4. **Shortcuts.** Find short-term shortcuts (hard-coded values, stubs, temporary branches) and say whether a planned item depends on them being replaced.
 
-Leave design quality independent of the plan to `review-architecture`, and ticket state to the triage lens.
+Leave design quality independent of the plan to `project-lens-architecture`, and ticket state to `project-lens-triage`.

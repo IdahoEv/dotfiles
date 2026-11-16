@@ -34,27 +34,27 @@ flowchart TD
 | `commands/local-review-cycle.md` | Command | Thin launcher: verifies a clean tree, pins BASE/ticket/flags, launches the manager. No cycle logic. |
 | `agents/local-review-cycle-manager.md` | Agent | Fresh context that orchestrates the whole cycle — selects reviewers, triages, fixes, commits each round locally; never pushes. |
 | `skills/local-review-cycle-procedure/SKILL.md` | Skill | The cycle procedure (preflight, selection, triage, telemetry, report); loaded by the command and manager; not user-invocable. |
-| `agents/{correctness,architecture,robustness,prompt}-reviewer.md` | Agent | Fresh, isolated context; read-only leaf reviewers. |
-| `agents/{security,supply-chain}-reviewer.md` | Agent | Read-only security leaf reviewers — code-level vulnerabilities and build/config risk, selected by `use_when:` like the rest. |
+| `agents/pr-reviewers/pr-reviewer-{correctness,architecture,robustness,prompt}.md` | Agent | Fresh, isolated context; read-only PR/diff leaf reviewers (`pr-reviewer-*`). |
+| `agents/pr-reviewers/pr-reviewer-{security,supply-chain}.md` | Agent | Read-only security PR/diff leaf reviewers — code-level vulnerabilities and build/config risk, selected by `use_when:` like the rest. |
 | `skills/security-review-rubric/SKILL.md` | Skill | OWASP-anchored rubric preloaded into both security reviewers; usable directly for interactive checks. Separate from the built-in `/security-review`, which stays as the interactive whole-branch pass. |
 | `agents/github-review-repair-agent.md` | Agent | Fresh context with edit tools; never commits/pushes/writes to GitHub. |
-| `skills/reviewer-contract/SKILL.md` | Skill | Shared contract loaded into every reviewer; avoids per-agent duplication. |
-| `skills/review-lens-contract/SKILL.md` | Skill | Contract for periodic project-review lenses (snapshot-scoped, not diff-scoped) and their discovery rules; mirrors `/local-review-cycle` tiers. |
+| `skills/reviewer-contract/SKILL.md` | Skill | Shared contract loaded into every `pr-reviewer-*` agent; avoids per-agent duplication. |
+| `skills/review-lens-contract/SKILL.md` | Skill | Contract for periodic project-review lenses (`project-lens-*`, snapshot-scoped, not diff-scoped) and their discovery rules; mirrors `/local-review-cycle` tiers. |
 | `commands/project-review.md` | Command | Thin launcher for periodic project review: resolves repo, default branch, and cwd, then launches `project-review-manager` and prints its report unaltered. |
 | `agents/project-review-manager.md` | Agent | Fresh read-only orchestrator for periodic project review: activity gate, shared snapshot, tracker pull with truncation abort, lens fan-out, central synthesis, inline report, and cleanup. |
 | `skills/project-review-procedure/SKILL.md` | Skill | Periodic project-review procedure loaded by `project-review-manager`; not user-invocable. |
-| `agents/review-triage.md` | Agent | Periodic `Lens: triage` agent: duplicates, ticket-state consistency, tech-debt priority, work clusters. Reads tickets only through `tracker.sh list`; proposes actions as text and never edits a ticket. |
+| `agents/project-lenses/project-lens-triage.md` | Agent | Periodic `Lens: triage` agent: duplicates, ticket-state consistency, tech-debt priority, work clusters. Reads tickets only through `tracker.sh list`; proposes actions as text and never edits a ticket. |
 | `tools/tracker.sh`, `tools/start-ticket-providers/*.sh` (`provider::list_issues`) | Script | Read-only tracker listing for lenses: JSON with a `truncated` flag; exit 2 when the provider cannot list (Shortcut is stubbed), so callers fall back to report-only. No write subcommands. |
 | `tools/pending-actions.sh`, `tools/lib/pending_actions.py` | Script | Pending-actions file protocol: markdown table keyed `(issue, action)`, upsert replaces in place so reruns never duplicate a queued action. Queues only; the apply step (#137) executes. |
-| `agents/review-{architecture,quality,docs,plan}.md` | Agent | Global `Lens: collect` lenses for the periodic project review. Read-only; scope, probes and doc roles come from `project-review.md`, never from the agent. |
+| `agents/project-lenses/project-lens-{architecture,quality,docs,plan}.md` | Agent | Global `Lens: collect` lenses for the periodic project review. Read-only; scope, probes and doc roles come from `project-review.md`, never from the agent. |
 | `skills/github-review-procedure/SKILL.md` | Skill | 3-mode procedure loaded by the command and repair agent; not user-invocable. |
 | `commands/github-review-comments.md` | Command | Routes mode, launches agent, owns commits and GitHub writes. In unattended mode (below) it commits, pushes, posts and re-requests Copilot with no prompts. |
 | `tools/review-unattended.sh` | Script | Unattended-mode switch (`active`: `~/.config/github-review-unattended` present and `local-review-only` absent) and per-worktree round counter (`next-round [--max N]`, flags the final round; `reset`). Cap: `--max`, else `REVIEW_UNATTENDED_MAX`, else `review_max_rounds` in `.start-ticket.conf`, else 5. `start-ticket.sh` appends an "Unattended review" block to the kickoff when active. |
-| `commands/prompt-audit.md` + `skills/prompt-review/` | Command + skill | Corpus-level prompt rubric; runs through `prompt-reviewer`. |
+| `commands/prompt-audit.md` + `skills/prompt-review/` | Command + skill | Corpus-level prompt rubric; runs through `pr-reviewer-prompt`. |
 | `tools/wf-event.sh`, `tools/wf-report.sh`, `tools/lib/telemetry.sh`, `tools/wf-backfill.sh` | Script | Telemetry: one event per triaged finding (path, line, claim) and per reviewer launch (model, effort), one per cycle; Copilot comments are logged as `source=bot` findings by `wf-backfill.sh --live`, which `/github-review-comments` runs every round. `wf-report.sh --usage` adds an all-session token view (by day, ticket, stage, agent, model, session type) read straight from transcripts. `review.result round=N` also writes the statusline's `local-review-rounds` file. `wf-backfill.sh` otherwise recovers the same fields (and, with `--bot`, Copilot findings from `gh`) for PRs reviewed earlier. |
 | `commands/pick.md`, `commands/start.md`, `tools/start-ticket.sh` | Command + script | Chained sessions: `/pick` emits chains and a paste-ready `/start 12,13 14` line; `/start` launches one session per space-separated group; `start-ticket.sh 12,13` makes one worktree/branch/kickoff/label for the group and writes `.workstream.json` in the worktree (excluded via `.git/info/exclude`, never synced by `.worktree-sync`). |
 | `tools/agy-tmux.sh`, `tools/lib/agy_tmux_dashboard.py` | Script | Launches parallel `agy` workstreams in a tmux session via `start-ticket.sh --no-tab` (one window per ticket/chain with `remain-on-exit`, plus a session-scoped `Ctrl-z` binding back to window `0`) and runs the live curses dashboard in window `0` (optional `--mem-cmd` memory column fed by `mem-guard.sh report --json`; switch, inspect pane output, close exited windows, detach); `--window` also backs `start-ticket.sh`'s `agy-tmux` launcher, auto-selected for `agy` sessions inside `@agy_dashboard=1` tmux sessions without stealing focus. See `docs/agy-tmux.md`. |
-| `tools/mem-guard.sh`, `tools/lib/mem_guard.py` | Script | Per-session memory attribution (RSS summed over each session's process tree, every process counted once under its nearest root; executable names only, never argv) plus host memory pressure (macOS `memory_pressure` level / free %), and the launch guard `check` (exit 3 = blocked, `--force` / `MEM_GUARD_OVERRIDE=1` overrides, never kills anything). `start-ticket.sh` (before worktree/tracker writes, `--tab-only`, `--session`) and `agy-tmux.sh` (per group) call it; the dashboard shows a `Mem` column and host line. Missing/crashing guard warns and launches. See `docs/memory-guard.md`. |
+| `tools/mem-guard.sh`, `tools/lib/mem_guard.py` | Script | Per-session memory attribution (macOS `phys_footprint` via `top` with RSS fallback, summed over each session's process tree, every process counted once under its nearest root; executable names only, never argv) plus host memory pressure (macOS `memory_pressure` level / free %), and the launch guard `check` (exit 3 = blocked, `--force` / `MEM_GUARD_OVERRIDE=1` overrides, never kills anything). `start-ticket.sh` (before worktree/tracker writes, `--tab-only`, `--session`) and `agy-tmux.sh` (per group) call it; the dashboard shows a `Mem` column and host line. Missing/crashing guard warns and launches. See `docs/memory-guard.md`. |
 | `commands/groom.md` | Command | Finds upcoming under-specified tickets and walks them to implementation-ready; edits only after per-ticket confirmation. Walks 1–2 tickets inline, else opens a `[TALK]` sibling session via `start-ticket.sh --session` (as `/discuss`). |
 | `tools/open-pr.sh`, `tools/finalize-check.sh` | Script | Read chain membership from `.workstream.json` (falling back to legacy `<git-dir>/chain`): `open-pr.sh` writes a `Closes` footer per ticket (and `--draft` for a stopped chain); `finalize-check.sh` reports `chain_ids` so `/finalize` verifies every ticket. `open-pr.sh` also commits a dirty tree from `--commit-message-file`, does the no-op agent-view push, starts the review watch, prints the `Shipped / PR / Reviews` report, and titles the PR `Is<N>: …` from the head ticket (github and kardashev providers) and repairs a draft that already carried another prefix form. |
 | `tools/pr-body.sh`, `tools/lib/pr_body.py`, `tools/lib/pr-risk.json` | Script | Mechanical PR body: `open-pr.sh` takes the model's Summary and Needs-your-judgment sections (capped at 3 items each, rejected over cap) and adds Risk (tier from the glob table; a repo's `.claude/pr-risk.json` replaces it), Review, Tests and footer. State in the git dir: `review-report.json` (manager, end of cycle) and `pr-draft.json` (background draft, fingerprinted by HEAD sha + touched files; stale means `/open-pr` redrafts inline). |
@@ -89,7 +89,7 @@ flowchart TD
 | Review of the prompt corpus itself | `/prompt-audit`, `/prompt-review` |
 | Periodic read-only review of the default branch | `/project-review` (`[--force] [--window N]`) |
 | Several ready tickets to start | `/pick` (groups them into chains), then paste its `/start` line |
-| Upcoming tickets lack ACs, estimate, or decided design | `/groom` |
+| Upcoming tickets lack ACs or decided design | `/groom` |
 | Topic to discuss with no ticket | `/discuss` (opens a `[TALK]` session) |
 | Merged | `/finalize` (every ticket in a chain) |
 
@@ -142,12 +142,12 @@ flowchart LR
         M1[Owns: cycle edits, round commits,<br/>telemetry events, statusline]
     end
     subgraph LeafReview[Leaf reviewers — read-only]
-        L1[correctness-reviewer]
-        L2[architecture-reviewer]
-        L3[robustness-reviewer]
-        L4[prompt-reviewer]
-        L5[security-reviewer]
-        L6[supply-chain-reviewer]
+        L1[pr-reviewer-correctness]
+        L2[pr-reviewer-architecture]
+        L3[pr-reviewer-robustness]
+        L4[pr-reviewer-prompt]
+        L5[pr-reviewer-security]
+        L6[pr-reviewer-supply-chain]
     end
     subgraph Repair[github-review-repair-agent — edits only]
         R1[Owns: working-tree edits,<br/>planned replies, proposed commit message]
@@ -168,7 +168,8 @@ Key invariant: outputs always flow **up**; the parent session owns every push an
 ## Machine- and project-specific extensions
 
 - **Machine:** machine behavior lives in templates and `is_*` data, never in agent bodies. The cycle command itself is machine-independent — `--confirm-commits` is opt-in per invocation on every machine.
-- **Project reviewers:** agent-format file with a `use_when:` key, in the repo's `.claude/agents/` (precedence over global); reference it from the project's `CLAUDE.md`.
+- **Project reviewers:** agent-format file with a `use_when:` key, in the repo's `.claude/agents/` (subdirectories such as `pr-reviewers/` and `project-lenses/` are scanned recursively; precedence over global); reference it from the project's `CLAUDE.md`. Legacy unprefixed `*-reviewer` files in existing repos are still loaded and auto-migrated to `.claude/agents/pr-reviewers/pr-reviewer-*.md` on next use.
+- **Terminology (`pr-reviewer-*` vs. `project-lens-*`):** `pr-reviewer-*` agents inspect a branch diff against ticket ACs (`reviewer-contract`); `project-lens-*` agents inspect a whole-project default-branch snapshot from one analytical perspective (`review-lens-contract`).
 - **Personal, work-machine reviewers for shared repos:** `docs/local/reviewers/*.md` — globally gitignored, symlinked into every worktree by `wm`. No work content in dotfiles. New personal agents default to the per-project overlay (`~/.config/project-overlays/<owner>/<repo>/claude/`, keyed by the origin remote), which also holds governor.md, kickoff preambles, and conf keys; `docs/local/` stays for content tied to this checkout's tree — scratch notes, temporary docs, throwaway experiments. Rule of thumb: a fresh clone needs it → overlay; only this checkout → `docs/local/`.
 - **New reviewer:** follow `reviewer-contract`'s authoring convention and cite it from project docs; the orchestrator must never invent reviewers mid-cycle.
 
