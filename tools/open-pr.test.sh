@@ -290,6 +290,23 @@ new_repo custom-branch 'provider=shortcut'
 out="$(run --title "Add cache" --issue sc-7435 --review none)"
 check "shortcut: non-integer --issue sc-7435 accepted" "Shipped sc-7435: Add cache" "$(grep '^Shipped ' <<<"$out")"
 
+# The workstream provider overrides config/branch inference; an explicit flag wins.
+new_repo custom-branch
+cat > "$ROOT/repo/.workstream.json" <<'EOF'
+{"version":1,"kind":"ticket","tickets":[{"id":"7435"}],"ticket_provider":"shortcut","desc":"Add cache"}
+EOF
+out="$(run --issue sc-7435 --review none)"
+check "workstream provider: Shortcut selected on custom branch" "shortcut" "$(grep '^provider=' <<<"$out" | cut -d= -f2)"
+check "workstream provider: prefixed issue normalized for title" "Shipped sc-7435: add cache" "$(grep '^Shipped ' <<<"$out")"
+check "workstream provider: prefixed issue footer" "Story: [sc-7435]" "$(cat "$GH_LOG.body")"
+new_repo custom-branch
+cat > "$ROOT/repo/.workstream.json" <<'EOF'
+{"version":1,"kind":"ticket","tickets":[{"id":"7435"}],"ticket_provider":"shortcut","desc":"Add cache"}
+EOF
+out="$(run --provider github --issue 7435 --review none)"
+check "explicit provider overrides workstream provider" "github" "$(grep '^provider=' <<<"$out" | cut -d= -f2)"
+check "explicit provider uses GitHub footer" "Closes #7435" "$(cat "$GH_LOG.body")"
+
 # bug/Is88-foo and Is88/foo branches extract the issue number even without .workstream.json.
 new_repo bug/Is88-foo
 out="$(run --title "Typed branch fix" --review none)"

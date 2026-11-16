@@ -152,6 +152,10 @@ fi
 
 git rev-parse --is-inside-work-tree >/dev/null 2>&1 || die "not inside a git repo"
 worktree_root="$(git rev-parse --show-toplevel)"
+ws_record=""
+if [ -x "$SCRIPT_DIR/workstream.sh" ] && [ -f "$worktree_root/.workstream.json" ]; then
+  ws_record="$("$SCRIPT_DIR/workstream.sh" show --dir "$worktree_root" 2>/dev/null || true)"
+fi
 wf_t0="$(wf::mono_ms)"
 command -v gh >/dev/null || die "gh CLI not found"
 
@@ -202,6 +206,9 @@ resolve_provider() {
   printf 'github'
 }
 
+if [ -z "$provider" ] && [ -n "$ws_record" ] && command -v python3 >/dev/null 2>&1; then
+  provider="$(python3 -c 'import json, sys; print(json.load(sys.stdin).get("ticket_provider", ""))' <<<"$ws_record" 2>/dev/null || true)"
+fi
 [ -n "$provider" ] || provider="$(resolve_provider)"
 pf="$(find_provider_file "$provider")"
 [ -n "$pf" ] || die "no provider script for '$provider' (searched: OPEN_PR_PROVIDER_DIR, <repo>/.project-overlays/open-pr-providers, ~/.config/project-overlays/.open-pr-providers, workflow-tools/open-pr-providers)"
@@ -227,10 +234,6 @@ fi
 # validation) via set -e instead of being swallowed like a || true.
 existing_pr="$(gh pr list --head "$branch" --json number --jq '.[0].number // empty')"
 create_pr=""
-ws_record=""
-if [ -x "$SCRIPT_DIR/workstream.sh" ] && [ -f "$worktree_root/.workstream.json" ]; then
-  ws_record="$("$SCRIPT_DIR/workstream.sh" show --dir "$worktree_root" 2>/dev/null || true)"
-fi
 if [ -z "$existing_pr" ] && [ -z "$title" ]; then
   if [ -n "$ws_record" ] && command -v python3 >/dev/null 2>&1; then
     title="$(python3 -c 'import json, sys; print(json.load(sys.stdin).get("desc", ""))' <<<"$ws_record" 2>/dev/null || true)"
@@ -296,13 +299,19 @@ else
   fi
 
   used_resolver=""
+  resolver_issue_csv="$issue_csv"
+  if [ "$provider" = shortcut ] && [ -n "$issue_explicit" ]; then
+    resolver_issues=()
+    for _i in "${issues[@]}"; do resolver_issues+=("${_i#sc-}"); done
+    resolver_issue_csv="$(IFS=,; echo "${resolver_issues[*]}")"
+  fi
   if [ -n "$ws_record" ]; then
     bare_title="$title"
     while [[ "$bare_title" =~ ^(Is[0-9]+(\+[0-9]+)*|sc-[0-9]+(\+[0-9]+)*)(:?)[[:space:]]+(.*)$ ]]; do
       bare_title="${BASH_REMATCH[5]}"
     done
     ws_pr_title="$("$SCRIPT_DIR/workstream.sh" render pr --dir "$worktree_root" \
-      ${issue_explicit:+--ids "$issue_csv"} \
+      ${issue_explicit:+--ids "$resolver_issue_csv"} \
       ${provider:+--provider "$provider"} \
       ${bare_title:+--desc "$bare_title"} 2>/dev/null || true)"
     if [ -n "$ws_pr_title" ]; then
