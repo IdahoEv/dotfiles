@@ -891,6 +891,9 @@ def main(argv: list[str] | None = None) -> int:
         else:
             if rec is None:
                 return 1
+            if args.provider:
+                rec.ticket_provider = args.provider
+                rec.key = derive_key(rec, args.dir)
             if args.desc:
                 sanitized = repo_facts.sanitize_label(args.desc)
                 if sanitized:

@@ -227,8 +227,8 @@ fi
 existing_pr="$(gh pr list --head "$branch" --json number --jq '.[0].number // empty')"
 create_pr=""
 if [ -z "$existing_pr" ] && [ -z "$title" ]; then
-  if [ -f .workstream.json ] && [ -x "$SCRIPT_DIR/workstream.sh" ]; then
-    title="$("$SCRIPT_DIR/workstream.sh" render base --dir . 2>/dev/null || true)"
+  if [ -f .workstream.json ] && command -v python3 >/dev/null 2>&1; then
+    title="$(python3 -c 'import json; print(json.load(open(".workstream.json")).get("desc", ""))' 2>/dev/null || true)"
   fi
   [ -n "$title" ] || die "no existing PR for '$branch' and no --title given"
 fi
