@@ -293,4 +293,13 @@ active_win="$(tmux -L "$SOCK" list-windows -t '=win-ws' -F '#{window_active}:#{w
 check "--window does not steal focus from caller window" "1" "$active_win"
 for _ in 1 2 3 4 5; do [ -s "$ROOT/agy-calls.log" ] && break; sleep 0.2; done
 has "--window invokes agy in plan mode" "--mode plan --prompt-interactive Kickoff 198" "$(cat "$ROOT/agy-calls.log")"
+
+# Detached-HEAD worktree without .workstream.json falls back to basename of worktree.
+mkdir -p "$ROOT/detached_wt"
+git -C "$ROOT/detached_wt" init -q
+git -C "$ROOT/detached_wt" -c user.name=test -c user.email=test@example.com commit -q --allow-empty -m "init"
+git -C "$ROOT/detached_wt" checkout -q --detach HEAD
+TMUX="stub,1,0" TMUX_PANE="$caller_pane" "$TOOLS/agy-tmux.sh" --window "$ROOT/detached_wt" "$ROOT/win_kf.md" >/dev/null
+detached_wins="$(tmux -L "$SOCK" list-windows -t '=win-ws' -F '#{window_index}:#{window_name}')"
+has "--window detached HEAD falls back to basename" "3:detached_wt" "$detached_wins"
 tmux -L "$SOCK" kill-session -t "=win-ws"

@@ -43,7 +43,7 @@ Maintained against the covered commands by `tools/cloud-workflow-adapter.test.sh
 | `ExitWorktree` | Not available; stay in the primary worktree without switching branches or directories. |
 | `/add-dir` | Not available; ask the user to add the workspace/directory to the AGY session and wait. |
 | `ListAgents` | Not available; rely on `git worktree list` and `gh pr list` to discover in-flight work. |
-| `--tab-only` | Inside a local `@agy_dashboard=1` tmux session (`$TMUX` set and `tmux display-message -p '#{@agy_dashboard}'` = `1`), run `start-ticket.sh --tab-only "<worktree>" "<kickoff>"` (auto-selects `agy-tmux` and opens a new tmux window in the active dashboard without stealing focus). Otherwise, skip the step that opens a session; the AGY task is already the session. |
+| `--tab-only` | Inside a local `@agy_dashboard=1` tmux session (`$TMUX` set and `tmux display-message ${TMUX_PANE:+-t "$TMUX_PANE"} -p '#{@agy_dashboard}'` = `1`), run `start-ticket.sh --tab-only "<worktree>" "<kickoff>"` (auto-selects `agy-tmux` and opens a new tmux window in the active dashboard without stealing focus). Otherwise, skip the step that opens a session; the AGY task is already the session. |
 | `--no-watch` | Always pass it. The detached watcher and its macOS notification are local-Claude machinery; follow the `github-review-poll.sh` row for review waits. |
 | `--no-multi` | Always in effect. Skip the fan-out step to sibling repos. |
 | `--confirm-commits` | Honour as written; pass through in the `local-review-cycle-manager` kickoff. |

@@ -300,7 +300,8 @@ window_label_for() {  # <group> <branch> [<worktree>]
 open_worktree_window() {  # <worktree> <kickoff> [<branch> [<group>]]
   local wt="$1" kf="$2" branch="${3:-}" group="${4:-}"
   if [ "$#" -lt 3 ]; then
-    branch="$(git -C "$wt" branch --show-current 2>/dev/null || basename "$wt")"
+    branch="$(git -C "$wt" branch --show-current 2>/dev/null || true)"
+    [ -n "$branch" ] || branch="$(basename "$wt")"
   fi
   ensure_session
 
