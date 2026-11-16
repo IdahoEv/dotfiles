@@ -63,7 +63,7 @@ _DEFAULT_REVIEWER_SIGNALS = {
     },
     "robustness-reviewer": {
         "keywords": ("error", "exception", "retry", "timeout", "cleanup", "leak",
-                     "race", "concurrent", "concurr", "lock", "deadlock", "null",
+                     "race", "concurrent", "concurrency", "lock", "deadlock", "null",
                      "none", "empty", "crash", "panic", "dispose", "resource",
                      "rollback", "partial"),
         "exts": (),
@@ -100,15 +100,28 @@ def tokenize(text):
     return {w for w in words if w not in _STOPWORDS}
 
 
+def _strip_claim_prefix(claim, path=""):
+    text = (claim or "").strip()
+    p = norm_path(path)
+    if p:
+        for prefix in (f"{p}:", p):
+            if text.lower().startswith(prefix.lower()):
+                text = text[len(prefix):].lstrip(" :")
+                break
+    return text
+
+
 def claim_similarity(claim_a, claim_b, path=""):
     """Return (shared_token_count, similarity_ratio) between two claims."""
+    clean_a = _strip_claim_prefix(claim_a, path)
+    clean_b = _strip_claim_prefix(claim_b, path)
     p_toks = tokenize(path)
-    ta = tokenize(claim_a) - p_toks
-    tb = tokenize(claim_b) - p_toks
+    ta = tokenize(clean_a) - p_toks
+    tb = tokenize(clean_b) - p_toks
     shared = len(ta & tb)
     union = len(ta | tb)
     jaccard = (shared / union) if union else 0.0
-    seq = difflib.SequenceMatcher(None, (claim_a or "").lower(), (claim_b or "").lower()).ratio()
+    seq = difflib.SequenceMatcher(None, clean_a.lower(), clean_b.lower()).ratio()
     return shared, max(jaccard, seq)
 
 
@@ -129,9 +142,22 @@ def _parse_frontmatter(text):
     return meta, body
 
 
-def load_project_config(repo_dir="."):
+def _overlay_dir_for_repo(repo_slug):
+    if not repo_slug:
+        return ""
+    key = repo_facts.repo_key(f"https://github.com/{repo_slug}")
+    return f"{repo_facts.overlays_root()}/{key}" if key else ""
+
+
+def load_project_config(repo_dir=".", repo_slug=None):
     """Load candidate reviewers and optional overlay config via repo_facts / project-config.sh."""
-    overlay = repo_facts.overlay_dir(repo_dir)
+    dir_repo_key = ""
+    if repo_dir and os.path.isdir(repo_dir):
+        url = repo_facts.git(repo_dir, "remote", "get-url", "origin")
+        dir_repo_key = repo_facts.repo_key(url) if url else ""
+
+    same_repo = not repo_slug or (bool(dir_repo_key) and dir_repo_key.lower() == repo_slug.lower())
+    overlay = repo_facts.overlay_dir(repo_dir) if same_repo else _overlay_dir_for_repo(repo_slug)
     candidates = {}
 
     def _add_file(path, tier):
@@ -155,12 +181,16 @@ def load_project_config(repo_dir="."):
             }
 
     root = Path(repo_facts.main_root(repo_dir) or repo_dir)
-    for p in sorted((root / ".claude" / "agents").glob("*.md")):
-        _add_file(p, "project")
-    for p in sorted((root / "docs" / "local" / "reviewers").glob("*.md")):
-        _add_file(p, "local")
-    for p in repo_facts.overlay_claude_files("agents", repo_dir):
-        _add_file(p, "overlay")
+    if same_repo:
+        for p in sorted((root / ".claude" / "agents").glob("*.md")):
+            _add_file(p, "project")
+        for p in sorted((root / "docs" / "local" / "reviewers").glob("*.md")):
+            _add_file(p, "local")
+        for p in repo_facts.overlay_claude_files("agents", repo_dir):
+            _add_file(p, "overlay")
+    elif overlay:
+        for p in sorted((Path(overlay) / "claude" / "agents").glob("*.md")):
+            _add_file(p, "overlay")
     for base in (root / "dot_claude" / "agents", Path.home() / ".claude" / "agents"):
         for p in sorted(base.glob("*.md")):
             _add_file(p, "global")
@@ -213,13 +243,14 @@ def _map_line_via_diff(repo_dir, sha_from, sha_to, path, line):
 
 
 def _changed_in_range(repo_dir, sha_from, sha_to, path, line):
-    """Return True if path (and line if given) was modified in sha_from..sha_to."""
+    """Return True if path (and line if given) was modified between sha_from and sha_to."""
     if not sha_from or not sha_to or sha_from == sha_to:
         return False
-    ok_anc, _ = _git_ok(repo_dir, "merge-base", "--is-ancestor", sha_from, sha_to)
-    if not ok_anc:
+    ok_from, _ = _git_ok(repo_dir, "cat-file", "-e", f"{sha_from}^{{commit}}")
+    ok_to, _ = _git_ok(repo_dir, "cat-file", "-e", f"{sha_to}^{{commit}}")
+    if not ok_from or not ok_to:
         return False
-    ok, out = _git_ok(repo_dir, "diff", "-U0", f"{sha_from}..{sha_to}", "--", path)
+    ok, out = _git_ok(repo_dir, "diff", "-U0", sha_from, sha_to, "--", path)
     if not ok or not out.strip():
         return False
     if line is None:
@@ -378,6 +409,10 @@ def match_finding(bot_f, local_findings, round_shas, repo_dir=None):
     return best
 
 
+def _has_keyword(text, kw):
+    return bool(re.search(rf"\b{re.escape(kw.lower())}\b", text))
+
+
 def _reviewer_matches_finding(name, candidate, path, claim, overlay_cfg):
     """Return True if reviewer `name` is relevant to (path, claim)."""
     ext = Path(path).suffix.lower()
@@ -391,7 +426,7 @@ def _reviewer_matches_finding(name, candidate, path, claim, overlay_cfg):
 
     kw_map = overlay_cfg.get("reviewer_keywords") or {}
     if name in kw_map:
-        if any(k.lower() in lower_claim or k.lower() in lower_path for k in kw_map[name]):
+        if any(_has_keyword(lower_claim, k) or _has_keyword(lower_path, k) for k in kw_map[name]):
             return True
 
     sig = _DEFAULT_REVIEWER_SIGNALS.get(name)
@@ -402,7 +437,7 @@ def _reviewer_matches_finding(name, candidate, path, claim, overlay_cfg):
             return True
         if name == "correctness-reviewer" and ext not in _NON_CODE_EXTS:
             return True
-        if any(k in lower_claim for k in sig["keywords"]):
+        if any(_has_keyword(lower_claim, k) for k in sig["keywords"]):
             return True
 
     if candidate and candidate.get("use_when"):
@@ -519,21 +554,26 @@ def _build_run_info(run_events):
     }
 
 
-def analyze_prs(pr_records, events, project_cfg, repo_dir=None):
+def analyze_prs(pr_records, events, project_cfg, repo_dir=None, project_cfgs=None, repo_dirs=None):
     """Join PR Copilot findings with local telemetry and classify misses."""
     by_run, pr_to_run = _index_events(events)
     results = []
-    model_stats = defaultdict(lambda: {"launches": 0, "runs": set(), "misses": 0})
+    model_stats = defaultdict(lambda: {"launches": 0, "runs": set(), "missed_runs": set()})
 
     for rec in pr_records:
         repo = rec["repo"]
+        repo_l = repo.lower()
         pr_num = rec["number"]
         branch = rec["branch"]
+        cfg = (project_cfgs or {}).get(repo_l, project_cfg)
+        r_dir = repo_dirs.get(repo_l) if repo_dirs is not None else repo_dir
+
         run_id = rec.get("run_id")
         if not run_id:
-            run_id = pr_to_run.get((repo.lower(), pr_num))
+            run_id = pr_to_run.get((repo_l, pr_num))
         if not run_id:
-            run_id, _, _ = wf_backfill.resolve_run_identity(branch, repo, events)
+            repo_events = [e for e in events if not e.get("repo") or e["repo"].lower() == repo_l]
+            run_id, _, _ = wf_backfill.resolve_run_identity(branch, repo, repo_events)
 
         run_events = by_run.get(run_id, []) if run_id else []
         run_info = _build_run_info(run_events)
@@ -545,20 +585,28 @@ def analyze_prs(pr_records, events, project_cfg, repo_dir=None):
 
         matched, missed = [], []
         for bf in valid_bot:
-            m = match_finding(bf, run_info["local_findings"], run_info["round_shas"], repo_dir=repo_dir)
+            m = match_finding(bf, run_info["local_findings"], run_info["round_shas"], repo_dir=r_dir)
             if m:
                 matched.append({"bot": bf, "local": m})
             else:
-                cls, evidence = classify_miss(bf, run_info, project_cfg, repo_dir=repo_dir)
+                cls, evidence = classify_miss(bf, run_info, cfg, repo_dir=r_dir)
                 missed.append({"bot": bf, "classification": cls, "evidence": evidence})
+
+        miss_run_key = run_id or f"{repo_l}#{pr_num}"
+        missed_reviewers = set()
+        for ms in missed:
+            if ms["classification"] == "reviewer ran and missed" and ms["evidence"].startswith("ran="):
+                for rname in ms["evidence"].removeprefix("ran=").split(","):
+                    if rname:
+                        missed_reviewers.add(rname)
 
         for ln in run_info["launches"]:
             key = (ln["reviewer"], ln["model"], ln["effort"])
             model_stats[key]["launches"] += 1
             if run_id:
                 model_stats[key]["runs"].add(run_id)
-            if any(ms["classification"] == "reviewer ran and missed" and ln["reviewer"] in ms["evidence"] for ms in missed):
-                model_stats[key]["misses"] += 1
+            if ln["reviewer"] in missed_reviewers:
+                model_stats[key]["missed_runs"].add(miss_run_key)
 
         results.append({
             "repo": repo,
@@ -578,7 +626,7 @@ def analyze_prs(pr_records, events, project_cfg, repo_dir=None):
 
     model_rows = [
         {"reviewer": k[0], "model": k[1], "effort": k[2],
-         "launches": v["launches"], "runs": len(v["runs"]), "misses": v["misses"]}
+         "launches": v["launches"], "runs": len(v["runs"]), "misses": len(v["missed_runs"])}
         for k, v in sorted(model_stats.items())
     ]
     return {"prs": results, "model_stats": model_rows}
@@ -807,9 +855,30 @@ def main(argv=None):
                         "workflow-telemetry", "events.jsonl")
     )
     events = wf_backfill.load_log(log_path)
-    project_cfg = load_project_config(args.dir)
+    default_cfg = load_project_config(args.dir)
     records = _collect_pr_records(args, events)
-    analysis = analyze_prs(records, events, project_cfg, repo_dir=args.dir if os.path.isdir(args.dir) else None)
+
+    dir_repo_key = ""
+    if os.path.isdir(args.dir):
+        url = repo_facts.git(args.dir, "remote", "get-url", "origin")
+        dir_repo_key = (repo_facts.repo_key(url) if url else "").lower()
+
+    project_cfgs = {}
+    repo_dirs = {}
+    for rec in records:
+        rl = rec["repo"].lower()
+        if rl and rl not in project_cfgs:
+            project_cfgs[rl] = load_project_config(args.dir, repo_slug=rec["repo"])
+            repo_dirs[rl] = args.dir if dir_repo_key and rl == dir_repo_key else None
+
+    analysis = analyze_prs(
+        records,
+        events,
+        default_cfg,
+        repo_dir=args.dir if os.path.isdir(args.dir) else None,
+        project_cfgs=project_cfgs,
+        repo_dirs=repo_dirs,
+    )
     proposals = build_proposals(analysis)
 
     if args.json:

@@ -191,6 +191,95 @@ class TestEndToEndReportAndProposals(unittest.TestCase):
                 rc = gaps.main(["--pr", "70", "--repo", "ex/r", "--log", str(log_path), "--json", "--dir", str(tmp_path)])
             self.assertEqual(rc, 0)
 
+    def test_claim_similarity_strips_long_path_prefix(self):
+        long_path = "tools/lib/very_long_module_name_here.py"
+        bot_f = {"path": long_path, "line": 100, "sha": "", "claim": f"{long_path}: missing error handling"}
+        local = [{"path": long_path, "line": 105, "sha": "", "round": 1, "claim": f"{long_path}: off by one in loop"}]
+        self.assertIsNone(gaps.match_finding(bot_f, local, {}))
+
+    def test_reviewer_matches_finding_word_boundaries(self):
+        cfg = {"candidates": {
+            "correctness-reviewer": {"name": "correctness-reviewer", "use_when": "logic"},
+            "supply-chain-reviewer": {"name": "supply-chain-reviewer", "use_when": "ci"},
+        }, "overlay_config": {}}
+        run_info = {"round_shas": {1: "aaa"}, "ran_reviewers": {"correctness-reviewer"}, "launches": [], "local_findings": []}
+        bot_f = {"path": "src/app.py", "line": 10, "sha": "aaa", "claim": "src/app.py: implicit mapping prevents null check"}
+        cls, _ = gaps.classify_miss(bot_f, run_info, cfg)
+        self.assertEqual(cls, "reviewer ran and missed")
+
+    def test_analyze_prs_does_not_join_across_repos(self):
+        events = [
+            {"v": 1, "ts": "2026-11-12T10:00:00Z", "event": "review.launch", "run_id": "ex/a#1",
+             "repo": "ex/a", "branch": "Is1-fix", "reviewer": "correctness-reviewer", "round": 1, "model": "sonnet", "source": "local"},
+        ]
+        pr_records = [{
+            "repo": "ex/b", "number": 5, "branch": "Is1-fix",
+            "bot_findings": [{"path": "app.py", "line": 10, "sha": "bbb", "severity": "High", "validity": "valid", "claim": "app.py: bug"}],
+        }]
+        res = gaps.analyze_prs(pr_records, events, {"candidates": {}, "overlay_config": {}})
+        self.assertEqual(res["prs"][0]["run_id"], "ex/b#1")
+        self.assertEqual(res["prs"][0]["ran_reviewers"], [])
+
+    def test_model_stats_dedupes_runs_and_exact_reviewer(self):
+        events = [
+            {"v": 1, "ts": "2026-11-12T10:00:00Z", "event": "pr.open", "run_id": "ex/r#1", "repo": "ex/r", "branch": "Is1-x", "pr_number": 1},
+            {"v": 1, "ts": "2026-11-12T10:01:00Z", "event": "review.launch", "run_id": "ex/r#1", "repo": "ex/r", "branch": "Is1-x",
+             "reviewer": "correctness-reviewer", "round": 1, "model": "sonnet", "effort": "medium", "source": "local"},
+            {"v": 1, "ts": "2026-11-12T10:02:00Z", "event": "review.launch", "run_id": "ex/r#1", "repo": "ex/r", "branch": "Is1-x",
+             "reviewer": "custom-correctness-reviewer", "round": 1, "model": "sonnet", "effort": "medium", "source": "local"},
+            {"v": 1, "ts": "2026-11-12T10:03:00Z", "event": "review.launch", "run_id": "ex/r#1", "repo": "ex/r", "branch": "Is1-x",
+             "reviewer": "custom-correctness-reviewer", "round": 2, "model": "sonnet", "effort": "medium", "source": "local"},
+            {"v": 1, "ts": "2026-11-12T10:04:00Z", "event": "review.round", "run_id": "ex/r#1", "round": 1, "state": "start", "sha": "111"},
+        ]
+        cfg = {"candidates": {}, "overlay_config": {"reviewer_keywords": {"custom-correctness-reviewer": ["broken"]}}}
+        pr_records = [{
+            "repo": "ex/r", "number": 1, "branch": "Is1-x",
+            "bot_findings": [{"path": "docs/a.md", "line": 5, "sha": "111", "severity": "Medium", "validity": "valid", "claim": "docs/a.md: broken link"}],
+        }]
+        res = gaps.analyze_prs(pr_records, events, cfg)
+        by_rev = {r["reviewer"]: r for r in res["model_stats"]}
+        self.assertEqual(by_rev["correctness-reviewer"]["misses"], 0)
+        self.assertEqual(by_rev["custom-correctness-reviewer"]["runs"], 1)
+        self.assertEqual(by_rev["custom-correctness-reviewer"]["launches"], 2)
+        self.assertEqual(by_rev["custom-correctness-reviewer"]["misses"], 1)
+
+    def test_changed_in_range_handles_amended_commits(self):
+        with mock.patch.object(gaps, "_git_ok") as m_git:
+            m_git.side_effect = [
+                (True, ""),
+                (True, ""),
+                (True, "@@ -10,0 +10,2 @@\n+x = 1\n"),
+            ]
+            self.assertTrue(gaps._changed_in_range(".", "sha1", "sha2", "a.py", 10))
+
+    def test_main_uses_per_repo_overlay_and_skips_mismatched_dir(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            ov_dir = tmp_path / "overlays" / "other" / "repo"
+            ov_dir.mkdir(parents=True)
+            (ov_dir / "review-gaps.json").write_text(json.dumps({"outside_scope_patterns": [r"^vendor/"]}))
+            log_path = tmp_path / "events.jsonl"
+            log_path.write_text("\n".join(json.dumps(e) for e in [
+                {"v": 1, "ts": "2026-11-12T10:00:00Z", "event": "pr.open", "run_id": "other/repo#1",
+                 "repo": "other/repo", "branch": "Is1-o", "pr_number": 1},
+                {"v": 1, "ts": "2026-11-12T10:01:00Z", "event": "review.launch", "run_id": "other/repo#1",
+                 "repo": "other/repo", "branch": "Is1-o", "reviewer": "correctness-reviewer", "round": 1, "model": "sonnet", "source": "local"},
+                {"v": 1, "ts": "2026-11-12T10:02:00Z", "event": "review.round", "run_id": "other/repo#1",
+                 "round": 1, "state": "start", "sha": "111"},
+                {"v": 1, "ts": "2026-11-12T10:05:00Z", "event": "review.finding", "run_id": "other/repo#1",
+                 "repo": "other/repo", "branch": "Is1-o", "source": "bot", "reviewer": "copilot",
+                 "severity": "Medium", "validity": "valid", "path": "vendor/lib.py", "line": 4, "sha": "222",
+                 "comment_id": 1, "claim": "vendor/lib.py: bug"},
+            ]) + "\n")
+            out_path = tmp_path / "report.md"
+            with mock.patch.dict(os.environ, {"PROJECT_OVERLAYS_DIR": str(tmp_path / "overlays")}), \
+                 mock.patch.object(gaps.repo_facts, "git", return_value="https://github.com/my/local-repo.git"), \
+                 mock.patch.object(gaps, "_changed_in_range") as m_changed:
+                rc = gaps.main(["--no-gh", "--repo", "other/repo", "--log", str(log_path), "--out", str(out_path), "--dir", str(tmp_path)])
+            self.assertEqual(rc, 0)
+            m_changed.assert_not_called()
+            self.assertIn("outside reviewer scope", out_path.read_text())
+
 
 if __name__ == "__main__":
     unittest.main()
