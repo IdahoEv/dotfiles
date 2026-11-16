@@ -49,13 +49,17 @@ Add nothing else: no prior verdicts, no framing of specific comments, no priorit
 
 If the agent runs in the background, wait for its completion notice. Don't act on partial output.
 
-## 3. Report
+## 3. Record bot findings
+
+Before anything else, whatever the report says (even `Files changed: no`), run `wf-backfill.sh --live --pr <n> --verdicts "$(git rev-parse --git-dir)/bot-verdicts.json"`, then delete that file. Omit `--verdicts` if the file is absent. It appends this round's Copilot findings to the local telemetry log, once per comment across rounds, and exits 0 on failure. Quick and Slow modes run it from the skill's Summary Report instead.
+
+## 4. Report
 
 Print the agent's report **unaltered, at top level** — no blockquote, no code fence, tables emitted directly, because quoting or fencing stops the terminal rendering its tables. If it says `Files changed: no` and lists no planned actions, run `agent-phase.sh --no-review`, say the round found nothing to do and polling has stopped, and stop. In unattended mode, use the stop procedure instead, reason "no valid fixes".
 
-## 4. Approve the commit
+## 5. Approve the commit
 
-**Unattended mode:** this explicitly overrides the skill's no-commit-without-approval rule, for this mode only. Don't ask. Commit with the proposed message plus this session's attribution trailer and go to step 5.
+**Unattended mode:** this explicitly overrides the skill's no-commit-without-approval rule, for this mode only. Don't ask. Commit with the proposed message plus this session's attribution trailer and go to step 6.
 
 Otherwise, if files changed, ask one `AskUserQuestion`. Write it as if the printed report were never shown, because background sessions often don't show it.
 
@@ -68,18 +72,18 @@ A typed `execute` commits with the proposed message; `execute <text>` uses `<tex
 
 **On "Don't commit yet"**, post nothing: list the planned actions as not posted, run `agent-phase.sh --no-review`, say polling has stopped, and stop.
 
-## 5. Commit, push, post
+## 6. Commit, push, post
 
 1. `git add` exactly the paths the agent listed, commit, and `git push`. If either fails, post nothing, report the error, and stop (unattended: the stop procedure, reason "commit or push failed").
 2. **After the push succeeds**, run the planned actions in order using the `gh api` snippets in the `github-review-procedure` skill's §4d (reactions, Reply, Mark Resolved, including the review-body `[RESOLVED]` edit); `pr-comment` rows go through `gh pr comment`. Skip 4d's conversational steps — the bodies are already final. Post each body exactly as planned. Confirm each resolution through the API. Report every action that fails, and keep going.
 
-If no files changed but there are planned actions (for example, rejections only), post them directly. There's no commit to gate them on. Then run `agent-phase.sh --no-review`, say polling has stopped because nothing was pushed to trigger a new review, and stop (unattended: the stop procedure, reason "no valid fixes"). Skip steps 6 and 7.
+If no files changed but there are planned actions (for example, rejections only), post them directly. There's no commit to gate them on. Then run `agent-phase.sh --no-review`, say polling has stopped because nothing was pushed to trigger a new review, and stop (unattended: the stop procedure, reason "no valid fixes"). Skip steps 7 and 8.
 
-In unattended mode, if this is the last round (`last=1`), run the stop procedure with reason "round cap" once the actions are posted, and skip steps 6 and 7: another review would never be handled.
+In unattended mode, if this is the last round (`last=1`), run the stop procedure with reason "round cap" once the actions are posted, and skip steps 7 and 8: another review would never be handled.
 
-## 6. Re-request review
+## 7. Re-request review
 
-GitHub auto-requests Copilot only when the PR opens. A later push gets no new pass unless one is requested. Skip this step while `~/.config/local-review-only` exists. In unattended mode, don't ask: run `request-review.sh` (below) and go to step 7. Otherwise ask:
+GitHub auto-requests Copilot only when the PR opens. A later push gets no new pass unless one is requested. Skip this step while `~/.config/local-review-only` exists. In unattended mode, don't ask: run `request-review.sh` (below) and go to step 8. Otherwise ask:
 
 ```text
 Question: "Request another Copilot review round for this push?"
@@ -91,7 +95,7 @@ Options:
 
 On request, run `request-review.sh`. Pass `--pr <N>` if needed, or `--level copilot+claude` to add the `claude.yml` smoke-test review.
 
-## 7. Poll
+## 8. Poll
 
 Run `agent-phase.sh REVIEW`, then run this in the background:
 

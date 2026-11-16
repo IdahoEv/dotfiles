@@ -250,5 +250,239 @@ class Pipeline(unittest.TestCase):
         self.assertEqual([f["severity"] for f in got], ["High"])
 
 
+class BotBackfillTests(unittest.TestCase):
+    def test_plan_bot_pr_inline_and_review_body_verdicts(self):
+        pr_data = {
+            "number": 173,
+            "branch": "Is10+11-chain-feature",
+            "comments": [
+                {"id": 101, "user": {"login": "copilot-pull-request-reviewer[bot]"},
+                 "path": "a.py", "original_line": 12, "original_commit_id": "a" * 40,
+                 "created_at": "2026-11-12T01:00:00Z", "body": "Null check missing here."},
+                {"id": 102, "user": {"login": "copilot-pull-request-reviewer[bot]"},
+                 "path": "b.py", "original_line": 30, "original_commit_id": "a" * 40,
+                 "created_at": "2026-11-12T01:00:00Z", "body": "Unused import."},
+                {"id": 103, "user": {"login": "IdahoEv"}, "in_reply_to_id": 102,
+                 "created_at": "2026-11-12T01:05:00Z", "body": "Disagree, this is not a bug."},
+                {"id": 104, "user": {"login": "copilot-pull-request-reviewer[bot]"},
+                 "path": "c.py", "original_line": 5, "original_commit_id": "a" * 40,
+                 "created_at": "2026-11-12T01:00:00Z", "body": "Edge case on empty input."},
+            ],
+            "reviews": [
+                {"id": 500, "user": {"login": "copilot-pull-request-reviewer[bot]"},
+                 "commit_id": "b" * 40, "submitted_at": "2026-11-12T01:00:00Z",
+                 "body": "<details><summary>Suppressed comments (1)</summary>\n- **d.py:9** — Consider caching this. [RESOLVED]\n</details>"},
+            ],
+            "threads": [
+                {"isResolved": False, "comments": {"nodes": [{"databaseId": 101, "body": "Null check"}]}},
+                {"isResolved": True, "comments": {"nodes": [{"databaseId": 102, "body": "Unused"}]}},
+                {"isResolved": False, "comments": {"nodes": [{"databaseId": 104, "body": "Edge case"}]}},
+            ],
+            "commit_files": [
+                ("2026-11-12T01:10:00Z", {"a.py"}),
+            ],
+        }
+        new, summary = bf.plan_bot_pr(pr_data, [], "IdahoEv/dotfiles")
+        self.assertEqual(summary["run_id"], "IdahoEv/dotfiles#10")
+        self.assertEqual((summary["inline"], summary["review_body"]), (3, 1))
+        findings = [e for e in new if e["event"] == "review.finding"]
+        results = [e for e in new if e["event"] == "review.result"]
+        self.assertEqual(len(findings), 4)
+        self.assertEqual(len(results), 1)
+        by_path = {f["path"]: f for f in findings}
+        self.assertEqual((by_path["a.py"]["verdict"], by_path["a.py"]["validity"], by_path["a.py"]["comment_id"]),
+                         ("fixed", "valid", 101))
+        self.assertEqual((by_path["b.py"]["verdict"], by_path["b.py"]["validity"]),
+                         ("dismissed", "rejected"))
+        self.assertEqual((by_path["c.py"]["verdict"], by_path["c.py"]["validity"]),
+                         ("deferred", "valid"))
+        self.assertEqual((by_path["d.py"]["verdict"], by_path["d.py"]["sha"], by_path["d.py"].get("comment_id")),
+                         ("fixed", "b" * 40, None))
+        self.assertTrue(all(e["backfill"] is True for e in new))
+        self.assertEqual((results[0]["fixed"], results[0]["dismissed"], results[0]["deferred"]), (2, 1, 1))
+
+    def test_numeric_branch_and_idempotency_with_live_events(self):
+        existing = [
+            {"v": 1, "ts": "2026-11-12T00:00:00Z", "run_id": "IdahoEv/dotfiles#160",
+             "repo": "IdahoEv/dotfiles", "ticket": "160", "branch": "160-workstream",
+             "event": "review.finding", "source": "bot", "reviewer": "copilot", "comment_id": 201},
+        ]
+        pr_data = {
+            "number": 178,
+            "branch": "160-workstream",
+            "comments": [
+                {"id": 201, "user": {"login": "copilot-pull-request-reviewer[bot]"},
+                 "path": "x.py", "original_line": 1, "original_commit_id": "c" * 40,
+                 "created_at": "2026-11-12T01:00:00Z", "body": "Already logged live."},
+                {"id": 202, "user": {"login": "copilot-pull-request-reviewer[bot]"},
+                 "path": "y.py", "original_line": 2, "original_commit_id": "c" * 40,
+                 "created_at": "2026-11-12T01:00:00Z", "body": "Missing from live log."},
+            ],
+            "reviews": [],
+            "threads": [],
+            "commit_files": [],
+        }
+        new, _ = bf.plan_bot_pr(pr_data, existing, "IdahoEv/dotfiles")
+        with tempfile.TemporaryDirectory() as d:
+            log = os.path.join(d, "events.jsonl")
+            w1, s1 = bf.append_new(log, new, existing)
+            self.assertEqual((w1, s1), (2, 1))  # 202 finding + review.result; 201 skipped
+            existing2 = existing + bf.load_log(log)
+            w2, s2 = bf.append_new(log, new, existing2)
+            self.assertEqual((w2, s2), (0, 3))
+
+    def _live_pr(self, comments):
+        return {"number": 9, "branch": "Is9-live", "comments": comments, "reviews": [],
+                "threads": [], "commit_files": []}
+
+    @staticmethod
+    def _c(cid, path):
+        return {"id": cid, "user": {"login": "Copilot"}, "path": path, "original_line": 3,
+                "original_commit_id": "d" * 40, "created_at": "2026-11-12T01:00:00Z", "body": "Fix this."}
+
+    def test_live_uses_caller_verdicts_and_is_not_marked_backfill(self):
+        pr = self._live_pr([self._c(1, "a.py"), self._c(2, "b.py")])
+        verdicts = {"1": {"verdict": "fixed", "validity": "partial", "reason": "half"},
+                    "2": {"verdict": "dismissed", "validity": "rejected", "reason": "intended"}}
+        new, _ = bf.plan_bot_pr(pr, [], "o/r", live=True, verdicts=verdicts)
+        self.assertFalse(any("backfill" in e for e in new))
+        f = {e["comment_id"]: e for e in new if e["event"] == "review.finding"}
+        self.assertEqual((f[1]["verdict"], f[1]["validity"]), ("fixed", "partial"))
+        self.assertEqual((f[2]["verdict"], f[2]["reason"]), ("dismissed", "intended"))
+        result = next(e for e in new if e["event"] == "review.result")
+        self.assertEqual((result["fixed"], result["dismissed"], result["deferred"]), (1, 1, 0))
+
+    def test_live_rounds_emit_each_comment_once_and_a_result_per_round(self):
+        with tempfile.TemporaryDirectory() as d:
+            log = os.path.join(d, "events.jsonl")
+
+            def round_(comments):
+                existing = bf.load_log(log)
+                new, _ = bf.plan_bot_pr(self._live_pr(comments), existing, "o/r", live=True)
+                return bf.append_new(log, new, existing)[0]
+
+            self.assertEqual(round_([self._c(1, "a.py")]), 2)
+            self.assertEqual(round_([self._c(1, "a.py")]), 0)  # re-run
+            self.assertEqual(round_([self._c(1, "a.py"), self._c(2, "b.py")]), 2)  # next round: new comment only
+            events = bf.load_log(log)
+            self.assertEqual(sum(e["event"] == "review.finding" for e in events), 2)
+            self.assertEqual(sum(e["event"] == "review.result" for e in events), 2)
+
+    def test_backfill_after_live_adds_nothing(self):
+        with tempfile.TemporaryDirectory() as d:
+            log = os.path.join(d, "events.jsonl")
+            pr = self._live_pr([self._c(1, "a.py")])
+            live, _ = bf.plan_bot_pr(pr, [], "o/r", live=True)
+            bf.append_new(log, live, [])
+            existing = bf.load_log(log)
+            back, _ = bf.plan_bot_pr(pr, existing, "o/r")
+            self.assertEqual(bf.append_new(log, back, existing), (0, 1))
+
+    def test_main_live_respects_telemetry_off(self):
+        old = os.environ.get("WF_TELEMETRY")
+        os.environ["WF_TELEMETRY"] = "0"
+        try:
+            self.assertEqual(bf.main(["--live", "--pr", "1", "--log", os.devnull]), 0)
+        finally:
+            if old is None:
+                del os.environ["WF_TELEMETRY"]
+            else:
+                os.environ["WF_TELEMETRY"] = old
+
+    def test_same_path_review_body_bullets_without_line_stay_distinct(self):
+        body = ("<details><summary>Suppressed comments (2)</summary>\n"
+                "- **a.py**: First problem.\n- **a.py**: Second problem.\n</details>")
+        pr = {"number": 9, "branch": "Is9-live", "comments": [], "threads": [], "commit_files": [],
+              "reviews": [{"user": {"login": "Copilot"}, "commit_id": "e" * 40,
+                           "submitted_at": "2026-11-12T01:00:00Z", "body": body}]}
+        new, _ = bf.plan_bot_pr(pr, [], "o/r", live=True)
+        with tempfile.TemporaryDirectory() as d:
+            log = os.path.join(d, "events.jsonl")
+            self.assertEqual(bf.append_new(log, new, [])[0], 3)
+            existing = bf.load_log(log)
+            again, _ = bf.plan_bot_pr(pr, existing, "o/r", live=True)
+            self.assertEqual(again, [])
+
+    def test_non_path_bold_bullets_in_review_body_are_not_findings(self):
+        body = ("Overview\n- **Note**: tests added\n1. **Summary** of changes\n"
+                "- **a.py:3** — Real one.\n- **Dockerfile:12** — pin the base image.")
+        items = bf.parse_suppressed_review_body(body)
+        self.assertEqual([i["path"] for i in items], ["a.py", "Dockerfile"])
+
+    def test_main_live_exits_zero_on_gh_or_verdicts_failure(self):
+        def boom(repo=None):
+            raise SystemExit("gh repo view failed: offline")
+        orig = bf.resolve_repo_slug
+        bf.resolve_repo_slug = boom
+        try:
+            self.assertEqual(bf.main(["--live", "--pr", "1", "--log", os.devnull]), 0)
+            with self.assertRaises(SystemExit):
+                bf.main(["--bot", "--pr", "1", "--log", os.devnull])
+        finally:
+            bf.resolve_repo_slug = orig
+        bf.resolve_repo_slug = lambda repo=None: "o/r"
+        orig_fetch = bf.fetch_pr_bot_data
+        bf.fetch_pr_bot_data = lambda *a, **k: self._live_pr([self._c(1, "a.py")])
+        try:
+            with tempfile.TemporaryDirectory() as d:
+                bad = os.path.join(d, "v.json")
+                with open(bad, "w") as fh:
+                    fh.write("{half")
+                log = os.path.join(d, "events.jsonl")
+                with redirect_stdout(io.StringIO()):
+                    self.assertEqual(bf.main(["--live", "--pr", "9", "--verdicts", bad, "--log", log]), 0)
+                self.assertEqual(sum(e["event"] == "review.finding" for e in bf.load_log(log)), 1)
+                with open(bad, "w") as fh:
+                    json.dump({"1": "fixed"}, fh)
+                log2 = os.path.join(d, "events2.jsonl")
+                with redirect_stdout(io.StringIO()):
+                    self.assertEqual(bf.main(["--live", "--pr", "9", "--verdicts", bad, "--log", log2]), 0)
+                self.assertEqual(sum(e["event"] == "review.finding" for e in bf.load_log(log2)), 1)
+        finally:
+            bf.resolve_repo_slug = orig
+            bf.fetch_pr_bot_data = orig_fetch
+
+    def test_run_identity_matches_shell_resolver(self):
+        facts = os.path.join(HERE, "repo-facts.sh")
+        for branch in ("Is12+13-chain", "Is7-x", "42-slug", "sc-5-thing", "feature/sc-9/do-it", "sc-1+2-x"):
+            shell = subprocess.run(
+                ["bash", "-c", f'. "{facts}"; printf "%s %s" "$(gt::ticket_from_branch "$1")" "$(gt::ticket_scheme "$1")"',
+                 "_", branch], capture_output=True, text=True).stdout
+            run_id, _, ticket = bf.resolve_run_identity(branch, "o/r", [])
+            scheme = shell.split()[1]
+            want = f"sc-{ticket}" if scheme == "shortcut" else f"o/r#{ticket}"
+            self.assertEqual((shell.split()[0], run_id), (ticket, want), branch)
+
+    def test_live_warns_only_for_findings_without_verdicts(self):
+        pr = self._live_pr([self._c(1, "a.py"), self._c(2, "b.py")])
+        _, s = bf.plan_bot_pr(pr, [], "o/r", live=True, verdicts={"1": {"verdict": "fixed"}})
+        self.assertEqual(s["unjudged"], 1)
+
+    def test_live_skips_commit_file_fetch(self):
+        calls = []
+        orig = bf._gh_json
+
+        def fake(args):
+            calls.append(" ".join(args))
+            if args[0] == "pr":
+                return {"number": 9, "headRefName": "Is9-x"}
+            if args[0] == "api" and args[1].endswith("/comments"):
+                return [self._c(1, "a.py")]
+            return {} if "graphql" in args else []
+        bf._gh_json = fake
+        try:
+            bf.fetch_pr_bot_data(9, "o/r", with_commit_files=False)
+        finally:
+            bf._gh_json = orig
+        self.assertFalse(any("/commits" in c for c in calls))
+        calls.clear()
+        bf._gh_json = fake
+        try:
+            bf.fetch_pr_bot_data(9, "o/r")
+        finally:
+            bf._gh_json = orig
+        self.assertTrue(any("/commits" in c for c in calls))
+
+
 if __name__ == "__main__":
     unittest.main()

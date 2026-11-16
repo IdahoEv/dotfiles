@@ -213,8 +213,8 @@ class Run:
         bad_verdicts = bad_validity = bad_keys = missing_keys = 0
         for e in self.of("review.finding"):
             rv, verdict = e.get("reviewer", "unknown"), e.get("verdict", "unknown")
-            if e.get("backfill") == 1:
-                # Text recovered for a finding already triaged in an earlier event.
+            if e.get("backfill") and e.get("source") != "bot":
+                # Local text recovered for a finding already triaged in an earlier event.
                 continue
             if verdict not in ("fixed", "dismissed", "deferred"):
                 bad_verdicts += 1
