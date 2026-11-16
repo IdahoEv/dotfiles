@@ -60,7 +60,7 @@ bddf25616fa63f0ca8ac5b4930003b30deab97b5058a623c8a88320938a8d6a7  644  dot_claud
 60a99a97d37a74b7198c608731c56dab7afd893af18bbe93a4faad173a5735db  644  tools/cloud-workflow-bootstrap.sh
 aba2b3934bec4b85ba04e090631da2057c981cac6059dec8ace4a8a3bd0fac9b  755  tools/finalize-check.sh
 2b0879df07b0123f330bd67e06e860453e229f422385f0c6da19e88277d855c9  755  tools/finalize-run.sh
-d340ad802d5b46f37a85dda5d45d991a0bed5d0e5ca1c2f9feca7ae94271fd40  644  tools/lib/agy_tmux_dashboard.py
+ef8edaa25e906becc0413ed2e9cb6b492a70a25367b474698179f3df5f7fb869  644  tools/lib/agy_tmux_dashboard.py
 f7673606e34113d3fbd15395094c7fdbfddce405964cc5f0f7222260c6d2282d  644  tools/lib/finalize_check.py
 f9a438f73d29326358262339d533f645052072c6740ce5724cc29ff9902273a2  644  tools/lib/finalize_run.py
 06127d9b52fa4eac4a6a64fb8f05e91b6c8d05cc2fa2f695cf08c43760349c24  644  tools/lib/mem_guard.py
