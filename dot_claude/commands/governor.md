@@ -76,8 +76,6 @@ A governor session has no standing ticket — it decides which ones exist.
 
 - **Always include concrete acceptance criteria** — observable conditions someone else
   could check, not restatements of the title.
-- **Always include an estimate.** If the work is too vague to estimate, that's the
-  finding: say so and propose a spike instead of guessing a number.
 - **Skip ticket-type debates** (story vs. task vs. chore). Pick the obvious one and move
   on; it is not worth a round trip.
 - Size to one reviewable unit of work. If acceptance criteria need "and then also",
