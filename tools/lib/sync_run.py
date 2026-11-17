@@ -79,11 +79,13 @@ def in_progress(dir_: str, method: str) -> bool:
 
 def push(dir_: str, branch: str, method: str) -> str:
     """"" on success, else the failure text."""
+    ref = f"refs/heads/{branch}"
     cmd = ["git", "push"]
     if method == "rebase":
-        cmd.append("--force-with-lease")
+        cmd.append(f"--force-with-lease={ref}")
     if not git_ok(dir_, "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"):
-        cmd += ["-u", "origin", "HEAD"]
+        cmd.append("-u")
+    cmd += ["origin", f"HEAD:{ref}"]
     r = run_cmd(cmd, cwd=dir_)
     if r.returncode == 0:
         return ""
@@ -126,11 +128,12 @@ def main(argv: list[str]) -> int:
         left = unmerged(d)
         if left:
             return handoff("unresolved", "unmerged paths remain", base_ref, method, ",".join(left))
-        if in_progress(d, method):
-            err = finish_in_progress(d, method)
-            if err:
-                return handoff("unresolved", err.splitlines()[-1], base_ref, method,
-                               ",".join(unmerged(d)))
+        if not paused:
+            return usage_error("--finish needs a merge or rebase in progress; run sync-run.sh without it")
+        err = finish_in_progress(d, method)
+        if err:
+            return handoff("unresolved", err.splitlines()[-1], base_ref, method,
+                           ",".join(unmerged(d)))
     elif paused:
         return usage_error("a merge or rebase is already in progress; resolve it, then run sync-run.sh --finish")
 
@@ -141,6 +144,8 @@ def main(argv: list[str]) -> int:
         return usage_error(f"on the base branch ({base}); run /sync from a feature worktree")
 
     if args.finish:
+        if git(d, "status", "--porcelain"):
+            return usage_error("working tree has uncommitted changes; commit or stash them, then run --finish again")
         err = push(d, branch, method)
         if err:
             return handoff("push-failed", err, base_ref, method)

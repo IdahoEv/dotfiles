@@ -99,6 +99,37 @@ class Sync(Base):
         self.assertIn("shared.txt", out["files"])
         self.assertEqual(self.remote_head("feat"), before)
 
+    def test_finish_without_an_operation_in_progress_is_refused(self):
+        wt = self.worktree("feat")
+        (wt / "local.txt").write_text("x")
+        self.git(wt, "add", "-A")
+        self.git(wt, "commit", "-qm", "local")
+        before = self.remote_head("feat")
+        r, _ = self.sync(wt, "--finish")
+        self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+        self.assertEqual(self.remote_head("feat"), before)
+
+    def test_finish_with_unrelated_dirty_files_is_refused(self):
+        wt = self.conflicting_branch()
+        before = self.remote_head("feat")
+        self.sync(wt)
+        (wt / "shared.txt").write_text("resolved\n")
+        self.git(wt, "add", "shared.txt")
+        (wt / "README.md").write_text("stray edit\n")
+        r, _ = self.sync(wt, "--finish")
+        self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+        self.assertEqual(self.remote_head("feat"), before)
+
+    def test_push_targets_the_feature_branch_not_a_foreign_upstream(self):
+        wt = self.worktree("feat")
+        self.git(wt, "branch", "--set-upstream-to=origin/main")
+        self.advance_main()
+        before = self.remote_head("main")
+        r, _ = self.sync(wt)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertEqual(self.remote_head("feat"), self.git(wt, "rev-parse", "HEAD"))
+        self.assertEqual(self.remote_head("main"), before)
+
     def test_rerun_during_merge_in_progress_is_refused(self):
         wt = self.conflicting_branch()
         self.sync(wt)

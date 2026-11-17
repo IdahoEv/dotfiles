@@ -147,6 +147,12 @@ class Cli(Base):
         rc, out = self.gate(wt)
         self.assertEqual((rc, out["verdict"]), (2, "unknown"))
 
+    def test_gh_not_executable_is_unknown(self):
+        import sync_gate
+        from unittest import mock
+        with mock.patch.object(sync_gate, "run_cmd", side_effect=FileNotFoundError("gh")):
+            self.assertEqual(sync_gate._view(".", "b"), ("error", {}))
+
     def test_states_and_conflict(self):
         wt = self.worktree("7-feature")
         for kw, want in ((dict(state="MERGED"), "already-merged"),

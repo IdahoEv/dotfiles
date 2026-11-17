@@ -34,6 +34,9 @@ case "$1 $2" in
   "api -X")
     if [ -f "$GH_PR_DIR/api.err" ]; then cat "$GH_PR_DIR/api.err" >&2; exit 1; fi
     exit 0 ;;
+  "api repos/"*)
+    [ -f "$GH_PR_DIR/ref.err" ] && { cat "$GH_PR_DIR/ref.err" >&2; exit 1; }
+    cat "$GH_PR_DIR/ref-sha"; exit 0 ;;
 esac
 exit 1
 """
@@ -84,6 +87,7 @@ class Run(Base):
 
     def view(self, branch, *, state="OPEN", draft=False, mergeable="MERGEABLE"):
         head = self.git(self.repo, "rev-parse", f"refs/heads/{branch}")
+        (self.pr_dir / "ref-sha").write_text(head)
         (self.pr_dir / f"view-{branch}.json").write_text(json.dumps({
             "number": 5, "state": state, "isDraft": draft, "mergeable": mergeable,
             "headRefOid": head, "baseRefName": "main"}))
@@ -185,6 +189,22 @@ class Run(Base):
         (self.pr_dir / "api.err").write_text("HTTP 422: Reference does not exist")
         r = self.merge(wt)
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+
+    def test_moved_remote_branch_is_not_deleted(self):
+        wt = self.ready()
+        (self.pr_dir / "ref-sha").write_text("0" * 40)
+        r = self.merge(wt)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertNotIn("api -X", self.calls())
+        self.assertIn("warning=remote-branch-not-deleted", r.stdout)
+
+    def test_remote_branch_already_gone_skips_delete(self):
+        wt = self.ready()
+        (self.pr_dir / "ref.err").write_text("gh: Not Found (HTTP 404)")
+        r = self.merge(wt)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertNotIn("api -X", self.calls())
+        self.assertNotIn("warning=", r.stdout)
 
     def test_branch_delete_failure_warns_but_reports_merged(self):
         wt = self.ready()

@@ -104,8 +104,11 @@ def _view(dir_: str, branch: str) -> tuple[str, dict]:
     delay = float(os.environ.get("SYNC_GATE_RETRY_DELAY", "2"))
     data: dict = {}
     for attempt in range(MERGEABLE_TRIES):
-        r = run_cmd(["gh", "pr", "view", branch, "--json",
-                     "number,state,isDraft,mergeable,headRefOid,baseRefName"], cwd=dir_)
+        try:
+            r = run_cmd(["gh", "pr", "view", branch, "--json",
+                         "number,state,isDraft,mergeable,headRefOid,baseRefName"], cwd=dir_)
+        except OSError:
+            return "error", {}
         if r.returncode != 0:
             if "no pull requests found" in r.stderr:
                 return "none", {}

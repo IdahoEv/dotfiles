@@ -79,8 +79,17 @@ def pr_state(dir_: str, number: str) -> str:
         return ""
 
 
-def delete_remote_branch(dir_: str, branch: str) -> str:
-    """"" on success (or already gone), else the failure text."""
+def delete_remote_branch(dir_: str, branch: str, merged_head: str) -> str:
+    """"" on success (or already gone), else the failure text. Skips the delete
+    when the remote branch has moved past the head that was merged."""
+    ref = run_cmd(["gh", "api", f"repos/{{owner}}/{{repo}}/git/ref/heads/{branch}",
+                   "--jq", ".object.sha"], cwd=dir_)
+    if ref.returncode != 0:
+        if "Not Found" in ref.stderr or "Reference does not exist" in ref.stderr:
+            return ""
+        return (ref.stderr.strip().splitlines() or ["unknown error"])[0]
+    if ref.stdout.strip() != merged_head:
+        return "remote branch no longer points at the merged head"
     r = run_cmd(["gh", "api", "-X", "DELETE", f"repos/{{owner}}/{{repo}}/git/refs/heads/{branch}"],
                 cwd=dir_)
     if r.returncode == 0 or "Reference does not exist" in r.stderr:
@@ -124,7 +133,7 @@ def main(argv: list[str]) -> int:
     if pr_state(d, facts.pr_number) != "MERGED":
         return stop("not-merged")
 
-    failure = delete_remote_branch(d, branch)
+    failure = delete_remote_branch(d, branch, facts.pr_head)
     tail = "remote branch deleted" if not failure else "remote branch kept"
     print(f"Merged #{facts.pr_number} ({method}) into {facts.base}; {tail}")
     if failure:
