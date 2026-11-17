@@ -84,11 +84,15 @@ def unrelated_changes(dir_: str) -> bool:
 
 
 def unpushed_sync(dir_: str, branch: str, base_ref: str) -> bool:
-    """A completed merge/rebase of base_ref that origin/<branch> does not have yet."""
+    """A completed merge/rebase of base_ref that origin/<branch> does not have yet.
+
+    A branch with no remote ref counts: its first push may be the one that failed.
+    """
     remote = f"refs/remotes/origin/{branch}"
-    return (git_ok(dir_, "rev-parse", "-q", "--verify", remote)
-            and git_ok(dir_, "merge-base", "--is-ancestor", base_ref, "HEAD")
-            and not git_ok(dir_, "merge-base", "--is-ancestor", base_ref, remote))
+    if not git_ok(dir_, "merge-base", "--is-ancestor", base_ref, "HEAD"):
+        return False
+    return (not git_ok(dir_, "rev-parse", "-q", "--verify", remote)
+            or not git_ok(dir_, "merge-base", "--is-ancestor", base_ref, remote))
 
 
 def push(dir_: str, branch: str, method: str) -> str:

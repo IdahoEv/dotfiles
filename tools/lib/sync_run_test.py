@@ -144,6 +144,12 @@ class Sync(Base):
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         self.assertEqual(self.remote_head("feat"), self.git(wt, "rev-parse", "HEAD"))
 
+    def test_finish_pushes_a_branch_that_has_no_remote_ref_yet(self):
+        wt = self.worktree("feat", pushed=False)
+        r, _ = self.sync(wt, "--finish")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertEqual(self.remote_head("feat"), self.git(wt, "rev-parse", "HEAD"))
+
     def test_push_targets_the_feature_branch_not_a_foreign_upstream(self):
         wt = self.worktree("feat")
         self.git(wt, "branch", "--set-upstream-to=origin/main")
