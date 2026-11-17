@@ -19,8 +19,11 @@ Act on the exit code:
 - **3** — `handoff=<reason>`, with `files=`, `base=`, `method=`:
   - `conflict` — the merge (or rebase) is left in place. Go to step 2.
   - `push-failed` — the merge is committed locally but not pushed (usually the remote
-    branch has commits this one lacks). Report `detail=`; do not force-push.
-  - `unresolved` — paths still conflicted after `--finish`; return to step 2.
+    branch has commits this one lacks; a rebase stops before rewriting in that case).
+    Report `detail=`; do not force-push. Once the user reconciles the remote, `sync-run.sh --finish`
+    retries the push; a plain re-run prints "up to date" without pushing.
+  - `unresolved` — paths still conflicted after `--finish`, including the next commit of a
+    multi-commit rebase; `files=` lists them. Return to step 2.
 
 ### 2. Resolve conflicts
 

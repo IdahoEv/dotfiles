@@ -107,7 +107,8 @@ def main(argv: list[str]) -> int:
         if in_progress(d, method):
             err = finish_in_progress(d, method)
             if err:
-                return handoff("unresolved", err.splitlines()[-1], base_ref, method)
+                return handoff("unresolved", err.splitlines()[-1], base_ref, method,
+                               ",".join(unmerged(d)))
     elif paused:
         return usage_error("a merge or rebase is already in progress; resolve it, then run sync-run.sh --finish")
 
@@ -135,6 +136,11 @@ def main(argv: list[str]) -> int:
     if method == "merge":
         r = run_cmd(["git", "merge", "--no-edit", base_ref], cwd=d)
     else:
+        remote_branch = f"refs/remotes/origin/{branch}"
+        if git_ok(d, "rev-parse", "-q", "--verify", remote_branch) and not git_ok(
+                d, "merge-base", "--is-ancestor", remote_branch, "HEAD"):
+            return handoff("push-failed", f"origin/{branch} has commits this branch lacks; "
+                           "rebasing would overwrite them", base_ref, method)
         r = run_cmd(["git", "rebase", base_ref], cwd=d)
     if r.returncode != 0:
         files = unmerged(d)
@@ -142,7 +148,7 @@ def main(argv: list[str]) -> int:
             run_cmd(["git", "merge", "--abort"] if method == "merge" else ["git", "rebase", "--abort"],
                     cwd=d)
             return usage_error(f"git {method} {base_ref} failed: "
-                               f"{(r.stderr or r.stdout).strip().splitlines()[-1:] or ['unknown error']}")
+                               f"{((r.stderr or r.stdout).strip().splitlines() or ['unknown error'])[-1]}")
         return handoff("conflict", f"{method} of {base_ref} conflicts", base_ref, method, ",".join(files))
     err = push(d, branch, method)
     if err:

@@ -161,6 +161,44 @@ class Sync(Base):
         self.assertEqual(len(self.parents(wt)), 1)
         self.assertEqual(self.remote_head("feat"), self.git(wt, "rev-parse", "HEAD"))
 
+    def test_rebase_does_not_overwrite_commits_pushed_to_the_branch_elsewhere(self):
+        wt = self.worktree("feat")
+        (self.repo / ".start-ticket.conf").write_text("sync_method=rebase\n")
+        other = self.root / "other-clone"
+        self.git(self.root, "clone", "-q", str(self.origin), str(other))
+        self.git(other, "checkout", "-q", "feat")
+        self.commit(other, "elsewhere")
+        self.git(other, "push", "-q", "origin", "feat")
+        before = self.remote_head("feat")
+        self.advance_main()
+        r, out = self.sync(wt)
+        self.assertEqual(r.returncode, 3, r.stdout + r.stderr)
+        self.assertEqual(out["handoff"], "push-failed")
+        self.assertEqual(self.remote_head("feat"), before)
+
+    def test_rebase_finish_reports_files_when_the_next_commit_conflicts(self):
+        wt = self.worktree("feat", pushed=False)
+        (self.repo / ".start-ticket.conf").write_text("sync_method=rebase\n")
+        for name in ("a", "b"):
+            (wt / f"{name}.txt").write_text(f"branch {name}\n")
+            self.git(wt, "add", "-A")
+            self.git(wt, "commit", "-qm", f"branch {name}")
+        self.git(wt, "push", "-q", "-u", "origin", "feat")
+        self.advance_main("a", "main a\n")
+        self.advance_main("b", "main b\n")
+        r, out = self.sync(wt)
+        self.assertEqual(out["files"], "a.txt", r.stdout + r.stderr)
+        (wt / "a.txt").write_text("resolved\n")
+        self.git(wt, "add", "a.txt")
+        r, out = self.sync(wt, "--finish")
+        self.assertEqual(r.returncode, 3, r.stdout + r.stderr)
+        self.assertEqual(out["files"], "b.txt")
+        (wt / "b.txt").write_text("resolved\n")
+        self.git(wt, "add", "b.txt")
+        r, _ = self.sync(wt, "--finish")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertEqual(self.remote_head("feat"), self.git(wt, "rev-parse", "HEAD"))
+
     def test_invalid_sync_method_is_a_usage_error(self):
         wt = self.worktree("feat")
         (self.repo / ".start-ticket.conf").write_text("sync_method=yolo\n")

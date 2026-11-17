@@ -37,7 +37,7 @@ aba793872a6ce83be45735cf898183d8d2b290c72f5e62312e161883462615af  644  dot_claud
 51367b2883763ed4354e9f51f596d3ed865982d0f57e2c1a8502c96b645b97de  644  dot_claude/commands/remind.md
 36451ca7b0c0afb4b6877b075d92dd555afe76658fa3ad409d4fa40e27a0a41c  644  dot_claude/commands/research_codebase.md
 746936f197ebe7da1f6351361e47e1949d1b3e280280faa11f3e4f3854640547  644  dot_claude/commands/start.md
-de670133a11ac6992a341c1536debb9868e530c873debfb3f4e8a1942c501b22  644  dot_claude/commands/sync.md
+4443c3e1b526cdbc4c6ff95bbe13f2b183ce6dee93b90d6a0a41e0afca7c97b8  644  dot_claude/commands/sync.md
 2cde0450935a61a0384afac7655b46cea02adc0957dfe840cfcbfbe9c8393cdc  644  dot_claude/skills/github-review-procedure/SKILL.md
 ee70fb1a401ed104231eb6f9ea72334263ca35b579f030d27946692cc57776be  644  dot_claude/skills/github-review-procedure/executable_github-review-poll.sh
 5ba50893bf0b8cccaaf6ce33095b9a8b7f673680eed702c57409ecebfbb163bf  644  dot_claude/skills/github-review-procedure/executable_github-review-state.sh
@@ -80,7 +80,7 @@ ac8c0f92f9527fbb17c12a660565f1359150725ea34531f6e556cd0ff056a941  644  tools/lib
 1675c497552ffa7a8a3b23bdfe6b790c126bf1d4ec854f76a857d05a349aef21  644  tools/lib/repo_facts.py
 d86aa76659afb858f4f235ed3e222d4359072437ad4c817efef4076a4c4ed9e9  644  tools/lib/sibling_worktrees.py
 25e48c296f3f47c5f6c1ef88870700aca702c719eec5617e202ac6e719d11a77  644  tools/lib/sync_gate.py
-b7ab3dfa5c65c22728a614b65f05506977213444328fbca988edca674438f438  644  tools/lib/sync_run.py
+76381af155405de428b33ea5cdc0d3f1d2b9db87b7d7136a1fc77da74ccfe82f  644  tools/lib/sync_run.py
 cc250687e95e2e4f392e1cf7fffc5487575466535c86659309b8428284d17a09  644  tools/lib/telemetry.sh
 3c042c6cc503481372fc0fdd23fb8e20b36214aa88d1b7ecc943975901008239  644  tools/lib/wf_backfill.py
 d6c45d70d96c21971b022ea65a73f2b0fd4af0dd0b8abb524a9fd34cfd7a43df  644  tools/lib/wf_report.py
