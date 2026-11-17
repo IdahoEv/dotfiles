@@ -245,9 +245,16 @@ open_tab() {  # <worktree> <kickoff> [<label>]
   if [ -n "$label" ]; then
     label="$(fit "$label" "${START_TICKET_TAB_MAXLEN:-30}" words)"
   else
-    local branch; branch="$(git -C "$wt" branch --show-current 2>/dev/null || basename "$wt")"
-    ST_CHAIN_TAG="$(chain_tag "$wt")"
-    label="$(make_label "$branch" "${START_TICKET_TAB_MAXLEN:-30}")"
+    if [ -f "$wt/.workstream.json" ] && [ -x "$SCRIPT_DIR/workstream.sh" ] && command -v python3 >/dev/null 2>&1; then
+      label="$("$SCRIPT_DIR/workstream.sh" render base --dir "$wt" 2>/dev/null || true)"
+    fi
+    if [ -n "$label" ]; then
+      label="$(fit "$label" "${START_TICKET_TAB_MAXLEN:-30}" words)"
+    else
+      local branch; branch="$(git -C "$wt" branch --show-current 2>/dev/null || basename "$wt")"
+      ST_CHAIN_TAG="$(chain_tag "$wt")"
+      label="$(make_label "$branch" "${START_TICKET_TAB_MAXLEN:-30}")"
+    fi
   fi
 
   local delay="${START_TICKET_CLAUDE_DELAY:-3}"
@@ -337,12 +344,23 @@ open_bg() {  # <worktree> <kickoff> [<label>]
   local wt="$1" kf="$2" label="${3:-}"
   command -v claude >/dev/null || die "claude CLI not found (needed by the bg launcher)"
   if [ -z "$label" ]; then
-    local branch; branch="$(git -C "$wt" branch --show-current 2>/dev/null || basename "$wt")"
-    ST_CHAIN_TAG="$(chain_tag "$wt")"
-    label="$(make_label "$branch" "${START_TICKET_BG_MAXLEN:-70}" pretty)"
-    # The phase prefix is budgeted outside make_label's maxlen: truncating the
-    # slug is fine, truncating "[PLAN]" would defeat the point of the label.
-    label="[PLAN] $label"
+    if [ -f "$wt/.workstream.json" ] && [ -x "$SCRIPT_DIR/workstream.sh" ] && command -v python3 >/dev/null 2>&1; then
+      local ws_base ws_tags
+      ws_base="$("$SCRIPT_DIR/workstream.sh" render base --dir "$wt" 2>/dev/null || true)"
+      if [ -n "$ws_base" ]; then
+        ws_base="$(fit "$ws_base" "${START_TICKET_BG_MAXLEN:-70}" words)"
+        ws_tags="$("$SCRIPT_DIR/workstream.sh" phase --dir "$wt" --show 2>/dev/null || true)"
+        label="${ws_tags:+$ws_tags }${ws_base}"
+      fi
+    fi
+    if [ -z "$label" ]; then
+      local branch; branch="$(git -C "$wt" branch --show-current 2>/dev/null || basename "$wt")"
+      ST_CHAIN_TAG="$(chain_tag "$wt")"
+      label="$(make_label "$branch" "${START_TICKET_BG_MAXLEN:-70}" pretty)"
+      # The phase prefix is budgeted outside make_label's maxlen: truncating the
+      # slug is fine, truncating "[PLAN]" would defeat the point of the label.
+      label="[PLAN] $label"
+    fi
   fi
   local perm; perm="$(setting bg_permission_mode START_TICKET_BG_PERMISSION_MODE plan)"
   local args=(--bg --name "$label")
@@ -732,6 +750,7 @@ if ! "$SCRIPT_DIR/workstream.sh" init-ticket \
   --ids "$(IFS=,; echo "${ids[*]}")" \
   --urls "$(IFS=,; echo "${chain_urls[*]}")" \
   "--title=$_ws_title" \
+  "--desc=${GT_LABEL_OVERRIDE:-}" \
   "--type=$ST_TYPE"; then
   [ -z "$chain_csv" ] || die "workstream record not written (required for chain $chain_csv)"
   echo "start-ticket: WARN workstream record not written" >&2

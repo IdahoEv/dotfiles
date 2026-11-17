@@ -68,6 +68,9 @@ sync_rounds() {
   gd="$(git -C "$dir" rev-parse --absolute-git-dir 2>/dev/null)" || return 0
   printf '%s\n' "$round" > "$gd/local-review-rounds.tmp" \
     && mv "$gd/local-review-rounds.tmp" "$gd/local-review-rounds"
+  if [ -x "$SCRIPT_DIR/workstream.sh" ]; then
+    "$SCRIPT_DIR/workstream.sh" set-reviews --dir "$dir" --local "$round" >/dev/null 2>&1 || true
+  fi
 }
 sync_rounds "$@" 2>/dev/null || true
 exit 0
