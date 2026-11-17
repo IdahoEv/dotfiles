@@ -538,7 +538,19 @@ def init_ticket_record(
     tags: list[str] | None = None,
 ) -> WorkstreamRecord:
     """Create or update .workstream.json in <worktree> for a ticket or chain."""
-    root = _worktree_root(worktree)
+    with _record_lock(worktree) as root:
+        return _init_ticket_record_locked(root, provider, tickets, title, desc, type_, tags)
+
+
+def _init_ticket_record_locked(
+    root: str,
+    provider: str,
+    tickets: list[dict[str, str]],
+    title: str,
+    desc: str,
+    type_: str,
+    tags: list[str] | None,
+) -> WorkstreamRecord:
     existing = load_record(root)
 
     # Single-ticket re-run on an existing chain worktree keeps the chain membership

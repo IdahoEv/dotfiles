@@ -280,6 +280,30 @@ new_repo custom-branch 'provider=shortcut'
 out="$(run --title "Add cache" --issue sc-7435 --review none)"
 check "shortcut: non-integer --issue sc-7435 accepted" "Shipped sc-7435: Add cache" "$(grep '^Shipped ' <<<"$out")"
 
+# Record lookup works from a subdirectory of the worktree.
+new_repo Is42+43-chain-fix
+cat > "$ROOT/repo/.workstream.json" <<'EOF'
+{"version":1,"kind":"ticket","tickets":[{"id":"42","url":""},{"id":"43","url":""}],"ticket_provider":"github","key":"Is42+43","desc":"chain fix","tags":["WIP"]}
+EOF
+mkdir -p "$ROOT/repo/nested/dir"
+out="$(cd "$ROOT/repo/nested/dir" && run --review none)"
+check "subdir: stored desc and resolver title" "Shipped Is42+43: chain fix" "$(grep '^Shipped ' <<<"$out")"
+
+# The record's ticket_provider selects the provider ahead of the config/branch fallback.
+new_repo custom-branch
+cat > "$ROOT/repo/.workstream.json" <<'EOF'
+{"version":1,"kind":"ticket","tickets":[{"id":"7435","url":""}],"ticket_provider":"shortcut","desc":"add cache"}
+EOF
+out="$(run --title "Add cache" --review none)"
+check "record provider: shortcut chosen from .workstream.json" "provider=shortcut" "$(grep '^provider=' <<<"$out")"
+check "record provider: PR title" "Shipped sc-7435: add cache" "$(grep '^Shipped ' <<<"$out")"
+new_repo custom-branch
+cat > "$ROOT/repo/.workstream.json" <<'EOF'
+{"version":1,"kind":"ticket","tickets":[{"id":"7435","url":""}],"ticket_provider":"shortcut","desc":"add cache"}
+EOF
+out="$(run --title "Add cache" --provider github --review none)"
+check "record provider: --provider flag wins" "provider=github" "$(grep '^provider=' <<<"$out")"
+
 # bug/Is88-foo and Is88/foo branches extract the issue number even without .workstream.json.
 new_repo bug/Is88-foo
 out="$(run --title "Typed branch fix" --review none)"

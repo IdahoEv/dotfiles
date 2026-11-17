@@ -154,6 +154,7 @@ git rev-parse --is-inside-work-tree >/dev/null 2>&1 || die "not inside a git rep
 wf_t0="$(wf::mono_ms)"
 command -v gh >/dev/null || die "gh CLI not found"
 
+ws_root="$(git rev-parse --show-toplevel)"
 branch="$(git branch --show-current)"
 [ -n "$branch" ] || die "not on a branch (detached HEAD)"
 # Refuse to ship from the repo's actual default branch, whatever it's called —
@@ -194,6 +195,10 @@ resolve_provider() {
   local v
   v="$(conf_get openpr_provider)"
   [ -n "$v" ] && { printf '%s' "$v"; return 0; }
+  v="$("$SCRIPT_DIR/workstream.sh" show --dir . 2>/dev/null | sed -n 's/^ *"ticket_provider": *"\([^"]*\)".*/\1/p' || true)"
+  if [ -n "$v" ] && [ -n "$(find_provider_file "$v")" ]; then
+    printf '%s' "$v"; return 0
+  fi
   v="$(conf_get provider)"
   if [ -n "$v" ] && [ -n "$(find_provider_file "$v")" ]; then
     printf '%s' "$v"; return 0
@@ -227,8 +232,8 @@ fi
 existing_pr="$(gh pr list --head "$branch" --json number --jq '.[0].number // empty')"
 create_pr=""
 if [ -z "$existing_pr" ] && [ -z "$title" ]; then
-  if [ -f .workstream.json ] && command -v python3 >/dev/null 2>&1; then
-    title="$(python3 -c 'import json; print(json.load(open(".workstream.json")).get("desc", ""))' 2>/dev/null || true)"
+  if [ -f "$ws_root/.workstream.json" ] && command -v python3 >/dev/null 2>&1; then
+    title="$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1])).get("desc", ""))' "$ws_root/.workstream.json" 2>/dev/null || true)"
   fi
   [ -n "$title" ] || die "no existing PR for '$branch' and no --title given"
 fi
@@ -291,7 +296,7 @@ else
   fi
 
   used_resolver=""
-  if [ -f .workstream.json ] && [ -x "$SCRIPT_DIR/workstream.sh" ]; then
+  if [ -f "$ws_root/.workstream.json" ] && [ -x "$SCRIPT_DIR/workstream.sh" ]; then
     bare_title="$title"
     while [[ "$bare_title" =~ ^(Is[0-9]+(\+[0-9]+)*|sc-[0-9]+(\+[0-9]+)*)(:?)[[:space:]]+(.*)$ ]]; do
       bare_title="${BASH_REMATCH[5]}"

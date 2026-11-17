@@ -32,10 +32,10 @@ join() {  # join the non-empty arguments with the separator
 }
 
 # ---- line 1 --------------------------------------------------------------------------
-# When .workstream.json is present, line 1 is generated from the record alone:
+# Generated from .workstream.json when the repo has one; otherwise the legacy branch/title line.
 #   project | workstream name | tags | PR # | local/remote review counts
 line1=""
-if [ -n "$cwd" ] && [ -f "$cwd/.workstream.json" ] && command -v workstream.sh >/dev/null 2>&1; then
+if [ -n "$cwd" ] && command -v workstream.sh >/dev/null 2>&1; then
   ws_json="$(workstream.sh statusline --dir "$cwd" --format json 2>/dev/null || true)"
   if [ -n "$ws_json" ]; then
     IFS=$US read -r ws_proj ws_name ws_tags ws_pr_num ws_pr_url ws_pr_state ws_rev < <(
