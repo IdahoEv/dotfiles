@@ -16,7 +16,6 @@
 from __future__ import annotations
 
 import argparse
-import contextlib
 import dataclasses
 import fcntl
 import json
@@ -24,8 +23,9 @@ import os
 import re
 import sys
 import tempfile
+from contextlib import contextmanager
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterator
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import repo_facts  # noqa: E402
@@ -185,32 +185,6 @@ def _worktree_root(dir_: str = ".") -> str:
     return top if top else os.path.abspath(dir_)
 
 
-@contextlib.contextmanager
-def _record_lock(worktree: str):
-    """Serialize read-modify-write updates to .workstream.json via flock."""
-    root = _worktree_root(worktree)
-    git_dir = repo_facts.git(root, "rev-parse", "--absolute-git-dir")
-    lock_dir = git_dir if git_dir else root
-    os.makedirs(lock_dir, exist_ok=True)
-    lock_path = os.path.join(lock_dir, "workstream.lock")
-    fd = os.open(lock_path, os.O_CREAT | os.O_RDWR, 0o644)
-    try:
-        fcntl.flock(fd, fcntl.LOCK_EX)
-        yield root
-    finally:
-        try:
-            fcntl.flock(fd, fcntl.LOCK_UN)
-        finally:
-            os.close(fd)
-
-
-def _normalize_ticket_id(tid: str, provider: str) -> str:
-    s = tid.strip()
-    if provider == "shortcut" and s.startswith("sc-"):
-        return s[3:]
-    return s
-
-
 def ensure_excluded(worktree: str) -> None:
     """Register .workstream.json in the repository's info/exclude file."""
     rel = repo_facts.git(worktree, "rev-parse", "--git-path", "info/exclude")
@@ -226,9 +200,24 @@ def ensure_excluded(worktree: str) -> None:
             f.write(f"{prefix}{RECORD_FILENAME}\n")
 
 
-def save_record(worktree: str, record: WorkstreamRecord) -> str:
-    """Atomically write .workstream.json in <worktree> and ensure info/exclude entry."""
+@contextmanager
+def _record_lock(worktree: str) -> Iterator[str]:
+    """Lock the worktree record while reading or writing it."""
     root = _worktree_root(worktree)
+    git_dir = repo_facts.git(root, "rev-parse", "--absolute-git-dir")
+    if git_dir:
+        lock_path = os.path.join(git_dir, "workstream-record.lock")
+        fd = os.open(lock_path, os.O_CREAT | os.O_RDWR, 0o600)
+    else:
+        fd = os.open(root, os.O_RDONLY)
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX)
+        yield root
+    finally:
+        os.close(fd)
+
+
+def _save_record_locked(root: str, record: WorkstreamRecord) -> str:
     ensure_excluded(root)
     target = os.path.join(root, RECORD_FILENAME)
     payload = json.dumps(record.to_dict(), indent=2) + "\n"
@@ -246,6 +235,12 @@ def save_record(worktree: str, record: WorkstreamRecord) -> str:
             pass
         raise
     return target
+
+
+def save_record(worktree: str, record: WorkstreamRecord) -> str:
+    """Atomically write .workstream.json in <worktree> and ensure info/exclude entry."""
+    with _record_lock(worktree) as root:
+        return _save_record_locked(root, record)
 
 
 def _legacy_chain_record(worktree: str) -> WorkstreamRecord | None:
@@ -427,7 +422,7 @@ def update_phase(
 
         if new_tags != rec.tags:
             rec.tags = new_tags
-            save_record(root, rec)
+            _save_record_locked(root, rec)
         return rec
 
 
@@ -539,66 +534,54 @@ def init_ticket_record(
 ) -> WorkstreamRecord:
     """Create or update .workstream.json in <worktree> for a ticket or chain."""
     with _record_lock(worktree) as root:
-        return _init_ticket_record_locked(root, provider, tickets, title, desc, type_, tags)
+        existing = load_record(root)
 
+        # Single-ticket re-run on an existing chain worktree keeps the chain membership
+        merged_tickets = list(tickets)
+        if (
+            existing is not None
+            and len(tickets) == 1
+            and len(existing.tickets) > 1
+            and existing.tickets[0].get("id") == tickets[0].get("id")
+        ):
+            merged_tickets = [dict(t) for t in existing.tickets]
+            if tickets[0].get("url"):
+                merged_tickets[0]["url"] = tickets[0]["url"]
 
-def _init_ticket_record_locked(
-    root: str,
-    provider: str,
-    tickets: list[dict[str, str]],
-    title: str,
-    desc: str,
-    type_: str,
-    tags: list[str] | None,
-) -> WorkstreamRecord:
-    existing = load_record(root)
+        if existing is not None and (
+            not existing.tickets
+            or not merged_tickets
+            or existing.tickets[0].get("id") != merged_tickets[0].get("id")
+        ):
+            existing = None
 
-    # Single-ticket re-run on an existing chain worktree keeps the chain membership
-    merged_tickets = list(tickets)
-    if (
-        existing is not None
-        and len(tickets) == 1
-        and len(existing.tickets) > 1
-        and existing.tickets[0].get("id") == tickets[0].get("id")
-    ):
-        merged_tickets = [dict(t) for t in existing.tickets]
-        if tickets[0].get("url"):
-            merged_tickets[0]["url"] = tickets[0]["url"]
-
-    if existing is not None and (
-        not existing.tickets
-        or not merged_tickets
-        or existing.tickets[0].get("id") != merged_tickets[0].get("id")
-    ):
-        existing = None
-
-    if not desc:
-        if existing and existing.desc and not title and not os.environ.get("GT_LABEL_SLUG_OVERRIDE"):
-            desc = existing.desc
+        if not desc:
+            if existing and existing.desc and not title and not os.environ.get("GT_LABEL_SLUG_OVERRIDE"):
+                desc = existing.desc
+            else:
+                desc = format_text(_slug_phrase(title), "words")
         else:
-            desc = format_text(_slug_phrase(title), "words")
-    else:
-        sanitized = repo_facts.sanitize_label(desc)
-        desc = format_text(sanitized, "words") if sanitized else format_text(_slug_phrase(title), "words")
+            sanitized = repo_facts.sanitize_label(desc)
+            desc = format_text(sanitized, "words") if sanitized else format_text(_slug_phrase(title), "words")
 
-    rec = WorkstreamRecord(
-        version=1,
-        kind="ticket",
-        tickets=merged_tickets,
-        ticket_provider=provider,
-        key="",
-        key_aliases=list(existing.key_aliases) if existing else [],
-        desc=desc,
-        type=type_ or (existing.type if existing else ""),
-        template_source=detect_template_source(root),
-        tags=list(tags) if tags is not None else (list(existing.tags) if existing else ["PLAN"]),
-        pr=existing.pr if existing else None,
-        reviews=dict(existing.reviews) if existing else {"local": 0, "remote": 0},
-        claude_sessions=list(existing.claude_sessions) if existing else [],
-    )
-    rec.key = derive_key(rec, root)
-    save_record(root, rec)
-    return rec
+        rec = WorkstreamRecord(
+            version=1,
+            kind="ticket",
+            tickets=merged_tickets,
+            ticket_provider=provider,
+            key="",
+            key_aliases=list(existing.key_aliases) if existing else [],
+            desc=desc,
+            type=type_ or (existing.type if existing else ""),
+            template_source=detect_template_source(root),
+            tags=list(tags) if tags is not None else (list(existing.tags) if existing else ["PLAN"]),
+            pr=existing.pr if existing else None,
+            reviews=dict(existing.reviews) if existing else {"local": 0, "remote": 0},
+            claude_sessions=list(existing.claude_sessions) if existing else [],
+        )
+        rec.key = derive_key(rec, root)
+        _save_record_locked(root, rec)
+        return rec
 
 
 def chain_ids(worktree: str = ".", fallback_ticket_id: str = "") -> list[str]:
@@ -643,7 +626,7 @@ def update_pr(
         loaded = _load_record_file(root)
         if loaded is None:
             return None
-        _, rec = loaded
+        root, rec = loaded
         pr_data: dict[str, Any] = dict(rec.pr) if isinstance(rec.pr, dict) else {}
         pr_data["number"] = int(number)
         if url:
@@ -652,7 +635,7 @@ def update_pr(
             pr_data["state"] = state
         if pr_data != rec.pr:
             rec.pr = pr_data
-            save_record(root, rec)
+            _save_record_locked(root, rec)
         return rec
 
 
@@ -679,7 +662,7 @@ def update_reviews(
         loaded = _load_record_file(root)
         if loaded is None:
             return None
-        _, rec = loaded
+        root, rec = loaded
         reviews: dict[str, Any] = dict(rec.reviews or {"local": 0, "remote": 0})
         if local is not None:
             cnt, running = _parse_review_count(local)
@@ -697,7 +680,7 @@ def update_reviews(
                 reviews.pop("remote_running", None)
         if reviews != rec.reviews:
             rec.reviews = reviews
-            save_record(root, rec)
+            _save_record_locked(root, rec)
         return rec
 
 
@@ -910,8 +893,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.cmd == "render":
         rec = load_record(args.dir)
         if args.ids:
-            eff_provider = args.provider or (rec.ticket_provider if rec else "") or "github"
-            ids = [_normalize_ticket_id(i, eff_provider) for i in args.ids.split(",") if i.strip()]
+            ids = [i.strip() for i in args.ids.split(",") if i.strip()]
             sanitized = repo_facts.sanitize_label(args.desc) if args.desc else ""
             if sanitized:
                 desc = format_text(sanitized, "words")
@@ -925,7 +907,7 @@ def main(argv: list[str] | None = None) -> int:
                 version=1,
                 kind="ticket",
                 tickets=[{"id": tid, "url": ""} for tid in ids],
-                ticket_provider=eff_provider,
+                ticket_provider=args.provider or (rec.ticket_provider if rec else "") or "github",
                 desc=desc,
                 type=args.type_ or (rec.type if rec else ""),
                 tags=list(rec.tags) if rec else ["PLAN"],

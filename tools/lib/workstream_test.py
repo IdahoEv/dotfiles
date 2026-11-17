@@ -11,8 +11,11 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
+from contextlib import contextmanager
 from pathlib import Path
+from unittest import mock
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
@@ -114,6 +117,57 @@ class SettingsLayeringTests(WorkstreamTestBase):
 
 
 class RecordPersistenceTests(WorkstreamTestBase):
+    def test_record_writers_read_and_write_under_shared_lock(self) -> None:
+        repo = self.make_repo("widgets")
+        record = workstream.init_ticket_record(
+            repo,
+            provider="github",
+            tickets=[{"id": "312"}],
+            title="Record locking",
+        )
+
+        original_lock = workstream._record_lock
+        original_load = workstream.load_record
+        original_save = workstream._save_record_locked
+        lock_held = False
+
+        @contextmanager
+        def tracked_lock(worktree: str):
+            nonlocal lock_held
+            with original_lock(worktree) as root:
+                lock_held = True
+                try:
+                    yield root
+                finally:
+                    lock_held = False
+
+        def assert_locked() -> None:
+            self.assertTrue(lock_held, "record read or write must hold the shared lock")
+
+        def tracked_load(*args, **kwargs):
+            assert_locked()
+            return original_load(*args, **kwargs)
+
+        def tracked_save(*args, **kwargs):
+            assert_locked()
+            return original_save(*args, **kwargs)
+
+        with (
+            mock.patch.object(workstream, "_record_lock", tracked_lock),
+            mock.patch.object(workstream, "load_record", tracked_load),
+            mock.patch.object(workstream, "_save_record_locked", tracked_save),
+        ):
+            workstream.init_ticket_record(
+                repo,
+                provider="github",
+                tickets=[{"id": "312"}],
+                title="Record locking",
+            )
+            workstream.update_phase(repo, phase="WIP")
+            workstream.update_pr(repo, 42)
+            workstream.update_reviews(repo, local="1")
+            workstream.save_record(repo, record)
+
     def test_save_and_load_record_and_exclude(self) -> None:
         repo = self.make_repo("widgets")
         rec = workstream.WorkstreamRecord(
@@ -191,6 +245,44 @@ class RecordPersistenceTests(WorkstreamTestBase):
             check=True,
         ).stdout.strip()
         self.assertEqual(st, "")
+
+    def test_concurrent_record_updates_preserve_each_others_fields(self) -> None:
+        repo = self.make_repo("widgets")
+        workstream.init_ticket_record(
+            repo, provider="github", tickets=[{"id": "7", "url": ""}], title="Ticket 7"
+        )
+        script = """
+import sys, time
+sys.path.insert(0, sys.argv[1])
+import workstream
+mode, root = sys.argv[2:]
+load_record = workstream.load_record
+def slow_load_record(worktree="."):
+    record = load_record(worktree)
+    time.sleep(0.005)
+    return record
+workstream.load_record = slow_load_record
+for i in range(20):
+    if mode == "pr":
+        workstream.update_pr(root, i + 1)
+    else:
+        workstream.update_reviews(root, local=str(i % 2 + 1), remote="7")
+"""
+        writers = [
+            subprocess.Popen(
+                [sys.executable, "-c", script, HERE, mode, repo],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+            )
+            for mode in ("pr", "reviews")
+        ]
+        results = [writer.communicate() for writer in writers]
+        self.assertEqual([writer.returncode for writer in writers], [0, 0], results)
+
+        record = workstream.load_record(repo)
+        self.assertEqual(record.pr["number"], 20)
+        self.assertEqual(record.reviews, {"local": 2, "remote": 7})
 
     def test_save_record_fails_closed_when_exclude_unwritable(self) -> None:
         if os.geteuid() == 0:
