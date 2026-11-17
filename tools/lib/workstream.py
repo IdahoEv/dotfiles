@@ -88,6 +88,7 @@ class WorkstreamRecord:
         default_factory=lambda: {"local": 0, "remote": 0}
     )
     claude_sessions: list[str] = dataclasses.field(default_factory=list)
+    codex_sessions: list[str] = dataclasses.field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         reviews_out: dict[str, Any] = {
@@ -112,6 +113,7 @@ class WorkstreamRecord:
             "pr": dict(self.pr) if isinstance(self.pr, dict) else None,
             "reviews": reviews_out,
             "claude_sessions": list(self.claude_sessions),
+            "codex_sessions": list(self.codex_sessions),
         }
 
     @classmethod
@@ -147,6 +149,7 @@ class WorkstreamRecord:
             pr=pr,
             reviews=reviews,
             claude_sessions=[str(s) for s in (data.get("claude_sessions") or [])],
+            codex_sessions=[str(s) for s in (data.get("codex_sessions") or [])],
         )
 
 
@@ -578,6 +581,7 @@ def init_ticket_record(
             pr=existing.pr if existing else None,
             reviews=dict(existing.reviews) if existing else {"local": 0, "remote": 0},
             claude_sessions=list(existing.claude_sessions) if existing else [],
+            codex_sessions=list(existing.codex_sessions) if existing else [],
         )
         rec.key = derive_key(rec, root)
         _save_record_locked(root, rec)

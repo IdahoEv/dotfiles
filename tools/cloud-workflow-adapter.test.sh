@@ -61,6 +61,16 @@ agy_commands=(
 check "$repo/workflow/adapters/agy.md" "${agy_commands[@]}" || fail "agy adapter has drifted from the commands it covers"
 printf 'PASS agy adapter maps every Claude-only construct in its covered commands\n'
 
+local_codex_commands=("${agy_commands[@]}"
+  "$repo/dot_claude/commands/governor.md"
+  "$repo/dot_claude/commands/groom.md"
+  "$repo/dot_claude/commands/pick.md"
+  "$repo/dot_claude/commands/discuss.md"
+  "$repo/dot_claude/commands/finalize.md"
+)
+check "$repo/workflow/adapters/codex-local.md" "${local_codex_commands[@]}" || fail "local Codex adapter has drifted"
+printf 'PASS local Codex adapter maps every covered command and nested review procedure\n'
+
 claude_commands=(
   "$repo/dot_claude/commands/start.md"
   "$repo/dot_claude/commands/open-pr.md"
