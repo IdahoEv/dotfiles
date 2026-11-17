@@ -19,7 +19,7 @@ from codex_rpc import Daemon, RpcError
 ROOT = Path(__file__).resolve().parents[2]
 TOOLS = ROOT / "tools"
 COMMANDS = ("governor", "groom", "pick", "start", "discuss", "local-review-cycle",
-            "open-pr", "github-review-comments", "finalize")
+            "open-pr", "github-review-comments", "finalize", "merge", "land", "sync")
 
 
 def child_environment():

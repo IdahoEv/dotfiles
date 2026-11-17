@@ -11,6 +11,27 @@ import codex_workflow as cw
 import workstream
 
 
+class InstructionTests(unittest.TestCase):
+    def test_delivery_commands_resolve_without_connecting_to_daemon(self):
+        for command in ("merge", "land", "sync"):
+            with self.subTest(command=command), patch.object(cw, "Daemon") as daemon, \
+                    patch("builtins.print") as output:
+                self.assertEqual(cw.main(["instructions", command]), 0)
+                pointers = output.call_args.args[0]
+                self.assertIn(str(cw.ROOT / "workflow/adapters/codex-local.md"), pointers)
+                self.assertIn(str(cw.ROOT / "dot_claude/commands" / f"{command}.md"), pointers)
+                daemon.assert_not_called()
+
+    def test_delivery_skills_use_the_same_checkout_and_canonical_procedures(self):
+        for command in ("merge", "land", "sync"):
+            with self.subTest(command=command):
+                skill = (cw.ROOT / "dot_codex/skills" / command / "SKILL.md.tmpl").read_text()
+                self.assertIn(f"name: {command}", skill)
+                self.assertIn("{{ .chezmoi.sourceDir }}/workflow/adapters/codex-local.md", skill)
+                self.assertIn("{{ .chezmoi.sourceDir }}/dot_claude/commands/" + command + ".md", skill)
+                self.assertTrue((cw.ROOT / "dot_claude/commands" / f"{command}.md").is_file())
+
+
 class LaunchTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()

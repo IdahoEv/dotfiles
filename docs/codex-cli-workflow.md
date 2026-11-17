@@ -15,8 +15,13 @@ $discuss Cache Invalidation
 $local-review-cycle
 $open-pr
 $github-review-comments
+$sync
+$merge
+$land
 $finalize
 ```
+
+`$merge` runs the local sync gate before merging; a blocked gate stops for the user. `$land` merges, then finalizes only on success. `$sync` brings in the base and pushes, handing conflicts to the session under the canonical test and recovery rules. Land uses the same manual native-thread archive handoff as finalize.
 
 These skills load [canonical procedures](../dot_claude/commands/) through the [local adapter](../workflow/adapters/codex-local.md). They do not register custom native slash commands. `codex-workflow.sh instructions <command>` prints the corresponding file pointers.
 
