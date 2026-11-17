@@ -59,7 +59,6 @@ MANAGED = json.loads(r"""
       "command(regex:^(bash )?{{ .chezmoi.homeDir }}/\\.claude/skills/workflow/wf-context\\.sh([ \\t]+[^;|&`$()\\r\\n]+)?$)",
       "command(docker-compose)",
       "read_file({{ .chezmoi.homeDir }}/.local/share/chezmoi)",
-      "read_file({{ .chezmoi.homeDir }}/Documents/Development/dotfiles)",
       "read_file({{ .chezmoi.homeDir }}/.claude)",
       "read_file(/tmp/)",
       "write_file(/tmp/)",
