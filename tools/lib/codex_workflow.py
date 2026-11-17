@@ -22,6 +22,29 @@ COMMANDS = ("governor", "groom", "pick", "start", "discuss", "local-review-cycle
             "open-pr", "github-review-comments", "finalize")
 
 
+def child_environment():
+    return {key: value for key, value in os.environ.items() if key != "MEM_GUARD_OVERRIDE"}
+
+
+def check_memory(directory, label):
+    try:
+        result = subprocess.run(
+            [str(TOOLS / "mem-guard.sh"), "check", "--context", f"codex {label}"],
+            cwd=directory, env=dict(os.environ), capture_output=True, text=True, timeout=20,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        print(f"codex-workflow: mem-guard unavailable ({exc}); launching without a memory check", file=sys.stderr)
+        return
+    if result.stdout:
+        print(result.stdout, file=sys.stderr, end="")
+    if result.stderr:
+        print(result.stderr, file=sys.stderr, end="")
+    if result.returncode == 3:
+        raise RpcError("launch blocked by mem-guard; stop remaining groups and let the user decide whether to override")
+    if result.returncode != 0:
+        print(f"codex-workflow: mem-guard failed (exit {result.returncode}); launching without a memory check", file=sys.stderr)
+
+
 def context():
     return (
         f"Local Codex CLI workflow. Read {ROOT / 'workflow/adapters/codex-local.md'} "
@@ -49,6 +72,7 @@ def launch(rpc, directory, kickoff, name="", kind="ticket"):
     row_record = dataclasses.replace(record, desc=(repo_facts.sanitize_label(
         os.environ.get("GT_LABEL_OVERRIDE", "")) or record.desc)) if record else None
     label = name or (workstream.render_surface(row_record, "row", directory) if row_record else "[TALK] Discussion")
+    check_memory(directory, "session launch")
     response = rpc.call("thread/start", {"cwd": directory, "ephemeral": False})
     thread_id = response["thread"]["id"]
     try:
@@ -91,7 +115,7 @@ def parse_groups(groups):
 
 def prepare(arguments, directory):
     result = subprocess.run([str(TOOLS / "start-ticket.sh"), *arguments],
-                            cwd=directory, text=True, capture_output=True, check=True)
+                            cwd=directory, env=child_environment(), text=True, capture_output=True, check=True)
     if result.stderr:
         print(result.stderr, file=sys.stderr, end="")
     return dict(line.split("=", 1) for line in result.stdout.splitlines() if "=" in line)
@@ -99,8 +123,12 @@ def prepare(arguments, directory):
 
 def start_groups(rpc, groups, directory):
     for group in parse_groups(groups):
+        check_memory(directory, f"ticket {group}")
         setup = prepare([group, "--no-tab"], directory)
-        result = launch(rpc, setup["worktree"], setup["kickoff"])
+        try:
+            result = launch(rpc, setup["worktree"], setup["kickoff"])
+        except RpcError as exc:
+            raise RpcError(f"{exc}. Setup already completed: {json.dumps(setup)}") from exc
         result.update(group=group, ticket_state=setup.get("ticket_state", "unknown"),
                       ticket_in_progress=setup.get("ticket_in_progress", "unknown"))
         print(json.dumps(result), flush=True)
@@ -178,7 +206,7 @@ def main(argv=None):
             print(instructions(args.name))
             return 0
         if args.command == "resume":
-            return subprocess.call(["codex", "resume", args.thread])
+            return subprocess.call(["codex", "resume", args.thread], env=child_environment())
         if args.command == "start":
             parse_groups(args.groups)
         with Daemon() as rpc:
@@ -187,6 +215,7 @@ def main(argv=None):
             elif args.command == "launch":
                 print(json.dumps(launch(rpc, args.dir, args.kickoff, args.name, args.kind)))
             elif args.command == "discuss":
+                check_memory(args.dir, "discussion setup")
                 setup = prepare(["--session", args.topic, "--about", args.about, "--launcher", "none"], args.dir)
                 print(json.dumps(launch(rpc, setup["dir"], setup["kickoff"], setup["label"], "talk")))
             elif args.command == "status":

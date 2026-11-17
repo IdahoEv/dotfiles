@@ -25,6 +25,8 @@ class LaunchTests(unittest.TestCase):
         )
         self.rpc = Mock()
         self.rpc.call.side_effect = self.respond
+        self.guard = patch.object(cw, "check_memory").start()
+        self.addCleanup(patch.stopall)
 
     def respond(self, method, params):
         if method == "thread/start":
@@ -48,6 +50,14 @@ class LaunchTests(unittest.TestCase):
         result = cw.launch(self.rpc, str(self.root), str(self.kickoff))
         self.assertEqual(result["thread_id"], "thread-1")
         self.assertFalse(result["reused"])
+        self.guard.assert_called_once_with(str(self.root), "session launch")
+
+    def test_blocked_launch_creates_no_thread_or_binding(self):
+        self.guard.side_effect = cw.RpcError("blocked by mem-guard")
+        with self.assertRaisesRegex(cw.RpcError, "blocked"):
+            cw.launch(self.rpc, str(self.root), str(self.kickoff))
+        self.rpc.call.assert_not_called()
+        self.assertEqual(workstream.load_record(str(self.root)).codex_sessions, [])
 
     def test_failed_submission_keeps_recoverable_binding_without_duplicate_launch(self):
         def respond(method, params):
@@ -62,6 +72,9 @@ class LaunchTests(unittest.TestCase):
         result = cw.launch(self.rpc, str(self.root), str(self.kickoff))
         self.assertTrue(result["reused"])
         self.assertEqual([c.args[0] for c in self.rpc.call.call_args_list], ["thread/read"])
+        self.guard.reset_mock()
+        cw.launch(self.rpc, str(self.root), str(self.kickoff))
+        self.guard.assert_not_called()
 
     def test_wrong_cwd_binding_fails_before_input(self):
         self.rec.codex_sessions = ["thread-1"]
@@ -91,6 +104,18 @@ class LaunchTests(unittest.TestCase):
 
 
 class GroupTests(unittest.TestCase):
+    def setUp(self):
+        self.guard = patch.object(cw, "check_memory").start()
+        self.addCleanup(patch.stopall)
+
+    def test_blocked_group_stops_before_setup(self):
+        self.guard.side_effect = cw.RpcError("blocked by mem-guard")
+        with patch.object(cw, "prepare") as prepare:
+            with self.assertRaisesRegex(cw.RpcError, "blocked"):
+                cw.start_groups(Mock(), ["12,13", "15"], "/repo")
+            prepare.assert_not_called()
+        self.guard.assert_called_once_with("/repo", "ticket 12,13")
+
     def test_groups_are_independent_and_chains_stay_ordered(self):
         self.assertEqual(cw.parse_groups(["12,13,14", "15"]), ["12,13,14", "15"])
 
@@ -104,6 +129,14 @@ class GroupTests(unittest.TestCase):
             with self.assertRaisesRegex(cw.RpcError, "setup failed"):
                 cw.start_groups(Mock(), ["12,13", "15"], "/repo")
             self.assertEqual(prepare.call_count, 1)
+
+    def test_pressure_rising_after_setup_reports_worktree_and_stops_next_group(self):
+        setup = {"worktree": "/prepared", "kickoff": "/kickoff", "ticket_in_progress": "yes"}
+        with patch.object(cw, "prepare", return_value=setup) as prepare, \
+                patch.object(cw, "launch", side_effect=cw.RpcError("blocked by mem-guard")):
+            with self.assertRaisesRegex(cw.RpcError, "Setup already completed.*prepared.*ticket_in_progress"):
+                cw.start_groups(Mock(), ["12", "15"], "/repo")
+        prepare.assert_called_once()
 
     def test_setup_uses_existing_script_and_never_launches_claude(self):
         completed = subprocess.CompletedProcess([], 0, "worktree=/w\nkickoff=/k\nbranch=Is12\n", "")
@@ -132,6 +165,60 @@ class StatusTests(unittest.TestCase):
         self.assertEqual([t["id"] for t in cw.list_threads(rpc)], ["one", "two"])
         self.assertEqual(rpc.call.call_args.args[1]["cursor"], "next")
         self.assertEqual(rpc.call.call_args.args[1]["modelProviders"], [])
+
+
+class MemoryTests(unittest.TestCase):
+    def test_real_guard_blocks_before_ticket_setup_and_honors_explicit_override(self):
+        with tempfile.TemporaryDirectory() as directory:
+            processes = Path(directory) / "processes"
+            processes.write_text("")
+            environment = {"MEM_GUARD_HOST_FIXTURE": "level=critical free_pct=3",
+                           "MEM_GUARD_PS_FIXTURE": str(processes), "MEM_GUARD_ENABLED": "on",
+                           "MEM_GUARD_OVERRIDE": ""}
+            with patch.dict(cw.os.environ, environment), patch.object(cw, "prepare") as prepare, \
+                    patch("sys.stderr"):
+                with self.assertRaisesRegex(cw.RpcError, "blocked by mem-guard"):
+                    cw.start_groups(Mock(), ["12", "15"], directory)
+                prepare.assert_not_called()
+                with patch.dict(cw.os.environ, {"MEM_GUARD_OVERRIDE": "1"}):
+                    cw.check_memory(directory, "explicit override")
+
+    def test_discussion_block_stops_before_setup(self):
+        with patch.object(cw, "Daemon"), patch.object(cw, "prepare") as prepare, \
+                patch.object(cw, "check_memory", side_effect=cw.RpcError("blocked")), patch("sys.stderr"):
+            self.assertEqual(cw.main(["discuss", "topic", "--dir", "/project"]), 1)
+        prepare.assert_not_called()
+
+    def test_guard_runs_in_target_project_and_reports_block(self):
+        result = subprocess.CompletedProcess([], 3, "", "BLOCKED: critical pressure\n")
+        with patch.object(cw.subprocess, "run", return_value=result) as run, \
+                patch("sys.stderr") as stderr:
+            with self.assertRaisesRegex(cw.RpcError, "blocked by mem-guard"):
+                cw.check_memory("/project", "ticket 12")
+        self.assertEqual(run.call_args.args[0], [str(cw.TOOLS / "mem-guard.sh"), "check", "--context", "codex ticket 12"])
+        self.assertEqual(run.call_args.kwargs["cwd"], "/project")
+        self.assertIn("BLOCKED", "".join(c.args[0] for c in stderr.write.call_args_list))
+
+    def test_missing_crashing_or_timed_out_guard_warns_and_continues(self):
+        outcomes = [FileNotFoundError("missing"), subprocess.TimeoutExpired("guard", 20),
+                    subprocess.CompletedProcess([], 1, "", "broken\n")]
+        for outcome in outcomes:
+            with self.subTest(outcome=outcome), patch.object(cw.subprocess, "run") as run, \
+                    patch("sys.stderr") as stderr:
+                if isinstance(outcome, Exception):
+                    run.side_effect = outcome
+                else:
+                    run.return_value = outcome
+                cw.check_memory("/project", "launch")
+                self.assertIn("launching without a memory check", "".join(c.args[0] for c in stderr.write.call_args_list))
+
+    def test_warning_allows_launch_and_override_is_scoped_to_guard(self):
+        result = subprocess.CompletedProcess([], 0, "", "WARNING: pressure\n")
+        with patch.dict(cw.os.environ, {"MEM_GUARD_OVERRIDE": "1"}), \
+                patch.object(cw.subprocess, "run", return_value=result) as run, patch("sys.stderr"):
+            cw.check_memory("/project", "launch")
+            self.assertEqual(run.call_args.kwargs["env"]["MEM_GUARD_OVERRIDE"], "1")
+            self.assertNotIn("MEM_GUARD_OVERRIDE", cw.child_environment())
 
 
 if __name__ == "__main__":

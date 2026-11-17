@@ -48,7 +48,7 @@ Each process belongs to exactly one session: its **nearest root ancestor**. Suba
 | `start-ticket.sh --tab-only` (iTerm and `bg` launchers, `/start` step 3), `--session` (`/discuss`) | Dies before the session starts. |
 | `agy-tmux.sh <groups…>` | Each group is checked separately; blocked groups are skipped, others still launch if pressure allows. `--force` overrides. |
 | `launcher=none`, `--print-title`, cloud `--in-place` runs | Not guarded: nothing is launched locally. |
-| Codex | **No launcher in this repo**, so no launch guard. Inspect Codex sessions with `mem-guard.sh report`; the guard still counts them in host pressure. |
+| `codex-workflow.sh start`, `discuss`, `launch` | Checks each group/discussion before setup and again before creating a new daemon thread. A block stops remaining groups; if setup already completed, its worktree and tracker state are reported. Reusing a recorded thread launches nothing and skips the second check. |
 | Sessions you start by typing `claude`, `agy` or `codex` yourself | Not guarded (nothing intercepts them). Run `mem-guard.sh check` first, or `mem-guard.sh report` to see what is running. |
 
 ## Thresholds and overrides
@@ -65,7 +65,7 @@ All settings resolve `env > project > machine > user conf > default`, via the sa
 | `mem_agent_names` | `claude,agy,codex` | Executable names treated as agents (basename, or `<name>/versions/<file>` for native installs). A directory merely named like an agent does not match. |
 | `mem_enabled` | `on` | `off` disables the guard entirely (report still works). |
 
-**Override a block** (explicit, per launch): `agy-tmux.sh --force …`, `mem-guard.sh check --force`, or `MEM_GUARD_OVERRIDE=1 start-ticket.sh …`. An override is announced on stderr. `agy-tmux.sh --force` scopes the override to its own guard checks and the `start-ticket.sh` it calls; it is removed from the environment before tmux starts, so agent panes and any `/start` they run do not inherit it. A block prints the largest sessions and says nothing was killed. Agents running `/start` must **not** set the override themselves: report the block and let the user decide.
+**Override a block** (explicit, per launch): `agy-tmux.sh --force …`, `mem-guard.sh check --force`, or `MEM_GUARD_OVERRIDE=1 start-ticket.sh …`. An override is announced on stderr. `agy-tmux.sh --force` scopes the override to its own guard checks and the `start-ticket.sh` it calls; it is removed from the environment before tmux starts, so agent panes and any `/start` they run do not inherit it. A block prints the largest sessions and says nothing was killed. `MEM_GUARD_OVERRIDE=1 codex-workflow.sh …` applies only to its guard checks; setup, daemon, and resumed CLI subprocesses do not inherit it. Agents running `/start` must **not** set the override themselves: report the block and let the user decide.
 
 ### Failure behaviour
 
@@ -74,7 +74,7 @@ All settings resolve `env > project > machine > user conf > default`, via the sa
 | Host pressure unreadable (sysctl missing, unsupported OS), or the macOS pressure level unreadable while free % is still available | Free % is still judged against the thresholds; if nothing trips, warn and launch (`mem_fail=open`) or block (`closed`). `--force` always wins. Linux has no OS level by design (`n/a`) and is judged on free % alone. |
 | `ps` fails | Per-session figures omitted; host pressure still decides. Reported as "process table unreadable". |
 | `lsof`/`tmux` missing or failing | Sessions fall back to name-only matching / no tmux labels. `lsof` exiting 1 because one pid vanished still yields the cwds of the others. |
-| `mem-guard.sh` missing or crashes (exit other than 0/3) | `start-ticket.sh` and `agy-tmux.sh` both warn explicitly and launch. The guard is a safeguard, not a gate on a broken install. |
+| `mem-guard.sh` missing or crashes (exit other than 0/3) | `start-ticket.sh`, `agy-tmux.sh`, and `codex-workflow.sh` warn explicitly and launch. The guard is a safeguard, not a gate on a broken install. |
 | Invalid threshold value (non-numeric, negative, `nan`, `inf`) | Ignored with a message; the default is used. |
 
 ## Privacy and overhead

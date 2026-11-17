@@ -31,6 +31,8 @@ codex-workflow.sh discuss 'Cache Invalidation' --about 'Compare the proposed str
 
 The shell start shortcut prepares and launches groups; use the start skill when tracker enrichment or state repair is needed. Start uses the existing provider and worktree manager. Ordered IDs, naming and metadata stay in `.workstream.json`; `codex_sessions` records the persistent UUID. Repeating a recorded launch returns that UUID without resubmitting. On failure, inspect the printed UUID before retrying. A failed group stops subsequent launches.
 
+Launches use the shared [memory guard](memory-guard.md): each group is checked before setup and every new thread before creation. A block stops subsequent groups; completed setup is reported for recovery. Missing or crashing guards warn and continue. Only the user may explicitly override with `MEM_GUARD_OVERRIDE=1`; child processes do not inherit it.
+
 Threads start in plan mode and inherit the user's model and permissions. Approve within the resumed TUI and switch to default mode, or use `send --implement` with explicit approval. Plain `send` preserves the mode. Discussion threads have their own UUIDs and do not consume governor context.
 
 ## Differences

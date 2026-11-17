@@ -24,13 +24,14 @@ class Daemon:
 
     def __enter__(self):
         try:
+            environment = {key: value for key, value in os.environ.items() if key != "MEM_GUARD_OVERRIDE"}
             result = subprocess.run(
                 ["codex", "app-server", "daemon", "start"],
-                capture_output=True, text=True, timeout=self.timeout, check=True,
+                env=environment, capture_output=True, text=True, timeout=self.timeout, check=True,
             )
             result = subprocess.run(
                 ["codex", "app-server", "daemon", "version"],
-                capture_output=True, text=True, timeout=self.timeout, check=True,
+                env=environment, capture_output=True, text=True, timeout=self.timeout, check=True,
             )
             info = json.loads(result.stdout)
             self.sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)

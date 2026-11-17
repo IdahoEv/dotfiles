@@ -4,7 +4,7 @@ import json
 import socket
 import struct
 import unittest
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 from codex_rpc import Daemon, RpcError
 
@@ -18,6 +18,13 @@ def frame(payload, opcode=1, final=True):
 
 
 class WireTests(unittest.TestCase):
+    def test_daemon_subprocess_does_not_inherit_guard_override(self):
+        with patch.dict("os.environ", {"MEM_GUARD_OVERRIDE": "1"}), \
+                patch("codex_rpc.subprocess.run", side_effect=OSError("unavailable")) as run:
+            with self.assertRaises(OSError):
+                Daemon().__enter__()
+        self.assertNotIn("MEM_GUARD_OVERRIDE", run.call_args.kwargs["env"])
+
     def setUp(self):
         self.client, self.server = socket.socketpair()
         self.addCleanup(self.client.close)
