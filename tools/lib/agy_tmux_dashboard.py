@@ -137,7 +137,7 @@ def _unanswered_tail(lines: list[str]) -> list[str]:
     for i, line in enumerate(lines):
         if line.startswith("●"):
             start = i + 1
-    return lines[start:][-4:]
+    return lines[start:]
 
 
 def _classify_pane_state(captured: str) -> str | None:

@@ -44,6 +44,16 @@ class TestHelpers(unittest.TestCase):
         mid_line = "make it so [y/N] ok\n$ "
         self.assertEqual(dash.compute_status(False, 900, 1000, captured=mid_line), "idle (1m)")
 
+    def test_live_prompt_after_activity_marker_is_waiting(self):
+        menu = (
+            "● Bash(x)\nDo you want to proceed?\n❯ 1. Yes\n2. Yes, and don't ask again\n"
+            "3. No\n4. Tell Claude what to do\nEsc to cancel\nfoo | main | [idle]\n"
+        )
+        self.assertEqual(dash.compute_status(False, 999, 1000, captured=menu), "waiting")
+        self.assertEqual(
+            dash.compute_status(False, 999, 1000, captured="● Bash\nOverwrite? [y/N]\n"), "waiting"
+        )
+
     def test_compute_status_from_agy_pane_signals(self):
         # pane_dead always wins over captured output
         self.assertEqual(
