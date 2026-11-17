@@ -24,8 +24,8 @@ set -euo pipefail
 
 die() { printf 'reviewer-model: %s\n' "$*" >&2; exit 1; }
 
-AGENTS="correctness-reviewer architecture-reviewer robustness-reviewer \
-security-reviewer supply-chain-reviewer prompt-reviewer \
+AGENTS="pr-reviewers/pr-reviewer-correctness pr-reviewers/pr-reviewer-architecture pr-reviewers/pr-reviewer-robustness \
+pr-reviewers/pr-reviewer-security pr-reviewers/pr-reviewer-supply-chain pr-reviewers/pr-reviewer-prompt \
 local-review-cycle-manager github-review-repair-agent"
 
 [ $# -eq 1 ] || die "usage: reviewer-model.sh auto|sonnet (see --help)"

@@ -47,10 +47,10 @@ git ls-files --others --exclude-standard
 
 If this branch has no PR yet, also draft the PR title and body.
 
-**Title: bare, no ticket prefix.** Write `Add the retry guard`, not `Is42: …` or `sc-42:
-…`. The provider adds its own prefix from the branch name (`Is<N>:` for `github` and
-`kardashev`; the head ticket only on a chain); `open-pr.sh` verifies the result and
-repairs a double (including a cross-dialect or colon-less one) itself.
+**Title: bare, no ticket prefix.** Write `Add the retry guard` (or omit `--title` when
+`.workstream.json` already holds the description). The workstream resolver and provider
+add the prefix and format per template; `open-pr.sh` verifies the result and repairs any
+doubled prefix itself.
 
 On a chained branch (`git rev-parse --absolute-git-dir`'s `chain` file lists several ids),
 the summary covers every ticket within the 3-bullet cap. If the chain stopped early, ship a draft

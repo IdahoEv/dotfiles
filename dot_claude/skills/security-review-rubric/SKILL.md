@@ -1,13 +1,13 @@
 ---
 name: security-review-rubric
-description: Canonical security rubric for the security-reviewer and supply-chain-reviewer agents — code-level vulnerabilities (authz, injection, XSS, SSRF, crypto) and build/config risks (dependencies, CI, deploy, secrets). Preloaded by those agents; apply directly for a small interactive security check.
+description: Canonical security rubric for the pr-reviewer-security and pr-reviewer-supply-chain agents — code-level vulnerabilities (authz, injection, XSS, SSRF, crypto) and build/config risks (dependencies, CI, deploy, secrets). Preloaded by those agents; apply directly for a small interactive security check.
 ---
 
 # Security Review Rubric
 
 Anchored to the OWASP Top 10 categories. Two halves — each agent applies its own and hands the other's territory to its sibling.
 
-## Application code (security-reviewer)
+## Application code (pr-reviewer-security)
 
 For each change, trace untrusted input to dangerous sinks and ask what guards the path:
 
@@ -18,12 +18,12 @@ For each change, trace untrusted input to dangerous sinks and ask what guards th
 - **SSRF:** outbound requests whose URL or host is user-influenced.
 - **Insecure design:** a trust boundary the diff crosses without the check a straightforward design would include.
 
-## Build and configuration (supply-chain-reviewer)
+## Build and configuration (pr-reviewer-supply-chain)
 
 - **Components:** added/updated dependencies — advisories, unmaintained packages, install scripts; lockfile consistency.
 - **Misconfiguration:** debug modes, permissive CORS, default credentials, verbose errors, exposed ports or tooling in config.
 - **Integrity:** CI workflows — untrusted input reaching privileged steps (`pull_request_target`, script steps), unpinned action refs, `curl | sh`, unverified artifacts.
-- **Secrets:** credentials in config/env/deploy files (a secret in a file that ships as config belongs here; one in executable source belongs to security-reviewer); secrets echoed into logs or shipped into artifacts.
+- **Secrets:** credentials in config/env/deploy files (a secret in a file that ships as config belongs here; one in executable source belongs to pr-reviewer-security); secrets echoed into logs or shipped into artifacts.
 
 ## Evidence bar
 
