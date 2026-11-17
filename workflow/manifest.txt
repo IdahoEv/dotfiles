@@ -37,6 +37,7 @@ aba793872a6ce83be45735cf898183d8d2b290c72f5e62312e161883462615af  644  dot_claud
 51367b2883763ed4354e9f51f596d3ed865982d0f57e2c1a8502c96b645b97de  644  dot_claude/commands/remind.md
 36451ca7b0c0afb4b6877b075d92dd555afe76658fa3ad409d4fa40e27a0a41c  644  dot_claude/commands/research_codebase.md
 746936f197ebe7da1f6351361e47e1949d1b3e280280faa11f3e4f3854640547  644  dot_claude/commands/start.md
+de670133a11ac6992a341c1536debb9868e530c873debfb3f4e8a1942c501b22  644  dot_claude/commands/sync.md
 2cde0450935a61a0384afac7655b46cea02adc0957dfe840cfcbfbe9c8393cdc  644  dot_claude/skills/github-review-procedure/SKILL.md
 ee70fb1a401ed104231eb6f9ea72334263ca35b579f030d27946692cc57776be  644  dot_claude/skills/github-review-procedure/executable_github-review-poll.sh
 5ba50893bf0b8cccaaf6ce33095b9a8b7f673680eed702c57409ecebfbb163bf  644  dot_claude/skills/github-review-procedure/executable_github-review-state.sh
@@ -68,7 +69,7 @@ adc0c0fa8e303e7d7551de7f7c281f6cc6f5287c4e81119f03c9bc4efa712e43  644  tools/lib
 f7673606e34113d3fbd15395094c7fdbfddce405964cc5f0f7222260c6d2282d  644  tools/lib/finalize_check.py
 c7ff5c7023983bd54b0ca320559948ea4f1957b6c3aa0c2b897e20e20210f57b  644  tools/lib/finalize_run.py
 c199ef2288c932712b23e714458383cff10c945f32d21ac5ded6ca2fe25e52f0  644  tools/lib/mem_guard.py
-5aff57b78dc988b99d4f618dfc4ac9dbcd23884f0599968dcafd5ff7d70a1051  644  tools/lib/merge_run.py
+d168faba5bd04216e63e3e9250033c49e01f1656a463e522260868ed7f60d9c1  644  tools/lib/merge_run.py
 f2a76fa675abd9ec93f935a0a9673ea6bbfac857b3ff2db535140c32a166db1e  644  tools/lib/model-pricing.json
 136e5d15665f21c2b8dd43900955182dd6bd3528e666553f8dddfca081a151cb  644  tools/lib/packages.tsv
 2e90a770d81cefd171f97841d558726a6322dc03902d02184e5c3fa930d1f6d9  644  tools/lib/pending_actions.py
@@ -79,6 +80,7 @@ ac8c0f92f9527fbb17c12a660565f1359150725ea34531f6e556cd0ff056a941  644  tools/lib
 1675c497552ffa7a8a3b23bdfe6b790c126bf1d4ec854f76a857d05a349aef21  644  tools/lib/repo_facts.py
 d86aa76659afb858f4f235ed3e222d4359072437ad4c817efef4076a4c4ed9e9  644  tools/lib/sibling_worktrees.py
 25e48c296f3f47c5f6c1ef88870700aca702c719eec5617e202ac6e719d11a77  644  tools/lib/sync_gate.py
+b7ab3dfa5c65c22728a614b65f05506977213444328fbca988edca674438f438  644  tools/lib/sync_run.py
 cc250687e95e2e4f392e1cf7fffc5487575466535c86659309b8428284d17a09  644  tools/lib/telemetry.sh
 3c042c6cc503481372fc0fdd23fb8e20b36214aa88d1b7ecc943975901008239  644  tools/lib/wf_backfill.py
 d6c45d70d96c21971b022ea65a73f2b0fd4af0dd0b8abb524a9fd34cfd7a43df  644  tools/lib/wf_report.py
@@ -98,7 +100,7 @@ dc55a6a27785e8576b61964aeefb66b3e419c24bcb46ee280a2f8463befb450a  755  tools/pen
 f6ec970038d77efb2159bd5818cb7fc4cbd72ceddfe0bcbc353d3a6f51061850  644  tools/project-colors
 b127c521bc0b7fd59034739990ec1010f5e929f1584a5fe5ff39746ccb390361  644  tools/project-config-templates/governor.md
 060962b774ffcf83bc0c402a196f72df15a8e618b8e4a351a8745c22517548ba  644  tools/project-config-templates/project-review.md
-63487c5590b220b8d8b4f03f5f75245c0014abd751fa4042dea2428a49942ee0  644  tools/project-config-templates/start-ticket.conf
+95fb55e2f13aca1099ec5d010aa480bb23a338b25e1cf14cee00063d02d15e76  644  tools/project-config-templates/start-ticket.conf
 9a5f4342274b648ff05f5f4c4505a62e8118968ab4f9890dfed2701d3c2f86b0  755  tools/project-config.sh
 897f3d03a1e760f56fdab55a0d787184e25e1bb265e71cf413c7e1259d747c13  755  tools/prune-worktrees.sh
 d6710ea71d1b71cab9ba9a94dc6ccfd6c1bafbe876d7b186f75633212b0a1652  755  tools/repo-facts.sh
@@ -113,6 +115,7 @@ fe34a71d2260c726846a0eef9673688185d019036e0c9e55df3e918030f06ae1  644  tools/sta
 ae4e93d3a0d38815b1c929d3ff237054c71a8a46dd01e30e2cd23c2ed9343fee  644  tools/start-ticket-providers/shortcut.sh
 034fcc268301c6b8d123e814e1ff3c6a9a34fdd290bb07031d9c136df4114ca2  755  tools/start-ticket.sh
 2f05e33075ba15221c8da189495317c293d22055b5548cd2db0f98b4c30c47e2  755  tools/sync-gate.sh
+1abff882cb55863b47da0513aec9a824a52a228f7da137c1562d638ad1d5fae6  755  tools/sync-run.sh
 242a517c6322f8dd47a053c459dec7aed2b7b8a803b5f3b4e08e681bbe9b3af7  755  tools/tracker.sh
 0c067601b72958d6cc81c6c057e25fb68ef5100e630ef216284d13c45e5ef51f  755  tools/wf-backfill.sh
 c1ab6c8c8f800a23622ec35d2b13d9e9bc25f252b67ba785490d23c661e2e34b  755  tools/wf-event.sh
