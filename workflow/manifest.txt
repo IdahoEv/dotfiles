@@ -30,7 +30,7 @@ ee76f7a16ca1f673afb566ae8ca4ae8b57bca5f52bad5fd3099a001b31f60b61  644  dot_claud
 aea92a98bed9188f79b921df6337530b891f045989d5db6494bcda4814d7fd09  644  dot_claude/commands/literal_create_plan.md
 a9688e7c6f0c8079a183b2327c4de0364245a3cda23f2cdd4ac94c8a0c64e07d  644  dot_claude/commands/local-review-cycle.md
 299444c3a1359ddc87e735476983f362f9526ef58cad8c323bbec944a8b6f6e6  644  dot_claude/commands/open-pr.md
-e51e92b7f3f511248420a7a1f678bd6742fadc8e87f47eb9f4ede9238fd1e434  644  dot_claude/commands/pick.md
+d7ce85520d9cb7671c54e6868d461c56fd193f2c60c1798902b0d5d32f359cad  644  dot_claude/commands/pick.md
 ecfadd04ba6312298e060aaef496079f83d32dc809e39bc91089bf3101852ef1  644  dot_claude/commands/project-review.md
 aba793872a6ce83be45735cf898183d8d2b290c72f5e62312e161883462615af  644  dot_claude/commands/prompt-audit.md
 51367b2883763ed4354e9f51f596d3ed865982d0f57e2c1a8502c96b645b97de  644  dot_claude/commands/remind.md
@@ -77,8 +77,9 @@ ac8c0f92f9527fbb17c12a660565f1359150725ea34531f6e556cd0ff056a941  644  tools/lib
 1675c497552ffa7a8a3b23bdfe6b790c126bf1d4ec854f76a857d05a349aef21  644  tools/lib/repo_facts.py
 d86aa76659afb858f4f235ed3e222d4359072437ad4c817efef4076a4c4ed9e9  644  tools/lib/sibling_worktrees.py
 cc250687e95e2e4f392e1cf7fffc5487575466535c86659309b8428284d17a09  644  tools/lib/telemetry.sh
-3c042c6cc503481372fc0fdd23fb8e20b36214aa88d1b7ecc943975901008239  644  tools/lib/wf_backfill.py
+cacb2a35954797e7368e2915225e443267d1399130d0698bd0b75ae90bda1617  644  tools/lib/wf_backfill.py
 d6c45d70d96c21971b022ea65a73f2b0fd4af0dd0b8abb524a9fd34cfd7a43df  644  tools/lib/wf_report.py
+bdc67f5e5e4a39317822f39d306cff15c4b9eb7b43335d2a656ac68f640bd6ed  644  tools/lib/wf_review_gaps.py
 3c46a31599092ceabb336ccd81b8e9a03631dbd0e8942152e8bbc420a74180fc  644  tools/lib/wf_tokens.py
 3b1a0716083c8f92ab94a60d59ecee59a1716e54cca16dd6cf25f77e2abfe41f  644  tools/lib/wf_usage.py
 f19b1fc4abe103b8808045985dc39d7bdeec79d60e93c4eb1e46bd9c995d3672  644  tools/lib/workstream.py
@@ -113,6 +114,7 @@ ae4e93d3a0d38815b1c929d3ff237054c71a8a46dd01e30e2cd23c2ed9343fee  644  tools/sta
 0c067601b72958d6cc81c6c057e25fb68ef5100e630ef216284d13c45e5ef51f  755  tools/wf-backfill.sh
 3cff87df7b0eea6d09c161fa8444ec24d98c0c0eb50a5ebea07aea0f6eb87f1d  755  tools/wf-event.sh
 080bf3233e51fd1e86ee7392d43f73481806b9101716f9c0bff4cd24bb25b500  755  tools/wf-report.sh
+7f0f1f48a0596a9665ec3fbf188178154064895bfbc5f5a78437107aca012a18  755  tools/wf-review-gaps.sh
 f15dd098841d7963da09693fafbb3bf3f713952434c4c4b8a40dec6cb7cb0fcd  755  tools/workflow-manifest.sh
 8b3c4fad15997740068b84ced54bf8395749d2b33b6700dd9af651b5047d0057  755  tools/workflow-session.sh
 0e8c1deefa52ec93b05c3e69b89f612adc5bb434d8c1ec8c8e98813313c92f44  755  tools/workstream.sh
