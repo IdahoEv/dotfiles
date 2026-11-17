@@ -33,7 +33,7 @@ The `Mem` column is an estimate of each window's process tree (`~1.2 GB`; `-` = 
 
 ### Status Indicators
 
-The `Status` column inspects captured pane output (statusline state, active subagents, spinners, and permission/question prompts) and falls back to tmux activity age for non-`agy` panes:
+The `Status` column inspects captured pane output (statusline state, active subagents, spinners, and permission/question prompts) and falls back to tmux activity age for panes without a `.workstream.json`:
 
 | Status | Styling | Meaning |
 | --- | --- | --- |

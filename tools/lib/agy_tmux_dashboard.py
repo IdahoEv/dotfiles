@@ -305,6 +305,10 @@ def load_workstream_meta(pane_path: str) -> tuple[str, str, str]:
     return (ticket_ref, rec.desc or "", workstream.format_phase_tags(rec))
 
 
+def _has_workstream_record(pane_path: str) -> bool:
+    return bool(pane_path) and os.path.isdir(pane_path) and workstream.load_record(pane_path) is not None
+
+
 def _tmux_base(tmux_bin: str, socket: str | None) -> list[str]:
     cmd = [tmux_bin]
     if socket:
@@ -416,7 +420,9 @@ def fetch_windows(
         ticket_ref, desc, tags = load_workstream_meta(pane_path)
         branch = "" if desc else _git_branch(pane_path)
         captured = _run_cmd([*base, "capture-pane", "-p", "-t", pane_id, "-S", "-30"])
-        status = compute_status(pane_dead, last_activity, current_time, captured=captured)
+        # Only workstream panes run agy; classifying other panes' output misreads shell prompts.
+        classify_from = captured if _has_workstream_record(pane_path) else ""
+        status = compute_status(pane_dead, last_activity, current_time, captured=classify_from)
         rows.append(
             WorkstreamRow(
                 window_index=win_idx,

@@ -285,6 +285,28 @@ class TestHelpers(unittest.TestCase):
             self.assertEqual(rows[0].desc, "Is99-some-branch")
             self.assertEqual(rows[0].status, "exited")
 
+    def test_fetch_windows_ignores_pane_output_without_workstream_record(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            wt = Path(tmp) / "wt"
+            wt.mkdir()
+            list_out = f"1\tshell\t%1\t{wt}\t0\t998\n"
+            box_prompt = "─" * 20 + "\n> \n" + "─" * 20 + "\n"
+
+            def fake_run(cmd: list[str]) -> str:
+                if "list-windows" in cmd:
+                    return list_out
+                if "capture-pane" in cmd:
+                    return box_prompt
+                return ""
+
+            with (
+                mock.patch.object(dash, "_run_cmd", side_effect=fake_run),
+                mock.patch.object(dash, "_git_branch", return_value="main"),
+            ):
+                rows = dash.fetch_windows("agy-dotfiles", now=1000)
+
+            self.assertEqual(rows[0].status, "working")
+
     def test_curses_loop_skips_fetch_on_navigation_and_uses_tmux_bin(self):
         rows = [
             dash.WorkstreamRow("1", "Is1", "%1", "/tmp/1", "Is1", "One", "", "running", "ok"),
