@@ -145,6 +145,36 @@ class Sync(Base):
         self.assertTrue((wt / "rel-only.txt").exists())
         self.assertFalse((wt / "main-only.txt").exists())
 
+    def test_rebase_finish_keeps_the_pr_base(self):
+        self._stub("gh", GH_STUB)
+        self.env.update(GH_LOG=str(self.root / "gh.log"))
+        wt = self.conflicting_branch()
+        self.git(self.repo, "push", "-q", "origin", "main:release")
+        (self.pr_dir / "view-feat.json").write_text(json.dumps(
+            {"state": "OPEN", "baseRefName": "release"}))
+        (self.repo / ".start-ticket.conf").write_text("sync_method=rebase\n")
+        r, out = self.sync(wt)
+        self.assertEqual(out["base"], "origin/release", r.stdout + r.stderr)
+        (wt / "shared.txt").write_text("resolved\n")
+        self.git(wt, "add", "shared.txt")
+        r, _ = self.sync(wt, "--finish")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn("origin/release", r.stdout)
+
+    def test_non_open_or_failed_pr_lookup_falls_back_to_the_default_base(self):
+        self._stub("gh", GH_STUB)
+        self.env.update(GH_LOG=str(self.root / "gh.log"))
+        self.git(self.repo, "push", "-q", "origin", "main:release")
+        wt = self.worktree("feat")
+        self.advance_main()
+        for body in (json.dumps({"state": "MERGED", "baseRefName": "release"}), "{not json"):
+            (self.pr_dir / "view-feat.json").write_text(body)
+            r, _ = self.sync(wt)
+            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+            self.assertIn("origin/main", r.stdout)
+            self.git(wt, "reset", "-q", "--hard", "origin/feat")
+            self.git(wt, "push", "-q", "-f", "origin", "feat")
+
     def test_rejected_push_hands_back(self):
         wt = self.worktree("feat")
         other = self.root / "other-clone"

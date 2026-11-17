@@ -34,6 +34,13 @@ METHODS = ("merge", "rebase")
 def resolve_base(d: str) -> str:
     """The open PR's base branch, else the repo default (no PR, gh unavailable, mid-rebase)."""
     branch = git(d, "symbolic-ref", "--short", "-q", "HEAD")
+    if not branch:
+        for sub in ("rebase-merge", "rebase-apply"):
+            path = git(d, "rev-parse", "--git-path", f"{sub}/head-name")
+            if path and os.path.isfile(os.path.join(d, path)):
+                with open(os.path.join(d, path)) as fh:
+                    branch = fh.read().strip().removeprefix("refs/heads/")
+                break
     if branch:
         try:
             r = run_cmd(["gh", "pr", "view", branch, "--json", "baseRefName,state"], cwd=d)
