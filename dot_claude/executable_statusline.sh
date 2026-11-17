@@ -31,6 +31,34 @@ join() {  # join the non-empty arguments with the separator
   printf '%s' "$out"
 }
 
+# ---- line 1 --------------------------------------------------------------------------
+# Generated from .workstream.json when the repo has one; otherwise the legacy branch/title line.
+#   project | workstream name | tags | PR # | local/remote review counts
+line1=""
+if [ -n "$cwd" ] && command -v workstream.sh >/dev/null 2>&1; then
+  ws_json="$(workstream.sh statusline --dir "$cwd" --format json 2>/dev/null || true)"
+  if [ -n "$ws_json" ]; then
+    IFS=$US read -r ws_proj ws_name ws_tags ws_pr_num ws_pr_url ws_pr_state ws_rev < <(
+      printf '%s' "$ws_json" | jq -r '[
+        .project // "", .name // "", .tags // "",
+        .pr_num // "", .pr_url // "", .pr_state // "", .reviews // ""
+      ] | map(tostring) | join("\u001f")' 2>/dev/null || true)
+    if [ -n "$ws_name" ] || [ -n "$ws_proj" ]; then
+      ws_proj_seg=""; [ -n "$ws_proj" ] && ws_proj_seg="${BLUE}${ws_proj}${RST}"
+      ws_name_seg=""; [ -n "$ws_name" ] && ws_name_seg="${GREEN}${ws_name}${RST}"
+      ws_tags_seg=""; [ -n "$ws_tags" ] && ws_tags_seg="${ORANGE}${ws_tags}${RST}"
+      ws_pr_seg=""
+      if [ -n "$ws_pr_num" ]; then
+        ws_pr_seg="PR #${ws_pr_num}${ws_pr_state:+ ${ws_pr_state//_/ }}"
+        [ -n "$ws_pr_url" ] && ws_pr_seg=$'\e]8;;'"${ws_pr_url}"$'\a'"${ws_pr_seg}"$'\e]8;;\a'
+      fi
+      ws_rev_seg=""; [ -n "$ws_rev" ] && ws_rev_seg="reviews: ${ws_rev}"
+      line1=$(join "$ws_proj_seg" "$ws_name_seg" "$ws_tags_seg" "$ws_pr_seg" "$ws_rev_seg")
+    fi
+  fi
+fi
+
+if [ -z "$line1" ]; then
 # ---- git facts ----------------------------------------------------------------
 common=$(git -C "$cwd" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)
 project=""
@@ -104,7 +132,7 @@ if [ -n "$pr_num" ] || [ -f "$rounds_file" ]; then
   [ -n "$rounds" ] && rounds_seg="reviews: ${rounds}"
 fi
 
-# ---- line 1 --------------------------------------------------------------------------
+# ---- legacy line 1 -------------------------------------------------------------------
 phase_seg=""; [ -n "$phase" ] && phase_seg="${ORANGE}[${phase}]${RST}"
 case "$role" in
   governor) line1=$(join "$project_seg" "Governor" "$branch_seg" "$pr_seg" "$rounds_seg") ;;
@@ -112,6 +140,7 @@ case "$role" in
             line1=$(join "$project_seg" "$branch_seg" "$phase_seg" "$pr_seg" "$rounds_seg") ;;
   *)        line1=$(join "${BLUE}${short_path}${RST}" "$branch_seg" "$title" "$pr_seg" "$rounds_seg") ;;
 esac
+fi
 
 # ---- line 2 --------------------------------------------------------------------------
 if   [ "$used_pct" -ge 90 ]; then bc=$RED

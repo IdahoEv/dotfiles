@@ -22,6 +22,10 @@ provider::available() {
   command -v gh >/dev/null && gh auth status >/dev/null 2>&1
 }
 
+provider::validate_issue() {  # <id> → 0 if valid GitHub issue number
+  [[ "$1" =~ ^[1-9][0-9]*$ ]]
+}
+
 provider::issue_from_branch() {  # <branch> → echoes issue number, or nothing
   local branch="$1"
   if [[ "$branch" =~ (^|/)Is([1-9][0-9]*)(\+[0-9]+)*(-.+|/.*|$) ]]; then

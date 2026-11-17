@@ -127,6 +127,7 @@ case "$action" in
 esac
 
 # ---- .workstream.json phase -------------------------------------------------
+ws_row=""
 if [ -x "$SCRIPT_DIR/workstream.sh" ]; then
   case "$action" in
     show)
@@ -139,6 +140,7 @@ if [ -x "$SCRIPT_DIR/workstream.sh" ]; then
     no-review) "$SCRIPT_DIR/workstream.sh" phase --dir "$dir" --no-review >/dev/null 2>&1 || true ;;
     set)       "$SCRIPT_DIR/workstream.sh" phase --dir "$dir" "$phase" >/dev/null 2>&1 || true ;;
   esac
+  ws_row="$("$SCRIPT_DIR/workstream.sh" render row --dir "$dir" 2>/dev/null || true)"
 fi
 
 # ---- locate the session's state file ----------------------------------------
@@ -160,13 +162,14 @@ command -v python3 >/dev/null || exit 0
 # daemon rewrites this same file on every status change, and a partial write
 # would corrupt a session's state, not just its label. jq isn't guaranteed
 # present; python3 ships with macOS.
-PHASE="$phase" ACTION="$action" PHASES="$PHASES" python3 - "$state_file" <<'PY'
+PHASE="$phase" ACTION="$action" PHASES="$PHASES" WS_ROW="$ws_row" python3 - "$state_file" <<'PY'
 import json, os, re, sys, tempfile
 
 path    = sys.argv[1]
 phase   = os.environ["PHASE"]
 action  = os.environ["ACTION"]
 phases  = os.environ["PHASES"].split()
+ws_row  = os.environ.get("WS_ROW", "")
 
 try:
     with open(path) as fh:
@@ -178,32 +181,35 @@ name = state.get("name")
 if not isinstance(name, str):
     sys.exit(0)
 
-# Parse the prefix we previously applied: an optional phase tag, then an
-# optional [PR] tag. Anchored to the known phase set so a ticket whose real
-# title happens to start with bracketed text (e.g. "[spike] try X") keeps it.
-m = re.match(r"^(?:\[(%s)\])?(\[PR\])?\s*" % "|".join(phases), name)
-cur_phase, cur_pr = m.group(1), bool(m.group(2))
-bare = name[m.end():]
-
-if action == "show":
-    print("".join(["[%s]" % cur_phase] * bool(cur_phase)) + "[PR]" * cur_pr)
-    sys.exit(0)
-
-new_phase, new_pr = cur_phase, cur_pr
-if action == "clear":
-    new_phase, new_pr = None, False
-elif action == "pr":
-    new_pr = True
-elif action == "no-review":
-    if cur_phase == "REVIEW":
-        new_phase = "REVIEWED"
+if ws_row and action != "show":
+    new = ws_row
 else:
-    new_phase = phase
-    if phase in ("MERGED", "DONE"):
-        new_pr = False
+    # Parse the prefix we previously applied: an optional phase tag, then an
+    # optional [PR] tag. Anchored to the known phase set so a ticket whose real
+    # title happens to start with bracketed text (e.g. "[spike] try X") keeps it.
+    m = re.match(r"^(?:\[(%s)\])?(\[PR\])?\s*" % "|".join(phases), name)
+    cur_phase, cur_pr = m.group(1), bool(m.group(2))
+    bare = name[m.end():]
 
-tags = ("[%s]" % new_phase if new_phase else "") + ("[PR]" if new_pr else "")
-new = "%s %s" % (tags, bare) if tags else bare
+    if action == "show":
+        print("".join(["[%s]" % cur_phase] * bool(cur_phase)) + "[PR]" * cur_pr)
+        sys.exit(0)
+
+    new_phase, new_pr = cur_phase, cur_pr
+    if action == "clear":
+        new_phase, new_pr = None, False
+    elif action == "pr":
+        new_pr = True
+    elif action == "no-review":
+        if cur_phase == "REVIEW":
+            new_phase = "REVIEWED"
+    else:
+        new_phase = phase
+        if phase in ("MERGED", "DONE"):
+            new_pr = False
+
+    tags = ("[%s]" % new_phase if new_phase else "") + ("[PR]" if new_pr else "")
+    new = "%s %s" % (tags, bare) if tags else bare
 if new == name:
     sys.exit(0)
 

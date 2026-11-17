@@ -54,9 +54,9 @@ check "--dir from outside repo" "[REVIEW]" "$(cd "$TMP" && env -u CLAUDE_JOB_DIR
 # Inside background session: updates BOTH state.json and .workstream.json
 JOB_DIR="$TMP/job"
 mkdir -p "$JOB_DIR"
-printf '{"name": "[PLAN] Is188 Phase tags"}\n' > "$JOB_DIR/state.json"
+printf '{"name": "stale name"}\n' > "$JOB_DIR/state.json"
 (cd "$REPO" && CLAUDE_JOB_DIR="$JOB_DIR" "$TOOLS_DIR/agent-phase.sh" WIP >/dev/null)
-check "bg state.json" "[WIP] Is188 Phase tags" "$(jq -r .name "$JOB_DIR/state.json")"
+check "bg state.json mirrors record" "[WIP] Is188 phase tags" "$(jq -r .name "$JOB_DIR/state.json")"
 check "bg .workstream.json" "[WIP]" "$("$TOOLS_DIR/workstream.sh" phase --dir "$REPO" --show)"
 check "bg --show" "[WIP]" "$(cd "$REPO" && CLAUDE_JOB_DIR="$JOB_DIR" "$TOOLS_DIR/agent-phase.sh" --show)"
 check "bg --show without state.json" "[WIP]" "$(cd "$REPO" && CLAUDE_JOB_DIR="$TMP/missing-job" "$TOOLS_DIR/agent-phase.sh" --show)"
