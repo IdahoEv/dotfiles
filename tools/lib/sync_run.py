@@ -11,7 +11,8 @@ Exit 1   usage/precondition error: not a repo, detached HEAD, on the base branch
          dirty tree or a merge already in progress, invalid `sync_method`.
 
 `--finish` is the re-run after the model resolved a conflict: it completes the
-merge (or rebase), then pushes.
+merge (or rebase), then pushes. It also retries a push that failed after a clean
+sync, while origin/<branch> still lacks the base.
 
 Method: `sync_method` (merge|rebase) from start-ticket.conf, project or global;
 default merge. Rebase pushes with --force-with-lease.
@@ -77,6 +78,19 @@ def in_progress(dir_: str, method: str) -> bool:
                for p in ("rebase-merge", "rebase-apply"))
 
 
+def unrelated_changes(dir_: str) -> bool:
+    """Untracked or unstaged edits; staged paths are the resolved conflicts."""
+    return any(l[:2] == "??" or l[1] != " " for l in git(dir_, "status", "--porcelain").splitlines())
+
+
+def unpushed_sync(dir_: str, branch: str, base_ref: str) -> bool:
+    """A completed merge/rebase of base_ref that origin/<branch> does not have yet."""
+    remote = f"refs/remotes/origin/{branch}"
+    return (git_ok(dir_, "rev-parse", "-q", "--verify", remote)
+            and git_ok(dir_, "merge-base", "--is-ancestor", base_ref, "HEAD")
+            and not git_ok(dir_, "merge-base", "--is-ancestor", base_ref, remote))
+
+
 def push(dir_: str, branch: str, method: str) -> str:
     """"" on success, else the failure text."""
     ref = f"refs/heads/{branch}"
@@ -128,12 +142,13 @@ def main(argv: list[str]) -> int:
         left = unmerged(d)
         if left:
             return handoff("unresolved", "unmerged paths remain", base_ref, method, ",".join(left))
-        if not paused:
-            return usage_error("--finish needs a merge or rebase in progress; run sync-run.sh without it")
-        err = finish_in_progress(d, method)
-        if err:
-            return handoff("unresolved", err.splitlines()[-1], base_ref, method,
-                           ",".join(unmerged(d)))
+        if paused:
+            if unrelated_changes(d):
+                return usage_error("working tree has uncommitted changes; commit or stash them, then run --finish again")
+            err = finish_in_progress(d, method)
+            if err:
+                return handoff("unresolved", err.splitlines()[-1], base_ref, method,
+                               ",".join(unmerged(d)))
     elif paused:
         return usage_error("a merge or rebase is already in progress; resolve it, then run sync-run.sh --finish")
 
@@ -144,7 +159,10 @@ def main(argv: list[str]) -> int:
         return usage_error(f"on the base branch ({base}); run /sync from a feature worktree")
 
     if args.finish:
-        if git(d, "status", "--porcelain"):
+        if not paused and not unpushed_sync(d, branch, base_ref):
+            return usage_error("--finish needs a merge or rebase in progress or an unpushed sync; "
+                               "run sync-run.sh without it")
+        if not paused and git(d, "status", "--porcelain"):
             return usage_error("working tree has uncommitted changes; commit or stash them, then run --finish again")
         err = push(d, branch, method)
         if err:

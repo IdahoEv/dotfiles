@@ -120,6 +120,30 @@ class Sync(Base):
         self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
         self.assertEqual(self.remote_head("feat"), before)
 
+    def test_finish_with_unrelated_unstaged_edit_does_not_commit_the_resolution(self):
+        wt = self.conflicting_branch()
+        self.sync(wt)
+        (wt / "shared.txt").write_text("resolved\n")
+        self.git(wt, "add", "shared.txt")
+        (wt / "README.md").write_text("stray edit\n")
+        self.sync(wt, "--finish")
+        self.assertTrue(self.git(wt, "rev-parse", "-q", "--verify", "MERGE_HEAD"))
+
+    def test_finish_retries_a_push_that_failed_after_a_clean_merge(self):
+        wt = self.worktree("feat")
+        other = self.root / "other-clone"
+        self.git(self.root, "clone", "-q", str(self.origin), str(other))
+        self.git(other, "checkout", "-q", "feat")
+        self.commit(other, "elsewhere")
+        self.git(other, "push", "-q", "origin", "feat")
+        self.advance_main()
+        r, out = self.sync(wt)
+        self.assertEqual(out["handoff"], "push-failed", r.stdout + r.stderr)
+        self.git(wt, "pull", "-q", "--no-rebase", "--no-edit", "origin", "feat")
+        r, _ = self.sync(wt, "--finish")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertEqual(self.remote_head("feat"), self.git(wt, "rev-parse", "HEAD"))
+
     def test_push_targets_the_feature_branch_not_a_foreign_upstream(self):
         wt = self.worktree("feat")
         self.git(wt, "branch", "--set-upstream-to=origin/main")
