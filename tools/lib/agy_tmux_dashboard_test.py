@@ -307,6 +307,16 @@ class TestHelpers(unittest.TestCase):
 
             self.assertEqual(rows[0].status, "working")
 
+    def test_has_workstream_record_ignores_legacy_chain_fallback(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            wt = Path(tmp) / "wt"
+            wt.mkdir()
+            legacy = dash.workstream.WorkstreamRecord.from_dict({"tickets": ["Is1"]})
+            with mock.patch.object(dash.workstream, "load_record", return_value=legacy):
+                self.assertFalse(dash._has_workstream_record(str(wt)))
+            (wt / dash.workstream.RECORD_FILENAME).write_text("{}", encoding="utf-8")
+            self.assertTrue(dash._has_workstream_record(str(wt)))
+
     def test_curses_loop_skips_fetch_on_navigation_and_uses_tmux_bin(self):
         rows = [
             dash.WorkstreamRow("1", "Is1", "%1", "/tmp/1", "Is1", "One", "", "running", "ok"),

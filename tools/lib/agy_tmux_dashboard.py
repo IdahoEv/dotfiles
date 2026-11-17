@@ -306,7 +306,11 @@ def load_workstream_meta(pane_path: str) -> tuple[str, str, str]:
 
 
 def _has_workstream_record(pane_path: str) -> bool:
-    return bool(pane_path) and os.path.isdir(pane_path) and workstream.load_record(pane_path) is not None
+    if not pane_path or not os.path.isdir(pane_path):
+        return False
+    # load_record also falls back to the legacy chain file, which non-agy panes can share.
+    root = workstream._worktree_root(pane_path)
+    return os.path.isfile(os.path.join(root, workstream.RECORD_FILENAME))
 
 
 def _tmux_base(tmux_bin: str, socket: str | None) -> list[str]:
