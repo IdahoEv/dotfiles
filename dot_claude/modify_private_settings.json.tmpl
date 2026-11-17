@@ -323,7 +323,8 @@ MANAGED = json.loads(r"""
   },
   "alwaysThinkingEnabled": true,
   "skipWorkflowUsageWarning": true,
-  "theme": "dark-daltonized"
+  "theme": "dark-daltonized"{{ if not .is_work }},
+  "remoteControlAtStartup": true{{ end }}
 }
 """)
 
