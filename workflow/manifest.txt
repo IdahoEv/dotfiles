@@ -81,7 +81,7 @@ cc250687e95e2e4f392e1cf7fffc5487575466535c86659309b8428284d17a09  644  tools/lib
 d6c45d70d96c21971b022ea65a73f2b0fd4af0dd0b8abb524a9fd34cfd7a43df  644  tools/lib/wf_report.py
 3c46a31599092ceabb336ccd81b8e9a03631dbd0e8942152e8bbc420a74180fc  644  tools/lib/wf_tokens.py
 3b1a0716083c8f92ab94a60d59ecee59a1716e54cca16dd6cf25f77e2abfe41f  644  tools/lib/wf_usage.py
-91d701df63b70f7a35a7e530be09222db0388300cd92ae718a4e45005df5abb4  644  tools/lib/workstream.py
+b621d719daa0b8a2312985284ff21eedbcde73fcd9dba9f36f95e2aa4c4aefe4  644  tools/lib/workstream.py
 f6d369e82e99df2b899a4e53f1418bced2ab931851ae6e9ea7603c2460975cbc  755  tools/mcp-notion.sh
 6a1180dd4d342705d243b1f0a8a1ecb59826860e67a7e0de6aa63b232c757cad  755  tools/mem-guard.sh
 c8ce372b7286fdec6d59dc1cc586f65cffd3ad95cdeebdd089631832c46e1b09  755  tools/migrate-use-when.sh
@@ -89,7 +89,7 @@ bbcb038846e1132a854e75eeb5da31897b4ba99dd034c07432cc5a81388b3248  644  tools/ope
 317386c0f4827f0ff313643b3832b05548adcc7a635a78dd7aec5ba05003e4e3  644  tools/open-pr-providers/kardashev.sh
 4646c4c8143747fa1e8ccb52a499d01ae230c71e6f06c19508223edce007fc25  644  tools/open-pr-providers/shortcut.sh
 20e1ba6f76351bfc20a2c77acbac4195426e5dd7e2122a60229b0e27c02438b0  755  tools/open-pr-watch.sh
-5ada7c12c1de483df7a217569b09a344cad72b4ffd60e1585c48b5281c0e3cd9  755  tools/open-pr.sh
+13099132eac53bee3dee35a89b3c2321a4e42465bfaea3f12d6c498f09864361  755  tools/open-pr.sh
 dc55a6a27785e8576b61964aeefb66b3e419c24bcb46ee280a2f8463befb450a  755  tools/pending-actions.sh
 924937befc2fa9b642c8cdd3407ec9958a32ca8cc05259bc2b31a1be387849fb  755  tools/pr-body.sh
 f6ec970038d77efb2159bd5818cb7fc4cbd72ceddfe0bcbc353d3a6f51061850  644  tools/project-colors
