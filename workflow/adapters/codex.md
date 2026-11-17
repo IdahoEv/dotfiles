@@ -12,7 +12,7 @@ Translation layer only. The workflow itself is the dotfiles command files, fetch
 6. The `/start` output names `worktree=` and `kickoff=`. Because the launch step is skipped, switch into `worktree=` and read `kickoff=` as the task brief.
 7. Report each project check (tests, lint, build) as passed, failed, or not run with the reason, in the PR body and final report. Never imply a check passed unless it ran.
 8. There is no interactive user mid-task. Where a command would ask a question or wait for approval, stop and report the decision needed, unless the command itself says to proceed.
-9. Stop with the PR open. Never merge or run `/finalize`.
+9. Stop with the PR open. Never merge (`/merge`, `/land`) or run `/finalize`.
 
 ## Construct map
 
@@ -23,6 +23,7 @@ Maintained against the covered commands by `tools/cloud-workflow-adapter.test.sh
 | `/start` | Read and follow `start.md`. |
 | `/open-pr` | Read and follow `open-pr.md`. |
 | `/finalize` | Not available. Stop and report. |
+| `/merge`, `/sync`, `/land` | Not available. Stop and report. |
 | `/local-review-cycle` | Not available; independent review is not performed (see protocol 5). Skip any mention. |
 | `/github-review-comments` | Not available. Skip; report that review follow-up is manual. |
 | `/discuss` | Not available. |
