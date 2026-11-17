@@ -71,7 +71,7 @@ class ResolveMethod(unittest.TestCase):
         self.assertEqual(mr.resolve_method("squash", None), ("squash", ""))
 
     def test_unset_with_unreadable_repo_is_unknown(self):
-        self.assertEqual(mr.resolve_method(None, None), ("", "unknown"))
+        self.assertEqual(mr.resolve_method(None, None), ("", "merge-method-unknown"))
 
 
 class Run(Base):
@@ -104,7 +104,7 @@ class Run(Base):
         wt = self.ready()
         r = self.merge(wt)
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
-        self.assertIn("pr merge 5 --merge", self.calls())
+        self.assertIn("pr merge 5 --merge --match-head-commit ", self.calls())
         self.assertIn("api -X DELETE", self.calls())
         self.assertIn("refs/heads/7-feature", self.calls())
         self.assertNotIn("--delete-branch", self.calls())

@@ -6,7 +6,7 @@ remote branch is deleted. Local cleanup stays with /finalize.
 
 Exit 0   merged; stdout is one summary line (plus `warning=` lines).
 Exit 2   stopped before or without merging: `stopped=<reason>` and `reason=`.
-         Gate refusals use sync_gate's verdicts; others are merge-method-ambiguous,
+         Gate refusals use sync_gate's verdicts; others are merge-method-ambiguous, merge-method-unknown,
          merge-method-not-allowed, merge-failed, not-merged.
 Exit 1   usage/precondition error (including an invalid `merge_method`).
 
@@ -32,6 +32,7 @@ METHODS = {"merge": "mergeCommitAllowed", "squash": "squashMergeAllowed",
 STOP_REASONS = {
     "merge-method-ambiguous": "several merge methods are allowed and merge_method is unset; set it in start-ticket.conf",
     "merge-method-not-allowed": "the configured merge_method is not enabled on this repository",
+    "merge-method-unknown": "could not read the repository's merge settings from GitHub; set merge_method in start-ticket.conf",
     "merge-failed": "GitHub refused the merge",
     "not-merged": "GitHub accepted the merge request but the PR is not merged (queued or auto-merge); nothing was deleted",
 }
@@ -44,7 +45,7 @@ def resolve_method(configured: str | None, allowed: dict | None) -> tuple[str, s
             return "", "merge-method-not-allowed"
         return configured, ""
     if allowed is None:
-        return "", "unknown"
+        return "", "merge-method-unknown"
     enabled = [m for m, key in METHODS.items() if allowed.get(key)]
     if "merge" in enabled:
         return "merge", ""
@@ -115,7 +116,8 @@ def main(argv: list[str]) -> int:
     if not method:
         return stop(why)
 
-    r = run_cmd(["gh", "pr", "merge", facts.pr_number, f"--{method}"], cwd=d)
+    r = run_cmd(["gh", "pr", "merge", facts.pr_number, f"--{method}",
+                 "--match-head-commit", facts.pr_head], cwd=d)
     if r.returncode != 0:
         return stop("merge-failed", (r.stderr.strip().splitlines() or [STOP_REASONS["merge-failed"]])[0])
     if pr_state(d, facts.pr_number) != "MERGED":
