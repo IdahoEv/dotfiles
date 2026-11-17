@@ -25,7 +25,7 @@ reads `MERGED`, and deletes the remote branch. Act on the exit code:
     (`git log <pr_head>..HEAD`, `git log HEAD..<pr_head>`). Push or pull only if the user
     asked.
   - `conflict` — tell the user to run `/sync`.
-  - `merge-method-ambiguous` / `merge-method-not-allowed` — name the allowed methods and the
+  - `merge-method-ambiguous` / `merge-method-not-allowed` / `merge-method-unknown` — name the allowed methods and the
     `merge_method` key (`start-ticket.conf`, project or global).
   - Anything else (`no-pr`, `draft`, `closed`, `already-merged`, `mergeable-unknown`,
     `unknown`, `merge-failed`, `not-merged`) — relay `reason=`; for `already-merged` suggest

@@ -20,6 +20,7 @@ default merge. Rebase pushes with --force-with-lease.
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import sys
 
@@ -28,6 +29,20 @@ from repo_facts import conf_get, default_branch, git, git_ok, run_cmd
 
 EXIT_OK, EXIT_USAGE, EXIT_HANDOFF = 0, 1, 3
 METHODS = ("merge", "rebase")
+
+
+def resolve_base(d: str) -> str:
+    """The open PR's base branch, else the repo default (no PR, gh unavailable, mid-rebase)."""
+    branch = git(d, "symbolic-ref", "--short", "-q", "HEAD")
+    if branch:
+        try:
+            r = run_cmd(["gh", "pr", "view", branch, "--json", "baseRefName,state"], cwd=d)
+            data = json.loads(r.stdout) if r.returncode == 0 else {}
+        except (OSError, ValueError):
+            data = {}
+        if data.get("state") == "OPEN" and data.get("baseRefName"):
+            return data["baseRefName"]
+    return default_branch(d)
 
 
 def usage_error(msg: str) -> int:
@@ -92,9 +107,9 @@ def main(argv: list[str]) -> int:
     method = conf_get("sync_method", d) or "merge"
     if method not in METHODS:
         return usage_error(f"sync_method={method!r} is not one of {', '.join(METHODS)}")
-    base = default_branch(d)
+    base = resolve_base(d)
     if not base:
-        return usage_error("cannot resolve the repository's default branch")
+        return usage_error("cannot resolve the base branch")
     base_ref = f"origin/{base}"
     paused = in_progress(d, method) or bool(unmerged(d))
 

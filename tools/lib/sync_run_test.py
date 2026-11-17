@@ -1,11 +1,13 @@
 """Tests for sync-run.sh. Fixtures are throwaway repos with a bare local origin."""
 
+import json
 import os
 import subprocess
 import unittest
 from pathlib import Path
 
 from prune_worktrees_test import Base
+from sync_gate_test import GH_STUB
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 RUN = os.path.join(os.path.dirname(HERE), "sync-run.sh")
@@ -124,6 +126,24 @@ class Sync(Base):
         r, _ = self.sync(self.repo)
         self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
         self.assertIn("base branch", r.stderr)
+
+    def test_open_pr_base_other_than_default_is_the_sync_base(self):
+        self._stub("gh", GH_STUB)
+        self.env.update(GH_LOG=str(self.root / "gh.log"))
+        self.git(self.repo, "checkout", "-q", "-b", "release")
+        self.advance_main("rel-only")
+        self.git(self.repo, "push", "-q", "origin", "release")
+        self.git(self.repo, "checkout", "-q", "main")
+        self.git(self.repo, "reset", "-q", "--hard", "origin/main")
+        wt = self.worktree("feat")
+        (self.pr_dir / "view-feat.json").write_text(json.dumps(
+            {"state": "OPEN", "baseRefName": "release"}))
+        self.advance_main("main-only")
+        r, _ = self.sync(wt)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn("origin/release", r.stdout)
+        self.assertTrue((wt / "rel-only.txt").exists())
+        self.assertFalse((wt / "main-only.txt").exists())
 
     def test_rejected_push_hands_back(self):
         wt = self.worktree("feat")
