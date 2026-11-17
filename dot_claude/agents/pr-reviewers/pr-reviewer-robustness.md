@@ -14,6 +14,7 @@ Follow the reviewer-contract skill: the caller's diff scope, finding-line format
 - Resource ownership and cleanup; lifecycle transitions and repeated invocation.
 - Races, reentrancy, and ordering assumptions when the code can actually run concurrently.
 - Persistence, recovery, consistency after interruption, and error propagation.
+- Scripts and CLI tools: exit codes that hide a failure or report success after a failed step; a nonzero exit that can mean more than one thing; external JSON assumed to have one shape, or paginated or capped output read as complete; side effects that run before the check that should gate them; behavior when run from a subdirectory or with explicit `--dir`/`--branch` flags; state left behind after a partial failure.
 
 **Use a high bar for defensive findings.** Report an edge case only when there is a credible path in normal supported operation and the impact justifies addressing it. Do not propose hardening for merely imaginable, extremely unlikely, unreachable, or unsupported states. Do not add layers of checks for theoretical completeness, or recommend complex defenses whose cost exceeds the plausible risk. Prefer the smallest fix that addresses a demonstrated problem.
 
