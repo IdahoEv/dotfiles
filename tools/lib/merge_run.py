@@ -97,10 +97,11 @@ def main(argv: list[str]) -> int:
     if not git_ok(d, "rev-parse", "--show-toplevel"):
         print("merge-run: not inside a git worktree", file=sys.stderr)
         return EXIT_USAGE
-    branch = args.branch or git(d, "symbolic-ref", "--short", "-q", "HEAD")
-    if not branch:
+    head_branch = git(d, "symbolic-ref", "--short", "-q", "HEAD")
+    if not head_branch:
         print("merge-run: detached HEAD; check out the PR branch", file=sys.stderr)
         return EXIT_USAGE
+    branch = args.branch or head_branch
     configured = conf_get("merge_method", d)
     if configured and configured not in METHODS:
         print(f"merge-run: merge_method={configured!r} is not one of "

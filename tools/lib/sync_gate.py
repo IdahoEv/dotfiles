@@ -137,8 +137,6 @@ def gather(dir_: str, branch: str) -> Facts:
     f.mergeable = data.get("mergeable", "")
     f.pr_head = data.get("headRefOid", "")
     f.base = data.get("baseRefName", "")
-    if f.pr_head and not git_ok(dir_, "cat-file", "-e", f"{f.pr_head}^{{commit}}"):
-        git_ok(dir_, "fetch", "-q", "origin", branch)
     f.head_vs_pr = _relation(dir_, f.head, f.pr_head)
     return f
 

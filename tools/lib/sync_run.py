@@ -149,8 +149,10 @@ def main(argv: list[str]) -> int:
 
     if git(d, "status", "--porcelain"):
         return usage_error("working tree has uncommitted changes; commit or stash them first")
-    if not git_ok(d, "fetch", "-q", "origin"):
-        return usage_error("git fetch origin failed")
+    # Explicit refspec: the bare-worktree layout has no remote.origin.fetch, so a
+    # plain fetch would leave origin/<base> stale.
+    if not git_ok(d, "fetch", "-q", "origin", f"+refs/heads/{base}:refs/remotes/origin/{base}"):
+        return usage_error(f"git fetch origin {base} failed")
     if git_ok(d, "merge-base", "--is-ancestor", base_ref, "HEAD"):
         print(f"{branch} is up to date with {base_ref}")
         return EXIT_OK

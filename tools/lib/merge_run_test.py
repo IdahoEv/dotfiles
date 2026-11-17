@@ -112,6 +112,15 @@ class Run(Base):
         self.assertIn("Merged #5", r.stdout)
         self.assertTrue(wt.exists())
 
+    def test_detached_head_is_a_usage_error_even_with_branch_flag(self):
+        wt = self.ready()
+        self.git(wt, "checkout", "-q", "--detach")
+        r = subprocess.run([RUN, "--dir", str(wt), "--branch", "7-feature"], cwd=wt,
+                           env=self.env, capture_output=True, text=True)
+        self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+        self.assertIn("detached HEAD", r.stderr)
+        self.assertNotIn("pr merge", self.calls())
+
     def test_configured_method_is_used(self):
         wt = self.ready()
         (self.repo / ".start-ticket.conf").write_text("merge_method=squash\n")
