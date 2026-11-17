@@ -1,5 +1,5 @@
 ---
-name: dotfiles-safety-reviewer
+name: pr-reviewer-dotfiles-safety
 use_when: the diff touches dot_claude/, dot_shell_modules/, dot_productivity/, gitconfig templates, tools/, .gitignore, or any other file that is committed or deployed, and may carry project names, ticket titles, internal identifiers, hostnames, or stack details.
 description: Reviews dotfiles branch diffs for references to private, closed-source repos — work or personal — that must not appear in this public repo.
 model: sonnet

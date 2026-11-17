@@ -208,6 +208,7 @@ class RecordPersistenceTests(WorkstreamTestBase):
                 "pr",
                 "reviews",
                 "claude_sessions",
+                "codex_sessions",
             },
         )
         self.assertEqual(raw["version"], 1)
