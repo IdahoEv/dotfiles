@@ -94,7 +94,7 @@ _WAITING_PROMPT_RE = re.compile(
     r"(?:^|\s)(?:"
     r"enter to select|space to select|allow once|allow for this session|always allow|"
     r"yes,\s*allow|no,\s*deny|do you want to (?:proceed|run|allow|continue)|"
-    r"\[[yY]/[nN]\]"
+    r"\[[yY]/[nN]\]\s*$"
     r")",
     re.IGNORECASE,
 )
@@ -131,6 +131,15 @@ def _has_prompt_box(lines: list[str]) -> bool:
     return False
 
 
+def _unanswered_tail(lines: list[str]) -> list[str]:
+    """Return the last few lines after the latest agent activity marker, where a live prompt sits."""
+    start = 0
+    for i, line in enumerate(lines):
+        if line.startswith("●"):
+            start = i + 1
+    return lines[start:][-4:]
+
+
 def _classify_pane_state(captured: str) -> str | None:
     """Classify an agy pane's attention state from captured output, or None if unknown."""
     if not captured:
@@ -144,9 +153,10 @@ def _classify_pane_state(captured: str) -> str | None:
         return "waiting"
 
     recent_body = body_lines[-8:] if body_lines else non_empty[-8:]
-    for line in recent_body:
-        if _WAITING_PROMPT_RE.search(line) or _WAITING_MENU_RE.match(line):
-            return "waiting"
+    if not _has_prompt_box(non_empty[-6:]):
+        for line in _unanswered_tail(recent_body):
+            if _WAITING_PROMPT_RE.search(line) or _WAITING_MENU_RE.match(line):
+                return "waiting"
 
     if sl_state in ("thinking", "working", "running", "tool_use"):
         return "working"

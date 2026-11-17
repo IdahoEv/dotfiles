@@ -36,6 +36,14 @@ class TestHelpers(unittest.TestCase):
         self.assertEqual(dash.compute_status(False, None, 1045), "working")
         self.assertEqual(dash.compute_status(False, 1000, 1045, captured="plain shell\n$ "), "idle (45s)")
 
+    def test_stale_or_prose_prompt_text_is_not_waiting(self):
+        answered = "Do you want to proceed?\n1. yes\n● Edit file\nfoo | main | [idle]\n"
+        self.assertEqual(dash.compute_status(False, 900, 1000, captured=answered), "idle (1m)")
+        prose = "I'll explain: use [y/N] flags\n──────────\n>\n──────────\nfoo | main | [idle]\n"
+        self.assertEqual(dash.compute_status(False, 900, 1000, captured=prose), "idle (1m)")
+        mid_line = "make it so [y/N] ok\n$ "
+        self.assertEqual(dash.compute_status(False, 900, 1000, captured=mid_line), "idle (1m)")
+
     def test_compute_status_from_agy_pane_signals(self):
         # pane_dead always wins over captured output
         self.assertEqual(
