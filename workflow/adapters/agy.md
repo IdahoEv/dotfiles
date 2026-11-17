@@ -12,7 +12,7 @@ Translation layer only. The workflow itself is the dotfiles command files; this 
      Do not download the tarball or invoke the remote bootstrap script when running on the host.
    - **Remote / Cloud AGY session** (isolated container or sandbox without local dotfiles):
      - Download the bootstrap to a file, then run it, using the same ref for both (`WORKFLOW_REF` defaults to `main`; pin a full SHA for stable runs): `curl -fsSL "https://raw.githubusercontent.com/IdahoEv/dotfiles/${WORKFLOW_REF:-main}/tools/cloud-workflow-bootstrap.sh" -o "${TMPDIR:-/tmp}/b.sh" && WORKFLOW_REF="${WORKFLOW_REF:-main}" bash "${TMPDIR:-/tmp}/b.sh"`. Do not use process substitution: it turns a failed download into an empty script that exits 0. Stop and report on a non-zero exit or when `workflow_source_commit=` is missing from the output. Never use a cached or remembered copy of the workflow.
-2. Add `workflow_bin` to `PATH` so command text such as `start-ticket.sh` and `open-pr.sh` runs unmodified. Keep `workflow_source_commit`.
+2. Add `workflow_bin` to `PATH` so command text such as `start-ticket.sh` and `open-pr.sh` runs unmodified. Invoke `workflow_bin` scripts by bare name (without `PATH=...` prefixes, `bash` wrappers, or `|| true`) so allowlist rules match. Keep `workflow_source_commit`.
 3. Tool execution in AGY:
    - Run shell commands using `run_command`. Attempt sandboxed execution first; retry with `BypassSandbox: true` if blocked by network or authentication requirements (e.g., `gh`).
    - Use `read_file`, `write_file`, and `edit_file` for file operations.
@@ -52,7 +52,7 @@ Maintained against the covered commands by `tools/cloud-workflow-adapter.test.sh
 | `GT_LABEL_SLUG_OVERRIDE` | Do not set. The deterministic branch name stands. |
 | `agent-phase.sh` | Run as written (`agent-phase.sh <PHASE>`, `--pr`, `--no-review`); it updates `.workstream.json` in the worktree (and is a no-op outside a workstream). |
 | `github-review-state.sh` | Skip direct `--set-local` statusline calls; `wf-event.sh review.result` records the final round count. |
-| `session-label.sh` | Skip. |
+| `session-label.sh` | Skip (do not run, even with `\|\| true`). |
 | `AskUserQuestion` | Follow protocol 9: in interactive sessions use `ask_question` with self-contained context; in headless/Telegram sessions print the self-contained question and options at the end of the turn and wait. |
 | `claude agents` | Ignore; there is no Claude agent view. |
 | `github-review-poll.sh` | In interactive CLI sessions, run in the background via `run_command` and re-invoke `/github-review-comments` on exit 0; in single-turn headless/Telegram or remote runs, skip the poll step and report that review polling is manual. |
