@@ -1,5 +1,5 @@
 ---
-name: review-quality
+name: project-lens-quality
 use_when: periodic project review.
 description: Periodic project-review lens for code quality of a default-branch snapshot — invariant probes, convention drift, data-layer consistency, build/test/CI hygiene. Read-only.
 tools: Read, Glob, Grep, Bash
@@ -20,4 +20,4 @@ Method, run against the snapshot:
 4. **Build, test, tooling.** Check that the build and test entry points the project documents exist and agree with each other, that tests cover the code paths the probes and conventions treat as critical, and that scripts and configs reference files that exist.
 5. **CI triggers.** Check that each CI workflow runs on the events and paths its purpose requires, and that no check is silently skipped or unreachable.
 
-Leave boundary and design questions to `review-architecture` and doc accuracy to `review-docs`.
+Leave boundary and design questions to `project-lens-architecture` and doc accuracy to `project-lens-docs`.

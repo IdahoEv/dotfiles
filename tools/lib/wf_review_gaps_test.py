@@ -334,14 +334,20 @@ class TestEndToEndReport(unittest.TestCase):
             _git(main_repo, "commit", "-q", "-m", "init")
             _git(main_repo, "worktree", "add", "-q", "-b", "feat", str(wt))
 
-            agents_dir = wt / ".claude" / "agents"
+            agents_dir = wt / ".claude" / "agents" / "pr-reviewers"
             agents_dir.mkdir(parents=True)
-            (agents_dir / "wt-only-reviewer.md").write_text(
-                "---\nname: wt-only-reviewer\nuse_when: always\n---\nCheck.\n"
+            (agents_dir / "pr-reviewer-wt.md").write_text(
+                "---\nname: pr-reviewer-wt\nuse_when: always\n---\nCheck.\n"
+            )
+            lenses_dir = wt / ".claude" / "agents" / "project-lenses"
+            lenses_dir.mkdir(parents=True)
+            (lenses_dir / "project-lens-arch.md").write_text(
+                "---\nname: project-lens-arch\nuse_when: periodic\n---\nLens.\n"
             )
             with mock.patch.dict(os.environ, {"PROJECT_OVERLAYS_DIR": str(Path(tmp) / "overlays")}):
                 cfg = gaps.load_project_config(str(wt))
-            self.assertIn("wt-only-reviewer", cfg["candidates"])
+            self.assertIn("pr-reviewer-wt", cfg["candidates"])
+            self.assertNotIn("project-lens-arch", cfg["candidates"])
 
     def test_analyze_prs_skips_originless_dir_for_diff_evidence(self):
         with tempfile.TemporaryDirectory() as tmp:

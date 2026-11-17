@@ -98,14 +98,14 @@ def load_project_config(repo_dir="."):
             }
 
     root = Path(repo_facts.git(repo_dir, "rev-parse", "--show-toplevel") or repo_dir)
-    for p in sorted((root / ".claude" / "agents").glob("*.md")):
+    for p in sorted((root / ".claude" / "agents").rglob("*.md")):
         _add_file(p, "project")
-    for p in sorted((root / "docs" / "local" / "reviewers").glob("*.md")):
+    for p in sorted((root / "docs" / "local" / "reviewers").rglob("*.md")):
         _add_file(p, "local")
     for p in repo_facts.overlay_claude_files("agents", repo_dir):
         _add_file(p, "overlay")
     for base in (root / "dot_claude" / "agents", Path.home() / ".claude" / "agents"):
-        for p in sorted(base.glob("*.md")):
+        for p in sorted(base.rglob("*.md")):
             _add_file(p, "global")
 
     overlay_cfg = {}

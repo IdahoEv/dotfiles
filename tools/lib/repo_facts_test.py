@@ -377,6 +377,16 @@ class Overlays(Base):
         self.assertEqual(repo_facts.overlay_claude_files("agents", repo),
                          r.stdout.splitlines())
 
+    def test_overlay_claude_files_nested_agents(self):
+        os.environ["PROJECT_OVERLAYS_DIR"] = os.path.join(self.root, "overlays")
+        ov = "overlays/acme/widgets/claude"
+        self.write(f"{ov}/agents/pr-reviewers/pr-reviewer-custom.md", "a\n")
+        self.write(f"{ov}/agents/.hidden-dir/secret.md", "b\n")
+        repo = self.fake_remote_repo()
+        expected = [os.path.join(self.root, ov, "agents", "pr-reviewers",
+                                 "pr-reviewer-custom.md")]
+        self.assertEqual(repo_facts.overlay_claude_files("agents", repo), expected)
+
 
 class GitFacts(Base):
     def test_main_root_from_worktree(self):
