@@ -28,6 +28,7 @@ Maintained against the covered commands by `tools/cloud-workflow-adapter.test.sh
 | `/finalize` | Read and follow `finalize.md`, with protocol 9 for steps 3–5. |
 | `/local-review-cycle` | Read and follow `local-review-cycle.md`. |
 | `/github-review-comments` | Read and follow `github-review-comments.md`, with the review-state mappings below. |
+| `/merge`, `/sync`, `/land` | Not available. Skip any mention. |
 | `/discuss` | Not available. Skip any mention. |
 | `/pick` | Not available. Skip any mention. |
 | `/board` | Not available. Skip any mention. |

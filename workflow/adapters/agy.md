@@ -23,7 +23,7 @@ Translation layer only. The workflow itself is the dotfiles command files; this 
 7. The `/start` output names `worktree=` and `kickoff=`. Outside a local `agy-tmux` dashboard session, the session launch step (`--tab-only`) is skipped: switch into `worktree=` (set working directory) and read `kickoff=` as the task brief. Inside a local `@agy_dashboard=1` tmux session, run `--tab-only` to launch the new workstream as a tmux window in the active dashboard without switching away from the caller window.
 8. Report each project check (tests, lint, build) as passed, failed, or not run with the reason, in the PR body and final report. Never imply a check passed unless it ran.
 9. Interactive prompts: In an interactive AGY session, use `ask_question` or user chat when human input is requested. In automated/headless execution, where a command would ask a question or wait for approval, stop and report the decision needed, unless the command itself says to proceed.
-10. Stop with the PR open. Never merge or run `/finalize`.
+10. Stop with the PR open. Never merge (`/merge`, `/land`) or run `/finalize`.
 
 ## Construct map
 
@@ -34,6 +34,7 @@ Maintained against the covered commands by `tools/cloud-workflow-adapter.test.sh
 | `/start` | Read and follow `start.md` using `run_command` and file tools. |
 | `/open-pr` | Read and follow `open-pr.md` using `run_command` and file tools. |
 | `/finalize` | Not available. Stop and report. |
+| `/merge`, `/sync`, `/land` | Not available. Stop and report. |
 | `/local-review-cycle` | Read and follow `local-review-cycle.md` using `run_command` and subagent tools. |
 | `/github-review-comments` | Read and follow `github-review-comments.md` using `run_command`, file tools, and subagent tools (in Quick or Slow mode, load `skills/github-review-procedure/SKILL.md` inline in the current session; in Automatic mode, launch `github-review-repair-agent` and retain parent ownership of commits, push, and GitHub thread writes). |
 | `/discuss` | Read and follow `discuss.md` using `run_command` (`start-ticket.sh --session ... --launcher none`); report `dir=`, `kickoff=`, and `label=` instead of opening a Claude tab or session. |
