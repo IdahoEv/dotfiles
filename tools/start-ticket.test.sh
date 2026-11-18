@@ -288,12 +288,23 @@ check "mcp: closed issue is refused" "1" "$rc"
 has "mcp: closed issue is explained" "not OPEN" "$ROOT/mcp.err"
 check "mcp: refusals leave the session branch" "ccr-session" "$(git -C "$ROOT/mcpcloud" branch --show-current)"
 
+printf '{"number":15,"title":"Object labels","body":"b","state":"OPEN","url":"","labels":[{"name":"Bug"}],"parent":null}\n' > "$MD/15.json"
+git -C "$ROOT/mcpcloud" checkout -q ccr-session
+out="$(START_TICKET_MCP_DIR="$MD" mcp 15)"
+check "mcp: object-form labels are accepted" "Is15-object-labels" "$(git -C "$ROOT/mcpcloud" branch --show-current)"
+
 # Neither path available: one message naming both fixes.
+# Autodetect falls through to Shortcut when `short` is on PATH, so this case only
+# applies on hosts without it.
+if command -v short >/dev/null; then
+  echo "SKIP no-handoff autodetect cases (short is installed on this host)"
+else
 mcp 12 >/dev/null; rc=$?
 check "no gh auth, no handoff: fails" "1" "$rc"
 check "no gh auth, no handoff: one error line" "1" "$(wc -l < "$ROOT/mcp.err" | tr -d ' ')"
 has "unavailable message names gh auth login" "gh auth login" "$ROOT/mcp.err"
 has "unavailable message names the MCP path" "--provider github-mcp" "$ROOT/mcp.err"
+fi
 (cd "$ROOT/mcpcloud" && PATH="$NOGH:$PATH" "$ST" 12 --provider github --in-place --no-tab >/dev/null 2>"$ROOT/mcp.err"); rc=$?
 check "explicit github with unauthed gh: fails" "1" "$rc"
 has "explicit github failure uses the same message" "--provider github-mcp" "$ROOT/mcp.err"

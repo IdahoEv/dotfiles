@@ -73,7 +73,8 @@ The script already read the state back, so trust `ticket_in_progress`:
   CLI's state-set prints `Error fetching story NaN` and still exits 0). Repair it:
   - **GitHub** — `gh issue edit <id> --add-assignee @me`, reopening if needed.
   - **GitHub via MCP** (the path above, every id) — `mcp__github__get_me`, then
-    `mcp__github__issue_write` (method `update`) adding that login to the assignees, then
+    `mcp__github__issue_write` (method `update`) setting assignees to the existing ones from
+    `issue_read` plus that login (update replaces the list), then
     `mcp__github__add_issue_comment` with "🚧 In progress — branch `<branch>`." Skip both
     if `mcp__github__issue_read` shows it already assigned to that login; read the
     assignees back with `issue_read` and report that as the state.
