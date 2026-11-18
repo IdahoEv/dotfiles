@@ -5,10 +5,10 @@ f3522de4dc0c92887d60d0b000c79c80cd724b6efae9cb09e2bed932c0bc4ad6  644  dot_claud
 1af82b59f92a026c19e45106c05c926ea8e9dd95a3b312d79b98c6184403eba0  644  dot_claude/agents/codebase-pattern-finder.md
 1d3c68de8ea88fb5b801cf131541f45b9b0853134398a7dfef8eeace30739aa3  644  dot_claude/agents/github-review-repair-agent.md
 6cc2a0ed6667e8ba0c167e9e76213f0c1d53cc5a43fc5a6f7e441c3bfa3a1040  644  dot_claude/agents/local-review-cycle-manager.md
-bd16daf5eb64aef0fcaca6613926317a218ddd0ae91aa40a6b2aff1d2381b2f7  644  dot_claude/agents/pr-reviewers/pr-reviewer-architecture.md
-de5d384eb39b420f87a118c11d648ba876ce3cccb76a2fac18c5cf6e215496ed  644  dot_claude/agents/pr-reviewers/pr-reviewer-correctness.md
+7d5f8c87843ccf69c4c3b3f27d6ba228249022da52cba8c08674f41bdbf62c7a  644  dot_claude/agents/pr-reviewers/pr-reviewer-architecture.md
+ce4926ee616dcbf604af0cf8e12f449af963e858ed5f36ff46429b266e484668  644  dot_claude/agents/pr-reviewers/pr-reviewer-correctness.md
 92d2899333f62cb889bd32117f2988cafb71042e3e393a70e16338097c72b0cb  644  dot_claude/agents/pr-reviewers/pr-reviewer-prompt.md
-45f00510e778edcbc33c4d4e60e6bfa131d8b0ed15cbe64f950c1aef9a2d8f58  644  dot_claude/agents/pr-reviewers/pr-reviewer-robustness.md
+5a5ca97c3f2734e1392087d411c5afff9c1c16d723daabec3062647fd353349b  644  dot_claude/agents/pr-reviewers/pr-reviewer-robustness.md
 d238bc76cb1340189536d171e754c7c859d0a6bc00ffb41af600566732089ccd  644  dot_claude/agents/pr-reviewers/pr-reviewer-security.md
 3a66ee9add41c9fc0ce5bcee1551bd4d6cc707b775280035033e763290419d93  644  dot_claude/agents/pr-reviewers/pr-reviewer-supply-chain.md
 efe28e6368f209f515635e5e6d24e27fa69a5ed8123fe1b3cf56e75668688342  644  dot_claude/agents/productivity-coach.md

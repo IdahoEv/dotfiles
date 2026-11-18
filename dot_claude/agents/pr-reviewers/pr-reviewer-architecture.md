@@ -14,6 +14,7 @@ Follow the reviewer-contract skill: the caller's diff scope, finding-line format
 - Whether interfaces, state ownership, and data flow fit the problem and existing architecture.
 - New coupling, duplication, leaky abstractions, unnecessary layers, or a simpler viable design.
 - Compatibility and migration costs when changing public contracts.
+- Counterpart artifacts: when the diff changes a contract, find the docs, sibling commands, generated files, and other consumers that restate it, and report any left out of sync.
 
 Do not flag a pattern merely because you prefer another style. A design concern is a finding only when you can explain the concrete cost or failure of the current approach and a credible alternative. Keep routine logic bugs to `pr-reviewer-correctness` and failure-path analysis to `pr-reviewer-robustness`.
 
