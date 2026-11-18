@@ -58,7 +58,7 @@ Maintained against the covered commands by `tools/cloud-workflow-adapter.test.sh
 | `claude agents` | Ignore; there is no Claude agent view. |
 | `github-review-poll.sh` | In interactive CLI sessions, run in the background via `run_command` and re-invoke `/github-review-comments` on exit 0; in single-turn headless/Telegram or remote runs, skip the poll step and report that review polling is manual. |
 | `mcp__shortcut__` | Not available. Shortcut tickets: stop and report. GitHub tickets need no MCP. |
-| `mcp__github__` | Not required; use the `gh` CLI (`gh api ...`) via `run_command` as preferred by `github-review-procedure`. |
+| `mcp__github__` | Not required; use the `gh` CLI (`gh api ...`) via `run_command` as preferred by `github-review-procedure`. Skip `/start`'s GitHub MCP path: if `start-ticket.sh` reports `github unavailable`, stop and report. |
 | `--review` | Honour as written (`open-pr.sh` defaults to `none` when `~/.config/local-review-only` exists). |
 | `--launcher` | Pass `--launcher none` for `/discuss` (`start-ticket.sh --session`); for `/start`, never pass `--launcher` (`start-ticket.sh` auto-selects `agy-tmux` inside a local `@agy_dashboard=1` tmux session, and `--tab-only` is skipped outside it). |
 | `review-unattended.sh` | When the script is absent, treat as exit 1 (interactive). Otherwise honour as written; unattended mode is opt-in per machine via `~/.config/github-review-unattended`. |

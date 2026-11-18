@@ -37,7 +37,7 @@ ecfadd04ba6312298e060aaef496079f83d32dc809e39bc91089bf3101852ef1  644  dot_claud
 aba793872a6ce83be45735cf898183d8d2b290c72f5e62312e161883462615af  644  dot_claude/commands/prompt-audit.md
 51367b2883763ed4354e9f51f596d3ed865982d0f57e2c1a8502c96b645b97de  644  dot_claude/commands/remind.md
 36451ca7b0c0afb4b6877b075d92dd555afe76658fa3ad409d4fa40e27a0a41c  644  dot_claude/commands/research_codebase.md
-746936f197ebe7da1f6351361e47e1949d1b3e280280faa11f3e4f3854640547  644  dot_claude/commands/start.md
+dd8514af97daddb5c2ebf7521ef457caf1200d86f24029aa30295de9c13942e4  644  dot_claude/commands/start.md
 4443c3e1b526cdbc4c6ff95bbe13f2b183ce6dee93b90d6a0a41e0afca7c97b8  644  dot_claude/commands/sync.md
 2cde0450935a61a0384afac7655b46cea02adc0957dfe840cfcbfbe9c8393cdc  644  dot_claude/skills/github-review-procedure/SKILL.md
 ee70fb1a401ed104231eb6f9ea72334263ca35b579f030d27946692cc57776be  644  dot_claude/skills/github-review-procedure/executable_github-review-poll.sh
@@ -117,9 +117,10 @@ e1c3ae04faac76a296220724c92c4bb953ffc875f3dee88308467be873a22a50  755  tools/rev
 71d00250a76fffd58c7e2fc2fc0df3a1b3d1b837bcaaa551c00c488d587183e1  755  tools/session-label.sh
 a394eba77efb25ef1f766806223ac4edf75c5eef0b4347084e6059b5fce9de68  755  tools/setup-ticket-profile.sh
 e366a502be678c6fa82962d428bbdc9414457a32835de696989c42582e500eca  755  tools/sibling-worktrees.sh
+d545d48d22308a316a00984483baead2334576101656c8dcefdb4883f293dc6a  644  tools/start-ticket-providers/github-mcp.sh
 fe34a71d2260c726846a0eef9673688185d019036e0c9e55df3e918030f06ae1  644  tools/start-ticket-providers/github.sh
 ae4e93d3a0d38815b1c929d3ff237054c71a8a46dd01e30e2cd23c2ed9343fee  644  tools/start-ticket-providers/shortcut.sh
-ddaccaeda7b5a995fa89f03e0f68adccfcb31bdffd602ff781fe7663955fe99f  755  tools/start-ticket.sh
+090d5e5b411ec58844bcf48f87f38b92400dca6377bf6ec6bad3d680ee2ada39  755  tools/start-ticket.sh
 2f05e33075ba15221c8da189495317c293d22055b5548cd2db0f98b4c30c47e2  755  tools/sync-gate.sh
 1abff882cb55863b47da0513aec9a824a52a228f7da137c1562d638ad1d5fae6  755  tools/sync-run.sh
 242a517c6322f8dd47a053c459dec7aed2b7b8a803b5f3b4e08e681bbe9b3af7  755  tools/tracker.sh
@@ -131,7 +132,7 @@ f15dd098841d7963da09693fafbb3bf3f713952434c4c4b8a40dec6cb7cb0fcd  755  tools/wor
 8b3c4fad15997740068b84ced54bf8395749d2b33b6700dd9af651b5047d0057  755  tools/workflow-session.sh
 0e8c1deefa52ec93b05c3e69b89f612adc5bb434d8c1ec8c8e98813313c92f44  755  tools/workstream.sh
 cb41af044928182975030d4ede61783b4c03acf1d5d766ae7890f0557efa64bd  755  tools/worktree-manager.sh
-e0d3e60581725464508b2af055c2b2e6016205dedd9fe10c15ea51021e356b91  644  workflow/adapters/agy.md
-47f2d5e2e9655105b79c347745183a0c130ceca98845b732301ff8045893174e  644  workflow/adapters/claude-cloud.md
+7d1f29e16dfc6685447d9f55c516d1531de523f979c222ae7f329e8e750d3164  644  workflow/adapters/agy.md
+462d4df058f2be40793fb37f991d60c91f51800a96de50f7118853b6b6939031  644  workflow/adapters/claude-cloud.md
 14c7c265a7699c75380d58933419d719b6b28f38490bd46a32fe682b0be40f7c  644  workflow/adapters/codex-local.md
-fcab2f182430cae25418ea429c96bad25ed0bd7af8f797502b9d6fae99109646  644  workflow/adapters/codex.md
+ec626507a711cc227a86d022bd6825bd5b4d8b99a17e8afd7e756c5dc082a28f  644  workflow/adapters/codex.md

@@ -39,6 +39,7 @@ Maintained against the covered commands by `tools/cloud-workflow-adapter.test.sh
 | `session-label.sh` | Skip. |
 | `claude agents` | Ignore; there is no agent view. |
 | `mcp__shortcut__` | Not available. Shortcut tickets: stop and report. GitHub tickets need no MCP. |
+| `mcp__github__` | Not available. Skip the GitHub MCP path in `/start`; if `start-ticket.sh` reports `github unavailable`, stop and report. |
 | `--review` | Always `--review none`; independent review is not performed. |
 | `--launcher` | Never pass it. No session is launched. |
 | `~/.config/local-review-only` | Ignore; `--review none` already applies. |
