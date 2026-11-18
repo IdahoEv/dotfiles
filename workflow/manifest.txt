@@ -119,7 +119,7 @@ a394eba77efb25ef1f766806223ac4edf75c5eef0b4347084e6059b5fce9de68  755  tools/set
 e366a502be678c6fa82962d428bbdc9414457a32835de696989c42582e500eca  755  tools/sibling-worktrees.sh
 fe34a71d2260c726846a0eef9673688185d019036e0c9e55df3e918030f06ae1  644  tools/start-ticket-providers/github.sh
 ae4e93d3a0d38815b1c929d3ff237054c71a8a46dd01e30e2cd23c2ed9343fee  644  tools/start-ticket-providers/shortcut.sh
-09716f7e3f811065d5afc952622cf45c6448ac7c8b630d9b8aba2355ea0cef99  755  tools/start-ticket.sh
+ddaccaeda7b5a995fa89f03e0f68adccfcb31bdffd602ff781fe7663955fe99f  755  tools/start-ticket.sh
 2f05e33075ba15221c8da189495317c293d22055b5548cd2db0f98b4c30c47e2  755  tools/sync-gate.sh
 1abff882cb55863b47da0513aec9a824a52a228f7da137c1562d638ad1d5fae6  755  tools/sync-run.sh
 242a517c6322f8dd47a053c459dec7aed2b7b8a803b5f3b4e08e681bbe9b3af7  755  tools/tracker.sh
