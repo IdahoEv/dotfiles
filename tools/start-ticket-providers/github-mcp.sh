@@ -15,6 +15,7 @@ provider::available() {
 
 provider::fetch() {
   local id="$1" f state label
+  [[ "$id" =~ ^[0-9]+$ ]] || { echo "invalid ticket id '$id': the github-mcp provider takes GitHub issue numbers" >&2; return 1; }
   f="$(_ghmcp_file "$id")"
   [ -f "$f" ] || { echo "no handoff file for #$id ($f): fetch it with the GitHub MCP tools first (see /start step 1)" >&2; return 1; }
   jq -e . "$f" >/dev/null 2>&1 || { echo "handoff file for #$id is not valid JSON: $f" >&2; return 1; }

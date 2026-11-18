@@ -286,6 +286,9 @@ has "mcp: missing handoff names the fix" "/start" "$ROOT/mcp.err"
 START_TICKET_MCP_DIR="$MD" mcp 14 >/dev/null; rc=$?
 check "mcp: closed issue is refused" "1" "$rc"
 has "mcp: closed issue is explained" "not OPEN" "$ROOT/mcp.err"
+START_TICKET_MCP_DIR="$MD" mcp '../mcp-handoff/12' >/dev/null; rc=$?
+check "mcp: path-like id is refused" "1" "$rc"
+has "mcp: path-like id is explained" "invalid ticket id" "$ROOT/mcp.err"
 check "mcp: refusals leave the session branch" "ccr-session" "$(git -C "$ROOT/mcpcloud" branch --show-current)"
 
 printf '{"number":15,"title":"Object labels","body":"b","state":"OPEN","url":"","labels":[{"name":"Enhancement"}],"parent":null}\n' > "$MD/15.json"

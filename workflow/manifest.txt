@@ -117,7 +117,7 @@ e1c3ae04faac76a296220724c92c4bb953ffc875f3dee88308467be873a22a50  755  tools/rev
 71d00250a76fffd58c7e2fc2fc0df3a1b3d1b837bcaaa551c00c488d587183e1  755  tools/session-label.sh
 a394eba77efb25ef1f766806223ac4edf75c5eef0b4347084e6059b5fce9de68  755  tools/setup-ticket-profile.sh
 e366a502be678c6fa82962d428bbdc9414457a32835de696989c42582e500eca  755  tools/sibling-worktrees.sh
-340d781acc71e50230037c66ce72d5c005d15b6912523234621fbd365c5eba9c  644  tools/start-ticket-providers/github-mcp.sh
+d545d48d22308a316a00984483baead2334576101656c8dcefdb4883f293dc6a  644  tools/start-ticket-providers/github-mcp.sh
 fe34a71d2260c726846a0eef9673688185d019036e0c9e55df3e918030f06ae1  644  tools/start-ticket-providers/github.sh
 ae4e93d3a0d38815b1c929d3ff237054c71a8a46dd01e30e2cd23c2ed9343fee  644  tools/start-ticket-providers/shortcut.sh
 ee4ffa320e68d556563cee7dbb7beead1db068fbc22d86823cd39bab0da8c9e2  755  tools/start-ticket.sh
