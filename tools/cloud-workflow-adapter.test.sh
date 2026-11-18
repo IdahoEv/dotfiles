@@ -13,6 +13,7 @@ check() { # check <adapter.md> <command.md>...
   local adapter="$1"; shift
   python3 -I - "$adapter" "$@" <<'PY' || return 1
 import re, sys
+from pathlib import Path
 
 adapter, commands = sys.argv[1], sys.argv[2:]
 construct = re.compile(
@@ -24,7 +25,13 @@ construct = re.compile(
 )
 used = {}
 for path in commands:
-    for match in construct.finditer(open(path, encoding="utf-8").read()):
+    text = open(path, encoding="utf-8").read()
+    if adapter.endswith("/codex-local.md"):
+        if Path(path).stem in {"merge", "land", "sync"}:
+            used.setdefault("/" + Path(path).stem, path)
+        for match in re.finditer(r"(?<![\w/.-])/(?:merge|land|sync)\b", text):
+            used.setdefault(match.group(0), path)
+    for match in construct.finditer(text):
         used.setdefault(match.group(0), path)
 
 rows = {m.group(1) for line in open(adapter, encoding="utf-8")
@@ -67,6 +74,9 @@ local_codex_commands=("${agy_commands[@]}"
   "$repo/dot_claude/commands/pick.md"
   "$repo/dot_claude/commands/discuss.md"
   "$repo/dot_claude/commands/finalize.md"
+  "$repo/dot_claude/commands/merge.md"
+  "$repo/dot_claude/commands/land.md"
+  "$repo/dot_claude/commands/sync.md"
 )
 check "$repo/workflow/adapters/codex-local.md" "${local_codex_commands[@]}" || fail "local Codex adapter has drifted"
 printf 'PASS local Codex adapter maps every covered command and nested review procedure\n'
