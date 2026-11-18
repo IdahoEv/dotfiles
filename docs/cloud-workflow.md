@@ -37,6 +37,8 @@ Unverified from this repo: whether the cloud git proxy accepts a push of the tic
 
 `main` is a moving target: with the default ref, any push to `main` changes what the next cloud task does, and the bootstrap script itself is fetched from `main`. For a stable pilot, pass `WORKFLOW_REF=<full sha>` ; the adapter's download URL uses the same ref. The reported `workflow_source_commit` is the resolved commit, not a promise that the ref was fixed in advance.
 
+**Testing a ref.** Setting `WORKFLOW_REF` in a session does nothing to an install that already ran: cloud environments cache the setup script's result, so a session can boot with the `main` of the last cache build. To test a branch or SHA, rerun the bootstrap with the ref (adapter protocol 1), then confirm `workflow_source_commit=` or `readlink -f "$(command -v start-ticket.sh)"` names it. Merged changes reach cached environments only after their cache is rebuilt.
+
 ## Coverage and limits
 
 - **Claude Code cloud (`workflow/adapters/claude-cloud.md`):** Covers `/start`, `/open-pr`, `/local-review-cycle`, `/github-review-comments`, and `/finalize`. Not covered: Shortcut tickets, Copilot review requests via `/open-pr`, `/discuss`, `/board`, sibling-repo fan-out.
