@@ -288,10 +288,13 @@ check "mcp: closed issue is refused" "1" "$rc"
 has "mcp: closed issue is explained" "not OPEN" "$ROOT/mcp.err"
 check "mcp: refusals leave the session branch" "ccr-session" "$(git -C "$ROOT/mcpcloud" branch --show-current)"
 
-printf '{"number":15,"title":"Object labels","body":"b","state":"OPEN","url":"","labels":[{"name":"Bug"}],"parent":null}\n' > "$MD/15.json"
+printf '{"number":15,"title":"Object labels","body":"b","state":"OPEN","url":"","labels":[{"name":"Enhancement"}],"parent":null}\n' > "$MD/15.json"
 git -C "$ROOT/mcpcloud" checkout -q ccr-session
+mkdir -p "$HOME/.config/start-ticket"
+printf 'branch.template={type}/{key}-{desc}\n' > "$HOME/.config/start-ticket/config"
 out="$(START_TICKET_MCP_DIR="$MD" mcp 15)"
-check "mcp: object-form labels are accepted" "Is15-object-labels" "$(git -C "$ROOT/mcpcloud" branch --show-current)"
+rm -f "$HOME/.config/start-ticket/config"
+check "mcp: object-form labels set the branch type" "feat/Is15-object-labels" "$(git -C "$ROOT/mcpcloud" branch --show-current)"
 
 # Neither path available: one message naming both fixes.
 # Autodetect falls through to Shortcut when `short` is on PATH, so this case only
