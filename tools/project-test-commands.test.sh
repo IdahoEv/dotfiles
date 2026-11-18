@@ -18,7 +18,12 @@ pass "CLAUDE.md documents FAST and FULL"
 grep -q 'tools/workflow-manifest.test.sh' <<<"$fast" || fail "FAST must run tools/workflow-manifest.test.sh"
 pass "FAST runs the manifest test"
 
-for t in $(grep -oE 'tools/[A-Za-z0-9._-]+\.test\.sh' <<<"$fast"); do
-  [ -f "$repo/$t" ] || fail "FAST names a missing test: $t"
+for suite in fast full; do
+  names="$(grep -oE 'tools/[A-Za-z0-9._*-]+\.test\.sh' <<<"${!suite}" || true)"
+  [ -n "$names" ] || fail "$suite names no test paths"
+  for t in $names; do
+    # shellcheck disable=SC2086
+    compgen -G "$repo/$t" >/dev/null || fail "$suite names a missing test: $t"
+  done
 done
-pass "every test FAST names exists"
+pass "every test FAST and FULL name exists"
