@@ -92,11 +92,11 @@ trap 'rm -rf "$fixture"' EXIT
 cp "$repo/workflow/adapters/codex.md" "$fixture/adapter.md"
 cp "${commands[@]}" "$fixture/"
 
-printf '\nCall AskUserQuestion here, then mcp__github__create.\n' >> "$fixture/start.md"
+printf '\nCall AskUserQuestion here, then mcp__slack__post.\n' >> "$fixture/start.md"
 if check "$fixture/adapter.md" "$fixture/start.md" "$fixture/open-pr.md" 2>"$fixture/err"; then
   fail "a new unmapped construct must be detected"
 fi
-grep -q 'mcp__github__' "$fixture/err" || fail "the unmapped construct should be named"
+grep -q 'mcp__slack__' "$fixture/err" || fail "the unmapped construct should be named"
 cp "${commands[0]}" "$fixture/start.md"
 pass_new=1
 

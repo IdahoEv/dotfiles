@@ -64,9 +64,12 @@ c8797dce111bbcfcf66eda3d7861ebec5a5629fd48d0f0db49d716c3ab8fd953  755  tools/agy
 56642e1c7439303b525d6b594ec2420f598feabe330d846e7420d4dad0f0e5d8  644  tools/bootstrap-mac.sh
 2005d23e14e09fec069d999bc58813745b711e65c14c50d22787e9f769f801b2  644  tools/cloud-gh-shim.py
 60a99a97d37a74b7198c608731c56dab7afd893af18bbe93a4faad173a5735db  644  tools/cloud-workflow-bootstrap.sh
+8e3f69c193164d57b5f964a41f48f52a7b835f8bf628751b08b1331d377d49bd  755  tools/codex-workflow.sh
 aba2b3934bec4b85ba04e090631da2057c981cac6059dec8ace4a8a3bd0fac9b  755  tools/finalize-check.sh
 2b0879df07b0123f330bd67e06e860453e229f422385f0c6da19e88277d855c9  755  tools/finalize-run.sh
 3f4eccfb3870044bd024e820eb574426ff520ebeee761fb622c1777710e85c2e  644  tools/lib/agy_tmux_dashboard.py
+c65a9d624fbaf3e578e61a3665878270255cbc0c7581174eff5e4e420ae5fc80  644  tools/lib/codex_rpc.py
+537485b947bf3f71aa645353ac66e669ef37d9dcf4fb499e50860e20f7cbd12b  644  tools/lib/codex_workflow.py
 f7673606e34113d3fbd15395094c7fdbfddce405964cc5f0f7222260c6d2282d  644  tools/lib/finalize_check.py
 c7ff5c7023983bd54b0ca320559948ea4f1957b6c3aa0c2b897e20e20210f57b  644  tools/lib/finalize_run.py
 c199ef2288c932712b23e714458383cff10c945f32d21ac5ded6ca2fe25e52f0  644  tools/lib/mem_guard.py
@@ -88,7 +91,7 @@ d6c45d70d96c21971b022ea65a73f2b0fd4af0dd0b8abb524a9fd34cfd7a43df  644  tools/lib
 bdc67f5e5e4a39317822f39d306cff15c4b9eb7b43335d2a656ac68f640bd6ed  644  tools/lib/wf_review_gaps.py
 3c46a31599092ceabb336ccd81b8e9a03631dbd0e8942152e8bbc420a74180fc  644  tools/lib/wf_tokens.py
 3b1a0716083c8f92ab94a60d59ecee59a1716e54cca16dd6cf25f77e2abfe41f  644  tools/lib/wf_usage.py
-f19b1fc4abe103b8808045985dc39d7bdeec79d60e93c4eb1e46bd9c995d3672  644  tools/lib/workstream.py
+2903b90af7c9a3e6bbf99053fb35b7ac157b520f6799805ad662fbd532b4df91  644  tools/lib/workstream.py
 f6d369e82e99df2b899a4e53f1418bced2ab931851ae6e9ea7603c2460975cbc  755  tools/mcp-notion.sh
 6a1180dd4d342705d243b1f0a8a1ecb59826860e67a7e0de6aa63b232c757cad  755  tools/mem-guard.sh
 1983059031a0f6fa099c539706b0f46edd41fd4aa675016a0ebbb0e126262b7b  755  tools/merge-run.sh
@@ -130,4 +133,5 @@ f15dd098841d7963da09693fafbb3bf3f713952434c4c4b8a40dec6cb7cb0fcd  755  tools/wor
 cb41af044928182975030d4ede61783b4c03acf1d5d766ae7890f0557efa64bd  755  tools/worktree-manager.sh
 e0d3e60581725464508b2af055c2b2e6016205dedd9fe10c15ea51021e356b91  644  workflow/adapters/agy.md
 47f2d5e2e9655105b79c347745183a0c130ceca98845b732301ff8045893174e  644  workflow/adapters/claude-cloud.md
+7fa1d3eafdf49223f215fe76070c286909cea47ef28f1056770fd0e211110408  644  workflow/adapters/codex-local.md
 fcab2f182430cae25418ea429c96bad25ed0bd7af8f797502b9d6fae99109646  644  workflow/adapters/codex.md

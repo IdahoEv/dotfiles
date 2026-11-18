@@ -249,6 +249,55 @@ echo stray > "$ROOT/cloud/stray.txt"
 check "in-place: untracked files are refused too" "1 ccr-session" "$rc $(git -C "$ROOT/cloud" branch --show-current)"
 rm -f "$ROOT/cloud/stray.txt"
 
+# ---- github-mcp provider (cloud: gh unauthenticated, tickets handed over as JSON) ----
+git clone -q "$ROOT/widgets" "$ROOT/mcpcloud"
+git -C "$ROOT/mcpcloud" checkout -q -b ccr-session
+MD="$ROOT/mcp-handoff"; mkdir -p "$MD"
+printf '{"number":12,"title":"Cloud ticket","body":"head body","state":"OPEN","url":"https://github.com/acme/widgets/issues/12","labels":["bug"],"parent":9}\n' > "$MD/12.json"
+printf '{"number":13,"title":"Second ticket","body":"tail body","state":"OPEN","url":"https://github.com/acme/widgets/issues/13","labels":[],"parent":null}\n' > "$MD/13.json"
+printf '{"number":14,"title":"Done","body":"x","state":"CLOSED","url":"","labels":[],"parent":null}\n' > "$MD/14.json"
+NOGH="$ROOT/nogh"; mkdir -p "$NOGH"
+printf '#!/bin/sh\nexit 1\n' > "$NOGH/gh"; chmod +x "$NOGH/gh"
+mcp() {  # <env-assignments-free> args… → stdout; stderr in $ROOT/mcp.err
+  (cd "$ROOT/mcpcloud" && PATH="$NOGH:$PATH" "$ST" "$@" --in-place --no-tab 2>"$ROOT/mcp.err")
+}
+
+out="$(START_TICKET_MCP_DIR="$MD" mcp 12)"; rc=$?
+check "mcp: exits 0 with no gh and no conf" "0" "$rc"
+check "mcp: autodetected from START_TICKET_MCP_DIR" "github-mcp" "$(get provider <<<"$out")"
+check "mcp: ticket branch checked out" "Is12-cloud-ticket" "$(git -C "$ROOT/mcpcloud" branch --show-current)"
+check "mcp: in-progress is left for the caller to repair" "unknown" "$(get ticket_in_progress <<<"$out")"
+check "mcp: parent carried" "9" "$(get ticket_parent <<<"$out")"
+has "mcp: kickoff has the title" "Cloud ticket" "$(get kickoff <<<"$out")"
+has "mcp: kickoff has the body" "head body" "$(get kickoff <<<"$out")"
+has "mcp: kickoff has the url" "issues/12" "$(get kickoff <<<"$out")"
+
+git -C "$ROOT/mcpcloud" checkout -q ccr-session
+out="$(START_TICKET_MCP_DIR="$MD" mcp 12,13)"; rc=$?
+check "mcp chain: exits 0" "0" "$rc"
+check "mcp chain: stdout carries the chain" "12,13" "$(get chain <<<"$out")"
+check "mcp chain: kickoff lists both tickets" "12 13" "$(sed -n 's/^## \([0-9]*\) — .*/\1/p' "$(get kickoff <<<"$out")" | tr '\n' ' ' | sed 's/ $//')"
+
+git -C "$ROOT/mcpcloud" checkout -q ccr-session
+START_TICKET_MCP_DIR="$MD" mcp 99 >/dev/null; rc=$?
+check "mcp: missing handoff file fails" "1" "$rc"
+has "mcp: missing handoff names the id" "99" "$ROOT/mcp.err"
+has "mcp: missing handoff names the fix" "/start" "$ROOT/mcp.err"
+START_TICKET_MCP_DIR="$MD" mcp 14 >/dev/null; rc=$?
+check "mcp: closed issue is refused" "1" "$rc"
+has "mcp: closed issue is explained" "not OPEN" "$ROOT/mcp.err"
+check "mcp: refusals leave the session branch" "ccr-session" "$(git -C "$ROOT/mcpcloud" branch --show-current)"
+
+# Neither path available: one message naming both fixes.
+mcp 12 >/dev/null; rc=$?
+check "no gh auth, no handoff: fails" "1" "$rc"
+check "no gh auth, no handoff: one error line" "1" "$(wc -l < "$ROOT/mcp.err" | tr -d ' ')"
+has "unavailable message names gh auth login" "gh auth login" "$ROOT/mcp.err"
+has "unavailable message names the MCP path" "--provider github-mcp" "$ROOT/mcp.err"
+(cd "$ROOT/mcpcloud" && PATH="$NOGH:$PATH" "$ST" 12 --provider github --in-place --no-tab >/dev/null 2>"$ROOT/mcp.err"); rc=$?
+check "explicit github with unauthed gh: fails" "1" "$rc"
+has "explicit github failure uses the same message" "--provider github-mcp" "$ROOT/mcp.err"
+
 # ---- clipboard fallback (open_tab via --tab-only, not in iTerm) ----------------
 CB="$ROOT/clip"; mkdir -p "$CB/bin" "$CB/sys"
 for t in git cat dirname basename sed tr wc mktemp rm date grep awk head cut sort uname env bash; do

@@ -15,7 +15,7 @@ Covered: `/start`, `/open-pr`, `/local-review-cycle`, `/github-review-comments`,
 7. Report each project check (tests, lint, build) as passed, failed, or not run with the reason, in the PR body and final report. Never imply a check passed unless it ran.
 8. Ask the user with `AskUserQuestion` only when the session is attended (`CLAUDE_CODE_SESSION_ATTENDED` is set and not `0`/`false`). Unattended, where a command would ask a question or wait for approval, stop and report the decision needed, unless the command itself says to proceed.
 9. After `/open-pr`, stop. Run `/finalize` only when the user says the PR merged. In a cloud session do not run `finalize-run.sh`: it needs a base worktree and a worktree to remove. Run `finalize-check.sh` and stop unless `verdict=ready`; close the ticket (GitHub: for each id in `chain_ids`, if it is still open and the PR body closes it (`Closes #<id>`), `gh issue close <id> --comment "Landed in <pr_merge_commit> (PR #<n>)"`; leave any other open ticket open and report it; Shortcut: the `shortcut` handoff text in `finalize.md`); then `git fetch origin <base>`, check out `<base>`, `git pull --ff-only`, and `git branch -D <branch>`. There is no worktree to remove and no deploy clone.
-10. GitHub ticket tracking only. A Shortcut ticket needs `mcp__shortcut__`, which cloud sessions do not have: stop and report.
+10. When `start-ticket.sh` reports `github unavailable` (the cloud `gh` has no valid token), `/start` uses its GitHub MCP path: the agent reads the issues with `mcp__github__issue_read` and the script runs with `--provider github-mcp`. GitHub ticket tracking only. A Shortcut ticket needs `mcp__shortcut__`, which cloud sessions do not have: stop and report.
 
 ## Construct map
 
@@ -52,7 +52,7 @@ Maintained against the covered commands by `tools/cloud-workflow-adapter.test.sh
 | `github-review-poll.sh` | Do not run: it queries GraphQL. If a review wait is wanted, subscribe with `subscribe_pr_activity` and end the turn; otherwise report that no review wait was done. |
 | `github-review-state.sh` | Do not run: it queries GraphQL. Read review state from `mcp__github__pull_request_read` (`get_reviews`, `get_review_comments`, `get_status`). |
 | `request-review.sh` | Do not run: it requests the review through GraphQL. For a Copilot re-review call `mcp__github__request_copilot_review`; for the `claude.yml` smoke test, `gh workflow run claude.yml -f pr_number=<N>` is REST and works. |
-| `mcp__github__` | Available. Use `pull_request_read` for reviews and threads, `resolve_review_thread` / `add_reply_to_pull_request_comment` for threads; REST `gh api` calls for reactions and replies work as written. Where the skill names `get_pull_request_review_comments`, use `pull_request_read` with method `get_review_comments`. |
+| `mcp__github__` | Available. `/start` uses `issue_read`, `issue_write`, `add_issue_comment` and `get_me` for tickets when `gh` can't authenticate. Use `pull_request_read` for reviews and threads, `resolve_review_thread` / `add_reply_to_pull_request_comment` for threads; REST `gh api` calls for reactions and replies work as written. Where the skill names `get_pull_request_review_comments`, use `pull_request_read` with method `get_review_comments`. |
 | `mcp__shortcut__` | Not available. Stop and report (protocol 10). |
 | `Co-Authored-By` | Use the attribution lines the session's own system reminder gives for commits and PRs in place of the global trailer. |
 | `~/.claude/` | Means `workflow_claude_dir`. |

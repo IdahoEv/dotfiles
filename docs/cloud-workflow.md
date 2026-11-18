@@ -50,3 +50,16 @@ The tests prove the bootstrap and adapter in source control, not that a phone-la
 ## Adding a host
 
 Copy an existing adapter (`workflow/adapters/codex.md` or `agy.md`), change the construct behaviors, and add a `check` call for it in the drift test. The bootstrap and commands do not change.
+
+## Ticket access when `gh` is unauthenticated
+
+**Decision: MCP handoff, not `gh` auth.** Cloud environments refuse the saved credential for `api.github.com`, so there is no supported way to give `gh` a working token; GitHub is reachable only through `mcp__github__*`, which a script can't call. So the agent does the tracker calls and the script consumes the result.
+
+| Step | Who | How |
+| --- | --- | --- |
+| Detect | `start-ticket.sh` | `gh` unauthenticated → one error, `github unavailable … rerun with --provider github-mcp` |
+| Read tickets | agent | `mcp__github__issue_read` per id → `$TMPDIR/start-ticket-mcp/<id>.json` |
+| Branch, kickoff | `start-ticket.sh` | `START_TICKET_MCP_DIR=<dir> start-ticket.sh <ids> --in-place --no-tab` (`tools/start-ticket-providers/github-mcp.sh`); reports `ticket_in_progress=unknown` |
+| Mark in progress | agent | `/start` step 1a: assign + comment through `issue_write` / `add_issue_comment`, then read back |
+
+Chains (`12,13 14`) work: one handoff file per id. Setting `START_TICKET_MCP_DIR` selects the provider without a `.start-ticket.conf`. Tested in `tools/start-ticket.test.sh`; a live cloud run is not covered.

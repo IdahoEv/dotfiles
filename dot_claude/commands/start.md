@@ -39,7 +39,9 @@ project's working agreement, so this command doesn't. Prints parseable `key=valu
 worktree= kickoff= branch= provider= ticket_state= ticket_in_progress= ticket_parent= chain=
 ```
 
-Non-zero exit (ticket not open, no provider, CLI not authed) → **stop** and report why.
+Non-zero exit (ticket not open, no provider, CLI not authed) → **stop** and report why,
+except `github unavailable` (gh missing or unauthenticated — the cloud case): use the
+**GitHub MCP path** below instead.
 A `mem-guard` block (host memory pressure is dangerous; stderr says `BLOCKED`) is one of these, in step 1
 or in step 3's `--tab-only` launch (which dies after the worktree and in-progress mark already exist, so report
 those too): stop, do not start any remaining groups, report it with the largest sessions it listed (if it
@@ -47,6 +49,20 @@ listed any), and **never** set `MEM_GUARD_OVERRIDE` or pass `--force` yourself �
 text prints that recipe, overriding is the user's call (`docs/memory-guard.md`). Warnings are informational:
 continue, and mention them in step 4's report.
 An already-existing worktree still succeeds.
+
+**GitHub MCP path.** The script can't call MCP, so you hand it the tickets. For every id in
+the group (each id of a comma group), read the issue with `mcp__github__issue_read`
+(method `get`; sub-issue parent via `get_parent` if offered, else omit) and write
+`$TMPDIR/start-ticket-mcp/<id>.json`:
+
+```json
+{"number":12,"title":"…","body":"…","state":"OPEN","url":"…","labels":["bug"],"parent":9}
+```
+
+(`state` as the tracker reports it, `labels` as names, `parent` a number or `null`.) Then
+rerun both script calls with `START_TICKET_MCP_DIR="$TMPDIR/start-ticket-mcp"` exported
+(`--provider github-mcp` does the same); the script never writes to the tracker on this
+path and reports `ticket_in_progress=unknown`, so step 1a always runs.
 
 ### 1a. Repair the ticket state, only if needed
 
@@ -56,6 +72,11 @@ The script already read the state back, so trust `ticket_in_progress`:
 - **`no` / `unknown`** — the write didn't land (for a chain, for at least one of its tickets: check each id) (on Shortcut this is expected: the `short`
   CLI's state-set prints `Error fetching story NaN` and still exits 0). Repair it:
   - **GitHub** — `gh issue edit <id> --add-assignee @me`, reopening if needed.
+  - **GitHub via MCP** (the path above, every id) — `mcp__github__get_me`, then
+    `mcp__github__issue_write` (method `update`) adding that login to the assignees, then
+    `mcp__github__add_issue_comment` with "🚧 In progress — branch `<branch>`." Skip both
+    if `mcp__github__issue_read` shows it already assigned to that login; read the
+    assignees back with `issue_read` and report that as the state.
   - **Shortcut** — use the MCP tools, never the CLI: `mcp__shortcut__stories-get-by-id`,
     then `mcp__shortcut__workflows-get-default` (pass the story's team id) to resolve the
     started-state id, then `mcp__shortcut__stories-update` with `workflow_state_id`.
@@ -79,6 +100,8 @@ implementer), and the implementer session can find them itself. Limit to:
     -q '"\(.title) (\(.subIssuesSummary.completed)/\(.subIssuesSummary.total))",
         (.subIssues.nodes[] | select(.state=="OPEN") | "#\(.number) \(.title)")'
   ```
+- **GitHub via MCP** — `mcp__github__issue_read` (method `get_sub_issues`) on the parent for
+  its title and still-open siblings; skip the progress count if it isn't available.
 - **Shortcut** — read `<worktree>/.ticket.local.md`; note any epic or linked stories (no
   bulk sub-issue progress query exists — skip that line rather than approximating).
 - **Dependencies** (either provider) — `Depends on #X` / `Blocked by #X` / linked-story

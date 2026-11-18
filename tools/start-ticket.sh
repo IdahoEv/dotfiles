@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # start-ticket.sh — spin up a worktree + Claude session for a tracker ticket.
 #
-#   start-ticket.sh <id>[,<id>…] [--provider github|shortcut] [--no-tab] [--launcher iterm|bg|agy-tmux|none]
+#   start-ticket.sh <id>[,<id>…] [--provider github|github-mcp|shortcut] [--no-tab] [--launcher iterm|bg|agy-tmux|none]
 #   start-ticket.sh <id> --print-title            # read-only: title + proposed label
 #   start-ticket.sh <id> --in-place --no-tab      # no worktree: check out the ticket branch here
 #   start-ticket.sh --tab-only <worktree> <kickoff> [--launcher iterm|bg|agy-tmux|none]
@@ -39,7 +39,8 @@
 # <git-dir>/chain (read by open-pr.sh and finalize-check.sh).
 #
 # Run from anywhere inside the target repo. Provider is chosen by, in order:
-#   --provider flag → .start-ticket.conf (provider=…) → autodetect (gh vs short).
+#   --provider flag → START_TICKET_MCP_DIR set (github-mcp) → .start-ticket.conf
+#   (provider=…) → autodetect (gh vs short).
 #
 # Env knobs: START_TICKET_CLAUDE_DELAY (secs before typing the prompt, default 3),
 #   START_TICKET_TAB_MAXLEN (default 30), START_TICKET_PROVIDER_DIR,
@@ -594,7 +595,7 @@ if [ "$mode" = "session" ]; then
   exit 0
 fi
 
-[ -n "$id" ] || die "usage: start-ticket.sh <id>[,<id>…] [--provider github|shortcut] [--no-tab|--print-title] [--launcher iterm|bg|agy-tmux|none]"
+[ -n "$id" ] || die "usage: start-ticket.sh <id>[,<id>…] [--provider github|github-mcp|shortcut] [--no-tab|--print-title] [--launcher iterm|bg|agy-tmux|none]"
 # Guard before any worktree or tracker write, so a blocked launch leaves no half-started ticket.
 # --no-tab and --print-title launch nothing: the later --tab-only call is the gate for /start,
 # and agy-tmux.sh guards each group itself, so guarding here would only check twice.
@@ -624,13 +625,20 @@ repo_root="$(git rev-parse --show-toplevel)"
 _url="$(git remote get-url origin 2>/dev/null || true)"
 if [ -n "$_url" ]; then repo_name="$(basename "${_url%.git}")"; else repo_name="$(basename "$repo_root")"; fi
 
+NO_GITHUB_MSG="github unavailable: gh is missing or not authenticated. Fix: run 'gh auth login', or in a cloud session fetch the tickets with the GitHub MCP tools and rerun with --provider github-mcp and START_TICKET_MCP_DIR set (see /start step 1)"
+# A handoff dir means the caller already fetched the tickets because gh can't, so it
+# outranks a committed provider=github.
+[ -n "$provider" ] || [ -z "${START_TICKET_MCP_DIR:-}" ] || provider=github-mcp
 [ -n "$provider" ] || provider="$(conf_get provider || true)"
 if [ -z "$provider" ]; then
   if command -v gh >/dev/null && gh repo view >/dev/null 2>&1; then provider=github
   elif command -v short >/dev/null; then provider=shortcut
-  else die "no ticket provider detected — set 'provider=' in .start-ticket.conf or pass --provider"
+  else die "$NO_GITHUB_MSG"
   fi
 fi
+# github-mcp is github with a different transport; workstream records, branch names and
+# telemetry know only the tracker, so they get the scheme.
+scheme="$provider"; [ "$provider" != github-mcp ] || scheme=github
 
 [ -z "$chain_csv" ] || [ "$provider" != shortcut ] \
   || die "chains need the github provider (Shortcut branches carry one story id); start the tickets separately"
@@ -644,7 +652,10 @@ WORKTREE_MANAGER="$(command -v worktree-manager.sh || echo "$SCRIPT_DIR/worktree
 [ -x "$WORKTREE_MANAGER" ] || die "worktree-manager.sh not found / not executable"
 export WORKTREE_MANAGER
 
-provider::available || die "provider '$provider' unavailable (CLI missing or not authed)"
+provider::available || case "$provider" in
+  github|github-mcp) die "$NO_GITHUB_MSG" ;;
+  *) die "provider '$provider' unavailable (CLI missing or not authed)" ;;
+esac
 
 # ---- run ---------------------------------------------------------------
 ST_TITLE="" ST_BODY="" ST_URL="" ST_PARENT="" ST_BRANCH="" ST_WORKTREE="" ST_REF="" ST_TYPE=""
@@ -665,14 +676,14 @@ if [ -z "$ST_BRANCH" ]; then
   if [ -x "$SCRIPT_DIR/workstream.sh" ]; then
     ST_BRANCH="$("$SCRIPT_DIR/workstream.sh" render branch \
       --dir "$repo_root" \
-      --provider "$provider" \
+      --provider "$scheme" \
       --ids "$(IFS=,; echo "${ids[*]}")" \
       "--title=$_ws_title" \
       "--desc=${GT_LABEL_SLUG_OVERRIDE:-}" \
       "--type=$ST_TYPE" 2>/dev/null || true)"
     ST_WORKTREE="$("$SCRIPT_DIR/workstream.sh" render worktree \
       --dir "$repo_root" \
-      --provider "$provider" \
+      --provider "$scheme" \
       --ids "$(IFS=,; echo "${ids[*]}")" \
       "--title=$_ws_title" \
       "--desc=${GT_LABEL_SLUG_OVERRIDE:-}" \
@@ -680,7 +691,7 @@ if [ -z "$ST_BRANCH" ]; then
   fi
   if [ -z "$ST_BRANCH" ]; then
     _fb_slug="$(gt::slug_title "$_ws_title")"
-    case "$provider" in
+    case "$scheme" in
       github)   ST_BRANCH="${_fb_slug:+Is${id}-${_fb_slug}}"; : "${ST_BRANCH:=Is${id}}" ;;
       shortcut) ST_BRANCH="${_fb_slug:+sc-${id}-${_fb_slug}}"; : "${ST_BRANCH:=sc-${id}}" ;;
       *)        die "could not determine branch name for $provider #$id" ;;
@@ -746,7 +757,7 @@ _ws_title="${chain_titles[0]:-}"
 [ "$_ws_title" != "untitled" ] || _ws_title=""
 if ! "$SCRIPT_DIR/workstream.sh" init-ticket \
   --dir "$wt" \
-  --provider "$provider" \
+  --provider "$scheme" \
   --ids "$(IFS=,; echo "${ids[*]}")" \
   --urls "$(IFS=,; echo "${chain_urls[*]}")" \
   "--title=$_ws_title" \
@@ -767,7 +778,10 @@ if declare -f provider::read_state >/dev/null; then
   for _i in "${ids[@]}"; do
     _ok=1; _st="$(provider::read_state "$_i")" || _ok=""
     [ "$_i" = "$id" ] && ticket_state="$_st"
-    [ -n "$_ok" ] || ticket_in_progress="no"
+    if [ -n "$_ok" ]; then :
+    elif [ "$_st" = unknown ]; then [ "$ticket_in_progress" = no ] || ticket_in_progress="unknown"
+    else ticket_in_progress="no"
+    fi
   done
 fi
 
