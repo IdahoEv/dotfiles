@@ -41,7 +41,7 @@ decision blocks work; never to solicit a topic or offer suggestions unprompted.
 
 **Reply style applies, with the artifact last.** Here the artifact is reference material
 to come back to — a table of tickets ready for work, a sequencing decision, a drift
-report. No narration of what you're about to do, no summary of an obvious outcome.
+report.
 
 ## Load the project's context
 
