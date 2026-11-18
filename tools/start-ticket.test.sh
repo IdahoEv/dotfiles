@@ -151,9 +151,12 @@ check "single id: kickoff has no chain block" "0" "$(grep -c 'chain of' "$(get k
 check "single id: marks only itself" "mark 7" "$(grep '^mark' "$FAKE_LOG")"
 
 check "no marker: kickoff has no unattended block" "0" "$(grep -c 'Unattended review' "$(get kickoff <<<"$out")")"
+stderr_without_marker="$(cat "$ROOT/chain.err")"
 touch "$HOME/.config/github-review-unattended" 2>/dev/null || { mkdir -p "$HOME/.config"; touch "$HOME/.config/github-review-unattended"; }
 out="$(chain 7)"
+check "marker: unattended kickoff adds nothing to stderr" "$stderr_without_marker" "$(cat "$ROOT/chain.err")"
 has "marker: single-ticket kickoff carries the unattended block" "/github-review-comments" "$(get kickoff <<<"$out")"
+has "marker: unattended kickoff preserves the literal round-cap option" '`--max-rounds N`' "$(get kickoff <<<"$out")"
 has "marker: block forbids merging" "Do not merge" "$(get kickoff <<<"$out")"
 out="$(chain 7,8,9)"
 has "marker: chain kickoff carries the unattended block" "## Unattended review" "$(get kickoff <<<"$out")"
@@ -211,6 +214,8 @@ provider::fetch() { ST_TITLE="Fake ticket"; ST_BODY="body"; ST_URL=""; ST_PARENT
 provider::create_worktree() { echo "create $1" >> "$FAKE_LOG"; echo "$ROOT/should-not-exist"; }
 provider::mark_in_progress() { echo "mark $1" >> "$FAKE_LOG"; }
 P
+cp "$TOOLS/../.start-ticket.conf" "$ROOT/widgets/.start-ticket.conf"
+git -C "$ROOT/widgets" add .start-ticket.conf && git -C "$ROOT/widgets" commit -q -m "Add repo ticket config"
 git clone -q "$ROOT/widgets" "$ROOT/cloud"
 git -C "$ROOT/cloud" checkout -q -b ccr-session
 : > "$FAKE_LOG"
@@ -314,6 +319,14 @@ fi
 (cd "$ROOT/mcpcloud" && PATH="$NOGH:$PATH" "$ST" 12 --provider github --in-place --no-tab >/dev/null 2>"$ROOT/mcp.err"); rc=$?
 check "explicit github with unauthed gh: fails" "1" "$rc"
 has "explicit github failure uses the same message" "--provider github-mcp" "$ROOT/mcp.err"
+
+# A fresh checkout uses the tracked provider config even if `gh repo view` fails.
+cp "$IP/fake.sh" "$IP/github.sh"
+printf '#!/bin/sh\nexit 1\n' > "$ROOT/stubbin/gh"; chmod +x "$ROOT/stubbin/gh"
+out="$(cd "$ROOT/cloud" && PATH="$ROOT/stubbin:$PATH" START_TICKET_PROVIDER_DIR="$IP" \
+  "$ST" 8 --in-place --no-tab 2>"$ROOT/cloud-provider.err")"; rc=$?
+check "in-place: configured start succeeds without --provider" "0" "$rc"
+check "in-place: tracked config selects GitHub" "github" "$(get provider <<<"$out")"
 
 # ---- clipboard fallback (open_tab via --tab-only, not in iTerm) ----------------
 CB="$ROOT/clip"; mkdir -p "$CB/bin" "$CB/sys"

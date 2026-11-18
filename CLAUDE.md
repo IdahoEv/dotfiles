@@ -14,6 +14,13 @@ Chezmoi source for Evan's machines. The repo is also the source of `~/.claude`, 
 | `workflow/` | Not deployed; per-host adapters that let non-Claude cloud agents run the commands (see `docs/cloud-workflow.md`) |
 | `docs/`, `CLAUDE.md` | Not deployed |
 
+## Tests
+
+- **FAST**: `for t in tools/workflow-manifest.test.sh tools/cloud-workflow-adapter.test.sh tools/project-test-commands.test.sh; do bash "$t" || exit 1; done`
+- **FULL**: `for t in tools/*.test.sh; do bash "$t" || exit 1; done`
+
+The manifest test hashes staged blobs: after adding or editing a covered file, stage it and run `tools/workflow-manifest.sh --write`, then commit the manifest.
+
 ## Two checkouts
 
 - **Dev copy**: `~/Documents/Development/dotfiles` (bare repo). Ticket worktrees live here; all edits and commits happen in a worktree.
