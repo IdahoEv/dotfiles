@@ -503,7 +503,7 @@ sequence_block() {
 ## Sequence
 
 1. Present your plan, then wait. Plan approval authorizes everything below; no further approval is needed for commits or pushes.
-2. After approval, do not pause for approval: implement until the acceptance criteria are met; commit; run `/local-review-cycle`; push and run `/open-pr`; then the remote review cycle (home: request a Copilot review each round; work: the repo's review bots review every PR and update, so wait for them and request nothing).
+2. After approval, do not pause for approval (a chain follows the Chain workflow block above instead: one PR, opened only after the last ticket): implement until the acceptance criteria are met; commit; run `/local-review-cycle`; push and run `/open-pr`; then the remote review cycle (home: request a Copilot review each round; work: the repo's review bots review every PR and update, so wait for them and request nothing).
 3. Stop before merge. The owner evaluates and merges (`/land`).
 4. If any step fails or a decision is needed, pause, notify the owner if the environment can, say what failed, and ask. No improvised workaround.
 SEQ

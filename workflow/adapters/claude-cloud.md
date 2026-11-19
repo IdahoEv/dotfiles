@@ -31,6 +31,8 @@ Maintained against the covered commands by `tools/cloud-workflow-adapter.test.sh
 | `/merge`, `/land`, `/sync` | Read and follow `merge.md`, `land.md`, `sync.md`; `merge-run.sh` runs through the `gh` shim (`pr merge`, `repo view`). `merge-run.sh` honors the configured `merge_method` (merge, squash or rebase; it stops when that method is ambiguous or disallowed) and does not inspect checks, so before running it read the PR's check status with `mcp__github__pull_request_read` `get_status`, stop and ask if a check is red, and reproduce a red check on the base branch before calling it pre-existing. Read the PR back as merged afterwards. `/land` ends where protocol 9 ends: no worktree to remove. If the shim cannot do a step, stop and report; do not improvise an MCP merge. |
 | `/discuss` | Not available. Skip any mention. |
 | `/pick` | Read and follow `pick.md` (read-only). In-flight work is open PRs and remote branches, not `git worktree list` or `ListAgents`. The session may start outside a repo: use the attached repo whose `.claude/governor.md` applies. Offer a ticket needing a build or test run only if the project's toolchain is present; otherwise mark it "unverifiable here". |
+| `/governor` | Read-only here: `pick.md` follows its reply style and stay-read-only conduct; do not start a governor session. |
+| `ListAgents` | Not available. Use open PRs and remote branches to find in-flight work (see `/pick`). |
 | `/board` | Not available. Skip any mention. |
 | `--tab-only` | Skip the step that opens a session. |
 | `--launcher` | Never pass it. No launcher exists here (equivalent to `none`). |

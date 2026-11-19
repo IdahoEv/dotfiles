@@ -272,11 +272,19 @@ PY
   # Make the shim the system gh so every shell finds it, including the agent's Bash
   # tool, which never reads ~/.bashrc. A real gh in the same directory is kept as gh.real.
   if [[ "$bin_dir" == "${WORKFLOW_SYSTEM_BIN:-/usr/local/bin}" && -w "$bin_dir" ]]; then
-    if [[ -e "$bin_dir/gh" && ! -e "$bin_dir/gh.real" ]] && ! grep -q 'gh shim for Claude Code cloud' "$bin_dir/gh" 2>/dev/null; then
-      mv "$bin_dir/gh" "$bin_dir/gh.real"
+    if [[ -e "$bin_dir/gh" ]] && ! grep -q 'gh shim for Claude Code cloud' "$bin_dir/gh" 2>/dev/null; then
+      if [[ -e "$bin_dir/gh.real" ]]; then
+        # Never overwrite a live gh when gh.real is already taken; the shim stays in $shim_dir on PATH.
+        printf 'workflow_system_gh=skipped (%s exists; real gh left in place)\n' "$bin_dir/gh.real" >&2
+        bin_dir_skip=1
+      else
+        mv "$bin_dir/gh" "$bin_dir/gh.real"
+      fi
     fi
-    install -m 0755 "$root/tools/cloud-gh-shim.py" "$bin_dir/gh"
-    printf 'workflow_system_gh=%s\n' "$bin_dir/gh"
+    if [[ -z "${bin_dir_skip:-}" ]]; then
+      install -m 0755 "$root/tools/cloud-gh-shim.py" "$bin_dir/gh"
+      printf 'workflow_system_gh=%s\n' "$bin_dir/gh"
+    fi
   fi
   path_line="export PATH=\"$shim_dir:$bin_dir:\$PATH\""
   if [[ -n "${CLAUDE_ENV_FILE:-}" ]]; then

@@ -63,7 +63,7 @@ c8797dce111bbcfcf66eda3d7861ebec5a5629fd48d0f0db49d716c3ab8fd953  755  tools/agy
 392b86f6854e4e3ffa1dcbd28904afa1c15536a1dea48039be0e3b69a5d35d71  644  tools/bootstrap-linux.sh
 56642e1c7439303b525d6b594ec2420f598feabe330d846e7420d4dad0f0e5d8  644  tools/bootstrap-mac.sh
 ad1afeb6c79b4650a97c4d2240ba897baa7645edc228a989036c9475d2bd96be  644  tools/cloud-gh-shim.py
-24310b92b58091d99d69ac76d71fd0537117be09f17f86e6bc5bf5a64a7fbf92  644  tools/cloud-workflow-bootstrap.sh
+9c71bac88dab69a315cd4855e71e1b0b298737d133f4554921da6d5c27f9ff80  644  tools/cloud-workflow-bootstrap.sh
 8e3f69c193164d57b5f964a41f48f52a7b835f8bf628751b08b1331d377d49bd  755  tools/codex-workflow.sh
 aba2b3934bec4b85ba04e090631da2057c981cac6059dec8ace4a8a3bd0fac9b  755  tools/finalize-check.sh
 2b0879df07b0123f330bd67e06e860453e229f422385f0c6da19e88277d855c9  755  tools/finalize-run.sh
@@ -120,7 +120,7 @@ e366a502be678c6fa82962d428bbdc9414457a32835de696989c42582e500eca  755  tools/sib
 d545d48d22308a316a00984483baead2334576101656c8dcefdb4883f293dc6a  644  tools/start-ticket-providers/github-mcp.sh
 fe34a71d2260c726846a0eef9673688185d019036e0c9e55df3e918030f06ae1  644  tools/start-ticket-providers/github.sh
 ae4e93d3a0d38815b1c929d3ff237054c71a8a46dd01e30e2cd23c2ed9343fee  644  tools/start-ticket-providers/shortcut.sh
-a57d2cd6f1d151929d93d5c4be0b58162f1a931676e30f4c931187a317235a51  755  tools/start-ticket.sh
+ba42aa5a5d7950ed385149f0b255f82b007c5b1a44bafac40a5738406e498e48  755  tools/start-ticket.sh
 2f05e33075ba15221c8da189495317c293d22055b5548cd2db0f98b4c30c47e2  755  tools/sync-gate.sh
 1abff882cb55863b47da0513aec9a824a52a228f7da137c1562d638ad1d5fae6  755  tools/sync-run.sh
 242a517c6322f8dd47a053c459dec7aed2b7b8a803b5f3b4e08e681bbe9b3af7  755  tools/tracker.sh
@@ -133,6 +133,6 @@ f15dd098841d7963da09693fafbb3bf3f713952434c4c4b8a40dec6cb7cb0fcd  755  tools/wor
 0e8c1deefa52ec93b05c3e69b89f612adc5bb434d8c1ec8c8e98813313c92f44  755  tools/workstream.sh
 cb41af044928182975030d4ede61783b4c03acf1d5d766ae7890f0557efa64bd  755  tools/worktree-manager.sh
 727e43df9fca9721a3dbc607b7f08d34494963e7e30a579dc041cd202f3fa5fa  644  workflow/adapters/agy.md
-be6793e84ab491ae932e1cf8bbe2d8f72ff56a6344856d3450f2b5e69387f2e0  644  workflow/adapters/claude-cloud.md
+b3316d3743948e7cade24eebe980bfd4a286de275c14f390f9471683b1abd499  644  workflow/adapters/claude-cloud.md
 6aababc08b7d64b5f10de317a1378587aae79d034067791dfb15f6002849a3b4  644  workflow/adapters/codex-local.md
 aae0f1c2a394dfa72012a412edcadc8eede575e652591c10db91bdea2932f73f  644  workflow/adapters/codex.md
