@@ -70,6 +70,13 @@ echo "$*" > "$WATCH_ARGS"
 STUB
 chmod +x "$ROOT/bin/watch-stub"
 export OPEN_PR_WATCH="$ROOT/bin/watch-stub" WATCH_ARGS="$ROOT/watch.args"
+cat > "$ROOT/bin/review-stub" <<'STUB'
+#!/usr/bin/env bash
+echo "$*" >> "$REVIEW_ARGS"
+exit "${REVIEW_STUB_RC:-0}"
+STUB
+chmod +x "$ROOT/bin/review-stub"
+export OPEN_PR_REQUEST_REVIEW="$ROOT/bin/review-stub" REVIEW_ARGS="$ROOT/review.args"
 
 # Fresh repo + origin on <branch>; leaves cwd inside it.
 new_repo() {  # <branch> [conf-contents]
@@ -140,10 +147,54 @@ check "assembled: over-cap section refused" "1" "$rc"
 check "assembled: nothing created on refusal" "" "$(cat "$GH_LOG" 2>/dev/null)"
 check "assembled: refusal names the cap" "1" "$(grep -c 'at most 3' <<<"$out")"
 
-new_repo 42-foo
+review_args() { cat "$REVIEW_ARGS" 2>/dev/null; }
+
+new_repo 42-foo; rm -f "$REVIEW_ARGS"
+out="$(run --title "Add foo" --review copilot)"
+check "github home: PR created"            "created" "$(cat "$GH_LOG")"
+check "github home: requests Copilot"      "--pr 1 --level copilot" "$(review_args)"
+check "github home: Reviews line"          "1" "$(grep -c '^Reviews: requested: copilot' <<<"$out")"
+
+new_repo 42-foo; rm -f "$REVIEW_ARGS"
+run --title "Add foo" --review copilot+claude >/dev/null
+check "github home: passes copilot+claude" "--pr 1 --level copilot+claude" "$(review_args)"
+
+new_repo 42-foo; rm -f "$REVIEW_ARGS"
+mkdir -p "$HOME/.config"; touch "$HOME/.config/local-review-only"
+out="$(run --title "Add foo")"
+check "github work: no request"            "" "$(review_args)"
+check "github work: Reviews none"          "Reviews: none" "$(grep '^Reviews:' <<<"$out")"
+
+new_repo 42-foo; rm -f "$REVIEW_ARGS" "$WATCH_ARGS"
+out="$(REVIEW_STUB_RC=1 run --title "Add foo" --review copilot)"; rc=$?
+check "github work explicit: exit 0"       "0" "$rc"
+check "github work explicit: stub invoked" "--pr 1 --level copilot" "$(review_args)"
+check "github work explicit: warns"        "1" "$(grep -c 'review request failed' <<<"$out")"
+check "github work explicit: Reviews"      "1" "$(grep -c '^Reviews: request failed' <<<"$out")"
+check "github work explicit: no watch"     "watch=skipped" "$(grep '^watch=' <<<"$out")"
+check "github work explicit: not launched" "absent" "$([ -e "$WATCH_ARGS" ] && echo present || echo absent)"
+rm -f "$HOME/.config/local-review-only"
+
+new_repo 42-foo; rm -f "$REVIEW_ARGS"
+run --title "Add foo" --review none >/dev/null
+check "github --review none: no request"   "" "$(review_args)"
+
+new_repo 42-foo; rm -f "$REVIEW_ARGS"
+out="$(REVIEW_STUB_RC=1 run --title "Add foo" --review copilot)"; rc=$?
+check "github failed request: exit 0"      "0" "$rc"
+check "github failed request: PR created"  "created" "$(cat "$GH_LOG")"
+check "github failed request: warns"       "1" "$(grep -c 'review request failed' <<<"$out")"
+check "github failed request: Reviews"     "1" "$(grep -c '^Reviews: request failed' <<<"$out")"
+check "github failed request: no watch"    "watch=skipped" "$(grep '^watch=' <<<"$out")"
+
+phase_review_count() { "$TOOLS/agent-phase.sh" --show 2>/dev/null | grep -c REVIEW; }
+ws_json='{"version":1,"kind":"ticket","tickets":[{"id":"42"}],"ticket_provider":"github"}'
+new_repo 42-foo; printf '%s\n' "$ws_json" > .workstream.json
+REVIEW_STUB_RC=1 run --title "Add foo" --review copilot >/dev/null
+check "github failed request: no REVIEW phase" "0" "$(phase_review_count)"
+new_repo 42-foo; printf '%s\n' "$ws_json" > .workstream.json
 run --title "Add foo" --review copilot >/dev/null
-check "github: no review triggers"    "created" "$(cat "$GH_LOG")"
-check "github: warns review ignored"  "1" "$(run --title "Add foo" --review copilot | grep -c 'review triggers')"
+check "github ok request: REVIEW phase"        "1" "$(phase_review_count)"
 
 new_repo 42-foo
 out="$(GH_EXISTING_PR=9 run --review none)"
