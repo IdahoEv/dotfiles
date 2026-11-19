@@ -493,7 +493,7 @@ Tickets ${chain_csv//,/, } are one chain: one worktree, one branch, one PR.
 CHAIN
 }
 
-# Default sequence for every ticket session (#242): plan gate, then unattended through review.
+# Default sequence for every ticket session: plan gate, then unattended through review.
 # A project's `design_gate=` conf key (its own criteria for changes needing aesthetic
 # judgement) adds a pause between implement and the local review cycle.
 sequence_block() {
