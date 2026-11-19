@@ -240,6 +240,7 @@ if [[ "$install_mode" == claude ]]; then
 import json, os, sys
 path = sys.argv[1]
 want = ["Bash(git add:*)", "Bash(git commit:*)", "Bash(git push -u origin:*)",
+        "Bash(git push --no-verify origin:*)",
         "mcp__github__request_copilot_review"]
 try:
     with open(path) as f:

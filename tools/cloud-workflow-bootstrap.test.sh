@@ -183,7 +183,7 @@ python3 - "$home/.claude/settings.json" <<'PY' || fail "settings should hold the
 import json, sys
 c = json.load(open(sys.argv[1]))
 a = c["permissions"]["allow"]
-assert "Bash(git commit:*)" in a and "Bash(git push -u origin:*)" in a and len(a) == len(set(a))
+assert "Bash(git commit:*)" in a and "Bash(git push -u origin:*)" in a and "Bash(git push --no-verify origin:*)" in a and len(a) == len(set(a))
 assert "hooks" not in c
 PY
 printf '{"model":"x","permissions":{"allow":["Bash(ls:*)"]}}\n' > "$home/.claude/settings.json"
