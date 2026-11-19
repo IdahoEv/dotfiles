@@ -15,9 +15,10 @@ Follow the review-lens-contract skill for inputs, finding-line format, word cap,
 
 Inventory, from the snapshot (omit none; name any directory that is absent):
 
-- `dot_claude/commands/`, `dot_claude/agents/`, `dot_claude/skills/`, and `dot_claude/CLAUDE.md`
+- `dot_claude/commands/`, `dot_claude/agents/`, `dot_claude/skills/`, `dot_claude/hooks/`, and `dot_claude/CLAUDE.md.tmpl` (read the template as the prompt text)
 - `.claude/` prompt files (agents, commands, skills, `governor.md`, `kickoff-preamble.md`)
 - the root `CLAUDE.md`
+- `dot_gemini/` (`AGENTS.md`, command skill wrappers) and `workflow/` adapters
 
 Method:
 

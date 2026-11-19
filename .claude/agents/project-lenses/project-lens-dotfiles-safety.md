@@ -24,8 +24,8 @@ Method, run against the snapshot:
 Rules:
 
 - A secret is reported by location only. Never quote the value in defect, evidence or fix.
-- Every finding is at least P2; a live credential or internal hostname is P0.
+- Every finding other than a question is at least P2; a live credential or internal hostname is P0.
 - `minimal fix` is a generic replacement that keeps the example's structure.
-- Work-scoped config the criteria file exempts (the `is_work` branch of the gitconfig template) is not a finding; verify it sits in that branch.
+- Work-scoped config the criteria file exempts is not a finding; verify it sits only in a work-scoped location (`dot_gitconfig-work` or an `is_work` template branch).
 
 Leave prose quality of prompts to `project-lens-prompts` and doc/code drift to `project-lens-docs`.
