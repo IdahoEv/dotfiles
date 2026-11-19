@@ -13,7 +13,7 @@ Review, then act. Filing and queueing are done by scripts; this procedure only w
 - Repo (`gh repo view --json nameWithOwner -q .nameWithOwner`), default branch (`repo-facts.sh default-branch`), working directory (`git rev-parse --show-toplevel`). Stop if any fails.
 - Tools: `project-review-config.sh`, `project-review-apply.sh`, `tracker.sh`, `pending-actions.sh` must be on `PATH`. Do not look in `~/.local/bin` specifically; if `command -v project-review-apply.sh` is empty, stop and report that the workflow install (cloud adapter run protocol) did not run.
 - Config file: `<working directory>/.claude/project-review.md` if present, else the overlay via `project-config.sh find project-review.md` (optional; skip silently when the tool or overlay is absent). None found: report-only.
-- Parse it: `project-review-config.sh <file> > "$TMPDIR/pr-config.json"`. A non-zero exit is a config error: stop and report its message, run nothing else.
+- Parse it: `project-review-config.sh <file> > "${TMPDIR:-/tmp}/pr-config.json"`. A non-zero exit is a config error: stop and report its message, run nothing else.
 
 ## 2. Review
 
@@ -32,11 +32,11 @@ If the manager reports the activity gate skipped the run or aborted, deliver not
 
 ## 3. Act
 
-Split the report: the findings block (the fenced `project-review-findings` JSON) goes to `$TMPDIR/pr-findings.json`; everything before it is the report body.
+Split the report: the findings block (the fenced `project-review-findings` JSON) goes to `${TMPDIR:-/tmp}/pr-findings.json`; everything before it is the report body.
 
-- `.actions` is `null` (no § Actions): report-only. Skip to §5.
-- Otherwise run `project-review-apply.sh "$TMPDIR/pr-findings.json" "$TMPDIR/pr-config.json"` and append its tab-separated output to the report under `## Actions taken`. A non-zero exit is reported, not retried; delivery still happens.
-- `doc_pr` true and § Review state has paths: one PR from a new branch editing only those paths (backlog/archive/pending-actions) using this run's results; never edit anything else. `open-pr.sh`; never push the default branch.
+- `.actions` is `null` (no § Actions): report-only. Skip to §4.
+- Otherwise run `project-review-apply.sh "${TMPDIR:-/tmp}/pr-findings.json" "${TMPDIR:-/tmp}/pr-config.json"` and append its tab-separated output to the report under `## Actions taken`. A non-zero exit is reported, not retried; delivery still happens.
+- `doc_pr` true and § Review state has paths: one PR from a new branch (named after the ticket branch or `<N>-slug` in a cloud session) editing only those paths (backlog/archive/pending-actions) using this run's results; never edit anything else. `open-pr.sh`; never push the default branch. A failure here is reported under `## Actions taken` and does not block delivery.
 
 ## 4. Deliver
 

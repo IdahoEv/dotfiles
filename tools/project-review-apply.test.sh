@@ -29,6 +29,7 @@ case "$1" in
     jq -c --arg s "$state" '{truncated: (env.FAKE_TRUNC == "1"), issues: .[$s]}' "$FAKE_STORE" ;;
   create)
     [ "${FAKE_CREATE_RC:-0}" -eq 0 ] || exit "$FAKE_CREATE_RC"
+    case " $* " in *" --label "*) [ -z "${FAKE_NO_LABELS:-}" ] || exit 1 ;; esac
     shift; title="" body="" labels=""
     while [ $# -gt 0 ]; do case "$1" in
       --title) title="$2"; shift 2 ;; --body-file) body="$(cat "$2")"; shift 2 ;;
@@ -43,7 +44,7 @@ EOF2
 chmod +x "$ROOT/tracker.sh"
 export PR_TRACKER="$ROOT/tracker.sh"
 
-reset() { echo '{"open":[],"closed":[]}' > "$FAKE_STORE"; : > "$LOG"; rm -f "$PEND"; unset FAKE_LIST_RC FAKE_CREATE_RC FAKE_TRUNC; }
+reset() { echo '{"open":[],"closed":[]}' > "$FAKE_STORE"; : > "$LOG"; rm -f "$PEND"; unset FAKE_LIST_RC FAKE_CREATE_RC FAKE_TRUNC FAKE_NO_LABELS; }
 run() {  # <findings-json> <actions-json>  → stdout; rc in $RC
   printf '%s' "$1" > "$ROOT/findings.json"
   jq -nc --argjson a "$2" --arg p "$PEND" '{actions:$a, review_state:{pending_actions:$p}}' > "$ROOT/config.json"
@@ -103,11 +104,25 @@ check "list exit 2 still exits 0" 0 "$RC"
 reset; FAKE_LIST_RC=1 run "$F" "$A"
 check "list failure aborts" 1 "$RC"
 reset; FAKE_TRUNC=1 run "$F" "$A"
-check "truncated list aborts" 1 "$RC"
+check "truncated list queues, exit 0" 0 "$RC"
 check "truncated list files nothing" 0 "$(grep -c '^create' "$LOG")"
+check "truncated list still queues the finding and closures" 3 "$("$TOOLS/pending-actions.sh" list "$PEND" | grep -c .)"
 
 reset; FAKE_CREATE_RC=1 run "$F" "$A"
 check "create failure exits 1" 1 "$RC"
+
+reset; run '{"findings":[{"lens":"q","severity":"high","status":"NEW","title":"Bad","body":"x"},
+ {"lens":"q","severity":"P1","status":"NEW","title":"Good","body":"y"}],"closures":[]}' "$A"
+check "malformed severity is skipped, valid finding filed" "create|Good|review,debt" "$(grep '^create' "$LOG")"
+check "malformed severity exits 0" 0 "$RC"
+
+reset; run '{"findings":[{"lens":"q","severity":"P1","status":"NEW","title":"Unquoted var","body":"x"},
+ {"lens":"r","severity":"P1","status":"NEW","title":"unquoted VAR!","body":"y"}],"closures":[]}' "$A"
+check "same title in one run is filed once, regardless of lens" 1 "$(grep -c '^create' "$LOG")"
+
+reset; FAKE_NO_LABELS=1 run "$F" "$A"
+check "missing label: retried without labels and filed" "create|Unquoted var in x.sh|" "$(grep '^create' "$LOG")"
+check "missing label: exit 0" 0 "$RC"
 
 printf 'project-review-apply.test.sh: %d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

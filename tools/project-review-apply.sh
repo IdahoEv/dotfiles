@@ -7,14 +7,16 @@
 #                 "closures":[{issue,action,detail,command?}]}
 # config.json:   project-review-config.sh output (uses .actions and .review_state.pending_actions).
 #
-# Filing is deterministic: each finding gets a stable key (sha1 of lens + normalized title),
+# Filing is deterministic: each finding gets a stable key (sha1 of the normalized title),
 # stamped in the ticket body as <!-- project-review-key: K -->. A key already present in an
 # open or closed ticket is never filed again. A provider that cannot create (tracker.sh exit 2)
-# or cannot list (so dedup is impossible) gets the finding queued in pending-actions instead.
+# or cannot list completely (so dedup is impossible: exit 2 or a truncated pull) gets the finding
+# queued in pending-actions instead. A create that fails (exit 1) is retried once without labels,
+# since a label missing from the repo is the usual cause. Findings with a malformed severity are skipped.
 # Closures and redefinitions are only ever queued; no ticket is closed or edited here.
 #
 # Output (tab-separated): filed|duplicate <key> <url|#id>; queued <issue|new-key> <action>; skipped|failed <id> <why>.
-# Exit: 0 ok · 1 a tracker call failed or the ticket pull was truncated.
+# Exit: 0 ok · 1 a tracker call failed.
 # Tools resolve next to this script (or PR_TRACKER / PR_PENDING for tests), never via PATH.
 
 set -euo pipefail
@@ -53,10 +55,8 @@ queue() {  # <issue> <action> <detail> [command] — prints the outcome line
 
 oneline() { tr '\n\r\t' '   ' <<<"$1"; }
 
-finding_key() {  # <lens> <title>
-  local norm
-  norm="$(tr '[:upper:]' '[:lower:]' <<<"$2" | tr -c 'a-z0-9\n' ' ' | tr -s ' ' | sed 's/^ //; s/ $//')"
-  printf '%s|%s' "$(tr '[:upper:]' '[:lower:]' <<<"$1")" "$norm" | shasum | cut -c1-12
+finding_key() {  # <title>; lens is excluded: the "first contributing lens" can change between sweeps
+  tr '[:upper:]' '[:lower:]' <<<"$1" | tr -c 'a-z0-9\n' ' ' | tr -s ' ' | sed 's/^ //; s/ $//' | shasum | cut -c1-12
 }
 
 if [ -n "$file_tickets" ]; then
@@ -66,7 +66,8 @@ if [ -n "$file_tickets" ]; then
 
   # Candidates: severity at or above the threshold, never ALREADY TICKETED, NEW unless status is ANY.
   candidates="$(jq -c --arg m "${max_sev#P}" --arg s "$want_status" '
-    .findings[] | select((.severity[1:] | tonumber) <= ($m | tonumber))
+    .findings[] | select((.severity // "") | test("^P[0-3]$"))
+    | select((.severity[1:] | tonumber) <= ($m | tonumber))
     | select(.status != "ALREADY TICKETED") | select($s == "ANY" or .status == "NEW")' "$FINDINGS")"
 
   if [ -n "$candidates" ]; then
@@ -75,14 +76,14 @@ if [ -n "$file_tickets" ]; then
       rc=0; page="$("$TRACKER" list --state "$state")" || rc=$?
       if [ "$rc" -eq 2 ]; then can_file=0; break; fi
       [ "$rc" -eq 0 ] || die "tracker list --state $state failed"
-      [ "$(jq -r .truncated <<<"$page")" = false ] || die "tracker list --state $state truncated; refusing to file without full dedup"
+      if [ "$(jq -r .truncated <<<"$page")" != false ]; then can_file=0; break; fi
       known="$known
 $(jq -r '.issues[] | "\(.id)\t\(.body // "" | [scan("project-review-key: ([0-9a-f]{12})")] | map(.[0]) | join(" "))"' <<<"$page")"
     done
 
     while IFS= read -r f; do
       title="$(jq -r .title <<<"$f")" lens="$(jq -r .lens <<<"$f")"
-      key="$(finding_key "$lens" "$title")"
+      key="$(finding_key "$title")"
       detail="$(oneline "$(jq -r .severity <<<"$f") $lens: $title")"
       if [ "$can_file" -eq 1 ]; then
         hit="$(awk -F'\t' -v k="$key" 'index($2, k) {print $1; exit}' <<<"$known")"
@@ -90,9 +91,14 @@ $(jq -r '.issues[] | "\(.id)\t\(.body // "" | [scan("project-review-key: ([0-9a-
         bodyf="$(mktemp "${TMPDIR:-/tmp}/pra-body.XXXXXX")"
         { jq -r .body <<<"$f"; printf '\n\n<!-- project-review-key: %s -->\n' "$key"; } > "$bodyf"
         rc=0; res="$("$TRACKER" create --title "$title" --body-file "$bodyf" ${labels[@]+"${labels[@]}"})" || rc=$?
+        if [ "$rc" -eq 1 ] && [ "${#labels[@]}" -gt 0 ]; then
+          rc=0; res="$("$TRACKER" create --title "$title" --body-file "$bodyf")" || rc=$?
+        fi
         rm -f "$bodyf"
         case "$rc" in
-          0) printf 'filed\t%s\t%s\n' "$key" "$(jq -r .url <<<"$res")"; continue ;;
+          0) printf 'filed\t%s\t%s\n' "$key" "$(jq -r .url <<<"$res")"
+             known="$known
+x	$key"; continue ;;
           2) ;;
           *) printf 'failed\t%s\t%s\n' "$key" "$detail"; rc_total=1; continue ;;
         esac

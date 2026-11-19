@@ -18,13 +18,13 @@ Resolved from `<repo>/.claude/project-review.md`, then the overlay if one exists
 | | `doc-pr: on\|off` | One PR updating the `## Review state` docs |
 | `## Delivery` | `email:<address>` \| `file:<path>` \| `inline` | Where the report goes. `- fallback: file:<path>\|inline` applies when email has no mail connector |
 
-Filing is script code (`tools/project-review-apply.sh`): each finding gets a key (`sha1(lens + normalized title)`, 12 hex) stamped in the ticket body as `<!-- project-review-key: K -->`. A key found in any open or closed ticket is skipped, so reruns never duplicate. If the provider cannot create or list (exit 2), the finding is queued in `pending-actions` as `new-<key>` instead.
+A create that fails is retried once without labels (a label missing from the repo is the usual cause). Filing is script code (`tools/project-review-apply.sh`): each finding gets a key (`sha1(normalized title)`, 12 hex) stamped in the ticket body as `<!-- project-review-key: K -->`. A key found in any open or closed ticket is skipped, so reruns never duplicate. If the provider cannot create or list completely (exit 2, or a truncated ticket pull), the finding is queued in `pending-actions` as `new-<key>` instead.
 
 ## Provider auth
 
 | Provider | Needs | Without it |
 | --- | --- | --- |
-| `github` | `GH_TOKEN` in the routine's environment with issues read+write (add contents/PR write for `doc-pr`). In a cloud session the `gh` shim answers `issue list`/`issue create` over REST | `tracker.sh` exits 1 and the review aborts; nothing is filed |
+| `github` | `GH_TOKEN` in the routine's environment with issues read+write (add contents/PR write for `doc-pr`). In a cloud session the `gh` shim answers `issue list`/`issue create` over REST | The review's ticket pull aborts and nothing is delivered. If only filing fails, the report is still delivered with the failure under `## Actions taken` |
 | `github-mcp` | Not supported by `tracker.sh` (scripts cannot call MCP) | Same as above; use `github` |
 | `shortcut` | Not supported: `list`/`create` are stubs (exit 2) | Report-only; findings queued in `pending-actions` |
 | other | Define `provider::list_issues` and `provider::create_issue <title> <body-file> <labels-csv>` (print `{"id":N,"url":"..."}`), return 2 for "cannot" | Exit 2 as above |

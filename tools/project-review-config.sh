@@ -7,7 +7,7 @@
 #  "actions": null | {"file_tickets": null | {"severity":"P1","status":"NEW"},
 #                     "labels":[...], "queue_closures":bool, "doc_pr":bool},
 #  "delivery": {"kind":"inline|file|email", "target":"...", "fallback":{"kind":"inline|file","target":"..."}}}
-# A missing § Actions (or one still holding only <placeholders>) gives "actions": null,
+# A missing § Actions (or one with no `- key:` lines) gives "actions": null,
 # which means report-only. A missing § Delivery means inline. Exit 1 on an unparseable value.
 
 set -euo pipefail
