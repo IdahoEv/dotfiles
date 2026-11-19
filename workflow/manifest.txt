@@ -44,8 +44,8 @@ aba793872a6ce83be45735cf898183d8d2b290c72f5e62312e161883462615af  644  dot_claud
 ee70fb1a401ed104231eb6f9ea72334263ca35b579f030d27946692cc57776be  644  dot_claude/skills/github-review-procedure/executable_github-review-poll.sh
 67802bf1ef342b36149f1c0a20f7f5ea00024b8b100b4793220a6b446c6f0105  644  dot_claude/skills/github-review-procedure/executable_github-review-state.sh
 02ebae36dc7a74a3c7105439bdc42f983b64982e26b6bf043af52c6ecd0885da  644  dot_claude/skills/local-review-cycle-procedure/SKILL.md
-380d90694ddb258b724bd1535e31486767a24f4a7a747bd792868d53029ccbd7  644  dot_claude/skills/project-review-apply-procedure/SKILL.md
-3a7b7df930f2c43f9cdcd81ef68103568c0b89b262bb5f63bd41d24035aaff45  644  dot_claude/skills/project-review-procedure/SKILL.md
+97c1052d80862ef417564d7e1e109c0cd0f48aaa755299962122f244559d2fab  644  dot_claude/skills/project-review-apply-procedure/SKILL.md
+6cdcee8781e3f952cb2639f1c29e067818c7feaf15aeb65bf4e0fd4dbf0df30e  644  dot_claude/skills/project-review-procedure/SKILL.md
 6df3c5e8b019a3ecb46bbd3f37c8d3866b39dd5596baea39734d710ab6cae649  644  dot_claude/skills/prompt-review/SKILL.md
 91f66b2780160f52a8cc5619c0659375c125a0070fbe7a8ec454a94190d8c413  644  dot_claude/skills/prompt-review/executable_prompt-metrics.sh
 947e3cfbb987c8dc9655ed68f2029ac6559d7d6b070a5d345f66f73659c064d0  644  dot_claude/skills/review-lens-contract/SKILL.md
@@ -109,7 +109,7 @@ b127c521bc0b7fd59034739990ec1010f5e929f1584a5fe5ff39746ccb390361  644  tools/pro
 58fa296192189b0af137d7c969a66efe560af9f5459e9a6efe2a8b68fd7154ee  644  tools/project-config-templates/project-review.md
 95fb55e2f13aca1099ec5d010aa480bb23a338b25e1cf14cee00063d02d15e76  644  tools/project-config-templates/start-ticket.conf
 9a5f4342274b648ff05f5f4c4505a62e8118968ab4f9890dfed2701d3c2f86b0  755  tools/project-config.sh
-c7dd7c881271a8ccfdd4c26ecf112dcfe2cc74eba4f863716203b471b6aea2f5  755  tools/project-review-apply.sh
+22ff0c3f5aac3e20fa3fc917c794fcd6bd3cc70529ea6195f55d6fb9b73549e0  755  tools/project-review-apply.sh
 145dee9f2040976204280f67d6afbee07dbbc9c808d89e2e3e8902cc6edb58f4  755  tools/project-review-config.sh
 897f3d03a1e760f56fdab55a0d787184e25e1bb265e71cf413c7e1259d747c13  755  tools/prune-worktrees.sh
 d6710ea71d1b71cab9ba9a94dc6ccfd6c1bafbe876d7b186f75633212b0a1652  755  tools/repo-facts.sh
@@ -120,7 +120,7 @@ e1c3ae04faac76a296220724c92c4bb953ffc875f3dee88308467be873a22a50  755  tools/rev
 71d00250a76fffd58c7e2fc2fc0df3a1b3d1b837bcaaa551c00c488d587183e1  755  tools/session-label.sh
 a394eba77efb25ef1f766806223ac4edf75c5eef0b4347084e6059b5fce9de68  755  tools/setup-ticket-profile.sh
 e366a502be678c6fa82962d428bbdc9414457a32835de696989c42582e500eca  755  tools/sibling-worktrees.sh
-d545d48d22308a316a00984483baead2334576101656c8dcefdb4883f293dc6a  644  tools/start-ticket-providers/github-mcp.sh
+19cf2853382e6922ff9b03291f85d00e5a4b98a8acd0bc2e9a563ac91d2e68e6  644  tools/start-ticket-providers/github-mcp.sh
 18f70650d7898cbaa3a7b3f6f67038901cb331b9138a3494ad7b8501bb9411d5  644  tools/start-ticket-providers/github.sh
 ae4e93d3a0d38815b1c929d3ff237054c71a8a46dd01e30e2cd23c2ed9343fee  644  tools/start-ticket-providers/shortcut.sh
 6ce7b8cb04e2854399d94f568de8aa6fa0b1380bcb415c01756142233acbcd83  755  tools/start-ticket.sh

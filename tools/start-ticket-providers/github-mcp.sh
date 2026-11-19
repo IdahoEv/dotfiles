@@ -7,10 +7,37 @@
 # Tracker writes (assign, comment) are the agent's job too: mark_in_progress is a
 # no-op and read_state reports "unknown", which /start step 1a repairs.
 
+# tracker.sh uses the same handoff for listing and creating: the agent writes
+# $TRACKER_MCP_DIR/issues-open.json and issues-closed.json (arrays of
+# {id,title,state,labels:[names],url,updated,body}), and create requests are written
+# to $TRACKER_MCP_DIR/create/<n>.json ({title,body,labels}) for the agent to file.
+
 _ghmcp_file() { printf '%s/%s.json' "${START_TICKET_MCP_DIR:-}" "$1"; }
 
 provider::available() {
-  command -v jq >/dev/null && [ -n "${START_TICKET_MCP_DIR:-}" ] && [ -d "$START_TICKET_MCP_DIR" ]
+  command -v jq >/dev/null || return 1
+  { [ -n "${START_TICKET_MCP_DIR:-}" ] && [ -d "$START_TICKET_MCP_DIR" ]; } ||
+    { [ -n "${TRACKER_MCP_DIR:-}" ] && [ -d "$TRACKER_MCP_DIR" ]; }
+}
+
+provider::list_issues() {  # <state> <limit>
+  local state="$1" s f out="[]"
+  for s in $([ "$state" = all ] && echo "open closed" || echo "$state"); do
+    f="${TRACKER_MCP_DIR:-}/issues-$s.json"
+    [ -f "$f" ] || { echo "no handoff file $f: list $s issues with the GitHub MCP tools first" >&2; return 1; }
+    out="$(jq -s '.[0] + .[1]' <(echo "$out") "$f")" || return 1
+  done
+  printf '%s' "$out"
+}
+
+# A script can't call MCP: record the request for the agent and report "cannot create"
+# (exit 2), so the caller queues the finding and the agent files the request.
+provider::create_issue() {  # <title> <body-file> <labels-csv>
+  local dir="${TRACKER_MCP_DIR:-}/create" n
+  n="$(printf '%s' "$1" | cksum | cut -d' ' -f1)"
+  mkdir -p "$dir" && jq -n --arg t "$1" --rawfile b "$2" --arg l "$3" \
+    '{title:$t, body:$b, labels:($l | split(",") | map(select(length > 0)))}' > "$dir/$n.json" || return 1
+  return 2
 }
 
 provider::fetch() {

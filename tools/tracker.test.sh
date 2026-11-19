@@ -107,5 +107,18 @@ check "github create passes labels and body file" "true" "$(grep -q -e "issue cr
 # shortcut stub defines no create_issue
 (cd "$REPO" && PATH="$ROOT/bin:$PATH" "$TR" create --provider shortcut --title t --body-file "$ROOT/body" >/dev/null 2>&1); check "shortcut create exits 2" 2 "$?"
 
+# github-mcp: the agent stages issues in TRACKER_MCP_DIR; create records a request and exits 2
+MD="$ROOT/mcp"; mkdir -p "$MD"
+echo '[{"id":1,"title":"a","state":"OPEN","labels":[],"url":"u","updated":"t","body":"b"}]' > "$MD/issues-open.json"
+echo '[{"id":2,"title":"c","state":"CLOSED","labels":[],"url":"u","updated":"t","body":"b"}]' > "$MD/issues-closed.json"
+mcp() { (cd "$REPO" && TRACKER_MCP_DIR="$MD" "$TR" "$@" 2>"$ROOT/err"); }
+check "github-mcp lists staged open issues" '[1]' "$(mcp list --provider github-mcp --state open | jq -c '[.issues[].id]')"
+check "github-mcp lists staged closed issues" '[2]' "$(mcp list --provider github-mcp --state closed | jq -c '[.issues[].id]')"
+check "github-mcp all merges both" '[1,2]' "$(mcp list --provider github-mcp --state all | jq -c '[.issues[].id]')"
+rm "$MD/issues-closed.json"; mcp list --provider github-mcp --state closed >/dev/null; check "github-mcp missing staged file fails" 1 "$?"
+(cd "$REPO" && env -u TRACKER_MCP_DIR -u START_TICKET_MCP_DIR "$TR" list --provider github-mcp >/dev/null 2>&1); check "github-mcp without a staging dir is unavailable" 1 "$?"
+mcp create --provider github-mcp --title "T 1" --body-file "$ROOT/body" --label a,b >/dev/null; check "github-mcp create exits 2" 2 "$?"
+check "github-mcp create records a request" '{"title":"T 1","body":"the body","labels":["a","b"]}' "$(cat "$MD"/create/*.json | jq -c .)"
+
 printf 'tracker.test.sh: %d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

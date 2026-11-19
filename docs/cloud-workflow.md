@@ -77,3 +77,5 @@ Copy an existing adapter (`workflow/adapters/codex.md` or `agy.md`), change the 
 | Mark in progress | agent | `/start` step 1a: assign + comment through `issue_write` / `add_issue_comment`, then read back |
 
 Chains (`12,13 14`) work: one handoff file per id. Setting `START_TICKET_MCP_DIR` selects the provider without a `.start-ticket.conf`. Tested in `tools/start-ticket.test.sh`; a live cloud run is not covered.
+
+`/project-review-apply` uses the same handoff for tracker listing and filing (`tracker.sh --provider github-mcp`, staged in `$TRACKER_MCP_DIR`); see `docs/project-review-scheduling.md` § Provider auth.

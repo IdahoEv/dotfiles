@@ -1,4 +1,17 @@
-# Scheduling /project-review-apply
+# Scheduling a Project Review Job
+
+Project review is a periodic task designed to review the project as a whole (as opposed to code review of an individual PR).
+
+Each repository you want to review should have a `.claude/project-review.md`. That file will configures the actions the reviewer will take; without it the review is report-only.
+
+## Setup steps
+
+- Copy `tools/project-config-templates/project-review.md` from dotfiles to your project's `.claude/`.
+- Edit that file to set review configuration. Config documentation is below
+- Commit that file to your repository so cloud sessions receive it. Many projects have `.claude` in gitignore, in which case you may allowlist the file by adding `!.claude/project-review.md` to `.gitignore`.
+- Schedule a job to execute `/project-review-apply` on the schedule you prefer. That job must run where dotfiles is installed: locally after `chezmoi apply`, or in cloud after the workflow bootstrap (`workflow/adapters/claude-cloud.md` § Run protocol).
+
+## Running the Project Review: /project-review-apply
 
 `/project-review-apply` runs the periodic review, then acts on the report per the repo's `project-review.md`. The scheduler's stored prompt is that command alone; every project-specific choice lives in the repo.
 
@@ -22,12 +35,17 @@ A create that fails is retried once without labels (a label missing from the rep
 
 ## Provider auth
 
-| Provider | Needs | Without it |
+The procedure runs `gh auth status` first. If `gh` works, the `github` provider is used. If not, tickets go through the GitHub MCP tools (`github-mcp`). Whether a cloud environment's `gh` holds a usable token varies (see `docs/cloud-workflow.md` § Ticket access when `gh` is unauthenticated).
+
+| Provider | Needs | Behavior |
 | --- | --- | --- |
-| `github` | `GH_TOKEN` in the routine's environment with issues read+write (add contents/PR write for `doc-pr`). In a cloud session the `gh` shim answers `issue list`/`issue create` over REST | The review's own ticket pull aborts and nothing is delivered. A failure inside the apply step (listing or filing) is reported under `## Actions taken` and the report is still delivered |
-| `github-mcp` | Not supported by `tracker.sh` (scripts cannot call MCP) | Same as above; use `github` |
+| `github` | `gh` authenticated with issues read+write (a local login, or `GH_TOKEN`; add contents/PR write for `doc-pr`). In cloud the `gh` shim answers `issue list`/`issue create` over REST | Scripts list and file tickets directly |
+| `github-mcp` | The GitHub MCP tools in the session | The agent stages open and closed issues in `$TRACKER_MCP_DIR` (`issues-open.json`, `issues-closed.json`) before the review. Filing: the apply script records each request in `$TRACKER_MCP_DIR/create/` and the agent creates it with `mcp__github__issue_write`. Dedup works the same: the key is in the body |
+| neither | | The ticket pull aborts and nothing is delivered |
 | `shortcut` | Not supported: `list`/`create` are stubs (exit 2) | Report-only; findings queued in `pending-actions` |
 | other | Define `provider::list_issues` and `provider::create_issue <title> <body-file> <labels-csv>` (print `{"id":N,"url":"..."}`), return 2 for "cannot" | Exit 2 as above |
+
+A failure inside the apply step (listing or filing) is reported under `## Actions taken` and the report is still delivered. With `github-mcp`, each recorded create request also leaves a `new-<key>` row in `pending-actions` (when a path is configured) that is not removed once the ticket is filed.
 
 Email needs a mail connector (Gmail-type MCP server) attached to the routine. Without one the report goes to the fallback channel.
 
