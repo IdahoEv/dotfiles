@@ -32,6 +32,18 @@ Conventions docs:
 ## Lenses
 Skip: <lens-name>, <lens-name>
 
+## Actions
+What `/project-review-apply` does with the report. Omit this section for report-only.
+- file-tickets: off
+<!-- off | <severity> <status>: file tickets for findings at that severity or higher (P0-P3); status NEW or ANY. e.g. `P1 NEW` -->
+- ticket-labels: `<label>`, `<label>`
+- queue-ticket-closures: off
+<!-- on: queue triage closures and redefinitions in § Review state pending-actions; tickets are never closed or edited -->
+- doc-pr: off
+<!-- on: one PR updating the § Review state docs -->
+
 ## Delivery
 inline
 <!-- inline | file:<path> | email:<address> -->
+- fallback: inline
+<!-- used when email has no mail connector: inline | file:<path> -->

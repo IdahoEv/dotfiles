@@ -43,6 +43,8 @@ case "$method $path" in
   "GET repos/acme/widgets/issues/9/sub_issues?per_page=100") echo '[]' ;;
   "GET repos/acme/widgets/issues/10") echo '{"number":10,"title":"T","body":"","state":"open","html_url":"u10","assignees":[]}' ;;
   "GET repos/acme/widgets/issues/10/parent") echo "HTTP 502: Bad Gateway" >&2; exit 1 ;;
+  "GET repos/acme/widgets/issues?state=all&per_page=100") echo '[{"number":1,"title":"I","body":"b","state":"open","html_url":"u1","updated_at":"t","labels":[{"name":"x"}]},{"number":2,"title":"P","state":"open","html_url":"u2","pull_request":{}},{"number":3,"title":"C","body":null,"state":"closed","html_url":"u3","updated_at":"t","labels":[]}]' ;;
+  "POST repos/acme/widgets/issues") echo '{"number":55,"html_url":"https://github.com/acme/widgets/issues/55"}' ;;
   POST*|PATCH*|PUT*) echo '{}' ;;
   *) echo "unexpected: $method $path" >&2; exit 1 ;;
 esac
@@ -78,6 +80,14 @@ grep -q 'api -X POST repos/acme/widgets/issues/7/assignees' "$FAKE_LOG" || fail 
 grep -q 'api -X POST repos/acme/widgets/issues/7/comments' "$FAKE_LOG" || fail "comment"
 grep -q 'api -X PATCH repos/acme/widgets/issues/7' "$FAKE_LOG" || fail "close"
 pass "issue edit/comment/close write over REST"
+
+[[ "$(g issue list --state all --limit 10 --json number,state,labels --jq '[.[]|"\(.number)\(.state)\(.labels|length)"]|join(",")')" == "1OPEN1,3CLOSED0" ]] || fail "issue list maps REST, drops PRs"
+[[ "$(g issue list --state all --limit 1 --json number --jq length)" == 1 ]] || fail "issue list honours --limit"
+pass "issue list answers over REST without pull requests"
+: > "$FAKE_LOG"; printf 'the body' > "$tmp/body"
+[[ "$(g issue create --title T --body-file "$tmp/body" --label a,b)" == https://github.com/acme/widgets/issues/55 ]] || fail "issue create prints URL"
+grep -q 'api -X POST repos/acme/widgets/issues -f title=T -f body=the body -f labels\[\]=a -f labels\[\]=b' "$FAKE_LOG" || fail "issue create fields: $(cat "$FAKE_LOG")"
+pass "issue create posts title, body and labels over REST and prints the URL"
 
 [[ "$(g pr list --head 7-fix --state all --json number,state,mergedAt,mergeCommit,headRefOid,baseRefName | jq -r '.[0] | "\(.number) \(.state) \(.mergeCommit.oid) \(.headRefOid) \(.baseRefName)"')" == "12 MERGED abc h1 trunk" ]] || fail "pr list state all"
 [[ -z "$(g pr list --head 7-fix --json number --jq '.[0].number // empty')" ]] || fail "open-only pr list should skip the merged PR"

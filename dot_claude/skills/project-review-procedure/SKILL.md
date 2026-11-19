@@ -11,7 +11,7 @@ Run a read-only periodic review of `origin/<default_branch>` using fresh lens ag
 ## 1. Preflight & config
 
 - Fetch `origin` (`git fetch origin`). Verify `origin/<default_branch>` resolves (`git rev-parse --verify "origin/<default_branch>"`); stop if not.
-- Locate `project-review.md` via `project-config.sh find project-review.md 2>/dev/null | cut -f1 || true`.
+- Locate `project-review.md`: `<working directory>/.claude/project-review.md` if it exists, else the overlay via `project-config.sh find project-review.md 2>/dev/null | cut -f1 || true` (the tool may be absent, e.g. in a cloud session; the repo file alone is enough).
   - If found, read it. Any value still in `<...>` placeholder form counts as unset.
   - If absent, proceed in report-only mode with defaults: `Window: 7`, no `Activity globs:`, no `Skip:`, `inline` delivery.
 - Resolve `Window` (positive integer days from § Cadence `Window:`, default `7`; overridden by `--window N` if passed in kickoff) and `Activity globs:` (non-placeholder globs from § Cadence).
@@ -98,3 +98,9 @@ Wait for all launched lenses, then synthesize centrally:
      `SEVERITY | STATUS | file:line | defect | evidence | minimal fix` (append `| recurring (N sweeps)` when applicable).
    - **Triage summary:** Separate section when a `Lens: triage` agent ran — duplicates, state consistency, debt ranking, work clusters, and any `Proposed actions:` listed as read-only recommendations (never executed).
    - **Verified clean & skipped:** Per-lens `Verified clean:` items, plus any sections/roles skipped because `project-review.md` was absent or unset.
+3. **Findings block (only when kickoff has `Findings block: yes`):** End the report with one fenced block tagged `project-review-findings`, holding JSON the apply step consumes and nothing else:
+   ```project-review-findings
+   {"findings":[{"lens":"<lens name>","severity":"P0-P3","status":"NEW|KNOWN|ALREADY TICKETED","title":"<short defect, no line numbers>","body":"<defect, evidence, minimal fix, markdown>"}],
+    "closures":[{"issue":<number>,"action":"<triage action>","detail":"<why>","command":"<optional>"}]}
+   ```
+   `findings` mirrors the report's findings one-to-one (`lens` is the first contributing lens). `closures` is the triage lens's `Proposed actions:` (close-duplicate, close-resolved, comment, relabel, link), empty when no triage lens ran. `title` must be stable across sweeps for the same defect: no SHAs, counts or line numbers.

@@ -1,14 +1,20 @@
 #!/usr/bin/env bash
-# tracker.sh — read-only view of the ticket tracker through the provider seam.
+# tracker.sh — ticket tracker access through the provider seam.
 #
-#   tracker.sh list [--state open|closed|all] [--limit N] [--provider NAME]
+#   tracker.sh list   [--state open|closed|all] [--limit N] [--provider NAME]
+#   tracker.sh create --title T --body-file F [--label L]... [--provider NAME]
 #
 # Prints {"truncated":bool,"issues":[{id,title,state,labels,url,updated,body}]}. truncated
 # means more than --limit matched; callers that need the full set must abort on it.
 # Provider: --provider → .start-ticket.conf `provider` → autodetect (gh, then short).
 # Providers are the start-ticket-providers scripts; one that defines no
 # provider::list_issues (or stubs it) makes this exit 2: report-only for the caller.
-# Exit: 0 ok · 1 failure · 2 provider cannot list. No write subcommands exist.
+# create prints {"id":N,"url":"..."}. Provider contract, same shape as list: define
+# provider::create_issue <title> <body-file> <labels-csv> to print that JSON and return 0;
+# a provider without it (or one that stubs it by returning 2) makes create exit 2, so the
+# caller queues the work instead of filing. create is the only write verb: nothing here
+# closes or edits an existing ticket.
+# Exit: 0 ok · 1 failure · 2 provider cannot list/create.
 
 set -euo pipefail
 
@@ -43,20 +49,28 @@ find_provider_file() {  # <name> → path, or empty
 }
 
 cmd="${1:-}"
-[ "$cmd" = list ] || die "usage: tracker.sh list [--state open|closed|all] [--limit N] [--provider NAME]"
+case "$cmd" in list|create) ;; *) die "usage: tracker.sh list|create ... (see header)" ;; esac
 shift
 
-state=open limit=500 provider=""
+state=open limit=500 provider="" title="" body_file="" labels=""
 while [ $# -gt 0 ]; do
   case "$1" in
-    --state)    state="${2:?--state needs a value}"; shift 2 ;;
-    --limit)    limit="${2:?--limit needs a value}"; shift 2 ;;
     --provider) provider="${2:?--provider needs a value}"; shift 2 ;;
+    --state)  [ "$cmd" = list ] || die "unknown argument: $1"; state="${2:?--state needs a value}"; shift 2 ;;
+    --limit)  [ "$cmd" = list ] || die "unknown argument: $1"; limit="${2:?--limit needs a value}"; shift 2 ;;
+    --title)  [ "$cmd" = create ] || die "unknown argument: $1"; title="${2:?--title needs a value}"; shift 2 ;;
+    --body-file) [ "$cmd" = create ] || die "unknown argument: $1"; body_file="${2:?--body-file needs a value}"; shift 2 ;;
+    --label)  [ "$cmd" = create ] || die "unknown argument: $1"; labels="${labels:+$labels,}${2:?--label needs a value}"; shift 2 ;;
     *) die "unknown argument: $1" ;;
   esac
 done
-case "$state" in open|closed|all) ;; *) die "--state must be open, closed or all" ;; esac
-case "$limit" in ''|*[!0-9]*|0) die "--limit must be a positive integer" ;; esac
+if [ "$cmd" = list ]; then
+  case "$state" in open|closed|all) ;; *) die "--state must be open, closed or all" ;; esac
+  case "$limit" in ''|*[!0-9]*|0) die "--limit must be a positive integer" ;; esac
+else
+  [ -n "$title" ] || die "create needs --title"
+  [ -f "$body_file" ] || die "create needs --body-file pointing at an existing file"
+fi
 
 git rev-parse --is-inside-work-tree >/dev/null 2>&1 || die "not inside a git repo"
 command -v jq >/dev/null || die "jq is required"
@@ -75,6 +89,17 @@ pf="$(find_provider_file "$provider")"
 source "$pf"
 
 provider::available || die "provider '$provider' unavailable (CLI missing or not authed)"
+if [ "$cmd" = create ]; then
+  declare -F provider::create_issue >/dev/null || { echo "tracker: provider '$provider' cannot create issues" >&2; exit 2; }
+  rc=0
+  raw="$(provider::create_issue "$title" "$body_file" "$labels")" || rc=$?
+  [ "$rc" -ne 2 ] || exit 2
+  [ "$rc" -eq 0 ] || die "provider '$provider' failed to create issue"
+  jq -ce 'select(type == "object" and has("id") and has("url"))' <<<"$raw" \
+    || die "provider '$provider' returned malformed output"
+  exit 0
+fi
+
 declare -F provider::list_issues >/dev/null || { echo "tracker: provider '$provider' cannot list issues" >&2; exit 2; }
 
 # Ask for one extra so a full page is distinguishable from a cut-off one.

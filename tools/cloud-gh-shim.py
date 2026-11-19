@@ -16,6 +16,8 @@ Covered, with the flags the workflow uses:
                 subIssuesSummary,subIssues]
   issue edit N --add-assignee @me|LOGIN     issue comment N --body|--body-file
   issue close N [--comment TEXT]
+  issue list [--state open|closed|all] [--limit N] --json F [-q|--jq EXPR]
+  issue create --title T [--body T|--body-file F] [--label a,b]   (prints the URL)
   pr list [--head B] [--state open|closed|merged|all] --json F
   pr view [N] --json number,url,title,id,headRefName,headRefOid,baseRefName,
             isDraft,mergeable,commits
@@ -78,6 +80,9 @@ def api(path, method="GET", fields=None, paginate=False, quiet=False):
     if paginate:
         cmd.append("--paginate")
     for k, v in (fields or {}).items():
+        if isinstance(v, list):
+            cmd += [x for item in v for x in ("-f", f"{k}[]={item}")]
+            continue
         cmd += ["-f" if isinstance(v, str) else "-F", f"{k}={v if isinstance(v, str) else json.dumps(v).strip(chr(34))}"]
     r = subprocess.run(cmd, capture_output=True, text=True)
     if r.returncode != 0:
@@ -262,6 +267,29 @@ def cmd_issue(args):
     elif sub == ["comment"]:
         pos, vals, _ = opts(rest, {"--body", "--body-file"})
         api(f"repos/{slug}/issues/{num0(pos)}/comments", "POST", {"body": body_arg(vals) or ""})
+    elif sub == ["list"]:
+        pos, vals, _ = opts(rest, {"--state", "-s", "--limit", "-L", "--json", "--jq", "-q"})
+        state = vals.get("--state") or vals.get("-s") or "open"
+        if state not in ("open", "closed", "all"):
+            sys.exit(f"gh shim: unsupported issue state '{state}'")
+        limit = int(number(vals.get("--limit") or vals.get("-L") or "30"))
+        items = [i for i in api(f"repos/{slug}/issues?state={state}&per_page=100", paginate=True)
+                 if "pull_request" not in i][:limit]
+        emit([{"number": i["number"], "title": i["title"], "body": i.get("body") or "",
+               "state": i["state"].upper(), "url": i["html_url"], "updatedAt": i.get("updated_at"),
+               "labels": [{"name": l["name"] if isinstance(l, dict) else l} for l in i.get("labels", [])]}
+              for i in items], vals)
+    elif sub == ["create"]:
+        pos, vals, _ = opts(rest, {"--title", "-t", "--body", "-b", "--body-file", "-F", "--label", "-l"})
+        title = vals.get("--title") or vals.get("-t")
+        if not title:
+            sys.exit("gh shim: issue create needs --title")
+        fields = {"title": title, "body": body_arg({"--body": vals.get("--body") or vals.get("-b"),
+                                                    **({"--body-file": vals["--body-file"]} if "--body-file" in vals else {})}) or ""}
+        label = vals.get("--label") or vals.get("-l")
+        if label:
+            fields["labels"] = [x.strip() for x in label.split(",") if x.strip()]
+        print(api(f"repos/{slug}/issues", "POST", fields)["html_url"])
     elif sub == ["close"]:
         pos, vals, _ = opts(rest, {"--comment", "-c", "--reason", "-r"})
         text = vals.get("--comment") or vals.get("-c")
