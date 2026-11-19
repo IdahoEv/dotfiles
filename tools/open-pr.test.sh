@@ -164,6 +164,15 @@ mkdir -p "$HOME/.config"; touch "$HOME/.config/local-review-only"
 out="$(run --title "Add foo")"
 check "github work: no request"            "" "$(review_args)"
 check "github work: Reviews none"          "Reviews: none" "$(grep '^Reviews:' <<<"$out")"
+
+new_repo 42-foo; rm -f "$REVIEW_ARGS" "$WATCH_ARGS"
+out="$(REVIEW_STUB_RC=1 run --title "Add foo" --review copilot)"; rc=$?
+check "github work explicit: exit 0"       "0" "$rc"
+check "github work explicit: stub invoked" "--pr 1 --level copilot" "$(review_args)"
+check "github work explicit: warns"        "1" "$(grep -c 'review request failed' <<<"$out")"
+check "github work explicit: Reviews"      "1" "$(grep -c '^Reviews: request failed' <<<"$out")"
+check "github work explicit: no watch"     "watch=skipped" "$(grep '^watch=' <<<"$out")"
+check "github work explicit: not launched" "absent" "$([ -e "$WATCH_ARGS" ] && echo present || echo absent)"
 rm -f "$HOME/.config/local-review-only"
 
 new_repo 42-foo; rm -f "$REVIEW_ARGS"
