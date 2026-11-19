@@ -98,10 +98,10 @@ f6d369e82e99df2b899a4e53f1418bced2ab931851ae6e9ea7603c2460975cbc  755  tools/mcp
 6a1180dd4d342705d243b1f0a8a1ecb59826860e67a7e0de6aa63b232c757cad  755  tools/mem-guard.sh
 1983059031a0f6fa099c539706b0f46edd41fd4aa675016a0ebbb0e126262b7b  755  tools/merge-run.sh
 c8ce372b7286fdec6d59dc1cc586f65cffd3ad95cdeebdd089631832c46e1b09  755  tools/migrate-use-when.sh
-bbcb038846e1132a854e75eeb5da31897b4ba99dd034c07432cc5a81388b3248  644  tools/open-pr-providers/github.sh
+ebdb84b0473af44ffdc63fce69e007c3529d61f245f8008c8bd6c7a2b330373d  644  tools/open-pr-providers/github.sh
 4646c4c8143747fa1e8ccb52a499d01ae230c71e6f06c19508223edce007fc25  644  tools/open-pr-providers/shortcut.sh
 20e1ba6f76351bfc20a2c77acbac4195426e5dd7e2122a60229b0e27c02438b0  755  tools/open-pr-watch.sh
-c66aa00ca9531491dbb32ac2f98dc9ae31df224f9a48ed2fba09dfc7485e78c5  755  tools/open-pr.sh
+4dbfcb3f6a44ec0d74e6604f2441c66195b4f806f142004d7f6f25ae2fc289e0  755  tools/open-pr.sh
 dc55a6a27785e8576b61964aeefb66b3e419c24bcb46ee280a2f8463befb450a  755  tools/pending-actions.sh
 924937befc2fa9b642c8cdd3407ec9958a32ca8cc05259bc2b31a1be387849fb  755  tools/pr-body.sh
 f6ec970038d77efb2159bd5818cb7fc4cbd72ceddfe0bcbc353d3a6f51061850  644  tools/project-colors
@@ -123,7 +123,7 @@ e366a502be678c6fa82962d428bbdc9414457a32835de696989c42582e500eca  755  tools/sib
 19cf2853382e6922ff9b03291f85d00e5a4b98a8acd0bc2e9a563ac91d2e68e6  644  tools/start-ticket-providers/github-mcp.sh
 18f70650d7898cbaa3a7b3f6f67038901cb331b9138a3494ad7b8501bb9411d5  644  tools/start-ticket-providers/github.sh
 ae4e93d3a0d38815b1c929d3ff237054c71a8a46dd01e30e2cd23c2ed9343fee  644  tools/start-ticket-providers/shortcut.sh
-2ca492c02337fc4c99c1990276db97e882b1286739551c252ccc2bc58f942eed  755  tools/start-ticket.sh
+6ce7b8cb04e2854399d94f568de8aa6fa0b1380bcb415c01756142233acbcd83  755  tools/start-ticket.sh
 2f05e33075ba15221c8da189495317c293d22055b5548cd2db0f98b4c30c47e2  755  tools/sync-gate.sh
 1abff882cb55863b47da0513aec9a824a52a228f7da137c1562d638ad1d5fae6  755  tools/sync-run.sh
 c1e6502f75831f41c5316e583cd7c14f7a33d694d9837e08094d107237bfe0a7  755  tools/tracker.sh

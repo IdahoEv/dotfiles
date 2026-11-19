@@ -4,8 +4,9 @@
 #   - branch convention `<NNN>-slug`  → issue number NNN
 #   - PR title `Is<NNN>: <title>` (ticketless PRs keep the title as given)
 #   - PR body footer `Closes #NNN`
-#   - no review triggers: --review is accepted and ignored. Repos that want
-#     Copilot/claude.yml wiring use the kardashev provider or their own.
+#   - review: request-review.sh requests Copilot (and claude.yml for
+#     copilot+claude) on PR open; skipped for --review none and, by default,
+#     on machines with ~/.config/local-review-only (review bots run there).
 
 PROVIDER_TRIGGER_MODE="manual"
 
@@ -44,7 +45,9 @@ provider::pr_body_footer() {  # <issue> → "Closes #NNN", appended to a drafted
   printf 'Closes #%s\n' "$1"
 }
 
-provider::trigger_reviews() {  # <pr_number> <level>
-  # Say so rather than silently dropping a requested review.
-  echo "open-pr: github provider has no review triggers; --review $2 ignored" >&2
+provider::trigger_reviews() {  # <pr_number> <level> → 0 if requested
+  # open-pr.sh only calls this when review != none, which already covers the
+  # work-machine marker (~/.config/local-review-only → default --review none).
+  "${OPEN_PR_REQUEST_REVIEW:-$SCRIPT_DIR/request-review.sh}" --pr "$1" --level "$2" >/dev/null \
+    || { echo "open-pr: review request failed for #$1 (--review $2); request it manually" >&2; return 1; }
 }
