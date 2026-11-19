@@ -199,6 +199,19 @@ run --title "Add foo" --review none >/dev/null
 check "no --draft by default" "no" "$([ -e "$GH_LOG.draft" ] && echo yes || echo no)"
 
 # ---- provider resolution ----------------------------------------------------
+# kardashev ships from the Kardashev repo's .project-overlays; stub it here via the override dir.
+mkdir -p "$ROOT/providers"
+cat > "$ROOT/providers/kardashev.sh" <<'PROV'
+PROVIDER_TRIGGER_MODE="manual"
+provider::available() { return 0; }
+provider::validate_issue() { [[ "$1" =~ ^[1-9][0-9]*$ ]]; }
+provider::issue_from_branch() { [[ "$1" =~ ^([1-9][0-9]*)-.+$ ]] && printf '%s\n' "${BASH_REMATCH[1]}"; return 0; }
+provider::pr_title() { printf 'Is%s: %s\n' "$1" "$2"; }
+provider::pr_body() { printf 'Closes #%s\n' "$1"; }
+provider::pr_body_footer() { printf 'Closes #%s\n' "$1"; }
+provider::trigger_reviews() { :; }
+PROV
+export OPEN_PR_PROVIDER_DIR="$ROOT/providers"
 resolved() {  # <branch> <conf> [args…] → provider= line
   local b="$1" c="$2"; shift 2
   new_repo "$b" "$c"
