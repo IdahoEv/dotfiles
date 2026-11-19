@@ -6,7 +6,7 @@ Inputs for the periodic, whole-project review (`/project-review`). Not for PR or
 
 Roles, not names. A role absent here falls back to `governor.md` § Key documents.
 
-- roadmap: `<path>`
+- roadmap: `docs/workstream-roadmap.md`
 - capacity-targets: `<path>`
 - current-focus: `<path>`
 
@@ -16,7 +16,7 @@ Paths the apply step may edit. Omit a line to make that item report-only.
 
 - backlog: `<path>`
 - archive: `<path>`
-- pending-actions: `<path>`
+- pending-actions: `docs/local/pending-actions.md`
 
 ## Cadence
 
@@ -27,17 +27,21 @@ Paths the apply step may edit. Omit a line to make that item report-only.
 
 Subsystem → paths, for the architecture lens.
 
-- <subsystem>: `<path>`, `<path>`
+- claude config (commands, agents, skills): `dot_claude/`
+- tools: `tools/`
+- cloud and host adapters: `workflow/`
+- docs: `docs/`
 
 ## Invariants
 
 Each probe is a deterministic command with its expected result.
 
-- <invariant>: `<command>` → <expected result>
+- workflow manifest is current: `bash tools/workflow-manifest.test.sh` → exit 0
+- FAST suite passes: `for t in tools/workflow-manifest.test.sh tools/cloud-workflow-adapter.test.sh tools/project-test-commands.test.sh; do bash "$t" || exit 1; done` → exit 0
 
 Conventions docs:
 
-- `<path>` — <what it governs>
+- `CLAUDE.md` — layout, tests, the two-checkout rule
 
 ## Lenses
 
@@ -47,7 +51,7 @@ Skip: <lens-name>, <lens-name>
 
 What `/project-review-apply` does with the report. Omit this section for report-only.
 
-- file-tickets: P1 NEW
+- file-tickets: off
 <!-- off | <severity> <status>: file tickets for findings at that severity or higher (P0-P3); status NEW or ANY. e.g. `P1 NEW` -->
 - ticket-labels: `review`
 - queue-ticket-closures: on

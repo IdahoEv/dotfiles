@@ -366,6 +366,11 @@ open_bg() {  # <worktree> <kickoff> [<label>]
   local perm; perm="$(setting bg_permission_mode START_TICKET_BG_PERMISSION_MODE plan)"
   local args=(--bg --name "$label")
   [ "$perm" = "default" ] || args+=(--permission-mode "$perm")
+  # remoteControlAtStartup alone leaves --bg sessions stuck at "/rc connecting";
+  # the explicit flag is what registers them. Honor the user's setting only.
+  if python3 -c 'import json,os,sys; sys.exit(0 if json.load(open(os.path.expanduser("~/.claude/settings.json"))).get("remoteControlAtStartup") is True else 1)' 2>/dev/null; then
+    args+=(--remote-control "$label")
+  fi
 
   printf 'start-ticket: dispatching background session "%s" (permission mode: %s)\n' "$label" "$perm" >&2
   if ! ( cd "$wt" && claude "${args[@]}" "$(cat "$kf")" ) >&2; then

@@ -110,6 +110,11 @@ class PendingActionsTest(unittest.TestCase):
         self.upsert("new-0a1b2c3d4e5f", "file-ticket", "b")
         self.assertEqual(run("list", self.path).stdout, "new-0a1b2c3d4e5f\tfile-ticket\tb\t\n")
 
+    def test_creates_missing_parent_directory(self):
+        self.path = os.path.join(self.dir.name, "sub", "dir", "pending.md")
+        self.assertEqual(self.upsert(1, "comment", "x").returncode, 0)
+        self.assertIn("| 1 | comment | x |", self.read())
+
     def test_rejects_malformed_unfiled_key(self):
         self.assertNotEqual(self.upsert("new-xyz", "file-ticket").returncode, 0)
 

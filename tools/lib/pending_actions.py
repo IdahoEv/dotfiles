@@ -79,6 +79,7 @@ def table_span(lines):
 def upsert(path, issue, action, detail, command):
     path = os.path.realpath(path)
     directory = os.path.dirname(path)
+    os.makedirs(directory, exist_ok=True)
     # Lock the directory: the file itself is replaced, so a lock on it would not survive the swap.
     lock = os.open(directory, os.O_RDONLY)
     try:
