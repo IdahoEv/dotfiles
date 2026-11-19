@@ -43,7 +43,7 @@ case "$method $path" in
   "GET repos/acme/widgets/issues/9/sub_issues?per_page=100") echo '[]' ;;
   "GET repos/acme/widgets/issues/10") echo '{"number":10,"title":"T","body":"","state":"open","html_url":"u10","assignees":[]}' ;;
   "GET repos/acme/widgets/issues/10/parent") echo "HTTP 502: Bad Gateway" >&2; exit 1 ;;
-  POST*|PATCH*) echo '{}' ;;
+  POST*|PATCH*|PUT*) echo '{}' ;;
   *) echo "unexpected: $method $path" >&2; exit 1 ;;
 esac
 FAKE
@@ -98,4 +98,8 @@ g auth status | grep -q 'Logged in as me' || fail "auth status"
 [[ "$(g workflow view x)" == "REAL-GH workflow view x" ]] || fail "unknown commands pass through"
 [[ "$(g api repos/acme/widgets)" == *'"widgets"'* ]] || fail "gh api passes through"
 if g issue view 7 --bogus 2>/dev/null; then fail "unsupported options must be refused, not guessed"; fi
+g pr merge 12 --merge --match-head-commit h1 >/dev/null
+grep -q 'api -X PUT repos/acme/widgets/pulls/12/merge -f merge_method=merge -f sha=h1' "$FAKE_LOG" || fail "pr merge should PUT a merge-commit merge pinned to the head sha"
+g pr merge 12 --squash >/dev/null; grep -q 'merge_method=squash' "$FAKE_LOG" || fail "pr merge --squash passes the method through"
+pass "pr merge merges over REST with the requested method and head pin"
 pass "auth status is REST-backed; everything else passes through; unsupported flags fail loudly"

@@ -4,8 +4,9 @@
 Those sessions block GitHub GraphQL, which `gh issue view`, `gh pr view`,
 `gh pr list`, `gh pr create` and `gh repo view` all use. The workflow scripts
 call exactly those, so this wrapper answers them over REST (`gh api`) and hands
-everything else to the real gh. Installed as `gh` in a directory that precedes
-the real one on PATH by cloud-workflow-bootstrap.sh (WORKFLOW_INSTALL=claude).
+everything else to the real gh. Installed as the system `gh` (real binary kept as `gh.real`) by
+cloud-workflow-bootstrap.sh (WORKFLOW_INSTALL=claude) when it can write there,
+else as `gh` in a directory it puts first on PATH.
 
 Covered, with the flags the workflow uses:
   auth status
@@ -18,6 +19,7 @@ Covered, with the flags the workflow uses:
   pr view [N] --json number,url,title,id,headRefName,headRefOid,baseRefName,commits
   pr create --title T --head B [--base B] [--body T|--body-file F] [--draft]
   pr comment [N] --body T|--body-file F
+  pr merge [N] [--merge|--squash|--rebase] [--match-head-commit SHA]
   pr edit N [--title T] [--body T|--body-file F]
 Anything else, including `gh api`, runs the real gh unchanged. Set GH_SHIM_REAL
 to the real binary; otherwise the first other `gh` on PATH is used.
@@ -36,12 +38,15 @@ def find_real():
     if real:
         return real
     me = os.path.realpath(__file__)
-    for d in os.environ.get("PATH", "").split(os.pathsep):
-        if not os.path.isabs(d):  # "" and "." would resolve against the cwd
-            continue
-        cand = os.path.join(d, "gh")
-        if os.path.isfile(cand) and os.access(cand, os.X_OK) and os.path.realpath(cand) != me:
-            return cand
+    # `gh.real` is where the bootstrap parks a real binary it displaced when it
+    # installed this shim as the system gh; prefer it, then any other gh.
+    for name in ("gh.real", "gh"):
+        for d in os.environ.get("PATH", "").split(os.pathsep):
+            if not os.path.isabs(d):  # "" and "." would resolve against the cwd
+                continue
+            cand = os.path.join(d, name)
+            if os.path.isfile(cand) and os.access(cand, os.X_OK) and os.path.realpath(cand) != me:
+                return cand
     sys.exit("gh shim: no real gh found on PATH")
 
 
@@ -328,6 +333,22 @@ def cmd_pr(args):
                 sys.exit("gh shim: no open PR for the current branch; pass a PR number")
             n = found[0]["number"]
         api(f"repos/{slug}/issues/{n}/comments", "POST", {"body": body or ""})
+    elif sub == ["merge"]:
+        pos, vals, flags = opts(rest, {"--match-head-commit"}, {"--merge", "-m", "--squash", "-s", "--rebase", "-r"})
+        if pos:
+            n = number(pos[0])
+        else:
+            branch = current_branch()
+            found = find_prs(slug, branch, "open") if branch else []
+            if not found:
+                sys.exit("gh shim: no open PR for the current branch; pass a PR number")
+            n = found[0]["number"]
+        method = "squash" if flags & {"--squash", "-s"} else "rebase" if flags & {"--rebase", "-r"} else "merge"
+        fields = {"merge_method": method}
+        if vals.get("--match-head-commit"):
+            fields["sha"] = vals["--match-head-commit"]
+        api(f"repos/{slug}/pulls/{n}/merge", "PUT", fields)
+        print(f"Merged pull request #{n}")
     else:
         passthrough(["pr"] + args)
 

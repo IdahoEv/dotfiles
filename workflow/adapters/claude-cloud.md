@@ -2,7 +2,7 @@
 
 Translation layer only. The workflow itself is the dotfiles command files, installed into `~/.claude` by `tools/cloud-workflow-bootstrap.sh` with `WORKFLOW_INSTALL=claude`; this file says what differs in a Claude Code cloud session (one fixed checkout, GitHub GraphQL blocked, no iTerm or agent view). It restates no workflow steps. Where a command step has no mapping, stop and report that step; do not improvise a substitute.
 
-Covered: `/start`, `/open-pr`, `/local-review-cycle`, `/github-review-comments`, `/finalize`.
+Covered: `/start`, `/open-pr`, `/local-review-cycle`, `/github-review-comments`, `/finalize`, `/merge`, `/land`, `/sync`, `/pick`.
 
 ## Run protocol
 
@@ -28,9 +28,9 @@ Maintained against the covered commands by `tools/cloud-workflow-adapter.test.sh
 | `/finalize` | Read and follow `finalize.md`, with protocol 9 for steps 3–5. |
 | `/local-review-cycle` | Read and follow `local-review-cycle.md`. |
 | `/github-review-comments` | Read and follow `github-review-comments.md`, with the review-state mappings below. |
-| `/merge`, `/sync`, `/land` | Not available. Skip any mention. |
+| `/merge`, `/land`, `/sync` | Read and follow `merge.md`, `land.md`, `sync.md`; `merge-run.sh` runs through the `gh` shim (`pr merge`, `repo view`). Keep a real merge commit (never squash), read the PR back as merged, and stop and ask before merging over a red check; reproduce a red check on the base branch before calling it pre-existing. `/land` ends where protocol 9 ends: no worktree to remove. If the shim cannot do a step, stop and report; do not improvise an MCP merge. |
 | `/discuss` | Not available. Skip any mention. |
-| `/pick` | Not available. Skip any mention. |
+| `/pick` | Read and follow `pick.md` (read-only). In-flight work is open PRs and remote branches, not `git worktree list` or `ListAgents`. The session may start outside a repo: use the attached repo whose `.claude/governor.md` applies. Offer a ticket needing a build or test run only if the project's toolchain is present; otherwise mark it "unverifiable here". |
 | `/board` | Not available. Skip any mention. |
 | `--tab-only` | Skip the step that opens a session. |
 | `--launcher` | Never pass it. No launcher exists here (equivalent to `none`). |

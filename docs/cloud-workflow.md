@@ -31,7 +31,9 @@ Use it either way:
 
 Differences from a local session, all in `claude-cloud.md`: `/start` uses `start-ticket.sh --in-place` (ticket branch cut from the default branch in the existing checkout, or continuing the remote one; refuses a dirty tree; no worktree); `/open-pr` runs `--review none` (Copilot's request is GraphQL; use `mcp__github__request_copilot_review`); `/github-review-comments` reads review state through the GitHub MCP tools instead of `github-review-poll.sh` / `-state.sh`; `/finalize` stops at verify, close, and sync (no worktree, no deploy clone). GitHub tickets only: Shortcut needs `mcp__shortcut__`.
 
-Unverified from this repo: whether the cloud git proxy accepts a push of the ticket branch when the environment names a different assigned branch. The adapter stops and reports if it does not.
+Push permission: a cloud session may push any branch it creates, named for its workstream (owner decision, #242). The cloud git proxy was observed to accept a push of a ticket branch when the environment named a different assigned branch (`docs/cloud-pilot-checklist.md`), so it does not enforce the restriction; the "assigned branch only" text comes from the session's own instructions, outside this repo, and the adapter records the standing permission. The adapter stops and reports if a push is refused.
+
+`gh` is installed as the system `gh` (the real binary kept as `gh.real`) when the setup script runs as root, so a plain Bash call finds the REST shim without any `PATH` setup. The bootstrap also installs a small `~/.claude/settings.json` with allow rules only (`git add`, `git commit`, `git push -u origin`, the Copilot review request) so multi-repo sessions can run the sequence unprompted; it merges into existing settings and adds no hooks.
 
 ## Trust and pinning
 
@@ -41,7 +43,7 @@ Unverified from this repo: whether the cloud git proxy accepts a push of the tic
 
 ## Coverage and limits
 
-- **Claude Code cloud (`workflow/adapters/claude-cloud.md`):** Covers `/start`, `/open-pr`, `/local-review-cycle`, `/github-review-comments`, and `/finalize`. Not covered: Shortcut tickets, Copilot review requests via `/open-pr`, `/discuss`, `/board`, sibling-repo fan-out.
+- **Claude Code cloud (`workflow/adapters/claude-cloud.md`):** Covers `/start`, `/open-pr`, `/local-review-cycle`, `/github-review-comments`, `/finalize`, `/merge`, `/land`, `/sync` and `/pick`. Not covered: Shortcut tickets, Copilot review requests via `/open-pr`, `/discuss`, `/board`, sibling-repo fan-out.
 - **Codex Cloud (`workflow/adapters/codex.md`):** Covers `/start` and `/open-pr`. Not covered: `/finalize`, review cycles (PRs from this path state `Independent review: not performed`), governor, discussion, planning. The Codex task is already an isolated checkout, so worktree and session-launch steps are skipped.
 - **Antigravity (`workflow/adapters/agy.md`):** Covers `/start`, `/local-review-cycle`, `/open-pr`, `/github-review-comments`, `/governor`, `/pick`, `/discuss`, and `/remind`. Maps `local-review-cycle-manager`, leaf reviewer specialists (`*-reviewer`), and `github-review-repair-agent` onto AGY's `define_subagent`/`invoke_subagent` tools, and deploys user rules and skill wrappers under `dot_gemini/config/` (`~/.gemini/config/`). Local AGY sessions create and switch into the ticket worktree; remote unreviewed runs skip the review cycle and state `Independent review: not performed`.
 

@@ -177,6 +177,34 @@ run valid WORKFLOW_INSTALL=claude HOME="$home" WORKFLOW_BIN_DIR="$tmp/installbin
 [[ "$(grep -c 'shim:' "$env_file")" == 1 ]] || fail "CLAUDE_ENV_FILE must not collect duplicate PATH lines"
 no_leftovers || fail "a claude install should clean up its temp dir"
 [[ "$(grep -c 'shim:' "$home/.bashrc")" == 1 ]] || fail "~/.bashrc must not collect duplicate PATH lines"
+# Settings: allow-only file, merged into existing settings, no hooks, idempotent.
+[[ -f "$home/.claude/settings.json" ]] || fail "cloud allow settings should be installed"
+python3 - "$home/.claude/settings.json" <<'PY' || fail "settings should hold the allow rules and no hooks"
+import json, sys
+c = json.load(open(sys.argv[1]))
+a = c["permissions"]["allow"]
+assert "Bash(git commit:*)" in a and "Bash(git push -u origin:*)" in a and len(a) == len(set(a))
+assert "hooks" not in c
+PY
+printf '{"model":"x","permissions":{"allow":["Bash(ls:*)"]}}\n' > "$home/.claude/settings.json"
+run valid WORKFLOW_INSTALL=claude HOME="$home" WORKFLOW_BIN_DIR="$tmp/installbin" || fail "install over existing settings should succeed"
+python3 - "$home/.claude/settings.json" <<'PY' || fail "existing settings must be kept and merged"
+import json, sys
+c = json.load(open(sys.argv[1]))
+assert c["model"] == "x" and "Bash(ls:*)" in c["permissions"]["allow"] and "Bash(git add:*)" in c["permissions"]["allow"]
+PY
+pass "claude install adds allow-only cloud settings without clobbering"
+
+# System gh: the shim replaces gh in the system bin dir; a real gh there is kept as gh.real.
+sysbin="$tmp/sysbin"; mkdir -p "$sysbin"; printf '#!/bin/sh\necho real\n' > "$sysbin/gh"; chmod +x "$sysbin/gh"
+run valid WORKFLOW_INSTALL=claude HOME="$home" WORKFLOW_BIN_DIR="$sysbin" WORKFLOW_SYSTEM_BIN="$sysbin" || fail "system gh install should succeed"
+[[ "$("$sysbin/gh.real")" == real ]] || fail "the displaced real gh should be kept as gh.real"
+[[ "$("$sysbin/gh")" == shim ]] || fail "the shim should be the system gh"
+grep -q "workflow_system_gh=$sysbin/gh" "$tmp/run.out" || fail "the system gh should be reported"
+run valid WORKFLOW_INSTALL=claude HOME="$home" WORKFLOW_BIN_DIR="$sysbin" WORKFLOW_SYSTEM_BIN="$sysbin" || fail "re-running system gh install should succeed"
+[[ "$("$sysbin/gh.real")" == real ]] || fail "re-install must not overwrite gh.real with the shim"
+pass "shim installs as the system gh with the real binary kept"
+
 expect_failure "unknown install mode" 'Invalid WORKFLOW_INSTALL' valid WORKFLOW_INSTALL=bogus
 pass "WORKFLOW_INSTALL=claude installs commands, agents, skills and tool links, idempotently"
 

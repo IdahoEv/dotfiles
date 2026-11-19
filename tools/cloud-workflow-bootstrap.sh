@@ -220,8 +220,8 @@ if [[ "$install_mode" == claude ]]; then
 
   claude_dir="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
   # Source names carry chezmoi prefixes (executable_); strip them the way chezmoi would.
-  # Only commands, agents and skills move: the global CLAUDE.md and settings are chezmoi
-  # templates for the user's own machines. Existing files with the same name are replaced.
+  # Only commands, agents and skills move: the global CLAUDE.md and settings templates are chezmoi
+  # templates for the user's own machines (a small allow-only settings file is added below). Existing files with the same name are replaced.
   for sub in commands agents skills; do
     [[ -d "$root/dot_claude/$sub" ]] || continue
     while IFS= read -r -d '' src; do
@@ -233,6 +233,34 @@ if [[ "$install_mode" == claude ]]; then
     done < <(find "$root/dot_claude/$sub" -type f -print0)
   done
 
+  # Cloud user settings: allow rules only, no hooks, so multi-repo sessions (which skip a
+  # repo's own .claude/settings.json) can run the unattended sequence. Existing settings
+  # are kept; only missing allow entries are added.
+  python3 - "$claude_dir/settings.json" <<'PY'
+import json, os, sys
+path = sys.argv[1]
+want = ["Bash(git add:*)", "Bash(git commit:*)", "Bash(git push -u origin:*)",
+        "mcp__github__request_copilot_review"]
+try:
+    with open(path) as f:
+        cfg = json.load(f)
+except FileNotFoundError:
+    cfg = {}
+except ValueError:
+    sys.exit(0)  # unreadable settings: leave them alone
+if not isinstance(cfg, dict):
+    sys.exit(0)
+perms = cfg.setdefault("permissions", {})
+allow = perms.setdefault("allow", [])
+added = [r for r in want if r not in allow]
+if added:
+    allow.extend(added)
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w") as f:
+        json.dump(cfg, f, indent=2)
+        f.write("\n")
+PY
+
   bin_dir="${WORKFLOW_BIN_DIR:-}"
   if [[ -z "$bin_dir" ]]; then
     if [[ -w /usr/local/bin ]]; then bin_dir=/usr/local/bin; else bin_dir="$HOME/.local/bin"; fi
@@ -241,6 +269,15 @@ if [[ "$install_mode" == claude ]]; then
   shim_dir="${WORKFLOW_HOME:-$HOME/.cache/dotfiles-workflow}/shim"
   mkdir -p "$shim_dir"
   install -m 0755 "$root/tools/cloud-gh-shim.py" "$shim_dir/gh"
+  # Make the shim the system gh so every shell finds it, including the agent's Bash
+  # tool, which never reads ~/.bashrc. A real gh in the same directory is kept as gh.real.
+  if [[ "$bin_dir" == "${WORKFLOW_SYSTEM_BIN:-/usr/local/bin}" && -w "$bin_dir" ]]; then
+    if [[ -e "$bin_dir/gh" && ! -e "$bin_dir/gh.real" ]] && ! grep -q 'gh shim for Claude Code cloud' "$bin_dir/gh" 2>/dev/null; then
+      mv "$bin_dir/gh" "$bin_dir/gh.real"
+    fi
+    install -m 0755 "$root/tools/cloud-gh-shim.py" "$bin_dir/gh"
+    printf 'workflow_system_gh=%s\n' "$bin_dir/gh"
+  fi
   path_line="export PATH=\"$shim_dir:$bin_dir:\$PATH\""
   if [[ -n "${CLAUDE_ENV_FILE:-}" ]]; then
     # A SessionStart hook can export PATH for the whole session through this file.
