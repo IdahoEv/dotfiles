@@ -41,11 +41,13 @@ flowchart TD
 | `skills/reviewer-contract/SKILL.md` | Skill | Shared contract loaded into every `pr-reviewer-*` agent; avoids per-agent duplication. |
 | `skills/review-lens-contract/SKILL.md` | Skill | Contract for periodic project-review lenses (`project-lens-*`, snapshot-scoped, not diff-scoped) and their discovery rules; mirrors `/local-review-cycle` tiers. |
 | `commands/project-review.md` | Command | Thin launcher for periodic project review: resolves repo, default branch, and cwd, then launches `project-review-manager` and prints its report unaltered. |
+| `commands/project-review-apply.md`, `skills/project-review-apply-procedure/SKILL.md` | Command, Skill | Scheduler entry point: runs the manager with `Findings block: yes`, acts on the report per `project-review.md` § Actions (`project-review-apply.sh`, doc PR), delivers per § Delivery. Report-only when § Actions is absent. Scheduling and per-provider auth: `docs/project-review-scheduling.md`. |
+| `tools/project-review-config.sh`, `tools/project-review-apply.sh` | Script | Config parser for § Actions/§ Delivery/§ Review state (JSON), and the deterministic act step: severity/status filter, stable finding key stamped in the ticket body, dedup against open and closed sets, filing through `tracker.sh create`, queueing through `pending-actions.sh` when the provider cannot create or list. Never closes or edits a ticket. |
 | `agents/project-review-manager.md` | Agent | Fresh read-only orchestrator for periodic project review: activity gate, shared snapshot, tracker pull with truncation abort, lens fan-out, central synthesis, inline report, and cleanup. |
 | `skills/project-review-procedure/SKILL.md` | Skill | Periodic project-review procedure loaded by `project-review-manager`; not user-invocable. |
 | `agents/project-lenses/project-lens-triage.md` | Agent | Periodic `Lens: triage` agent: duplicates, ticket-state consistency, tech-debt priority, work clusters. Reads tickets only through `tracker.sh list`; proposes actions as text and never edits a ticket. |
-| `tools/tracker.sh`, `tools/start-ticket-providers/*.sh` (`provider::list_issues`) | Script | Read-only tracker listing for lenses: JSON with a `truncated` flag; exit 2 when the provider cannot list (Shortcut is stubbed), so callers fall back to report-only. No write subcommands. |
-| `tools/pending-actions.sh`, `tools/lib/pending_actions.py` | Script | Pending-actions file protocol: markdown table keyed `(issue, action)`, upsert replaces in place so reruns never duplicate a queued action. Queues only; the apply step (#137) executes. |
+| `tools/tracker.sh`, `tools/start-ticket-providers/*.sh` (`provider::list_issues`) | Script | Tracker seam: `list` (JSON with a `truncated` flag) and `create` (`provider::create_issue`, GitHub only). Exit 2 when the provider cannot list or create (Shortcut is stubbed), so callers fall back to report-only or queueing. No close/edit verbs. |
+| `tools/pending-actions.sh`, `tools/lib/pending_actions.py` | Script | Pending-actions file protocol: markdown table keyed `(issue, action)`, upsert replaces in place so reruns never duplicate a queued action. Queues only, including `new-<key>` rows for findings that could not be filed; a human or governor executes them. |
 | `agents/project-lenses/project-lens-{architecture,quality,docs,plan}.md` | Agent | Global `Lens: collect` lenses for the periodic project review. Read-only; scope, probes and doc roles come from `project-review.md`, never from the agent. |
 | `.claude/agents/project-lenses/project-lens-{dotfiles-safety,prompts}.md` | Agent | Repo-local (tier 1, not deployed) `Lens: collect` lenses for this repo: public-repo safety (reuses `pr-reviewer-dotfiles-safety` criteria) and prompt-file staleness/bloat/duplication/scope leakage (`prompt-review` rubric). |
 | `skills/github-review-procedure/SKILL.md` | Skill | 3-mode procedure loaded by the command and repair agent; not user-invocable. |
@@ -93,6 +95,7 @@ flowchart TD
 | PR opened, bot comments arrived | `/github-review-comments` → Automatic (agent round), Quick (one agent turn), Slow (ask me per comment) |
 | Review of the prompt corpus itself | `/prompt-audit`, `/prompt-review` |
 | Periodic read-only review of the default branch | `/project-review` (`[--force] [--window N]`) |
+| Scheduled review that files tickets / delivers the report | `/project-review-apply` (same flags) |
 | Several ready tickets to start | `/pick` (groups them into chains), then paste its `/start` line |
 | Upcoming tickets lack ACs or decided design | `/groom` |
 | Topic to discuss with no ticket | `/discuss` (opens a `[TALK]` session) |

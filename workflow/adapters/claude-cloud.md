@@ -2,7 +2,7 @@
 
 Translation layer only. The workflow itself is the dotfiles command files, installed into `~/.claude` by `tools/cloud-workflow-bootstrap.sh` with `WORKFLOW_INSTALL=claude`; this file says what differs in a Claude Code cloud session (one fixed checkout, GitHub GraphQL blocked, no iTerm or agent view). It restates no workflow steps. Where a command step has no mapping, stop and report that step; do not improvise a substitute.
 
-Covered: `/start`, `/open-pr`, `/local-review-cycle`, `/github-review-comments`, `/finalize`, `/merge`, `/land`, `/sync`, `/pick`.
+Covered: `/start`, `/open-pr`, `/local-review-cycle`, `/github-review-comments`, `/finalize`, `/merge`, `/land`, `/sync`, `/pick`, `/project-review-apply` (scheduled runs: see `docs/project-review-scheduling.md`).
 
 ## Run protocol
 

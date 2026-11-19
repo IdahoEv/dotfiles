@@ -13,7 +13,7 @@ import tempfile
 
 HEADER = "| issue | action | detail | command |"
 RULE = "| --- | --- | --- | --- |"
-ROW = re.compile(r"^\|\s*([0-9]+)\s*\|")
+ROW = re.compile(r"^\|\s*([0-9]+|new-[0-9a-f]{6,40})\s*\|")
 
 
 def escape(s):
@@ -142,9 +142,12 @@ def main(argv):
             print("\t".join(r))
         return 0
 
-    if not re.fullmatch(r"[0-9]+", a.issue):
-        p.error(f"--issue must be a number, got {a.issue!r}")
-    a.issue = str(int(a.issue))
+    if re.fullmatch(r"new-[0-9a-f]{6,40}", a.issue):
+        pass  # unfiled finding, keyed by its stable finding key
+    elif re.fullmatch(r"[0-9]+", a.issue):
+        a.issue = str(int(a.issue))
+    else:
+        p.error(f"--issue must be a number or new-<key>, got {a.issue!r}")
     if a.cmd == "has":
         return 0 if any(r[0] == a.issue and r[1] == a.action for r in rows(a.file)) else 1
 

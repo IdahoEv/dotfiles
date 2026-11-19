@@ -95,6 +95,8 @@ claude_commands=(
   "$repo/dot_claude/commands/github-review-comments.md"
   "$repo/dot_claude/agents/github-review-repair-agent.md"
   "$repo/dot_claude/skills/github-review-procedure/SKILL.md"
+  "$repo/dot_claude/commands/project-review-apply.md"
+  "$repo/dot_claude/skills/project-review-apply-procedure/SKILL.md"
 )
 check "$repo/workflow/adapters/claude-cloud.md" "${claude_commands[@]}" || fail "claude-cloud adapter has drifted from the commands it covers"
 printf 'PASS claude-cloud adapter maps every Claude-only construct in its covered commands\n'

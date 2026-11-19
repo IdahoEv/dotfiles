@@ -48,7 +48,7 @@ $PROJECT_OVERLAYS_DIR (default ~/.config/project-overlays)/<owner>/<repo>/
 | `start-ticket.conf` keys (`provider`, `label_noise`, `launcher`, `openpr_provider`, `color`, `prune_force_delete`, …) | per key: `<worktree>/.start-ticket.conf` → `<main repo>/.start-ticket.conf` → overlay `start-ticket.conf` → `~/.config/start-ticket/config` |
 | `claude/` agents, commands, skills | Claude Code registers these only from the repo's `.claude/` and `~/.claude`, so overlay assets are injected by instruction instead: `start-ticket.sh` appends a "Personal project Claude assets" section to every kickoff listing them, and `/governor` announces them at startup. Agents are launched as `general-purpose` with the file body as brief (same pattern as `docs/local/reviewers/`); commands and skills are read and followed inline. A repo-defined same-named asset wins. |
 
-`project-review.md` holds the inputs to the periodic whole-project review (planning docs, review state, cadence, scope, invariants, lenses, delivery); it is unrelated to PR or diff review. Placeholders only in the template; real values stay in the overlay.
+`project-review.md` holds the inputs to the periodic whole-project review (planning docs, review state, cadence, scope, invariants, lenses, actions, delivery); `## Actions` and `## Delivery` drive `/project-review-apply`, and a missing `## Actions` means report-only; it is unrelated to PR or diff review. Placeholders only in the template; real values stay in the overlay.
 
 Used by `/governor` (says which file it loaded), `start-ticket.sh`, `open-pr.sh`, `worktree-manager.sh`.
 

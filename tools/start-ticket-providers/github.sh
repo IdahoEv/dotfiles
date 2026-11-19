@@ -69,3 +69,10 @@ provider::list_issues() {  # <state> <limit>
   gh issue list --state "$1" --limit "$2" --json number,title,state,labels,url,updatedAt,body \
     --jq '[.[] | {id: .number, title, state, labels: [.labels[].name], url, updated: .updatedAt, body}]'
 }
+
+# Write verb for tracker.sh create: prints {id,url}. Labels are comma-separated.
+provider::create_issue() {  # <title> <body-file> <labels-csv>
+  local url
+  url="$(gh issue create --title "$1" --body-file "$2" ${3:+--label "$3"})" || return 1
+  jq -nc --arg url "$url" '{id: ($url | capture("/(?<n>[0-9]+)$").n | tonumber), url: $url}'
+}

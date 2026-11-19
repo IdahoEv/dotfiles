@@ -105,6 +105,14 @@ class PendingActionsTest(unittest.TestCase):
         self.assertEqual(run("list", self.path).stdout, "1\tcomment\tb\t\n")
         self.assertEqual(run("has", self.path, "--issue", "001", "--action", "comment").returncode, 0)
 
+    def test_unfiled_finding_key_is_accepted_and_idempotent(self):
+        self.assertEqual(self.upsert("new-0a1b2c3d4e5f", "file-ticket", "a").returncode, 0)
+        self.upsert("new-0a1b2c3d4e5f", "file-ticket", "b")
+        self.assertEqual(run("list", self.path).stdout, "new-0a1b2c3d4e5f\tfile-ticket\tb\t\n")
+
+    def test_rejects_malformed_unfiled_key(self):
+        self.assertNotEqual(self.upsert("new-xyz", "file-ticket").returncode, 0)
+
     def test_rejects_unicode_digit_issue(self):
         self.assertNotEqual(self.upsert("\u00b2", "comment").returncode, 0)
 
