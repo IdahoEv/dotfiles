@@ -32,6 +32,8 @@ done
 SCRIPT_DIR="$(cd -P "$(dirname "$_src")" && pwd)"
 TRACKER="${PR_TRACKER:-$SCRIPT_DIR/tracker.sh}"
 PENDING="${PR_PENDING:-$SCRIPT_DIR/pending-actions.sh}"
+# PR_PROVIDER forces the tracker provider (e.g. github-mcp where gh cannot authenticate).
+prov=(); [ -z "${PR_PROVIDER:-}" ] || prov=(--provider "$PR_PROVIDER")
 
 [ $# -eq 2 ] && [ -f "$1" ] && [ -f "$2" ] || die "usage: project-review-apply.sh <findings.json> <config.json>"
 command -v jq >/dev/null || die "jq is required"
@@ -76,7 +78,7 @@ if [ -n "$file_tickets" ]; then
   if [ -n "$candidates" ]; then
     known="" can_file=1
     for state in open closed; do
-      rc=0; page="$("$TRACKER" list --state "$state")" || rc=$?
+      rc=0; page="$("$TRACKER" list --state "$state" ${prov[@]+"${prov[@]}"})" || rc=$?
       if [ "$rc" -eq 2 ]; then can_file=0; break; fi
       [ "$rc" -eq 0 ] || die "tracker list --state $state failed"
       if [ "$(jq -r .truncated <<<"$page")" != false ]; then can_file=0; break; fi
@@ -93,9 +95,9 @@ $(jq -r '.issues[] | "\(.id)\t\(.body // "" | [scan("project-review-key: ([0-9a-
         if [ -n "$hit" ]; then printf 'duplicate\t%s\t#%s\n' "$key" "$hit"; continue; fi
         bodyf="$(mktemp "${TMPDIR:-/tmp}/pra-body.XXXXXX")"
         { jq -r .body <<<"$f"; printf '\n\n<!-- project-review-key: %s -->\n' "$key"; } > "$bodyf"
-        rc=0; res="$("$TRACKER" create --title "$title" --body-file "$bodyf" ${labels[@]+"${labels[@]}"})" || rc=$?
+        rc=0; res="$("$TRACKER" create --title "$title" --body-file "$bodyf" ${prov[@]+"${prov[@]}"} ${labels[@]+"${labels[@]}"})" || rc=$?
         if [ "$rc" -eq 1 ] && [ "${#labels[@]}" -gt 0 ]; then
-          rc=0; res="$("$TRACKER" create --title "$title" --body-file "$bodyf")" || rc=$?
+          rc=0; res="$("$TRACKER" create --title "$title" --body-file "$bodyf" ${prov[@]+"${prov[@]}"})" || rc=$?
         fi
         rm -f "$bodyf"
         case "$rc" in

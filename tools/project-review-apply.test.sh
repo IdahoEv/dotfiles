@@ -25,9 +25,10 @@ case "$1" in
   list)
     [ "${FAKE_LIST_RC:-0}" -eq 0 ] || exit "$FAKE_LIST_RC"
     state=open; [ "$2" = --state ] && state="$3"
-    echo "list $state" >> "$FAKE_LOG"
+    echo "list $state" >> "$FAKE_LOG"; echo "args $*" >> "$FAKE_LOG"
     jq -c --arg s "$state" '{truncated: (env.FAKE_TRUNC == "1"), issues: .[$s]}' "$FAKE_STORE" ;;
   create)
+    echo "args $*" >> "$FAKE_LOG"
     [ "${FAKE_CREATE_RC:-0}" -eq 0 ] || exit "$FAKE_CREATE_RC"
     case " $* " in *" --label "*) [ -z "${FAKE_NO_LABELS:-}" ] || exit 1 ;; esac
     shift; title="" body="" labels=""
@@ -107,6 +108,10 @@ reset; FAKE_TRUNC=1 run "$F" "$A"
 check "truncated list queues, exit 0" 0 "$RC"
 check "truncated list files nothing" 0 "$(grep -c '^create' "$LOG")"
 check "truncated list still queues the finding and closures" 3 "$("$TOOLS/pending-actions.sh" list "$PEND" | grep -c .)"
+
+reset; PR_PROVIDER=github-mcp run "$F" "$A"
+check "PR_PROVIDER is passed to list and create" 3 "$(grep -c -e '--provider github-mcp' "$LOG")"
+unset PR_PROVIDER
 
 reset; FAKE_CREATE_RC=1 run "$F" "$A"
 check "create failure exits 1" 1 "$RC"

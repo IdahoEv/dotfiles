@@ -50,7 +50,7 @@ Create one detached checkout of `origin/<default_branch>` shared by all lenses:
 
 ## 4. Tracker pull (truncation abort)
 
-Pull open and closed issues through the provider seam:
+Pull open and closed issues through the provider seam. When the kickoff has `Tracker provider: <name>` and `Tracker data dir: <path>`, add `--provider <name>` and prefix each call with `TRACKER_MCP_DIR=<path>` (the launcher staged the issues there because `gh` cannot authenticate):
 
 ```bash
 tracker.sh list --state open
