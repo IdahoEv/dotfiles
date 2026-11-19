@@ -59,7 +59,7 @@ finding_key() {  # <title>; lens is excluded: the "first contributing lens" can 
   local lower norm
   lower="$(tr '[:upper:]' '[:lower:]' <<<"$1")"
   norm="$(tr -c 'a-z0-9\n' ' ' <<<"$lower" | tr -s ' ' | sed 's/^ //; s/ $//')"
-  printf '%s' "${norm:-$lower}" | shasum | cut -c1-12
+  printf '%s' "${norm:-$lower}" | python3 -c 'import hashlib,sys; print(hashlib.sha1(sys.stdin.buffer.read()).hexdigest()[:12])'
 }
 
 if [ -n "$file_tickets" ]; then

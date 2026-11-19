@@ -10,7 +10,7 @@ Review, then act. Filing and queueing are done by scripts; this procedure only w
 
 ## 1. Resolve context and tools
 
-- Repo (`gh repo view --json nameWithOwner -q .nameWithOwner`), default branch (`repo-facts.sh default-branch`), working directory (`git rev-parse --show-toplevel`). Stop if any fails.
+- Repo (`gh repo view --json owner,name --jq '"\(.owner.login)/\(.name)"'`), default branch (`repo-facts.sh default-branch`), working directory (`git rev-parse --show-toplevel`). Stop if any fails.
 - Tools: `project-review-config.sh`, `project-review-apply.sh`, `tracker.sh`, `pending-actions.sh` must be on `PATH`. Do not look in `~/.local/bin` specifically; if `command -v project-review-apply.sh` is empty, stop and report that the workflow install (cloud adapter run protocol) did not run.
 - Config file: `<working directory>/.claude/project-review.md` if present, else the overlay via `project-config.sh find project-review.md` (optional; skip silently when the tool or overlay is absent). None found: report-only.
 - Parse it: `project-review-config.sh <file> > "${TMPDIR:-/tmp}/pr-config.json"`. A non-zero exit is a config error: stop and report its message, run nothing else.

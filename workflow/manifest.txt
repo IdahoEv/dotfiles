@@ -44,7 +44,7 @@ aba793872a6ce83be45735cf898183d8d2b290c72f5e62312e161883462615af  644  dot_claud
 ee70fb1a401ed104231eb6f9ea72334263ca35b579f030d27946692cc57776be  644  dot_claude/skills/github-review-procedure/executable_github-review-poll.sh
 67802bf1ef342b36149f1c0a20f7f5ea00024b8b100b4793220a6b446c6f0105  644  dot_claude/skills/github-review-procedure/executable_github-review-state.sh
 02ebae36dc7a74a3c7105439bdc42f983b64982e26b6bf043af52c6ecd0885da  644  dot_claude/skills/local-review-cycle-procedure/SKILL.md
-4a97495a6e876e2538e977157bea73b8eb8443dec7bcd606b4197d2de74e5119  644  dot_claude/skills/project-review-apply-procedure/SKILL.md
+380d90694ddb258b724bd1535e31486767a24f4a7a747bd792868d53029ccbd7  644  dot_claude/skills/project-review-apply-procedure/SKILL.md
 3a7b7df930f2c43f9cdcd81ef68103568c0b89b262bb5f63bd41d24035aaff45  644  dot_claude/skills/project-review-procedure/SKILL.md
 6df3c5e8b019a3ecb46bbd3f37c8d3866b39dd5596baea39734d710ab6cae649  644  dot_claude/skills/prompt-review/SKILL.md
 91f66b2780160f52a8cc5619c0659375c125a0070fbe7a8ec454a94190d8c413  644  dot_claude/skills/prompt-review/executable_prompt-metrics.sh
@@ -109,8 +109,8 @@ b127c521bc0b7fd59034739990ec1010f5e929f1584a5fe5ff39746ccb390361  644  tools/pro
 58fa296192189b0af137d7c969a66efe560af9f5459e9a6efe2a8b68fd7154ee  644  tools/project-config-templates/project-review.md
 95fb55e2f13aca1099ec5d010aa480bb23a338b25e1cf14cee00063d02d15e76  644  tools/project-config-templates/start-ticket.conf
 9a5f4342274b648ff05f5f4c4505a62e8118968ab4f9890dfed2701d3c2f86b0  755  tools/project-config.sh
-583709d3d5566a6244769afe0b7f3dc4333366a694d63240e59d5683568d4557  755  tools/project-review-apply.sh
-6961d365f0d434673068beb8c87cdc77eaeb458d1651cc84c86668b0aacc9937  755  tools/project-review-config.sh
+c7dd7c881271a8ccfdd4c26ecf112dcfe2cc74eba4f863716203b471b6aea2f5  755  tools/project-review-apply.sh
+145dee9f2040976204280f67d6afbee07dbbc9c808d89e2e3e8902cc6edb58f4  755  tools/project-review-config.sh
 897f3d03a1e760f56fdab55a0d787184e25e1bb265e71cf413c7e1259d747c13  755  tools/prune-worktrees.sh
 d6710ea71d1b71cab9ba9a94dc6ccfd6c1bafbe876d7b186f75633212b0a1652  755  tools/repo-facts.sh
 99f46aff424a3272685909ffe90412157e6516701adee19707ab7f2148a716da  755  tools/request-review.sh

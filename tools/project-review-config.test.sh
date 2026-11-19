@@ -58,6 +58,9 @@ cfg '## Actions
 - doc-pr: maybe' >/dev/null; check "bad on/off rejected" 1 "$?"
 cfg '## Delivery
 carrier-pigeon' >/dev/null; check "bad delivery rejected" 1 "$?"
+cfg '## Delivery
+email:a@b.co
+- fallback: email:c@d.co' >/dev/null; check "email fallback rejected" 1 "$?"
 "$CFG" "$ROOT/missing.md" >/dev/null 2>&1; check "missing file fails" 1 "$?"
 
 "$CFG" "$TEMPLATE" >/dev/null 2>&1; check "shipped template parses" 0 "$?"

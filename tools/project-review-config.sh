@@ -68,7 +68,10 @@ if [ -n "$dv" ] && ! is_placeholder "$dv"; then delivery="$(parse_channel "$dv")
 # Used when the primary channel (email) has no connector; defaults to inline.
 fb="$(field Delivery fallback)"
 fallback='{"kind":"inline","target":""}'
-if [ -n "$fb" ] && ! is_placeholder "$fb"; then fallback="$(parse_channel "$fb")" || exit 1; fi
+if [ -n "$fb" ] && ! is_placeholder "$fb"; then
+  case "$fb" in email:*) die "Delivery fallback must be inline or file:<path>, got '$fb'" ;; esac
+  fallback="$(parse_channel "$fb")" || exit 1
+fi
 delivery="$(jq -c --argjson f "$fallback" '. + {fallback:$f}' <<<"$delivery")"
 
 # Review-state paths the apply step may touch; a placeholder or absent line is null.
