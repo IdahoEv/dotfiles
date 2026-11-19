@@ -119,6 +119,11 @@ check "malformed severity exits 0" 0 "$RC"
 reset; run '{"findings":[{"lens":"q","severity":"P1","status":"NEW","title":"Unquoted var","body":"x"},
  {"lens":"r","severity":"P1","status":"NEW","title":"unquoted VAR!","body":"y"}],"closures":[]}' "$A"
 check "same title in one run is filed once, regardless of lens" 1 "$(grep -c '^create' "$LOG")"
+check "same-run duplicate cites the filed ticket id" 1 "$(grep -cE '^duplicate	[0-9a-f]{12}	#[0-9]+$' <<<"$out")"
+
+reset; run '{"findings":[{"lens":"q","severity":"P1","status":"NEW","title":"日本語","body":"x"},
+ {"lens":"q","severity":"P1","status":"NEW","title":"ログ","body":"y"}],"closures":[]}' "$A"
+check "distinct non-ASCII titles are both filed" 2 "$(grep -c '^create' "$LOG")"
 
 reset; FAKE_NO_LABELS=1 run "$F" "$A"
 check "missing label: retried without labels and filed" "create|Unquoted var in x.sh|" "$(grep '^create' "$LOG")"

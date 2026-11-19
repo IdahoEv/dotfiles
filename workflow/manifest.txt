@@ -109,7 +109,7 @@ b127c521bc0b7fd59034739990ec1010f5e929f1584a5fe5ff39746ccb390361  644  tools/pro
 58fa296192189b0af137d7c969a66efe560af9f5459e9a6efe2a8b68fd7154ee  644  tools/project-config-templates/project-review.md
 95fb55e2f13aca1099ec5d010aa480bb23a338b25e1cf14cee00063d02d15e76  644  tools/project-config-templates/start-ticket.conf
 9a5f4342274b648ff05f5f4c4505a62e8118968ab4f9890dfed2701d3c2f86b0  755  tools/project-config.sh
-46daaaf1b0ce0d69296b43b5a5e0011f39a532b65b2aa193f8283d8c98b91730  755  tools/project-review-apply.sh
+583709d3d5566a6244769afe0b7f3dc4333366a694d63240e59d5683568d4557  755  tools/project-review-apply.sh
 6961d365f0d434673068beb8c87cdc77eaeb458d1651cc84c86668b0aacc9937  755  tools/project-review-config.sh
 897f3d03a1e760f56fdab55a0d787184e25e1bb265e71cf413c7e1259d747c13  755  tools/prune-worktrees.sh
 d6710ea71d1b71cab9ba9a94dc6ccfd6c1bafbe876d7b186f75633212b0a1652  755  tools/repo-facts.sh

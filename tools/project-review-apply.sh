@@ -56,7 +56,10 @@ queue() {  # <issue> <action> <detail> [command] — prints the outcome line
 oneline() { tr '\n\r\t' '   ' <<<"$1"; }
 
 finding_key() {  # <title>; lens is excluded: the "first contributing lens" can change between sweeps
-  tr '[:upper:]' '[:lower:]' <<<"$1" | tr -c 'a-z0-9\n' ' ' | tr -s ' ' | sed 's/^ //; s/ $//' | shasum | cut -c1-12
+  local lower norm
+  lower="$(tr '[:upper:]' '[:lower:]' <<<"$1")"
+  norm="$(tr -c 'a-z0-9\n' ' ' <<<"$lower" | tr -s ' ' | sed 's/^ //; s/ $//')"
+  printf '%s' "${norm:-$lower}" | shasum | cut -c1-12
 }
 
 if [ -n "$file_tickets" ]; then
@@ -98,7 +101,7 @@ $(jq -r '.issues[] | "\(.id)\t\(.body // "" | [scan("project-review-key: ([0-9a-
         case "$rc" in
           0) printf 'filed\t%s\t%s\n' "$key" "$(jq -r .url <<<"$res")"
              known="$known
-x	$key"; continue ;;
+$(jq -r .id <<<"$res")	$key"; continue ;;
           2) ;;
           *) printf 'failed\t%s\t%s\n' "$key" "$detail"; rc_total=1; continue ;;
         esac

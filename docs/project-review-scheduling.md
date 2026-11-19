@@ -24,7 +24,7 @@ A create that fails is retried once without labels (a label missing from the rep
 
 | Provider | Needs | Without it |
 | --- | --- | --- |
-| `github` | `GH_TOKEN` in the routine's environment with issues read+write (add contents/PR write for `doc-pr`). In a cloud session the `gh` shim answers `issue list`/`issue create` over REST | The review's ticket pull aborts and nothing is delivered. If only filing fails, the report is still delivered with the failure under `## Actions taken` |
+| `github` | `GH_TOKEN` in the routine's environment with issues read+write (add contents/PR write for `doc-pr`). In a cloud session the `gh` shim answers `issue list`/`issue create` over REST | The review's own ticket pull aborts and nothing is delivered. A failure inside the apply step (listing or filing) is reported under `## Actions taken` and the report is still delivered |
 | `github-mcp` | Not supported by `tracker.sh` (scripts cannot call MCP) | Same as above; use `github` |
 | `shortcut` | Not supported: `list`/`create` are stubs (exit 2) | Report-only; findings queued in `pending-actions` |
 | other | Define `provider::list_issues` and `provider::create_issue <title> <body-file> <labels-csv>` (print `{"id":N,"url":"..."}`), return 2 for "cannot" | Exit 2 as above |
