@@ -28,7 +28,7 @@ while (($#)); do
 done
 case "$method $path" in
   "GET user") echo '{"login":"me"}' ;;
-  "GET repos/acme/widgets") echo '{"name":"widgets","owner":{"login":"acme"},"default_branch":"trunk","html_url":"https://github.com/acme/widgets"}' ;;
+  "GET repos/acme/widgets") echo '{"name":"widgets","owner":{"login":"acme"},"default_branch":"trunk","html_url":"https://github.com/acme/widgets","allow_merge_commit":false,"allow_squash_merge":true,"allow_rebase_merge":false}' ;;
   "GET repos/acme/widgets/issues/7") echo '{"number":7,"title":"Fix it","body":"b","state":"open","html_url":"u7","assignees":[{"login":"me"}],"sub_issues_summary":{"total":2,"completed":1}}' ;;
   "GET repos/acme/widgets/issues/7/parent") echo '{"number":3,"title":"Epic"}' ;;
   "GET repos/acme/widgets/issues/7/sub_issues?per_page=100") echo '[{"number":8,"title":"S","state":"open"}]' ;;
@@ -57,6 +57,14 @@ g() { python3 -I "$shim" "$@"; }
 [[ "$(g repo view --json defaultBranchRef -q .defaultBranchRef.name)" == trunk ]] || fail "repo view default branch"
 [[ "$(g repo view --json name --jq .name)" == widgets ]] || fail "repo view name"
 pass "repo view answers owner, name and default branch over REST"
+[[ "$(g repo view --json mergeCommitAllowed,squashMergeAllowed,rebaseMergeAllowed)" == '{"mergeCommitAllowed": false, "squashMergeAllowed": true, "rebaseMergeAllowed": false}' ]] || fail "repo view merge-method fields (merge-run.sh)"
+[[ "$(g pr view 12 --json mergeable,isDraft,state)" == *'"mergeable": "UNKNOWN"'* ]] || fail "pr view mergeable is UNKNOWN when REST gives null (sync gate)"
+pass "repo view and pr view carry the merge-method and mergeable fields merge-run.sh and the sync gate read"
+# Two shim copies (shim dir and system bin) must not pick each other as the real gh.
+mkdir -p "$tmp/a" "$tmp/b" "$tmp/c"; cp "$shim" "$tmp/a/gh"; cp "$shim" "$tmp/b/gh"; cp "$tmp/gh" "$tmp/c/gh"
+chmod +x "$tmp/a/gh" "$tmp/b/gh"
+[[ "$(env -u GH_SHIM_REAL PATH="$tmp/a:$tmp/b:$tmp/c:/usr/bin:/bin" python3 -I "$tmp/a/gh" workflow view x)" == "REAL-GH workflow view x" ]] || fail "shim copies must skip each other and find the real gh"
+pass "a second shim copy on PATH is never taken for the real gh"
 
 [[ "$(g issue view 7 --json number,title,body,state,url | jq -r '"\(.number) \(.title) \(.state)"')" == "7 Fix it OPEN" ]] || fail "issue view fields"
 [[ "$(g issue view 7 --json parent --jq '.parent.number // empty')" == 3 ]] || fail "issue parent"

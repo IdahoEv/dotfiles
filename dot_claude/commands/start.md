@@ -52,7 +52,7 @@ An already-existing worktree still succeeds.
 
 **GitHub MCP path.** The script can't call MCP, so you hand it the tickets. For every id in
 the group (each id of a comma group), read the issue with `mcp__github__issue_read`
-(method `get`; sub-issue parent via `get_parent` if offered, else omit) and write
+(method `get`; omit the parent, see step 2) and write
 `$TMPDIR/start-ticket-mcp/<id>.json`:
 
 ```json

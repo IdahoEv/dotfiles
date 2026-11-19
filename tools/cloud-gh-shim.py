@@ -10,13 +10,15 @@ else as `gh` in a directory it puts first on PATH.
 
 Covered, with the flags the workflow uses:
   auth status
-  repo view [--json owner,name,defaultBranchRef] [-q|--jq EXPR]
+  repo view [--json owner,name,url,defaultBranchRef,mergeCommitAllowed,
+            squashMergeAllowed,rebaseMergeAllowed] [-q|--jq EXPR]
   issue view N [--json number,title,body,state,url,assignees,parent,
                 subIssuesSummary,subIssues]
   issue edit N --add-assignee @me|LOGIN     issue comment N --body|--body-file
   issue close N [--comment TEXT]
   pr list [--head B] [--state open|closed|merged|all] --json F
-  pr view [N] --json number,url,title,id,headRefName,headRefOid,baseRefName,commits
+  pr view [N] --json number,url,title,id,headRefName,headRefOid,baseRefName,
+            isDraft,mergeable,commits
   pr create --title T --head B [--base B] [--body T|--body-file F] [--draft]
   pr comment [N] --body T|--body-file F
   pr merge [N] [--merge|--squash|--rebase] [--match-head-commit SHA]
@@ -33,6 +35,15 @@ import urllib.parse
 import sys
 
 
+def is_shim(path):
+    """True for any copy of this shim (it is installed at two paths), so copies never pick each other."""
+    try:
+        with open(path, "rb") as f:
+            return b"gh shim for Claude Code cloud" in f.read(300)
+    except OSError:
+        return False
+
+
 def find_real():
     real = os.environ.get("GH_SHIM_REAL")
     if real:
@@ -45,7 +56,8 @@ def find_real():
             if not os.path.isabs(d):  # "" and "." would resolve against the cwd
                 continue
             cand = os.path.join(d, name)
-            if os.path.isfile(cand) and os.access(cand, os.X_OK) and os.path.realpath(cand) != me:
+            if (os.path.isfile(cand) and os.access(cand, os.X_OK) and os.path.realpath(cand) != me
+                    and not is_shim(cand)):
                 return cand
     sys.exit("gh shim: no real gh found on PATH")
 
@@ -215,6 +227,7 @@ def pr_json(slug, d, full=False):
         "mergeCommit": {"oid": d["merge_commit_sha"]} if merged and d.get("merge_commit_sha") else None,
         "headRefName": d["head"]["ref"], "headRefOid": d["head"]["sha"], "baseRefName": d["base"]["ref"],
         "isDraft": d.get("draft", False), "body": d.get("body") or "",
+        "mergeable": {True: "MERGEABLE", False: "CONFLICTING"}.get(d.get("mergeable"), "UNKNOWN"),
     }
     return out
 
@@ -227,7 +240,10 @@ def cmd_repo(args):
     slug = pos[0] if pos else slug
     d = api(f"repos/{slug}")
     emit({"owner": {"login": d["owner"]["login"]}, "name": d["name"], "url": d["html_url"],
-          "defaultBranchRef": {"name": d["default_branch"]}}, vals)
+          "defaultBranchRef": {"name": d["default_branch"]},
+          "mergeCommitAllowed": d.get("allow_merge_commit", True),
+          "squashMergeAllowed": d.get("allow_squash_merge", True),
+          "rebaseMergeAllowed": d.get("allow_rebase_merge", True)}, vals)
 
 
 def cmd_issue(args):
