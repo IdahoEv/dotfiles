@@ -23,8 +23,8 @@
 # Provider: --provider, else `openpr_provider=` in .start-ticket.conf, else the
 # start-ticket `provider=` if an open-pr provider of that name exists, else
 # github. github: `<NNN>-slug` branch → issue NNN, `Is<NNN>:` title, `Closes #NNN`
-# footer, no review triggers (--review is ignored). kardashev: same title and
-# footer plus Copilot/claude.yml triggers.
+# footer, and request-review.sh at PR open (a failed request warns, never fails
+# the PR). kardashev: same title and footer plus its own Copilot/claude.yml triggers.
 #
 # Chains: --issue takes a comma list, and a branch with <git-dir>/chain (written by
 # start-ticket.sh 12,13) closes every ticket in it. The head issue (first) prefixes
@@ -420,6 +420,7 @@ if [ -n "$create_pr" ] && [ -n "${issue:-}" ] && [ -z "${used_resolver:-}" ]; th
 fi
 
 # ---- reviews ----------------------------------------------------------------
+review_failed=""
 if [ "$review" != "none" ]; then
   # trigger_mode seam: "manual" providers dispatch their review triggers here
   # (Copilot requestReviews, claude.yml workflow run, …) after the user
@@ -427,7 +428,7 @@ if [ "$review" != "none" ]; then
   # do here — that path is a later work-environment provider's concern and is
   # deliberately left unimplemented.
   case "${PROVIDER_TRIGGER_MODE:-manual}" in
-    manual) provider::trigger_reviews "$pr_number" "$review" ;;
+    manual) provider::trigger_reviews "$pr_number" "$review" || review_failed=1 ;;
     auto)   : ;;
     *)      die "provider '$provider' declares unknown trigger_mode '$PROVIDER_TRIGGER_MODE'" ;;
   esac
@@ -460,7 +461,7 @@ printf 'provider=%s\ntrigger_mode=%s\npr_title=%s\n' \
 # Skipped only when no bot will ever comment: --review none on a manual-trigger
 # provider. Detached so the session can be left; the watcher notifies on exit.
 watch="started"
-if [ -n "$no_watch" ] || { [ "$review" = "none" ] && [ "${PROVIDER_TRIGGER_MODE:-manual}" = "manual" ]; }; then
+if [ -n "$no_watch" ] || [ -n "$review_failed" ] || { [ "$review" = "none" ] && [ "${PROVIDER_TRIGGER_MODE:-manual}" = "manual" ]; }; then
   watch="skipped"
 else
   watch_log="$(git rev-parse --absolute-git-dir)/open-pr-watch.log"
@@ -471,6 +472,7 @@ printf 'watch=%s\n' "$watch"
 
 if [ "${PROVIDER_TRIGGER_MODE:-manual}" = "auto" ]; then reviews_line="automatic on PR open"
 elif [ "$review" = "none" ]; then reviews_line="none"
+elif [ -n "$review_failed" ]; then reviews_line="request failed: $review (request it manually)"
 else reviews_line="requested: $review"
 fi
 printf '\nShipped %s\nPR #%s: %s  (%s)\nReviews: %s%s\n' \
