@@ -68,3 +68,5 @@ Maintained against the covered commands by `tools/cloud-workflow-adapter.test.sh
 | `Co-Authored-By` | Use the attribution line the host/project instructs; if none, omit the trailer. |
 | `~/.claude/` | Paths under `~/.claude/` may exist in local environments; for repository or remote runs, use `<workflow_root>/dot_claude/` (names carry chezmoi prefixes such as `executable_`). |
 | `request-review.sh` | Run as written (needs `gh` with GraphQL access); if GraphQL is blocked, stop and report that the re-request is manual. |
+
+Friction goes in `docs/friction/<environment>.md` (e.g. `cloud-claude`); from another repo, file an intake issue titled `[<environment>] <friction>`.

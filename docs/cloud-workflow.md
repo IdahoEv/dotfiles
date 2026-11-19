@@ -31,7 +31,9 @@ Use it either way:
 
 Differences from a local session, all in `claude-cloud.md`: `/start` uses `start-ticket.sh --in-place` (ticket branch cut from the default branch in the existing checkout, or continuing the remote one; refuses a dirty tree; no worktree); `/open-pr` runs `--review none` (Copilot's request is GraphQL; use `mcp__github__request_copilot_review`); `/github-review-comments` reads review state through the GitHub MCP tools instead of `github-review-poll.sh` / `-state.sh`; `/finalize` stops at verify, close, and sync (no worktree, no deploy clone). GitHub tickets only: Shortcut needs `mcp__shortcut__`.
 
-Unverified from this repo: whether the cloud git proxy accepts a push of the ticket branch when the environment names a different assigned branch. The adapter stops and reports if it does not.
+Push permission: a cloud session may push any branch it creates. Branch names follow the ticket branch from `start-ticket.sh --in-place`, or `<N>-slug`. Never force-push, push to the default branch, or rewrite history on a shared branch; stop and report if a push is refused. Protect the default branch on the remote, since the `git push -u origin` allow rule matches any branch.
+
+`gh` is installed as the system `gh` (the real binary kept as `gh.real`) when the setup script runs as root, so a plain Bash call finds the REST shim without any `PATH` setup. The bootstrap also installs a small `~/.claude/settings.json` with allow rules only (`git add`, `git commit`, `git push -u origin`, the Copilot review request) so multi-repo sessions can run the sequence unprompted; it merges into existing settings and adds no hooks.
 
 ## Trust and pinning
 
@@ -39,9 +41,19 @@ Unverified from this repo: whether the cloud git proxy accepts a push of the tic
 
 **Testing a ref.** Setting `WORKFLOW_REF` in a session does nothing to an install that already ran: cloud environments cache the setup script's result, so a session can boot with the `main` of the last cache build. To test a branch or SHA, rerun the bootstrap with the ref (adapter protocol 1), then confirm `workflow_source_commit=` or `readlink -f "$(command -v start-ticket.sh)"` names it. Merged changes reach cached environments only after their cache is rebuilt.
 
+## Per-project toolchains
+
+A project whose toolchain is missing from the cloud image cannot run its tests there; that is an environment concern, not a workflow one. Two options: install it in the **environment setup script**, or in a **per-repo SessionStart hook**. Either way the environment's network allowlist must include the toolchain's download hosts. `/pick` checks the toolchain is present before offering a ticket that needs a build or test run, and reports it as "unverifiable here" otherwise.
+
+## Default sequence and Stop hook
+
+Every kickoff carries the default sequence (`start-ticket.sh` `sequence_block`): plan then pause; after approval implement, commit, `/local-review-cycle`, push and `/open-pr`, remote review, with no further approvals; stop before merge; any failure pauses and asks. A project's `design_gate=` key in `.start-ticket.conf` adds a pause for aesthetic changes before the review cycle. The "uncommitted changes, please commit and push" Stop hook seen in one cloud session is not in this repo (`dot_claude/modify_private_settings.json.tmpl` Stop hooks only set colour and status), `dot_claude/plugins`, or a fresh cloud container. It must be in the cloud environment settings, the account/organisation settings, or the project repo's `.claude/settings.json`: still to be located by the owner, and it must not fire before plan approval.
+
+Board fields (GitHub Projects v2) cannot be set from cloud; `/open-pr` sets milestones over REST and reports the board fields to set by hand.
+
 ## Coverage and limits
 
-- **Claude Code cloud (`workflow/adapters/claude-cloud.md`):** Covers `/start`, `/open-pr`, `/local-review-cycle`, `/github-review-comments`, and `/finalize`. Not covered: Shortcut tickets, Copilot review requests via `/open-pr`, `/discuss`, `/board`, sibling-repo fan-out.
+- **Claude Code cloud (`workflow/adapters/claude-cloud.md`):** Covers `/start`, `/open-pr`, `/local-review-cycle`, `/github-review-comments`, `/finalize`, `/merge`, `/land`, `/sync` and `/pick`. Not covered: Shortcut tickets, Copilot review requests via `/open-pr`, `/discuss`, `/board`, sibling-repo fan-out.
 - **Codex Cloud (`workflow/adapters/codex.md`):** Covers `/start` and `/open-pr`. Not covered: `/finalize`, review cycles (PRs from this path state `Independent review: not performed`), governor, discussion, planning. The Codex task is already an isolated checkout, so worktree and session-launch steps are skipped.
 - **Antigravity (`workflow/adapters/agy.md`):** Covers `/start`, `/local-review-cycle`, `/open-pr`, `/github-review-comments`, `/governor`, `/pick`, `/discuss`, and `/remind`. Maps `local-review-cycle-manager`, leaf reviewer specialists (`*-reviewer`), and `github-review-repair-agent` onto AGY's `define_subagent`/`invoke_subagent` tools, and deploys user rules and skill wrappers under `dot_gemini/config/` (`~/.gemini/config/`). Local AGY sessions create and switch into the ticket worktree; remote unreviewed runs skip the review cycle and state `Independent review: not performed`.
 

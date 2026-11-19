@@ -11,6 +11,7 @@ Results from the real phone-launched pilot required by issue #74. Fill in each r
 | `/start` and `/open-pr` executed from the fetched command files | Not run | Note any step the adapter had to stop on. |
 | Test execution | Mocked suites pass locally (`tools/cloud-workflow-bootstrap.test.sh`, `tools/cloud-workflow-adapter.test.sh`); project checks in the cloud task: Not run | |
 | Branch / PR creation | Not run | |
+| Push of a ticket branch when the environment names a different assigned branch (Claude cloud) | Accepted | Observed in a cloud session: the git proxy took the push, so it does not enforce the assigned-branch restriction (#242). |
 | Workflow SHA traceability | Not run | Same SHA in task output and PR body. |
 
 ## Completion rule

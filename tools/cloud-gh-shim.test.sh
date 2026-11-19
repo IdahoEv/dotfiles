@@ -28,8 +28,8 @@ while (($#)); do
 done
 case "$method $path" in
   "GET user") echo '{"login":"me"}' ;;
-  "GET repos/acme/widgets") echo '{"name":"widgets","owner":{"login":"acme"},"default_branch":"trunk","html_url":"https://github.com/acme/widgets"}' ;;
-  "GET repos/acme/widgets/issues/7") echo '{"number":7,"title":"Fix it","body":"b","state":"open","html_url":"u7","assignees":[{"login":"me"}],"sub_issues_summary":{"total":2,"completed":1}}' ;;
+  "GET repos/acme/widgets") echo '{"name":"widgets","owner":{"login":"acme"},"default_branch":"trunk","html_url":"https://github.com/acme/widgets","allow_merge_commit":false,"allow_squash_merge":true,"allow_rebase_merge":false}' ;;
+  "GET repos/acme/widgets/issues/7") echo '{"number":7,"title":"Fix it","body":"b","state":"open","html_url":"u7","labels":[{"name":"bug"}],"assignees":[{"login":"me"}],"sub_issues_summary":{"total":2,"completed":1}}' ;;
   "GET repos/acme/widgets/issues/7/parent") echo '{"number":3,"title":"Epic"}' ;;
   "GET repos/acme/widgets/issues/7/sub_issues?per_page=100") echo '[{"number":8,"title":"S","state":"open"}]' ;;
   "GET repos/acme/widgets/pulls?head=acme%3A7-fix&state=all&per_page=100") echo '[{"number":12,"state":"closed","merged_at":"2026-01-01T00:00:00Z","merge_commit_sha":"abc","html_url":"pu","title":"T","node_id":"PR_x","head":{"ref":"7-fix","sha":"h1"},"base":{"ref":"trunk"}}]' ;;
@@ -43,7 +43,7 @@ case "$method $path" in
   "GET repos/acme/widgets/issues/9/sub_issues?per_page=100") echo '[]' ;;
   "GET repos/acme/widgets/issues/10") echo '{"number":10,"title":"T","body":"","state":"open","html_url":"u10","assignees":[]}' ;;
   "GET repos/acme/widgets/issues/10/parent") echo "HTTP 502: Bad Gateway" >&2; exit 1 ;;
-  POST*|PATCH*) echo '{}' ;;
+  POST*|PATCH*|PUT*) echo '{}' ;;
   *) echo "unexpected: $method $path" >&2; exit 1 ;;
 esac
 FAKE
@@ -57,8 +57,17 @@ g() { python3 -I "$shim" "$@"; }
 [[ "$(g repo view --json defaultBranchRef -q .defaultBranchRef.name)" == trunk ]] || fail "repo view default branch"
 [[ "$(g repo view --json name --jq .name)" == widgets ]] || fail "repo view name"
 pass "repo view answers owner, name and default branch over REST"
+[[ "$(g repo view --json mergeCommitAllowed,squashMergeAllowed,rebaseMergeAllowed)" == '{"mergeCommitAllowed": false, "squashMergeAllowed": true, "rebaseMergeAllowed": false}' ]] || fail "repo view merge-method fields (merge-run.sh)"
+[[ "$(g pr view 12 --json mergeable,isDraft,state)" == *'"mergeable": "UNKNOWN"'* ]] || fail "pr view mergeable is UNKNOWN when REST gives null (sync gate)"
+pass "repo view and pr view carry the merge-method and mergeable fields merge-run.sh and the sync gate read"
+# Two shim copies (shim dir and system bin) must not pick each other as the real gh.
+mkdir -p "$tmp/a" "$tmp/b" "$tmp/c"; cp "$shim" "$tmp/a/gh"; cp "$shim" "$tmp/b/gh"; cp "$tmp/gh" "$tmp/c/gh"
+chmod +x "$tmp/a/gh" "$tmp/b/gh"
+[[ "$(env -u GH_SHIM_REAL PATH="$tmp/a:$tmp/b:$tmp/c:/usr/bin:/bin" python3 -I "$tmp/a/gh" workflow view x)" == "REAL-GH workflow view x" ]] || fail "shim copies must skip each other and find the real gh"
+pass "a second shim copy on PATH is never taken for the real gh"
 
 [[ "$(g issue view 7 --json number,title,body,state,url | jq -r '"\(.number) \(.title) \(.state)"')" == "7 Fix it OPEN" ]] || fail "issue view fields"
+[[ "$(g issue view 7 --json number,title,body,state,url,labels --jq '.labels[0].name')" == bug ]] || fail "issue labels (start-ticket-providers/github.sh field set)"
 [[ "$(g issue view 7 --json parent --jq '.parent.number // empty')" == 3 ]] || fail "issue parent"
 [[ "$(g issue view 7 --json assignees --jq '.assignees[].login')" == me ]] || fail "issue assignees"
 [[ "$(g issue view 7 --json title,subIssuesSummary,subIssues -q '"\(.subIssuesSummary.completed)/\(.subIssuesSummary.total) \(.subIssues.nodes[] | select(.state=="OPEN") | .number)"')" == "1/2 8" ]] || fail "sub-issue summary"
@@ -98,4 +107,8 @@ g auth status | grep -q 'Logged in as me' || fail "auth status"
 [[ "$(g workflow view x)" == "REAL-GH workflow view x" ]] || fail "unknown commands pass through"
 [[ "$(g api repos/acme/widgets)" == *'"widgets"'* ]] || fail "gh api passes through"
 if g issue view 7 --bogus 2>/dev/null; then fail "unsupported options must be refused, not guessed"; fi
+g pr merge 12 --merge --match-head-commit h1 >/dev/null
+grep -q 'api -X PUT repos/acme/widgets/pulls/12/merge -f merge_method=merge -f sha=h1' "$FAKE_LOG" || fail "pr merge should PUT a merge-commit merge pinned to the head sha"
+g pr merge 12 --squash >/dev/null; grep -q 'merge_method=squash' "$FAKE_LOG" || fail "pr merge --squash passes the method through"
+pass "pr merge merges over REST with the requested method and head pin"
 pass "auth status is REST-backed; everything else passes through; unsupported flags fail loudly"

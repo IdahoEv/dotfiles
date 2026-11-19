@@ -131,7 +131,7 @@ primary/deploy worktrees).
 whose first user message begins `Working on <ref> in this worktree. Branch `<branch>` is
 checked out.` If the session opens that way, the worktree, branch, and ticket bookkeeping
 are **already done** — don't ask whether to run `/start`. Read the ticket context given,
-check repo state, present a plan, and wait for approval before editing.
+check repo state, present a plan, and wait for approval before editing. Plan approval authorizes the kickoff's **Sequence** (commit, `/local-review-cycle`, push, `/open-pr`, remote review) with no further approvals; stop before merge. Push permission: a cloud session may push any branch it creates; name it after the ticket branch or `<N>-slug`. Never force-push or push the default branch.
 
 **Workflow phase in the agent view.** Background ticket sessions carry their lifecycle
 phase as a name prefix (`[PLAN] Sc74618 …`) — a third state axis beside `status`

@@ -17,7 +17,10 @@ and stop. Then, in parallel:
 
 - Open tickets from the tracker named there, with dependencies, estimates, and status.
 - Work already in flight: `git worktree list`, open PRs, and other sessions via
-  `ListAgents`. Ticket refs found there are **taken**, not candidates.
+  `ListAgents`. Ticket refs found there are **taken**, not candidates. Where there are no
+  worktrees or session listing (cloud), use open PRs and remote branches only.
+- Toolchain: a ticket that needs a build or test run is offered only if the project's
+  toolchain is present here; otherwise list it as "unverifiable here".
 - Local planning docs (`docs/`, `TODO.md`) for sequencing the tracker doesn't encode.
 
 ## Filter: ready

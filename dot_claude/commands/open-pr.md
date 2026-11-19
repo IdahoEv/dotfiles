@@ -170,3 +170,9 @@ Also on this ticket: <sibling-repo> (<branch>) — session dispatched, will open
 Report dispatched siblings as *sessions started*, not PRs opened — you don't know their PR
 numbers and must not guess. Under `trigger_mode=auto`, the script's Reviews line says reviews
 fire automatically; don't claim to have requested them.
+
+**Milestone and board fields.** If the ticket has a milestone, set it on the PR over REST
+(`gh api -X PATCH repos/<o>/<r>/issues/<pr> -F milestone=<n>`; works through the cloud
+shim). Board fields (GitHub Projects v2: Status, Track, Priority, …) need GraphQL, which
+cloud blocks and the MCP tools lack: end the report with the board fields the owner must set
+by hand, or "none".
