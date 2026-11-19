@@ -62,3 +62,5 @@ The manager discovers reviewers in all canonical tiers, dedupes by name, and sel
 Claude model aliases such as sonnet/auto are host hints, not Codex model IDs. Inherit the configured Codex model and record the actual launch model (or `configured`, if unavailable), never claim a Claude model ran. Explicit model requirements with no available mapping stop for a decision. Reviewer read-only scope is enforced by its canonical contract; the manager and repair boundaries are unchanged. If fresh delegation or nested reviewer launches are unavailable, stop with independent review not performed; do not open a PR claiming review passed.
 
 Native daemon runtime status is observable; workflow phase/color and Claude transcript token telemetry are not synchronized. Existing review events and PR review records still work. Cloud/desktop parity and AGY's tmux dashboard are outside this adapter.
+
+Friction goes in `docs/friction/<environment>.md` (e.g. `cloud-claude`); from another repo, file an intake issue titled `[<environment>] <friction>`.

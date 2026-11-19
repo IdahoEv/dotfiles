@@ -44,3 +44,5 @@ Maintained against the covered commands by `tools/cloud-workflow-adapter.test.sh
 | `--launcher` | Never pass it. No session is launched. |
 | `~/.config/local-review-only` | Ignore; `--review none` already applies. |
 | `Co-Authored-By` | Use the attribution line the host/project instructs; if none, omit the trailer. |
+
+Friction goes in `docs/friction/<environment>.md` (e.g. `cloud-claude`); from another repo, file an intake issue titled `[<environment>] <friction>`.

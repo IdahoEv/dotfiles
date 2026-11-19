@@ -33,7 +33,7 @@ Read the title, write the session label yourself — see **Naming** — and expo
 
 Creates the worktree, marks the ticket in progress, and writes a kickoff from the repo's
 `.claude/kickoff-preamble.md`, else the per-project overlay's copy. It carries the
-project's working agreement, so this command doesn't. Prints parseable `key=value` on stdout — capture all of it:
+project's working agreement, so this command doesn't. The kickoff ends with the default **Sequence** block: plan, then pause; after approval, implement, commit, `/local-review-cycle`, push and `/open-pr`, remote review with no further prompts; stop before merge. A project's `design_gate=` conf key adds a design pause before review. Prints parseable `key=value` on stdout — capture all of it:
 
 ```
 worktree= kickoff= branch= provider= ticket_state= ticket_in_progress= ticket_parent= chain=
@@ -91,20 +91,11 @@ Don't block on this — if the state can't be set, say so in the report and cont
 
 ### 2. Enrich the kickoff (tracker facts only)
 
-Read the kickoff file and append a short `## Context` section. **Do not open or read source
+Read the kickoff file and append a short `## Context` section. Do no parent-epic, sub-issue or sibling lookup (the MCP sub-issue listing returns every body and overflows the tool limit); a session with a real need uses `gh issue view --json subIssuesSummary,subIssues`. **Do not open or read source
 files** — pre-reading puts them into context three times (ticket author → here →
 implementer), and the implementer session can find them itself. Limit to:
 
-- **GitHub** — parent epic (`ticket_parent` from step 1) + its still-open siblings:
-  ```bash
-  gh issue view <parent> --json title,subIssuesSummary,subIssues \
-    -q '"\(.title) (\(.subIssuesSummary.completed)/\(.subIssuesSummary.total))",
-        (.subIssues.nodes[] | select(.state=="OPEN") | "#\(.number) \(.title)")'
-  ```
-- **GitHub via MCP** — `mcp__github__issue_read` (method `get_sub_issues`) on the parent for
-  its title and still-open siblings; skip the progress count if it isn't available.
-- **Shortcut** — read `<worktree>/.ticket.local.md`; note any epic or linked stories (no
-  bulk sub-issue progress query exists — skip that line rather than approximating).
+- **Shortcut** — read `<worktree>/.ticket.local.md`; note any linked stories.
 - **Dependencies** (either provider) — `Depends on #X` / `Blocked by #X` / linked-story
   refs in the ticket body: fetch each one's state, warn if open, don't block. This is the
   one fact worth the round-trip, since ticket text can't tell you a blocker has closed.
@@ -177,7 +168,5 @@ recomputes true state from git + the tracker when they disagree.
 ### 4. Report
 
 One block per group. Worktree path, branch, ticket state (report what you read back — step 1a's re-read if it
-repaired, else `ticket_state` — never what you intended to set), and for GitHub with a
-parent epic, its sub-issue progress and remaining
-siblings. Under `bg`, say the session is running in `claude agents` and shows as
+repaired, else `ticket_state` — never what you intended to set). Under `bg`, say the session is running in `claude agents` and shows as
 `[PLAN]` until its plan is approved.

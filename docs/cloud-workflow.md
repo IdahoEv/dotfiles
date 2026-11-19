@@ -41,6 +41,16 @@ Push permission: a cloud session may push any branch it creates, named for its w
 
 **Testing a ref.** Setting `WORKFLOW_REF` in a session does nothing to an install that already ran: cloud environments cache the setup script's result, so a session can boot with the `main` of the last cache build. To test a branch or SHA, rerun the bootstrap with the ref (adapter protocol 1), then confirm `workflow_source_commit=` or `readlink -f "$(command -v start-ticket.sh)"` names it. Merged changes reach cached environments only after their cache is rebuilt.
 
+## Per-project toolchains
+
+A project whose toolchain is missing from the cloud image cannot run its tests there; that is an environment concern, not a workflow one. Two options: install it in the **environment setup script**, or in a **per-repo SessionStart hook**. Either way the environment's network allowlist must include the toolchain's download hosts. `/pick` checks the toolchain is present before offering a ticket that needs a build or test run, and reports it as "unverifiable here" otherwise.
+
+## Default sequence and Stop hook
+
+Every kickoff carries the default sequence (`start-ticket.sh` `sequence_block`): plan then pause; after approval implement, commit, `/local-review-cycle`, push and `/open-pr`, remote review, with no further approvals; stop before merge; any failure pauses and asks. A project's `design_gate=` key in `.start-ticket.conf` adds a pause for aesthetic changes before the review cycle. The "uncommitted changes, please commit and push" Stop hook seen in one cloud session is not in this repo (`dot_claude/modify_private_settings.json.tmpl` Stop hooks only set colour and status), `dot_claude/plugins`, or a fresh cloud container. It must be in the cloud environment settings, the account/organisation settings, or the project repo's `.claude/settings.json`: still to be located by the owner, and it must not fire before plan approval.
+
+Board fields (GitHub Projects v2) cannot be set from cloud; `/open-pr` sets milestones over REST and reports the board fields to set by hand.
+
 ## Coverage and limits
 
 - **Claude Code cloud (`workflow/adapters/claude-cloud.md`):** Covers `/start`, `/open-pr`, `/local-review-cycle`, `/github-review-comments`, `/finalize`, `/merge`, `/land`, `/sync` and `/pick`. Not covered: Shortcut tickets, Copilot review requests via `/open-pr`, `/discuss`, `/board`, sibling-repo fan-out.

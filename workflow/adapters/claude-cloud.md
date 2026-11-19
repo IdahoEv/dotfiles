@@ -56,3 +56,5 @@ Maintained against the covered commands by `tools/cloud-workflow-adapter.test.sh
 | `mcp__shortcut__` | Not available. Stop and report (protocol 10). |
 | `Co-Authored-By` | Use the attribution lines the session's own system reminder gives for commits and PRs in place of the global trailer. |
 | `~/.claude/` | Means `workflow_claude_dir`. |
+
+Friction goes in `docs/friction/<environment>.md` (e.g. `cloud-claude`); from another repo, file an intake issue titled `[<environment>] <friction>`.

@@ -276,7 +276,17 @@ check "mcp: parent carried" "9" "$(get ticket_parent <<<"$out")"
 has "mcp: kickoff has the title" "Cloud ticket" "$(get kickoff <<<"$out")"
 has "mcp: kickoff has the body" "head body" "$(get kickoff <<<"$out")"
 has "mcp: kickoff has the url" "issues/12" "$(get kickoff <<<"$out")"
+has "mcp: kickoff carries the plan-gate sequence" "Plan approval authorizes everything below" "$(get kickoff <<<"$out")"
+has "mcp: kickoff says stop before merge" "Stop before merge" "$(get kickoff <<<"$out")"
+check "mcp: no design gate without the key" "0" "$(grep -c 'Design gate' "$(get kickoff <<<"$out")" || true)"
 
+git -C "$ROOT/mcpcloud" checkout -q ccr-session
+mkdir -p "$HOME/.config/start-ticket"
+printf 'design_gate=new or changed visuals, layout or style\n' > "$HOME/.config/start-ticket/config"
+out="$(START_TICKET_MCP_DIR="$MD" mcp 12)"
+has "mcp: design_gate key adds the design pause" "Design gate" "$(get kickoff <<<"$out")"
+has "mcp: design gate carries the project criteria" "new or changed visuals" "$(get kickoff <<<"$out")"
+rm -f "$HOME/.config/start-ticket/config"
 git -C "$ROOT/mcpcloud" checkout -q ccr-session
 out="$(START_TICKET_MCP_DIR="$MD" mcp 12,13)"; rc=$?
 check "mcp chain: exits 0" "0" "$rc"

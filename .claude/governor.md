@@ -38,3 +38,5 @@ Goal: make the full workstream command set (`/governor`, `/groom`, `/pick` throu
 - Where they contain Claude or other AI prompts, keep them terse and minimal-token.
 - Changes must transfer and apply cleanly machine to machine (home and work); flag anything machine-specific.
 - Tickets must not contain sensitive or work-identifying details.
+
+Friction from any environment is logged in `docs/friction/<environment>.md`; sessions in other repos file an intake issue titled `[<environment>] <friction>`, which you fold into the matching file during triage.

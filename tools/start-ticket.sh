@@ -493,6 +493,25 @@ Tickets ${chain_csv//,/, } are one chain: one worktree, one branch, one PR.
 CHAIN
 }
 
+# Default sequence for every ticket session (#242): plan gate, then unattended through review.
+# A project's `design_gate=` conf key (its own criteria for changes needing aesthetic
+# judgement) adds a pause between implement and the local review cycle.
+sequence_block() {
+  local gate; gate="$(conf_get design_gate || true)"
+  cat <<'SEQ'
+
+## Sequence
+
+1. Present your plan, then wait. Plan approval authorizes everything below; no further approval is needed for commits or pushes.
+2. After approval, do not pause for approval: implement until the acceptance criteria are met; commit; run `/local-review-cycle`; push and run `/open-pr`; then the remote review cycle (home: request a Copilot review each round; work: the repo's review bots review every PR and update, so wait for them and request nothing).
+3. Stop before merge. The owner evaluates and merges (`/land`).
+4. If any step fails or a decision is needed, pause, notify the owner if the environment can, say what failed, and ask. No improvised workaround.
+SEQ
+  if [ -n "$gate" ]; then
+    printf '\n**Design gate.** After implementing and before `/local-review-cycle`, classify the diff against this project'"'"'s criteria: %s\nIf the diff needs aesthetic judgement (new or changed visuals, art, layout, style), pause and ask the owner to look and approve. Only design changes pause; straightforward UI or behaviour changes go straight to review.\n' "$gate"
+  fi
+}
+
 # Appended when this machine opted into unattended GitHub review.
 unattended_block() {
   cat <<UNATTENDED
@@ -798,6 +817,7 @@ _tmp="${TMPDIR:-/tmp}"; kickoff="${_tmp%/}/${repo_name}-kickoff-$(IFS=-; echo "$
     [ -z "${chain_urls[_n]}" ] || printf '\n<%s>\n' "${chain_urls[_n]}"
   done
   [ -z "$chain_csv" ] || chain_block
+  sequence_block
   ! "$SCRIPT_DIR/review-unattended.sh" active || unattended_block
   # The repo's own preamble wins outright; else the per-project overlay's.
   if _doc="$(gt::find_doc kickoff-preamble.md "$repo_root")"; then
