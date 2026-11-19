@@ -12,7 +12,7 @@ Covered, with the flags the workflow uses:
   auth status
   repo view [--json owner,name,url,defaultBranchRef,mergeCommitAllowed,
             squashMergeAllowed,rebaseMergeAllowed] [-q|--jq EXPR]
-  issue view N [--json number,title,body,state,url,assignees,parent,
+  issue view N [--json number,title,body,state,url,labels,assignees,parent,
                 subIssuesSummary,subIssues]
   issue edit N --add-assignee @me|LOGIN     issue comment N --body|--body-file
   issue close N [--comment TEXT]
@@ -206,6 +206,7 @@ def issue_json(slug, n):
     out = {
         "number": d["number"], "title": d["title"], "body": d.get("body") or "",
         "state": d["state"].upper(), "url": d["html_url"],
+        "labels": [{"name": l["name"] if isinstance(l, dict) else l} for l in d.get("labels", [])],
         "assignees": [{"login": a["login"]} for a in d.get("assignees", [])],
         "subIssuesSummary": {"total": (d.get("sub_issues_summary") or {}).get("total", 0),
                              "completed": (d.get("sub_issues_summary") or {}).get("completed", 0)},
