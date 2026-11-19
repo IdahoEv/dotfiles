@@ -40,7 +40,9 @@ export PATH="$ROOT/bin:$PATH" OPEN_PR_POLL="$ROOT/bin/poll" NOTIFY_LOG="$ROOT/no
 watch() {  # <poll-rc> → stdout of the watcher
   rm -f "$NOTIFY_LOG" "$WF_TELEMETRY_LOG"
   printf '{"name":"[REVIEW][PR] Is42 foo","state":"working"}' > "$CLAUDE_JOB_DIR/state.json"
-  POLL_RC="$1" "$TOOLS/open-pr-watch.sh" 7
+  # agent-phase.sh reads ./.workstream.json; run from a dir without one so the
+  # caller's checkout can't override the fixture's state.json.
+  (cd "$ROOT" && POLL_RC="$1" "$TOOLS/open-pr-watch.sh" 7)
 }
 phase() { jq -r '.name | split(" ")[0]' "$CLAUDE_JOB_DIR/state.json"; }
 event() { tail -1 "$WF_TELEMETRY_LOG" 2>/dev/null | jq -r "$1" 2>/dev/null; }
