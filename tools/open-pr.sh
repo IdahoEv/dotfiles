@@ -436,13 +436,13 @@ fi
 
 # ---- agent-view phase --------------------------------------------------------
 # The PR exists, so tag it [PR]; it is also [REVIEW] whenever a bot will review
-# (requested here, or fired automatically on PR open under trigger_mode=auto).
+# (requested here successfully, or fired automatically on PR open under trigger_mode=auto).
 # Stamped here rather than left to /open-pr's prose because it's deterministic
 # and should hold even when the command is run by hand. Updates `.workstream.json`
 # in the worktree (and the agent-view row in a background session); no-ops where
 # inapplicable and never fails the ship — the PR is already open by now, so
 # aborting over a display label would be strictly worse than a stale one.
-if [ "$review" != "none" ] || [ "${PROVIDER_TRIGGER_MODE:-manual}" = "auto" ]; then
+if { [ "$review" != "none" ] && [ -z "$review_failed" ]; } || [ "${PROVIDER_TRIGGER_MODE:-manual}" = "auto" ]; then
   "$SCRIPT_DIR/agent-phase.sh" REVIEW >/dev/null 2>&1 || true
 fi
 "$SCRIPT_DIR/agent-phase.sh" --pr >/dev/null 2>&1 || true

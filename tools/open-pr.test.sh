@@ -178,6 +178,15 @@ check "github failed request: warns"       "1" "$(grep -c 'review request failed
 check "github failed request: Reviews"     "1" "$(grep -c '^Reviews: request failed' <<<"$out")"
 check "github failed request: no watch"    "watch=skipped" "$(grep '^watch=' <<<"$out")"
 
+phase_review_count() { "$TOOLS/agent-phase.sh" --show 2>/dev/null | grep -c REVIEW; }
+ws_json='{"version":1,"kind":"ticket","tickets":[{"id":"42"}],"ticket_provider":"github"}'
+new_repo 42-foo; printf '%s\n' "$ws_json" > .workstream.json
+REVIEW_STUB_RC=1 run --title "Add foo" --review copilot >/dev/null
+check "github failed request: no REVIEW phase" "0" "$(phase_review_count)"
+new_repo 42-foo; printf '%s\n' "$ws_json" > .workstream.json
+run --title "Add foo" --review copilot >/dev/null
+check "github ok request: REVIEW phase"        "1" "$(phase_review_count)"
+
 new_repo 42-foo
 out="$(GH_EXISTING_PR=9 run --review none)"
 check "existing PR reused, no title"  "pr_action=reused" "$(grep '^pr_action=' <<<"$out")"

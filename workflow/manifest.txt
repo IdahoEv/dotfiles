@@ -101,7 +101,7 @@ c8ce372b7286fdec6d59dc1cc586f65cffd3ad95cdeebdd089631832c46e1b09  755  tools/mig
 ebdb84b0473af44ffdc63fce69e007c3529d61f245f8008c8bd6c7a2b330373d  644  tools/open-pr-providers/github.sh
 4646c4c8143747fa1e8ccb52a499d01ae230c71e6f06c19508223edce007fc25  644  tools/open-pr-providers/shortcut.sh
 20e1ba6f76351bfc20a2c77acbac4195426e5dd7e2122a60229b0e27c02438b0  755  tools/open-pr-watch.sh
-e6b590305170b04e66543bab6c58fc7ec93a4e62dc881b5097e5ea2df23382b2  755  tools/open-pr.sh
+4dbfcb3f6a44ec0d74e6604f2441c66195b4f806f142004d7f6f25ae2fc289e0  755  tools/open-pr.sh
 dc55a6a27785e8576b61964aeefb66b3e419c24bcb46ee280a2f8463befb450a  755  tools/pending-actions.sh
 924937befc2fa9b642c8cdd3407ec9958a32ca8cc05259bc2b31a1be387849fb  755  tools/pr-body.sh
 f6ec970038d77efb2159bd5818cb7fc4cbd72ceddfe0bcbc353d3a6f51061850  644  tools/project-colors
