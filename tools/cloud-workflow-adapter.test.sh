@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Drift check: every Claude-only construct used by the commands a cloud adapter
+# Drift check: every Claude-only construct used by the commands a workflow adapter
 # covers must have a row in the adapter's construct map, and every row must
 # still occur in those commands.
 set -euo pipefail
@@ -26,7 +26,7 @@ construct = re.compile(
 used = {}
 for path in commands:
     text = open(path, encoding="utf-8").read()
-    if adapter.endswith("/codex-local.md"):
+    if adapter.endswith(("/codex-local.md", "/opencode-local.md")):
         if Path(path).stem in {"merge", "land", "sync"}:
             used.setdefault("/" + Path(path).stem, path)
         for match in re.finditer(r"(?<![\w/.-])/(?:merge|land|sync)\b", text):
@@ -81,6 +81,9 @@ local_codex_commands=("${agy_commands[@]}"
 check "$repo/workflow/adapters/codex-local.md" "${local_codex_commands[@]}" || fail "local Codex adapter has drifted"
 printf 'PASS local Codex adapter maps every covered command and nested review procedure\n'
 
+check "$repo/workflow/adapters/opencode-local.md" "${local_codex_commands[@]}" || fail "local OpenCode adapter has drifted"
+printf 'PASS local OpenCode adapter maps every covered command and nested review procedure\n'
+
 claude_commands=(
   "$repo/dot_claude/commands/start.md"
   "$repo/dot_claude/commands/open-pr.md"
@@ -123,10 +126,14 @@ fi
 grep -q 'TodoWrite' "$fixture/err" || fail "the stale row should be named"
 [[ "$pass_new" == 1 ]] && printf 'PASS detects unmapped constructs and stale rows\n'
 
-for adapter_name in codex agy claude-cloud; do
+for adapter_name in codex agy claude-cloud codex-local opencode-local; do
   adapter="$repo/workflow/adapters/${adapter_name}.md"
   if grep -q 'bash <(' "$adapter"; then fail "$adapter_name adapter must not run the bootstrap via process substitution (hides download failure)"; fi
-  for rule in 'workflow_source_commit=' 'Never imply a check passed' 'Workflow source:'; do
+  case "$adapter_name" in
+    codex-local|opencode-local) sha_rule='workflow_source_commit' ;;
+    *) sha_rule='workflow_source_commit=' ;;
+  esac
+  for rule in "$sha_rule" 'Never imply a check passed' 'Workflow source:'; do
     grep -q -- "$rule" "$adapter" || fail "$adapter_name adapter protocol is missing: $rule"
   done
 done
