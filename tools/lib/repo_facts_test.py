@@ -262,7 +262,10 @@ class TicketParsing(Base):
                  "bug/Is312+313-invoice-totals": "312",
                  "feat/sc-7435-fix-bug": "7435",
                  "sc-7435-fix-bug": "7435",
-                 "sc-10+20-chain": "10"}
+                 "sc-10+20-chain": "10",
+                 "12+13+14-invoice-totals": "12",
+                 "[12,13,14]-invoice-totals": "12",
+                 "feat/[12,13]-chain": "12"}
         for branch, expected in cases.items():
             self.assertEqual(repo_facts.ticket_from_branch(branch), expected, branch)
 
@@ -272,7 +275,8 @@ class TicketParsing(Base):
                  "Is160-workstream": "github", "Is312+313-chain": "github",
                  "Is160/workstream": "github", "bug/Is312+313-chain": "github",
                  "feat/sc-7435-fix-bug": "shortcut",
-                 "sc-7435-fix-bug": "shortcut", "sc-10+20-chain": "shortcut"}
+                 "sc-7435-fix-bug": "shortcut", "sc-10+20-chain": "shortcut",
+                 "12+13+14-chain": "github", "[12,13,14]-chain": "github"}
         for branch, expected in cases.items():
             self.assertEqual(repo_facts.ticket_scheme(branch), expected, branch)
 
@@ -283,6 +287,18 @@ class TicketParsing(Base):
                 json.dump({"tickets": [{"id": "99", "url": ""}], "ticket_provider": "shortcut"}, fh)
             self.assertEqual(repo_facts.ticket_from_branch("unrelated-branch", repo), "99")
             self.assertEqual(repo_facts.ticket_scheme("unrelated-branch", repo), "shortcut")
+
+    def test_custom_branch_key_with_provider_setting(self):
+        with tempfile.TemporaryDirectory() as repo:
+            subprocess.run(["git", "-C", repo, "init", "-q"], check=True)
+            ws_dir = os.path.join(repo, ".workstreams")
+            os.makedirs(ws_dir, exist_ok=True)
+            with open(os.path.join(ws_dir, "settings.json"), "w", encoding="utf-8") as fh:
+                json.dump({"provider": "shortcut", "provider.brief": "sc#"}, fh)
+            self.assertEqual(repo_facts.ticket_from_branch("12+13+14-invoice-totals", repo), "12")
+            self.assertEqual(repo_facts.ticket_scheme("12+13+14-invoice-totals", repo), "shortcut")
+            self.assertEqual(repo_facts.ticket_from_branch("sc#74-fix", repo), "74")
+            self.assertEqual(repo_facts.ticket_scheme("sc#74-fix", repo), "shortcut")
 
 
 class RepoKey(Base):
@@ -619,7 +635,8 @@ class Facade(Base):
                  "Is160-cloud-branch": "160", "Is312+313-chain": "312",
                  "Is7-fix-sc-5-sc-6": "7",
                  "Is160/workstream": "160", "bug/Is312+313-chain": "312",
-                 "sc-7435-fix-bug": "7435", "sc-10+20-chain": "10"}
+                 "sc-7435-fix-bug": "7435", "sc-10+20-chain": "10",
+                 "12+13+14-chain": "12", "[12,13,14]-chain": "12"}
         for branch, expected in cases.items():
             self.assertEqual(self.gt(f'gt::ticket_from_branch "{branch}"'),
                              (0, expected), branch)
@@ -628,7 +645,8 @@ class Facade(Base):
         cases = {"sc-5/x": "shortcut", "7-foo": "github", "main": "unknown",
                  "2-sc-5/foo": "shortcut", "release/7-foo": "unknown",
                  "Is160-cloud-branch": "github", "bug/Is160-cloud-branch": "github",
-                 "sc-7435-fix-bug": "shortcut", "feat/sc-7435-fix-bug": "shortcut"}
+                 "sc-7435-fix-bug": "shortcut", "feat/sc-7435-fix-bug": "shortcut",
+                 "12+13+14-chain": "github", "[12,13,14]-chain": "github"}
         for branch, expected in cases.items():
             self.assertEqual(self.gt(f'gt::ticket_scheme "{branch}"'),
                              (0, expected), branch)

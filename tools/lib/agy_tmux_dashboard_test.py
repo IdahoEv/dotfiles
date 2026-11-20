@@ -336,6 +336,23 @@ class TestHelpers(unittest.TestCase):
             self.assertEqual(ticket_ref, "[12,13]")
             self.assertEqual(desc, "fix")
 
+    def test_load_workstream_meta_rejects_invalid_row_key(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            wt = Path(tmp) / "wt"
+            ws_dir = wt / ".workstreams"
+            ws_dir.mkdir(parents=True)
+            subprocess.run(["git", "init", str(wt)], check=True, capture_output=True)
+            (ws_dir / "settings.json").write_text(
+                '{"row": {"key_template": "{chain}\\nx"}}',
+                encoding="utf-8",
+            )
+            (wt / dash.workstream.RECORD_FILENAME).write_text(
+                '{"kind": "ticket", "key": "Is12", "tickets": [{"id": "12"}], "desc": "fix"}',
+                encoding="utf-8",
+            )
+            with self.assertRaises(dash.workstream.WorkstreamValidationError):
+                dash.load_workstream_meta(str(wt))
+
     def test_curses_loop_skips_fetch_on_navigation_and_uses_tmux_bin(self):
         rows = [
             dash.WorkstreamRow("1", "Is1", "%1", "/tmp/1", "Is1", "One", "", "running", "ok"),

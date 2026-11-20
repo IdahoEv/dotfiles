@@ -284,6 +284,21 @@ class WorkstreamsSettingsTests(WorkstreamTestBase):
         self.assertIn("branch", r.stderr)
         self.assertIn("branch.template", r.stderr)
 
+    def test_validation_attributes_form_and_provider_brief(self) -> None:
+        repo = self.make_repo("widgets")
+        rec = self.chain_record()
+        self.settings("widgets/.workstreams/settings.json", {"branch": {"form": "words"}})
+        with self.assertRaises(workstream.WorkstreamValidationError) as ctx:
+            workstream.render_surface(rec, "branch", repo)
+        msg = str(ctx.exception)
+        self.assertIn("branch.form='words'", msg)
+        self.assertNotIn("default settings", msg)
+
+        self.settings("widgets/.workstreams/settings.json", {"provider": {"brief": "gh:"}})
+        with self.assertRaises(workstream.WorkstreamValidationError) as ctx2:
+            workstream.render_surface(rec, "branch", repo)
+        self.assertIn("provider.brief='gh:'", str(ctx2.exception))
+
         self.settings("widgets/.workstreams/settings.json", {"branch": {"template": ".."}})
         with self.assertRaises(workstream.WorkstreamValidationError) as ctx3:
             workstream.render_surface(rec, "worktree", repo)

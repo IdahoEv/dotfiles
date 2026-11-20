@@ -306,9 +306,25 @@ else
     resolver_issue_csv="$(IFS=,; echo "${resolver_issues[*]}")"
   fi
   if [ -n "$ws_record" ]; then
+    ws_pr_key="$("$SCRIPT_DIR/workstream.sh" render key --for-surface pr --dir "$worktree_root" \
+      ${issue_explicit:+--ids "$resolver_issue_csv"} \
+      ${provider:+--provider "$provider"})" || exit 1
     bare_title="$title"
-    while [[ "$bare_title" =~ ^(Is[0-9]+(\+[0-9]+)*|sc-[0-9]+(\+[0-9]+)*)(:?)[[:space:]]+(.*)$ ]]; do
-      bare_title="${BASH_REMATCH[5]}"
+    while :; do
+      if [ -n "$ws_pr_key" ] && [[ "$bare_title" == "$ws_pr_key"* ]]; then
+        rest="${bare_title#"$ws_pr_key"}"
+        rest="${rest#:}"
+        trimmed="${rest#"${rest%%[![:space:]]*}"}"
+        if [ "$rest" != "$trimmed" ] || [ -z "$rest" ]; then
+          bare_title="$trimmed"
+          continue
+        fi
+      fi
+      if [[ "$bare_title" =~ ^(Is[0-9]+(\+[0-9]+)*|sc-[0-9]+(\+[0-9]+)*)(:?)[[:space:]]+(.*)$ ]]; then
+        bare_title="${BASH_REMATCH[5]}"
+        continue
+      fi
+      break
     done
     ws_pr_title="$("$SCRIPT_DIR/workstream.sh" render pr --dir "$worktree_root" \
       ${issue_explicit:+--ids "$resolver_issue_csv"} \

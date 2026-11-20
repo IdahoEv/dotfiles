@@ -376,6 +376,14 @@ new_repo bug/Is88-foo
 out="$(run --title "Typed branch fix" --review none)"
 check "bug/Is88-foo branch: PR title prefixed" "Shipped Is88: Typed branch fix" "$(grep '^Shipped ' <<<"$out")"
 
+# Re-running with an already-rendered custom PR key is idempotent.
+new_repo 12+13-retry-guard
+mkdir -p .workstreams
+printf '{"pr":{"key_template":"[{chain}]","ticket_separator":","}}\n' > .workstreams/settings.json
+"$TOOLS/workstream.sh" init-ticket --dir "$ROOT/repo" --provider github --ids 12,13 --desc "retry guard" >/dev/null
+out="$(run --title "[12,13] retry guard" --review none)"
+check "custom PR key idempotent" "Shipped [12,13]: retry guard" "$(grep '^Shipped ' <<<"$out")"
+
 # ---- telemetry --------------------------------------------------------------
 export WF_TELEMETRY_LOG="$ROOT/events.jsonl"
 # Events need an owner/repo origin. The URL is display-only: pushes are routed

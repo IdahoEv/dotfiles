@@ -298,6 +298,7 @@ def load_workstream_meta(pane_path: str) -> tuple[str, str, str]:
         return ("", "", "")
     if rec.tickets and (rec.ticket_provider or rec.kind == "ticket"):
         ticket_ref = workstream.derive_key(rec, pane_path, surface="row")
+        workstream.validate_surface_output(ticket_ref, "row", rec, pane_path)
     else:
         ticket_ref = rec.key or ""
     return (ticket_ref, rec.desc or "", workstream.format_phase_tags(rec))

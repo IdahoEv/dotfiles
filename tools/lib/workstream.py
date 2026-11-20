@@ -605,6 +605,20 @@ def _active_naming_sources(surface: str, dir_: str) -> str:
         parts.append(f"{tmpl_key}={tmpl!r} ({tmpl_src})")
     if sep_src != "default":
         parts.append(f"{sep_key}={sep!r} ({sep_src})")
+    for setting_key, default_val in (
+        ("provider.form", "brief"),
+        ("provider.brief", ""),
+        ("provider.full", ""),
+        ("chain.mode", "all"),
+    ):
+        val, src = resolve_setting(setting_key, dir_, default=default_val)
+        if src != "default" and val:
+            parts.append(f"{setting_key}={val!r} ({src})")
+    if surface != "key":
+        default_form = DEFAULT_SURFACE_FORMS.get(surface, "words")
+        form_val, form_src = resolve_setting(f"{surface}.form", dir_, default=default_form)
+        if form_src != "default" and form_val:
+            parts.append(f"{surface}.form={form_val!r} ({form_src})")
     _, surface_sources = _resolve_surface_template(surface, dir_)
     for key, val, src in surface_sources:
         parts.append(f"{key}={val!r} ({src})")
@@ -655,11 +669,18 @@ def validate_surface_output(
         )
 
 
-def render_surface(record: WorkstreamRecord, surface: str, dir_: str = ".") -> str:
+def render_surface(
+    record: WorkstreamRecord,
+    surface: str,
+    dir_: str = ".",
+    *,
+    key_surface: str = "",
+) -> str:
     """Render a named surface ('key' | 'base' | 'branch' | 'worktree' | 'row' | 'pr' | 'commit')."""
     if surface == "key":
-        out = derive_key(record, dir_, surface="key")
-        validate_surface_output(out, "key", record, dir_)
+        target_surface = key_surface or "key"
+        out = derive_key(record, dir_, surface=target_surface)
+        validate_surface_output(out, target_surface, record, dir_)
         return out
     default_form = DEFAULT_SURFACE_FORMS.get(surface, "words")
     form, _ = resolve_setting(f"{surface}.form", dir_, default=default_form)
@@ -952,6 +973,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_ren = sub.add_parser("render")
     p_ren.add_argument("surface", choices=SURFACES)
+    p_ren.add_argument("--for-surface", default="")
     p_ren.add_argument("--dir", default=".")
     p_ren.add_argument("--provider", default="")
     p_ren.add_argument("--ids", default="")
@@ -1094,7 +1116,7 @@ def main(argv: list[str] | None = None) -> int:
                 if sanitized:
                     rec.desc = format_text(sanitized, "words")
         try:
-            sys.stdout.write(render_surface(rec, args.surface, args.dir))
+            sys.stdout.write(render_surface(rec, args.surface, args.dir, key_surface=args.for_surface))
         except WorkstreamValidationError as exc:
             sys.stderr.write(f"workstream: {exc}\n")
             return 1
