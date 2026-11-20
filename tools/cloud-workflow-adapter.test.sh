@@ -84,6 +84,7 @@ printf 'PASS local Codex adapter maps every covered command and nested review pr
 claude_commands=(
   "$repo/dot_claude/commands/start.md"
   "$repo/dot_claude/commands/open-pr.md"
+  "$repo/dot_claude/commands/finalize.md"
   "$repo/dot_claude/commands/merge.md"
   "$repo/dot_claude/commands/land.md"
   "$repo/dot_claude/commands/sync.md"
