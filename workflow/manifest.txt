@@ -93,7 +93,7 @@ d6c45d70d96c21971b022ea65a73f2b0fd4af0dd0b8abb524a9fd34cfd7a43df  644  tools/lib
 bdc67f5e5e4a39317822f39d306cff15c4b9eb7b43335d2a656ac68f640bd6ed  644  tools/lib/wf_review_gaps.py
 3c46a31599092ceabb336ccd81b8e9a03631dbd0e8942152e8bbc420a74180fc  644  tools/lib/wf_tokens.py
 3b1a0716083c8f92ab94a60d59ecee59a1716e54cca16dd6cf25f77e2abfe41f  644  tools/lib/wf_usage.py
-551b1883ff779ef86c21480c6f7c1ee5a78f190809e66368b7689372ab46a60f  644  tools/lib/workstream.py
+5f8ecef8011aa8d2ae942d9760ea33062b6f9b68c16b64953892faea30f373f4  644  tools/lib/workstream.py
 f6d369e82e99df2b899a4e53f1418bced2ab931851ae6e9ea7603c2460975cbc  755  tools/mcp-notion.sh
 6a1180dd4d342705d243b1f0a8a1ecb59826860e67a7e0de6aa63b232c757cad  755  tools/mem-guard.sh
 1983059031a0f6fa099c539706b0f46edd41fd4aa675016a0ebbb0e126262b7b  755  tools/merge-run.sh
@@ -101,7 +101,7 @@ c8ce372b7286fdec6d59dc1cc586f65cffd3ad95cdeebdd089631832c46e1b09  755  tools/mig
 ebdb84b0473af44ffdc63fce69e007c3529d61f245f8008c8bd6c7a2b330373d  644  tools/open-pr-providers/github.sh
 4646c4c8143747fa1e8ccb52a499d01ae230c71e6f06c19508223edce007fc25  644  tools/open-pr-providers/shortcut.sh
 20e1ba6f76351bfc20a2c77acbac4195426e5dd7e2122a60229b0e27c02438b0  755  tools/open-pr-watch.sh
-4dbfcb3f6a44ec0d74e6604f2441c66195b4f806f142004d7f6f25ae2fc289e0  755  tools/open-pr.sh
+d078b6af81123a4eb20320708a7c29700268c033a0ce18d85ba6d041f4ca7422  755  tools/open-pr.sh
 dc55a6a27785e8576b61964aeefb66b3e419c24bcb46ee280a2f8463befb450a  755  tools/pending-actions.sh
 924937befc2fa9b642c8cdd3407ec9958a32ca8cc05259bc2b31a1be387849fb  755  tools/pr-body.sh
 f6ec970038d77efb2159bd5818cb7fc4cbd72ceddfe0bcbc353d3a6f51061850  644  tools/project-colors
@@ -123,7 +123,7 @@ e366a502be678c6fa82962d428bbdc9414457a32835de696989c42582e500eca  755  tools/sib
 19cf2853382e6922ff9b03291f85d00e5a4b98a8acd0bc2e9a563ac91d2e68e6  644  tools/start-ticket-providers/github-mcp.sh
 18f70650d7898cbaa3a7b3f6f67038901cb331b9138a3494ad7b8501bb9411d5  644  tools/start-ticket-providers/github.sh
 ae4e93d3a0d38815b1c929d3ff237054c71a8a46dd01e30e2cd23c2ed9343fee  644  tools/start-ticket-providers/shortcut.sh
-5bf37440058fad57fd5964cfcd31127c22f9859bf89520501b6f553ab2c035f5  755  tools/start-ticket.sh
+f532098156d5165096a2571bd70f9d50ce27377eef6493f7e532c82c5b521a4c  755  tools/start-ticket.sh
 2f05e33075ba15221c8da189495317c293d22055b5548cd2db0f98b4c30c47e2  755  tools/sync-gate.sh
 1abff882cb55863b47da0513aec9a824a52a228f7da137c1562d638ad1d5fae6  755  tools/sync-run.sh
 c1e6502f75831f41c5316e583cd7c14f7a33d694d9837e08094d107237bfe0a7  755  tools/tracker.sh
@@ -134,7 +134,7 @@ c1e6502f75831f41c5316e583cd7c14f7a33d694d9837e08094d107237bfe0a7  755  tools/tra
 f15dd098841d7963da09693fafbb3bf3f713952434c4c4b8a40dec6cb7cb0fcd  755  tools/workflow-manifest.sh
 8b3c4fad15997740068b84ced54bf8395749d2b33b6700dd9af651b5047d0057  755  tools/workflow-session.sh
 0e8c1deefa52ec93b05c3e69b89f612adc5bb434d8c1ec8c8e98813313c92f44  755  tools/workstream.sh
-cb41af044928182975030d4ede61783b4c03acf1d5d766ae7890f0557efa64bd  755  tools/worktree-manager.sh
+3b1dc980b3cdfa3906b4080f25518308db20af7babcbb7d8e06a7ac3cf499cd3  755  tools/worktree-manager.sh
 727e43df9fca9721a3dbc607b7f08d34494963e7e30a579dc041cd202f3fa5fa  644  workflow/adapters/agy.md
 c42c6ae3b68ab2aca41bceff8ad42be91af428625cf0db30c670bc3345cd3548  644  workflow/adapters/claude-cloud.md
 6aababc08b7d64b5f10de317a1378587aae79d034067791dfb15f6002849a3b4  644  workflow/adapters/codex-local.md

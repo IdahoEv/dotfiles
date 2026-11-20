@@ -704,14 +704,14 @@ if [ -z "$ST_BRANCH" ]; then
       --ids "$(IFS=,; echo "${ids[*]}")" \
       "--title=$_ws_title" \
       "--desc=${GT_LABEL_SLUG_OVERRIDE:-}" \
-      "--type=$ST_TYPE" 2>/dev/null || true)"
+      "--type=$ST_TYPE")" || exit 1
     ST_WORKTREE="$("$SCRIPT_DIR/workstream.sh" render worktree \
       --dir "$repo_root" \
       --provider "$scheme" \
       --ids "$(IFS=,; echo "${ids[*]}")" \
       "--title=$_ws_title" \
       "--desc=${GT_LABEL_SLUG_OVERRIDE:-}" \
-      "--type=$ST_TYPE" 2>/dev/null || true)"
+      "--type=$ST_TYPE")" || exit 1
   fi
   if [ -z "$ST_BRANCH" ]; then
     _fb_slug="$(gt::slug_title "$_ws_title")"

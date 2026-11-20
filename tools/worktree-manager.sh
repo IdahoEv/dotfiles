@@ -447,14 +447,14 @@ fetch_shortcut_ticket() {
             --ids "$ticket_id" \
             "--title=$title" \
             "--desc=${GT_LABEL_SLUG_OVERRIDE:-}" \
-            "--type=$stype" 2>/dev/null || true)"
+            "--type=$stype")" || exit 1
         worktree_name="$("$SCRIPT_DIR/workstream.sh" render worktree \
             --dir "$repo_dir" \
             --provider shortcut \
             --ids "$ticket_id" \
             "--title=$title" \
             "--desc=${GT_LABEL_SLUG_OVERRIDE:-}" \
-            "--type=$stype" 2>/dev/null || true)"
+            "--type=$stype")" || exit 1
     fi
 
     if [ -z "$branch_name" ]; then

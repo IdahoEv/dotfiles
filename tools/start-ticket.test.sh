@@ -458,5 +458,14 @@ rm -f "$ROOT/agy-tmux.args" "$HOME/.config/start-ticket/config"
 check "mem-guard blocks agy-tmux launcher" "1" "$rc"
 check "blocked agy-tmux never invokes agy-tmux.sh" "no" "$([ -e "$ROOT/agy-tmux.args" ] && echo yes || echo no)"
 
+mkdir -p "$ROOT/widgets/.workstreams"
+printf '{"branch":{"template":".."}}\n' > "$ROOT/widgets/.workstreams/settings.json"
+(cd "$ROOT/widgets" && START_TICKET_PROVIDER_DIR="$STP" \
+  "$ST" 12 --provider fake --print-title >/dev/null 2>"$ROOT/invalid-branch.err"); rc=$?
+check "invalid branch.template fails start-ticket.sh" "1" "$rc"
+has "invalid branch.template reports destination" "invalid branch name" "$ROOT/invalid-branch.err"
+has "invalid branch.template reports producing setting" "branch.template" "$ROOT/invalid-branch.err"
+rm -rf "$ROOT/widgets/.workstreams"
+
 printf '%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

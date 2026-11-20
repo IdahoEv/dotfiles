@@ -1,6 +1,8 @@
 # Workstream configuration
 
-**Decision:** one `config.yaml` per layer, plus prose files referenced by name. It replaces `start-ticket.conf`, the `GT_*` env knobs, `.worktree-sync`, `lib/pr-risk.json` and the settings parts of `.claude/project-review.md`. The committed layer moves out of `.claude/` into `.workstream/`, so the tool stays separable from Claude's own files if it is opened to other developers (roadmap phase 4).
+> **Note:** Sections 1–7 below (`config.yaml` in `.workstream/`) are the earlier design proposal, superseded for implemented settings by [Workstreams JSON settings (implemented)](#workstreams-json-settings-implemented).
+
+**Decision (earlier proposal):** one `config.yaml` per layer, plus prose files referenced by name. It replaces `start-ticket.conf`, the `GT_*` env knobs, `.worktree-sync`, `lib/pr-risk.json` and the settings parts of `.claude/project-review.md`. The committed layer moves out of `.claude/` into `.workstream/`, so the tool stays separable from Claude's own files if it is opened to other developers (roadmap phase 4).
 
 ## Format
 

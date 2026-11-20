@@ -559,6 +559,44 @@ def render_template(
     return _clean_rendered(rendered, form)
 
 
+def _resolve_surface_template(surface: str, dir_: str) -> tuple[str, list[tuple[str, str, str]]]:
+    """Return (effective_template, contributing_non_default_settings) for <surface>."""
+    if surface in ("key", "base"):
+        base_tmpl, base_src = resolve_setting("base", dir_, default="")
+        sources = [("base", base_tmpl, base_src)] if (surface == "base" and base_src != "default" and base_tmpl) else []
+        return ("", sources)
+
+    sources: list[tuple[str, str, str]] = []
+    tmpl, tmpl_src = resolve_setting(f"{surface}.template", dir_, default="")
+    if tmpl_src != "default" and tmpl:
+        sources.append((f"{surface}.template", tmpl, tmpl_src))
+    elif not tmpl:
+        if surface == "worktree":
+            branch_tmpl, branch_src = resolve_setting("branch.template", dir_, default="")
+            if branch_src != "default" and branch_tmpl:
+                sources.append(("branch.template", branch_tmpl, branch_src))
+            tmpl = branch_tmpl if branch_tmpl else "{base}"
+        elif surface == "row":
+            tmpl = "{phase} {base}"
+        elif surface == "pr":
+            _, base_src = resolve_setting("base", dir_, default="{key} {desc}")
+            tmpl = "{base}" if base_src != "default" else "{key}: {desc}"
+        elif surface == "commit":
+            prefix_on, prefix_src = resolve_setting("commit.key_prefix", dir_, default="false")
+            if prefix_src != "default":
+                sources.append(("commit.key_prefix", prefix_on, prefix_src))
+            tmpl = "{key}: {desc}" if prefix_on.lower() == "true" else "{desc}"
+        else:
+            tmpl = "{base}"
+
+    if "{base}" in tmpl:
+        base_tmpl, base_src = resolve_setting("base", dir_, default="")
+        if base_src != "default" and base_tmpl:
+            sources.append(("base", base_tmpl, base_src))
+
+    return (tmpl, sources)
+
+
 def _active_naming_sources(surface: str, dir_: str) -> str:
     """Describe non-default settings contributing to <surface>."""
     tmpl, tmpl_key, tmpl_src, sep, sep_key, sep_src = _resolve_key_settings(dir_, surface)
@@ -567,21 +605,9 @@ def _active_naming_sources(surface: str, dir_: str) -> str:
         parts.append(f"{tmpl_key}={tmpl!r} ({tmpl_src})")
     if sep_src != "default":
         parts.append(f"{sep_key}={sep!r} ({sep_src})")
-    effective_tmpl = ""
-    if surface not in ("key", "base"):
-        surface_tmpl, surface_tmpl_src = resolve_setting(f"{surface}.template", dir_, default="")
-        if surface_tmpl_src != "default" and surface_tmpl:
-            parts.append(f"{surface}.template={surface_tmpl!r} ({surface_tmpl_src})")
-            effective_tmpl = surface_tmpl
-        elif surface == "worktree":
-            branch_tmpl, branch_tmpl_src = resolve_setting("branch.template", dir_, default="")
-            if branch_tmpl_src != "default" and branch_tmpl:
-                parts.append(f"branch.template={branch_tmpl!r} ({branch_tmpl_src})")
-                effective_tmpl = branch_tmpl
-    if surface == "base" or (surface != "key" and (not effective_tmpl or "{base}" in effective_tmpl)):
-        base_tmpl, base_src = resolve_setting("base", dir_, default="")
-        if base_src != "default" and base_tmpl:
-            parts.append(f"base={base_tmpl!r} ({base_src})")
+    _, surface_sources = _resolve_surface_template(surface, dir_)
+    for key, val, src in surface_sources:
+        parts.append(f"{key}={val!r} ({src})")
     return ", ".join(parts) if parts else "default settings"
 
 
@@ -645,21 +671,7 @@ def render_surface(record: WorkstreamRecord, surface: str, dir_: str = ".") -> s
         validate_surface_output(out, "base", record, dir_)
         return out
 
-    tmpl, _ = resolve_setting(f"{surface}.template", dir_, default="")
-    if not tmpl:
-        if surface == "worktree":
-            branch_tmpl, _ = resolve_setting("branch.template", dir_, default="")
-            tmpl = branch_tmpl if branch_tmpl else "{base}"
-        elif surface == "row":
-            tmpl = "{phase} {base}"
-        elif surface == "pr":
-            _, base_src = resolve_setting("base", dir_, default="{key} {desc}")
-            tmpl = "{base}" if base_src != "default" else "{key}: {desc}"
-        elif surface == "commit":
-            prefix_on, _ = resolve_setting("commit.key_prefix", dir_, default="false")
-            tmpl = "{key}: {desc}" if prefix_on.lower() == "true" else "{desc}"
-        else:
-            tmpl = "{base}"
+    tmpl, _ = _resolve_surface_template(surface, dir_)
 
     out = render_template(tmpl, record, form=form, dir_=dir_, surface=surface)
     if surface == "worktree":

@@ -313,7 +313,7 @@ else
     ws_pr_title="$("$SCRIPT_DIR/workstream.sh" render pr --dir "$worktree_root" \
       ${issue_explicit:+--ids "$resolver_issue_csv"} \
       ${provider:+--provider "$provider"} \
-      ${bare_title:+--desc "$bare_title"} 2>/dev/null || true)"
+      ${bare_title:+--desc "$bare_title"})" || exit 1
     if [ -n "$ws_pr_title" ]; then
       title="$ws_pr_title"
       used_resolver=1
