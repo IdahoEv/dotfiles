@@ -26,8 +26,8 @@ import finalize_check  # noqa: E402
 KEYS = [
     "branch", "ticket_id", "chain_ids", "ticket_scheme", "base", "base_source",
     "pr_number", "pr_state", "pr_merge_commit", "pr_head_oid", "pr_count",
-    "pr_open_other", "head_oid", "head_matches", "merged",
-    "merge_commit_landed", "base_fetch", "shallow", "tracking_refspec",
+    "pr_open_other", "head_oid", "head_matches",
+    "local_commits_in_base", "merged", "merge_commit_landed", "base_fetch", "shallow", "tracking_refspec",
     "base_worktree", "worktree", "verdict", "agent_phase", "dotfiles_repo",
     "deploy_root", "deploy_branch", "deploy_dirty_files", "deploy_pull_rebase",
 ]
@@ -161,6 +161,14 @@ class VerdictLadder(unittest.TestCase):
             ({"pr_state": "CLOSED"}, "not-merged", "REVIEW"),
             ({"head_matches": "ahead"}, "local-commits", ""),
             ({"head_matches": "diverged"}, "local-commits", ""),
+            ({"head_matches": "ahead", "local_commits_in_base": "no"},
+             "local-commits", ""),
+            ({"head_matches": "ahead", "local_commits_in_base": "unknown"},
+             "local-commits", ""),
+            ({"head_matches": "ahead", "local_commits_in_base": "yes"},
+             "ready", "MERGED"),
+            ({"head_matches": "diverged", "local_commits_in_base": "yes"},
+             "ready", "MERGED"),
             ({"head_matches": "unknown"}, "unknown", ""),
             ({"pr_open_other": "9"}, "not-merged", "REVIEW"),
             ({"merged": "no", "merge_commit_landed": "yes"}, "ready", "MERGED"),
@@ -273,7 +281,8 @@ class Verdicts(Base):
             "pr_number": "3", "pr_state": "MERGED",
             "pr_merge_commit": merge_sha, "pr_head_oid": tip,
             "pr_count": "1", "pr_open_other": "",
-            "head_oid": tip, "head_matches": "same", "merged": "yes",
+            "head_oid": tip, "head_matches": "same",
+            "local_commits_in_base": "", "merged": "yes",
             "merge_commit_landed": "yes", "base_fetch": "ok", "shallow": "no",
             "tracking_refspec": "ok", "base_worktree": str(repo),
             "worktree": str(wt), "verdict": "ready", "agent_phase": "MERGED",
@@ -391,12 +400,47 @@ class HeadMatches(Base):
         (wt / "more.txt").write_text("m\n")
         self.git(wt, "add", "-A")
         self.git(wt, "commit", "-qm", "more")
-        tip = self.git(wt, "rev-parse", "HEAD")
-        merge_sha = self.merge_branch(repo)
+        self.git(repo, "merge", "--no-ff", "-m", "merge first", first)
+        merge_sha = self.git(repo, "rev-parse", "HEAD")
+        self.git(repo, "push", "-q", "origin", "main")
         self.set_pr(self.pr(3, "MERGED", head=first, merge=merge_sha))
         f = self.facts(self.run_check("--dir", str(wt)))
         self.assertEqual(f["head_matches"], "ahead")
+        self.assertEqual(f["local_commits_in_base"], "no")
         self.assertEqual(f["verdict"], "local-commits")
+
+    def test_ahead_but_merged_forward_with_base_is_ready(self):
+        repo, wt = self.repo_with_wt()
+        first = self.git(wt, "rev-parse", "HEAD")
+        merge_sha = self.merge_branch(repo)
+        self.git(repo, "commit", "-q", "--allow-empty", "-m", "main moves on")
+        self.git(repo, "push", "-q", "origin", "main")
+        self.git(wt, "fetch", "-q", "origin")
+        self.git(wt, "reset", "-q", "--hard", "origin/main")
+        self.set_pr(self.pr(3, "MERGED", head=first, merge=merge_sha))
+        f = self.facts(self.run_check("--dir", str(wt)))
+        self.assertEqual(f["head_matches"], "ahead")
+        self.assertEqual(f["local_commits_in_base"], "yes")
+        self.assertEqual(f["merged"], "yes")
+        self.assertEqual(f["verdict"], "ready")
+
+    def test_ahead_patch_equivalent_to_base_is_ready(self):
+        repo, wt = self.repo_with_wt()
+        first = self.git(wt, "rev-parse", "HEAD")
+        (wt / "more.txt").write_text("m\n")
+        self.git(wt, "add", "-A")
+        self.git(wt, "commit", "-qm", "more")
+        more = self.git(wt, "rev-parse", "HEAD")
+        self.git(repo, "merge", "--no-ff", "-m", "merge first", first)
+        self.git(repo, "cherry-pick", more)
+        merge_sha = self.git(repo, "rev-parse", "HEAD")
+        self.git(repo, "push", "-q", "origin", "main")
+        self.set_pr(self.pr(3, "MERGED", head=first, merge=merge_sha))
+        f = self.facts(self.run_check("--dir", str(wt)))
+        self.assertEqual(f["head_matches"], "ahead")
+        self.assertEqual(f["merged"], "no")
+        self.assertEqual(f["local_commits_in_base"], "yes")
+        self.assertEqual(f["verdict"], "ready")
 
     def test_diverged_is_local_commits(self):
         repo, wt = self.repo_with_wt()

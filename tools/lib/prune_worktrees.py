@@ -204,11 +204,13 @@ def merge_proof(branch: str, wt: str) -> tuple[str, str, str, str]:
     head = _git(wt, "rev-parse", "--verify", "--quiet", f"refs/heads/{branch}")
     landed = fc.merge_commit_landed(pr.merge_commit, base, wt)
     shallow = _git(wt, "rev-parse", "--is-shallow-repository") == "true"
+    matches = fc.head_matches_status(head, pr.head_oid, wt)
     facts = dataclasses.replace(
         fc.Facts(**{k: "" for k in fc.KEYS}),
         base=base, base_source=source, pr_number=pr.number, pr_state=pr.state,
         pr_open_other=pr.open_other, head_oid=head, merged=merged,
-        head_matches=fc.head_matches_status(head, pr.head_oid, wt),
+        head_matches=matches,
+        local_commits_in_base=fc.local_commits_in_base_status(head, matches, base, wt),
         merge_commit_landed=landed, base_fetch=fetch,
         shallow="yes" if shallow else "no",
     )
