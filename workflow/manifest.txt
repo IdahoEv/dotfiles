@@ -72,7 +72,7 @@ aba2b3934bec4b85ba04e090631da2057c981cac6059dec8ace4a8a3bd0fac9b  755  tools/fin
 3f4eccfb3870044bd024e820eb574426ff520ebeee761fb622c1777710e85c2e  644  tools/lib/agy_tmux_dashboard.py
 c65a9d624fbaf3e578e61a3665878270255cbc0c7581174eff5e4e420ae5fc80  644  tools/lib/codex_rpc.py
 b46a5fb41794ce2ac7b79ffdbfc7765c3bb0241fb005be870a7b7198408721f3  644  tools/lib/codex_workflow.py
-9129521d5fa38004e4ab60f2730c2b13dd4887f161b335a75a5baba18bf555da  644  tools/lib/finalize_check.py
+2753a6520187c61fd2a9d7c821d41a68ce4deacb69bf069630ba3e09fe89cf97  644  tools/lib/finalize_check.py
 c7ff5c7023983bd54b0ca320559948ea4f1957b6c3aa0c2b897e20e20210f57b  644  tools/lib/finalize_run.py
 c199ef2288c932712b23e714458383cff10c945f32d21ac5ded6ca2fe25e52f0  644  tools/lib/mem_guard.py
 f1fdb71b7615a6e2078d9a8923b9657215f5431fe9605d1d57bf54f874bfc6f7  644  tools/lib/merge_run.py
@@ -81,7 +81,7 @@ f2a76fa675abd9ec93f935a0a9673ea6bbfac857b3ff2db535140c32a166db1e  644  tools/lib
 3cc905bbaf8a45cb980ef6dfb458c57b334e867026f4e21602393c49292fb004  644  tools/lib/pending_actions.py
 c35d14e612032aeb02db2a06ba9770e4b193f42c0c1570a96c0907613d0d959f  644  tools/lib/pr-risk.json
 ac8c0f92f9527fbb17c12a660565f1359150725ea34531f6e556cd0ff056a941  644  tools/lib/pr_body.py
-38d09af7329cebfd5aa02106525cad5bdf2e5929ff2c8c80992e10abb4f8ef97  644  tools/lib/prune_worktrees.py
+32baf9bd8a3256f6e63a6adfedff2a79944f4e01defaf78c87b023a2d03043d9  644  tools/lib/prune_worktrees.py
 0d3c21eccab00c8f4fdce929fe2c239d3cf46d5996270f6e3b4e2276674fe3a4  644  tools/lib/repo-facts.sh
 1675c497552ffa7a8a3b23bdfe6b790c126bf1d4ec854f76a857d05a349aef21  644  tools/lib/repo_facts.py
 d86aa76659afb858f4f235ed3e222d4359072437ad4c817efef4076a4c4ed9e9  644  tools/lib/sibling_worktrees.py

@@ -169,6 +169,10 @@ class VerdictLadder(unittest.TestCase):
              "ready", "MERGED"),
             ({"head_matches": "diverged", "local_commits_in_base": "yes"},
              "ready", "MERGED"),
+            ({"head_matches": "ahead", "local_commits_in_base": "yes",
+              "base_fetch": "failed"}, "local-commits", ""),
+            ({"head_matches": "ahead", "local_commits_in_base": "yes",
+              "shallow": "yes"}, "local-commits", ""),
             ({"head_matches": "unknown"}, "unknown", ""),
             ({"pr_open_other": "9"}, "not-merged", "REVIEW"),
             ({"merged": "no", "merge_commit_landed": "yes"}, "ready", "MERGED"),
@@ -439,6 +443,31 @@ class HeadMatches(Base):
         f = self.facts(self.run_check("--dir", str(wt)))
         self.assertEqual(f["head_matches"], "ahead")
         self.assertEqual(f["merged"], "no")
+        self.assertEqual(f["local_commits_in_base"], "yes")
+        self.assertEqual(f["verdict"], "ready")
+
+    def test_ahead_patch_equivalent_after_squash_merge_is_ready(self):
+        repo, wt = self.repo_with_wt()
+        (wt / "second.txt").write_text("s\n")
+        self.git(wt, "add", "-A")
+        self.git(wt, "commit", "-qm", "second")
+        pr_head = self.git(wt, "rev-parse", "HEAD")
+        # Squash-merge the two-commit PR so neither commit matches main alone.
+        self.git(repo, "merge", "--squash", pr_head)
+        self.git(repo, "commit", "-qm", "squash PR")
+        # Add a local commit after pr_head and cherry-pick it onto main.
+        (wt / "more.txt").write_text("m\n")
+        self.git(wt, "add", "-A")
+        self.git(wt, "commit", "-qm", "more")
+        more = self.git(wt, "rev-parse", "HEAD")
+        self.git(repo, "cherry-pick", more)
+        merge_sha = self.git(repo, "rev-parse", "HEAD")
+        self.git(repo, "push", "-q", "origin", "main")
+        self.set_pr(self.pr(3, "MERGED", head=pr_head, merge=merge_sha))
+        f = self.facts(self.run_check("--dir", str(wt)))
+        self.assertEqual(f["head_matches"], "ahead")
+        self.assertEqual(f["merged"], "no")
+        self.assertEqual(f["merge_commit_landed"], "yes")
         self.assertEqual(f["local_commits_in_base"], "yes")
         self.assertEqual(f["verdict"], "ready")
 

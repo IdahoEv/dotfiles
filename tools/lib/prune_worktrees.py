@@ -210,7 +210,8 @@ def merge_proof(branch: str, wt: str) -> tuple[str, str, str, str]:
         base=base, base_source=source, pr_number=pr.number, pr_state=pr.state,
         pr_open_other=pr.open_other, head_oid=head, merged=merged,
         head_matches=matches,
-        local_commits_in_base=fc.local_commits_in_base_status(head, matches, base, wt),
+        local_commits_in_base=fc.local_commits_in_base_status(
+            head, matches, base, wt, pr.head_oid),
         merge_commit_landed=landed, base_fetch=fetch,
         shallow="yes" if shallow else "no",
     )
