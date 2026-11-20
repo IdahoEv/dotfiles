@@ -92,7 +92,7 @@ if [[ "$title" =~ ^\[!\]\ * ]]; then
   attn=1; title="${title#"${BASH_REMATCH[0]}"}"
 fi
 # Legacy REVIEW/REVIEWED/READY stay recognised for sessions named before the review tags.
-rtok='[LGH]([0-9]+✓?|-|✓)'
+rtok='[LGH]([0-9]+(✓)?|-|✓)'
 if [[ "$title" =~ ^\[(PLAN|WIP|MERGED|DONE|REVIEW|REVIEWED|READY)\]\ * ]] \
   || [[ "$title" =~ ^\[($rtok( $rtok)*)\]\ * ]]; then
   phase="${BASH_REMATCH[1]}"; title="${title#"${BASH_REMATCH[0]}"}"

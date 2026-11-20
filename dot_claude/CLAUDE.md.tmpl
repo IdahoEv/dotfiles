@@ -154,7 +154,7 @@ local accepted, GitHub in round 1, PR open. Review flows run `agent-phase.sh --r
 
 **Needs-you:** run `agent-phase.sh --attn` before any question or approval request to me
 (including presenting the plan), and when something fails that I must fix (auth, a reviewer
-that couldn't run, a stall). It puts `[!]` first in the row; a hook clears it when I reply. It
+that couldn't run, a stall). It puts `[!]` first in the row; a hook clears it when I reply (after an `AskUserQuestion` answer, run `agent-phase.sh --ok`). It
 is raised automatically when every planned review is accepted and a PR is open.
 
 `[TALK]` marks a non-ticket `/discuss` session. It has no phase until it files a ticket and

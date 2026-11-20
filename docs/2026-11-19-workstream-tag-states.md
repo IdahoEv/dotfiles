@@ -21,7 +21,7 @@ The session name prefix is `[!]<stage-or-review>[PR] <label>`. Each part is opti
 | Review group | one tag per planned source, space-separated, in brackets | Replaces the stage while review is active |
 | `[PR]` | present or absent | A PR exists; dropped by `MERGED` and `DONE` |
 
-`READY` and `REVIEWED` are removed. "Ready for review" is `L-`; "review finished" is every planned source `✓`.
+`READY` and `REVIEWED` are removed as name-prefix tags (`REVIEWED` survives only as the telemetry `phase` event). "Ready for review" is `L-`; "review finished" is every planned source `✓`.
 
 ## Review tag
 
@@ -46,7 +46,7 @@ The session name prefix is `[!]<stage-or-review>[PR] <label>`. Each part is opti
 
 ## Planned sources (interim)
 
-One function in `agent-phase.sh` derives the set: `L` always; `G` unless `~/.config/local-review-only` is set; `H` never, unless a command marks it. The planned review config (sources, round limit, serial/parallel) will come from the workstream settings system; replacing this function is the only change then. Out of scope here.
+`planned_review_sources()` in `tools/lib/workstream.py` derives the set: `L` always; `G` unless `~/.config/local-review-only` is set; `H` never, unless a command marks it. The planned review config (sources, round limit, serial/parallel) will come from the workstream settings system; replacing this function is the only change then. Out of scope here.
 
 ## Needs-you rule
 

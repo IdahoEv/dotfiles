@@ -43,7 +43,7 @@ c50e086a7b42089c07e17323e2aa8656c6fcc9e35fd22d5244dd52c1c8728557  644  dot_claud
 2cde0450935a61a0384afac7655b46cea02adc0957dfe840cfcbfbe9c8393cdc  644  dot_claude/skills/github-review-procedure/SKILL.md
 ee70fb1a401ed104231eb6f9ea72334263ca35b579f030d27946692cc57776be  644  dot_claude/skills/github-review-procedure/executable_github-review-poll.sh
 67802bf1ef342b36149f1c0a20f7f5ea00024b8b100b4793220a6b446c6f0105  644  dot_claude/skills/github-review-procedure/executable_github-review-state.sh
-3472e2abdbb5089196ba4f4a8d75a520062b458baede56615f9f2e5a1a6a999d  644  dot_claude/skills/local-review-cycle-procedure/SKILL.md
+044594eccdf47faebc865d564c0b9f413b183390663d8306cb650abaa417d916  644  dot_claude/skills/local-review-cycle-procedure/SKILL.md
 97c1052d80862ef417564d7e1e109c0cd0f48aaa755299962122f244559d2fab  644  dot_claude/skills/project-review-apply-procedure/SKILL.md
 6cdcee8781e3f952cb2639f1c29e067818c7feaf15aeb65bf4e0fd4dbf0df30e  644  dot_claude/skills/project-review-procedure/SKILL.md
 6df3c5e8b019a3ecb46bbd3f37c8d3866b39dd5596baea39734d710ab6cae649  644  dot_claude/skills/prompt-review/SKILL.md
@@ -135,7 +135,7 @@ f15dd098841d7963da09693fafbb3bf3f713952434c4c4b8a40dec6cb7cb0fcd  755  tools/wor
 8b3c4fad15997740068b84ced54bf8395749d2b33b6700dd9af651b5047d0057  755  tools/workflow-session.sh
 0e8c1deefa52ec93b05c3e69b89f612adc5bb434d8c1ec8c8e98813313c92f44  755  tools/workstream.sh
 cb41af044928182975030d4ede61783b4c03acf1d5d766ae7890f0557efa64bd  755  tools/worktree-manager.sh
-bf434fa0dbe4272f6324fe9b7a42f7911eff895c02ae06a0ef9a0d97b4931e7c  644  workflow/adapters/agy.md
+0cb8d1f00c61dffb76916f1ae0efaf303c04c5d087b3e645540b449f5720a2cf  644  workflow/adapters/agy.md
 c42c6ae3b68ab2aca41bceff8ad42be91af428625cf0db30c670bc3345cd3548  644  workflow/adapters/claude-cloud.md
 6aababc08b7d64b5f10de317a1378587aae79d034067791dfb15f6002849a3b4  644  workflow/adapters/codex-local.md
 aae0f1c2a394dfa72012a412edcadc8eede575e652591c10db91bdea2932f73f  644  workflow/adapters/codex.md

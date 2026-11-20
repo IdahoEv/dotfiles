@@ -75,7 +75,7 @@ Each round:
    Once the round is committed (or nothing changed), close it on the statusline with `~/.claude/skills/github-review-procedure/github-review-state.sh --set-local "<k>"`.
 7. Stop when there are no actionable findings or remaining feedback is only repeats, speculative hardening, or low-value nits. In later rounds, scope follows step 1: reviewers see only the fix-commit diff plus the correctness pass on touched files; a full `BASE...HEAD` re-review needs a concrete reason.
 
-Run `agent-phase.sh --attn` before every question to the user: the round approval, the design gate and the round-5 stop.
+Run `agent-phase.sh --attn` before every question to the user: the round approval, the design gate and the round-5 stop. An `AskUserQuestion` answer is not a prompt, so run `agent-phase.sh --ok` once it is answered.
 
 If the first architecture review returns `DESIGN: unsound`, stop before changing code and ask the user whether to keep or rework the design. Include the concrete alternative and trade-offs. This gate applies only when the reviewer demonstrates a materially better alternative—not for style preferences.
 
