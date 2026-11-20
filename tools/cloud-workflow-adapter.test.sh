@@ -129,7 +129,11 @@ grep -q 'TodoWrite' "$fixture/err" || fail "the stale row should be named"
 for adapter_name in codex agy claude-cloud codex-local opencode-local; do
   adapter="$repo/workflow/adapters/${adapter_name}.md"
   if grep -q 'bash <(' "$adapter"; then fail "$adapter_name adapter must not run the bootstrap via process substitution (hides download failure)"; fi
-  for rule in 'workflow_source_commit' 'Never imply a check passed' 'Workflow source:'; do
+  case "$adapter_name" in
+    codex-local|opencode-local) sha_rule='workflow_source_commit' ;;
+    *) sha_rule='workflow_source_commit=' ;;
+  esac
+  for rule in "$sha_rule" 'Never imply a check passed' 'Workflow source:'; do
     grep -q -- "$rule" "$adapter" || fail "$adapter_name adapter protocol is missing: $rule"
   done
 done
