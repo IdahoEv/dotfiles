@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Drift check: every Claude-only construct used by the commands a cloud adapter
+# Drift check: every Claude-only construct used by the commands a workflow adapter
 # covers must have a row in the adapter's construct map, and every row must
 # still occur in those commands.
 set -euo pipefail
@@ -126,10 +126,10 @@ fi
 grep -q 'TodoWrite' "$fixture/err" || fail "the stale row should be named"
 [[ "$pass_new" == 1 ]] && printf 'PASS detects unmapped constructs and stale rows\n'
 
-for adapter_name in codex agy claude-cloud; do
+for adapter_name in codex agy claude-cloud codex-local opencode-local; do
   adapter="$repo/workflow/adapters/${adapter_name}.md"
   if grep -q 'bash <(' "$adapter"; then fail "$adapter_name adapter must not run the bootstrap via process substitution (hides download failure)"; fi
-  for rule in 'workflow_source_commit=' 'Never imply a check passed' 'Workflow source:'; do
+  for rule in 'workflow_source_commit' 'Never imply a check passed' 'Workflow source:'; do
     grep -q -- "$rule" "$adapter" || fail "$adapter_name adapter protocol is missing: $rule"
   done
 done

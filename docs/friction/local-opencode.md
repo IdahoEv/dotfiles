@@ -1,4 +1,4 @@
-# Friction: opencode-local
+# Friction: local-opencode
 
 Entries follow the template in [README.md](README.md).
 
