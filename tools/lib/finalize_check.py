@@ -103,7 +103,7 @@ HELP = """# finalize-check.sh — read-only post-merge verification for a featur
 #                               makes merge commits — offer the config fix)
 #   verdict=ready|not-merged|no-pr|local-commits|squash-merged|not-on-base|
 #           unknown
-#   agent_phase=MERGED|REVIEW|  the agent-view phase this verdict implies, for
+#   agent_phase=MERGED|         the agent-view phase this verdict implies, for
 #               <empty>         the caller to pass to agent-phase.sh. Empty when
 #                               the verdict doesn't justify moving the label.
 #
@@ -513,8 +513,6 @@ def agent_phase_for(verdict: str) -> str:
     there, and stamping MERGED would mislabel work that never landed)."""
     if verdict == "ready":
         return "MERGED"
-    if verdict == "not-merged":
-        return "REVIEW"
     return ""
 
 

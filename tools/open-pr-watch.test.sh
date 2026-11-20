@@ -39,29 +39,29 @@ export PATH="$ROOT/bin:$PATH" OPEN_PR_POLL="$ROOT/bin/poll" NOTIFY_LOG="$ROOT/no
 
 watch() {  # <poll-rc> → stdout of the watcher
   rm -f "$NOTIFY_LOG" "$WF_TELEMETRY_LOG"
-  printf '{"name":"[REVIEW][PR] Is42 foo","state":"working"}' > "$CLAUDE_JOB_DIR/state.json"
+  printf '{"name":"[L2✓ G1][PR] Is42 foo","state":"working"}' > "$CLAUDE_JOB_DIR/state.json"
   # agent-phase.sh reads ./.workstream.json; run from a dir without one so the
   # caller's checkout can't override the fixture's state.json.
   (cd "$ROOT" && POLL_RC="$1" "$TOOLS/open-pr-watch.sh" 7)
 }
-phase() { jq -r '.name | split(" ")[0]' "$CLAUDE_JOB_DIR/state.json"; }
+phase() { jq -r '.name | sub(" Is42 foo$"; "")' "$CLAUDE_JOB_DIR/state.json"; }
 event() { tail -1 "$WF_TELEMETRY_LOG" 2>/dev/null | jq -r "$1" 2>/dev/null; }
 
 out="$(watch 0)"
 check "comments: outcome line"  "pr=7 exit_code=0 outcome=comments: review comments arrived: run /github-review-comments" "$out"
-check "comments: phase untouched" "[REVIEW][PR]" "$(phase)"
+check "comments: phase untouched" "[L2✓ G1][PR]" "$(phase)"
 check "comments: notified"      "1" "$(grep -c 'display notification' "$NOTIFY_LOG")"
 check "comments: notification names the PR" "1" "$(grep -c 'PR #7' "$NOTIFY_LOG")"
 
 out="$(watch 3)"
-check "signed off: phase reviewed" "[REVIEWED][PR]" "$(phase)"
+check "signed off: G accepted, awaiting merge" "[!][L2✓ G1✓][PR]" "$(phase)"
 check "signed off: outcome"     "1" "$(grep -c 'outcome=signed-off' <<<"$out")"
 
 out="$(watch 4)"
-check "reviewer unavailable: phase reviewed" "[REVIEWED][PR]" "$(phase)"
+check "reviewer unavailable: needs you" "[!][L2✓ G1][PR]" "$(phase)"
 
 out="$(watch 1)"
-check "timeout: phase reviewed" "[REVIEWED][PR]" "$(phase)"
+check "timeout: needs you" "[!][L2✓ G1][PR]" "$(phase)"
 check "timeout: outcome"        "1" "$(grep -c 'outcome=timeout' <<<"$out")"
 
 out="$(watch 9)"

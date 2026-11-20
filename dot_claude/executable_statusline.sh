@@ -2,7 +2,7 @@
 # Two-line statusline. Line 1 is project/task info, line 2 is Claude info.
 # The layout depends on the session's role, read from its title:
 #   "<Project> Governor"      long-running: no phase
-#   "[PHASE] <ticket label>"  ticket session (agent-phase.sh writes the prefix)
+#   "[!][STAGE|reviews][PR] <ticket label>"  ticket session (agent-phase.sh writes the prefix)
 #   "Workflow"                like a ticket session; phase shown once one is set
 #   anything else             plain session: directory and title
 input=$(cat)
@@ -38,22 +38,23 @@ line1=""
 if [ -n "$cwd" ] && command -v workstream.sh >/dev/null 2>&1; then
   ws_json="$(workstream.sh statusline --dir "$cwd" --format json 2>/dev/null || true)"
   if [ -n "$ws_json" ]; then
-    IFS=$US read -r ws_proj ws_name ws_tags ws_pr_num ws_pr_url ws_pr_state ws_rev < <(
+    IFS=$US read -r ws_proj ws_name ws_tags ws_attn ws_pr_num ws_pr_url ws_pr_state ws_rev < <(
       printf '%s' "$ws_json" | jq -r '[
-        .project // "", .name // "", .tags // "",
+        .project // "", .name // "", .tags // "", .attn // "",
         .pr_num // "", .pr_url // "", .pr_state // "", .reviews // ""
       ] | map(tostring) | join("\u001f")' 2>/dev/null || true)
     if [ -n "$ws_name" ] || [ -n "$ws_proj" ]; then
       ws_proj_seg=""; [ -n "$ws_proj" ] && ws_proj_seg="${BLUE}${ws_proj}${RST}"
       ws_name_seg=""; [ -n "$ws_name" ] && ws_name_seg="${GREEN}${ws_name}${RST}"
-      ws_tags_seg=""; [ -n "$ws_tags" ] && ws_tags_seg="${ORANGE}${ws_tags}${RST}"
+      ws_tags_seg=""; [ -n "$ws_tags" ] && ws_tags_seg="${ORANGE}${ws_tags//✓/${GREEN}✓${ORANGE}}${RST}"
+      ws_attn_seg=""; [ -n "$ws_attn" ] && ws_attn_seg=$'\e[1m'"${RED}[!]${RST}"
       ws_pr_seg=""
       if [ -n "$ws_pr_num" ]; then
         ws_pr_seg="PR #${ws_pr_num}${ws_pr_state:+ ${ws_pr_state//_/ }}"
         [ -n "$ws_pr_url" ] && ws_pr_seg=$'\e]8;;'"${ws_pr_url}"$'\a'"${ws_pr_seg}"$'\e]8;;\a'
       fi
       ws_rev_seg=""; [ -n "$ws_rev" ] && ws_rev_seg="reviews: ${ws_rev}"
-      line1=$(join "$ws_proj_seg" "$ws_name_seg" "$ws_tags_seg" "$ws_pr_seg" "$ws_rev_seg")
+      line1=$(join "$ws_attn_seg" "$ws_proj_seg" "$ws_name_seg" "$ws_tags_seg" "$ws_pr_seg" "$ws_rev_seg")
     fi
   fi
 fi
@@ -86,8 +87,14 @@ project_seg=""; [ -n "$project" ] && project_seg="${BLUE}${project}${RST}"
 short_path=$(printf '%s' "$cwd" | awk -F/ '{if (NF <= 4) {print $0} else {printf "~/…"; for (i=NF-1; i<=NF; i++) {if ($i != "") printf "/%s", $i}}}' | sed "s|^$HOME|~|")
 
 # ---- role and phase from the title ---------------------------------------------
-phase="" title="$name"
-if [[ "$title" =~ ^\[(PLAN|WIP|REVIEW|REVIEWED|MERGED|DONE)\] ]]; then
+attn="" phase="" title="$name"
+if [[ "$title" =~ ^\[!\]\ * ]]; then
+  attn=1; title="${title#"${BASH_REMATCH[0]}"}"
+fi
+# Legacy REVIEW/REVIEWED/READY stay recognised for sessions named before the review tags.
+rtok='[LGH]([0-9]+(✓)?|-|✓)'
+if [[ "$title" =~ ^\[(PLAN|WIP|MERGED|DONE|REVIEW|REVIEWED|READY)\]\ * ]] \
+  || [[ "$title" =~ ^\[($rtok( $rtok)*)\]\ * ]]; then
   phase="${BASH_REMATCH[1]}"; title="${title#"${BASH_REMATCH[0]}"}"
 fi
 title="${title#\[PR\]}"; title="${title# }"
@@ -133,12 +140,13 @@ if [ -n "$pr_num" ] || [ -f "$rounds_file" ]; then
 fi
 
 # ---- legacy line 1 -------------------------------------------------------------------
-phase_seg=""; [ -n "$phase" ] && phase_seg="${ORANGE}[${phase}]${RST}"
+phase_seg=""; [ -n "$phase" ] && phase_seg="${ORANGE}[${phase//✓/${GREEN}✓${ORANGE}}]${RST}"
+attn_seg=""; [ -n "$attn" ] && attn_seg=$'\e[1m'"${RED}[!]${RST}"
 case "$role" in
-  governor) line1=$(join "$project_seg" "Governor" "$branch_seg" "$pr_seg" "$rounds_seg") ;;
+  governor) line1=$(join "$attn_seg" "$project_seg" "Governor" "$branch_seg" "$pr_seg" "$rounds_seg") ;;
   ticket|workflow)
-            line1=$(join "$project_seg" "$branch_seg" "$phase_seg" "$pr_seg" "$rounds_seg") ;;
-  *)        line1=$(join "${BLUE}${short_path}${RST}" "$branch_seg" "$title" "$pr_seg" "$rounds_seg") ;;
+            line1=$(join "$attn_seg" "$project_seg" "$branch_seg" "$phase_seg" "$pr_seg" "$rounds_seg") ;;
+  *)        line1=$(join "$attn_seg" "${BLUE}${short_path}${RST}" "$branch_seg" "$title" "$pr_seg" "$rounds_seg") ;;
 esac
 fi
 

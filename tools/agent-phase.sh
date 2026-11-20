@@ -1,31 +1,38 @@
 #!/usr/bin/env bash
 # agent-phase.sh — stamp a ticket's workflow phase onto .workstream.json and its agent-view row.
 #
-#   agent-phase.sh [--dir <path>] <PLAN|WIP|REVIEW|REVIEWED|MERGED|DONE>
-#   agent-phase.sh [--dir <path>] --pr          # add the [PR] tag (a PR has been issued)
-#   agent-phase.sh [--dir <path>] --no-review   # REVIEW -> REVIEWED, keep [PR] (review finished)
-#   agent-phase.sh [--dir <path>] --show
-#   agent-phase.sh [--dir <path>] --clear
+#   agent-phase.sh [--dir <path>] <PLAN|WIP|MERGED|DONE>   set the stage; drops review tags
+#   agent-phase.sh [--dir <path>] --plan-reviews            add the planned review sources, not started
+#   agent-phase.sh [--dir <path>] --review <L|G|H> <N|next|-|drop> [ok]
+#   agent-phase.sh [--dir <path>] --review <L|G|H> ok       N = round in progress, next = the round
+#                                                           after the current one, - = planned,
+#                                                           ok = accepted (keeps the current round)
+#   agent-phase.sh [--dir <path>] --pr                      a PR exists
+#   agent-phase.sh [--dir <path>] --attn | --ok             raise / clear the needs-you flag
+#   agent-phase.sh [--dir <path>] --show | --clear
 #
 # Claude Code's agent view (`claude agents`) shows two state axes already:
 # `status` (idle/busy — process level, set by the daemon) and `state`
 # (working/blocked/done — turn level, set by the model). Neither says where a
-# ticket is in ITS lifecycle: planning, implementing, in review, merged,
-# finalized. This script encodes that third axis as a prefix on the session's
-# display name, which is the only field that is model-writable, unbounded, and
-# visible in both the TUI and `claude agents --json`:
+# workstream is in ITS lifecycle. This script encodes that third axis as a prefix
+# on the session's display name, the only field that is model-writable, unbounded,
+# and visible in both the TUI and `claude agents --json`:
 #
-#   [PLAN]   Sc74618 Build Docker Image
-#   [WIP]    Sc74618 Build Docker Image
-#   [REVIEW] Sc74618 Build Docker Image
+#   [!][L2✓ G1][PR] Sc74618 Build Docker Image
 #
-# [PR] is a second, compounding tag: set once a PR exists, independent of phase.
-#   [REVIEW]         local review in progress, no PR yet
-#   [REVIEW][PR]     PR open and a review (local or GitHub) in progress
-#   [REVIEWED]       review finished, no PR yet
-#   [REVIEWED][PR]   PR open, review finished
-#   [PR]             PR open, never reviewed (or review skipped)
-# MERGED and DONE drop [PR]; the merge supersedes it.
+#   [!]        needs the user, whatever the cause; always first
+#   stage      [PLAN] [WIP] [MERGED] [DONE] — shown when no review is planned
+#   reviews    one tag per planned source, replacing the stage while review is active:
+#              <source><round><status>; source L local, G GitHub/bots, H human;
+#              status: none = in progress, - = planned, ✓ = accepted
+#   [PR]       a PR exists; MERGED and DONE drop it
+#
+# Any stage, review or PR change clears [!]. It is raised by --attn, and
+# automatically when every planned source is accepted and a PR is open (awaiting
+# merge). A UserPromptSubmit hook runs --ok so it clears when the user replies.
+# The tag logic lives in lib/workstream.py (apply_transition); this script is the
+# CLI, the telemetry emit and the state.json mirror. Design:
+# docs/2026-11-19-workstream-tag-states.md.
 #
 # The name after the number is distilled from the ticket title by
 # start-ticket.sh (gt::distill_title); this script only rewrites the prefix.
@@ -61,16 +68,16 @@ set -euo pipefail
 
 die() { printf 'agent-phase: %s\n' "$*" >&2; exit 1; }
 
-PHASES="PLAN WIP REVIEW REVIEWED MERGED DONE"
+PHASES="PLAN WIP MERGED DONE"
 
 usage() {
-  printf 'usage: agent-phase.sh [--dir <path>] <%s>\n       agent-phase.sh [--dir <path>] --pr | --no-review | --show | --clear\n' \
+  printf 'usage: agent-phase.sh [--dir <path>] <%s>\n       agent-phase.sh [--dir <path>] --review <L|G|H> <N|next|-|drop> [ok] | --review <L|G|H> ok\n       agent-phase.sh [--dir <path>] --plan-reviews | --pr | --attn | --ok | --show | --clear\n' \
     "$(echo "$PHASES" | tr ' ' '|')" >&2
 }
 
 # ---- args -------------------------------------------------------------------
 dir="."
-phase="" action=""
+phase="" action="" src="" round="" accepted=""
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --dir)
@@ -83,10 +90,26 @@ while [ "$#" -gt 0 ]; do
       [ -n "$dir" ] || { usage; die "--dir requires a path"; }
       shift
       ;;
-    --show|--clear|--pr|--no-review)
+    --show|--clear|--pr|--attn|--ok|--plan-reviews)
       [ -z "$action" ] || { usage; die "unexpected extra argument: $1"; }
       action="${1#--}"
       shift
+      ;;
+    --review)
+      [ -z "$action" ] || { usage; die "unexpected extra argument: $1"; }
+      action="review"
+      src="${2:-}" round="${3:-}"
+      case "$src" in L|G|H) ;; *) usage; die "unknown review source '$src' (expected L, G or H)" ;; esac
+      if [ "$round" = "ok" ]; then
+        round="keep" accepted=1; shift 3
+      else
+        [[ "$round" =~ ^([1-9][0-9]*|-|next|keep|drop)$ ]] || { usage; die "bad round '$round' (expected a number >= 1, -, next, keep or drop)"; }
+        case "${4:-}" in
+          "") shift 3 ;;
+          ok) accepted=1; shift 4 ;;
+          *) usage; die "unknown status '$4' (expected ok)" ;;
+        esac
+      fi
       ;;
     -h|--help)
       sed -n '2,/^set -euo/p' "$0" | sed '$d'
@@ -119,28 +142,36 @@ while [ -h "$_src" ]; do
   [ "${_src#/}" = "$_src" ] && _src="$_dir/$_src"
 done
 SCRIPT_DIR="$(cd -P "$(dirname "$_src")" && pwd)"
+emit_phase() {
+  # shellcheck source=lib/telemetry.sh
+  { . "$SCRIPT_DIR/lib/telemetry.sh" && wf::emit phase "phase=$1"; } || true
+}
 case "$action" in
-  set|no-review)
-    # shellcheck source=lib/telemetry.sh
-    { . "$SCRIPT_DIR/lib/telemetry.sh" \
-      && wf::emit phase "phase=${phase:-REVIEWED}"; } || true ;;
+  set)    emit_phase "$phase" ;;
+  review) [ -n "$accepted" ] || [ "$round" = "-" ] || [ "$round" = "drop" ] || emit_phase REVIEW ;;
 esac
 
-# ---- .workstream.json phase -------------------------------------------------
+# ---- .workstream.json tags ----------------------------------------------------
 ws_row=""
 if [ -x "$SCRIPT_DIR/workstream.sh" ]; then
+  ws="$SCRIPT_DIR/workstream.sh"
   case "$action" in
     show)
-      if "$SCRIPT_DIR/workstream.sh" phase --dir "$dir" --show 2>/dev/null; then
+      if "$ws" phase --dir "$dir" --show 2>/dev/null; then
         exit 0
       fi
       ;;
-    clear)     "$SCRIPT_DIR/workstream.sh" phase --dir "$dir" --clear >/dev/null 2>&1 || true ;;
-    pr)        "$SCRIPT_DIR/workstream.sh" phase --dir "$dir" --pr >/dev/null 2>&1 || true ;;
-    no-review) "$SCRIPT_DIR/workstream.sh" phase --dir "$dir" --no-review >/dev/null 2>&1 || true ;;
-    set)       "$SCRIPT_DIR/workstream.sh" phase --dir "$dir" "$phase" >/dev/null 2>&1 || true ;;
+    clear|pr|attn|ok|plan-reviews) "$ws" phase --dir "$dir" "--$action" >/dev/null 2>&1 || true ;;
+    review)
+      "$ws" phase --dir "$dir" --review "$src" "$round" ${accepted:+ok} >/dev/null 2>&1 || true ;;
+    set)       "$ws" phase --dir "$dir" "$phase" >/dev/null 2>&1 || true ;;
   esac
-  ws_row="$("$SCRIPT_DIR/workstream.sh" render row --dir "$dir" 2>/dev/null || true)"
+  # Awaiting merge: every planned review accepted with a PR open. Recorded as REVIEWED
+  # so the telemetry stage report keeps its post-review bucket.
+  case "$action" in
+    pr|review) "$ws" phase --dir "$dir" --awaiting-merge 2>/dev/null && emit_phase REVIEWED ;;
+  esac
+  ws_row="$("$ws" render row --dir "$dir" 2>/dev/null || true)"
 fi
 
 # ---- locate the session's state file ----------------------------------------
@@ -162,14 +193,13 @@ command -v python3 >/dev/null || exit 0
 # daemon rewrites this same file on every status change, and a partial write
 # would corrupt a session's state, not just its label. jq isn't guaranteed
 # present; python3 ships with macOS.
-PHASE="$phase" ACTION="$action" PHASES="$PHASES" WS_ROW="$ws_row" python3 - "$state_file" <<'PY'
-import json, os, re, sys, tempfile
+PHASE="$phase" ACTION="$action" SRC="$src" ROUND="$round" ACCEPTED="$accepted" WS_ROW="$ws_row" \
+  LIB_DIR="$SCRIPT_DIR/lib" python3 - "$state_file" <<'PY'
+import json, os, sys, tempfile
 
-path    = sys.argv[1]
-phase   = os.environ["PHASE"]
-action  = os.environ["ACTION"]
-phases  = os.environ["PHASES"].split()
-ws_row  = os.environ.get("WS_ROW", "")
+path     = sys.argv[1]
+action   = os.environ["ACTION"]
+ws_row   = os.environ.get("WS_ROW", "")
 
 try:
     with open(path) as fh:
@@ -181,35 +211,27 @@ name = state.get("name")
 if not isinstance(name, str):
     sys.exit(0)
 
-if ws_row and action != "show":
+sys.path.insert(0, os.environ["LIB_DIR"])
+import workstream  # noqa: E402
+
+if action == "show":
+    print(workstream.name_prefix(name))
+    sys.exit(0)
+
+if ws_row:
     new = ws_row
 else:
-    # Parse the prefix we previously applied: an optional phase tag, then an
-    # optional [PR] tag. Anchored to the known phase set so a ticket whose real
-    # title happens to start with bracketed text (e.g. "[spike] try X") keeps it.
-    m = re.match(r"^(?:\[(%s)\])?(\[PR\])?\s*" % "|".join(phases), name)
-    cur_phase, cur_pr = m.group(1), bool(m.group(2))
-    bare = name[m.end():]
-
-    if action == "show":
-        print("".join(["[%s]" % cur_phase] * bool(cur_phase)) + "[PR]" * cur_pr)
+    # No workstream record: apply the transition to the name's own prefix.
+    kw = {
+        "clear": dict(clear=True), "pr": dict(pr=True), "attn": dict(attn=True), "ok": dict(ok=True),
+        "plan-reviews": dict(plan_reviews=True),
+        "review": dict(review=(os.environ["SRC"], os.environ["ROUND"], bool(os.environ["ACCEPTED"]))),
+        "set": dict(phase=os.environ["PHASE"]),
+    }[action]
+    try:
+        new = workstream.retag_name(name, **kw)
+    except ValueError:
         sys.exit(0)
-
-    new_phase, new_pr = cur_phase, cur_pr
-    if action == "clear":
-        new_phase, new_pr = None, False
-    elif action == "pr":
-        new_pr = True
-    elif action == "no-review":
-        if cur_phase == "REVIEW":
-            new_phase = "REVIEWED"
-    else:
-        new_phase = phase
-        if phase in ("MERGED", "DONE"):
-            new_pr = False
-
-    tags = ("[%s]" % new_phase if new_phase else "") + ("[PR]" if new_pr else "")
-    new = "%s %s" % (tags, bare) if tags else bare
 if new == name:
     sys.exit(0)
 
@@ -225,7 +247,7 @@ dirname = os.path.dirname(path) or "."
 fd, tmp = tempfile.mkstemp(dir=dirname, prefix=".state.json.")
 try:
     with os.fdopen(fd, "w") as fh:
-        json.dump(state, fh, indent=2)
+        json.dump(state, fh, indent=2, ensure_ascii=False)
         fh.flush()
         os.fsync(fh.fileno())
     os.replace(tmp, path)

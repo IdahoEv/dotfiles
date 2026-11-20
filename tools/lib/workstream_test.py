@@ -463,7 +463,7 @@ class ResolverTests(WorkstreamTestBase):
             key="Is312+313+315",
             desc="SQL invoice totals",
             type="feature",
-            tags=["REVIEW", "PR"],
+            tags=["L2", "G-", "PR"],
         )
         self.assertEqual(
             workstream.render_template("{provider:full}-{chain:first}..{chain:last} {desc:snake}", rec, form="words", dir_=repo),
@@ -471,7 +471,7 @@ class ResolverTests(WorkstreamTestBase):
         )
         self.assertEqual(
             workstream.render_template("{phase} {key} {desc:Title}", rec, form="words", dir_=repo),
-            "[REVIEW][PR] Is312+313+315 SQL Invoice Totals",
+            "[L2 G-][PR] Is312+313+315 SQL Invoice Totals",
         )
 
 
@@ -627,11 +627,23 @@ class CliTests(WorkstreamTestBase):
         self.assertEqual(rec.tags, ["WIP", "PR", "custom"])
         self.assertEqual(workstream.format_phase_tags(rec), "[WIP][PR][custom]")
 
-        rec = workstream.update_phase(repo, phase="REVIEW")
-        self.assertEqual(rec.tags, ["REVIEW", "PR", "custom"])
-
-        rec = workstream.update_phase(repo, no_review=True)
-        self.assertEqual(rec.tags, ["REVIEWED", "PR", "custom"])
+        rec = workstream.update_phase(repo, plan_reviews=True)
+        self.assertEqual(rec.tags, ["L-", "G-", "PR", "custom"])
+        rec = workstream.update_phase(repo, review=("L", "1", False))
+        self.assertEqual(rec.tags, ["L1", "G-", "PR", "custom"])
+        self.assertEqual(workstream.format_phase_tags(rec), "[L1 G-][PR][custom]")
+        rec = workstream.update_phase(repo, review=("L", "keep", True))
+        rec = workstream.update_phase(repo, review=("G", "next", False))
+        self.assertEqual(workstream.format_phase_tags(rec), "[L1✓ G1][PR][custom]")
+        rec = workstream.update_phase(repo, review=("G", "keep", True))
+        self.assertEqual(rec.tags, ["!", "L1✓", "G1✓", "PR", "custom"])
+        self.assertEqual(workstream.format_phase_tags(rec, include_attn=False), "[L1✓ G1✓][PR][custom]")
+        rec = workstream.update_phase(repo, ok=True)
+        self.assertEqual(rec.tags, ["L1✓", "G1✓", "PR", "custom"])
+        rec = workstream.update_phase(repo, attn=True)
+        self.assertEqual(rec.tags[0], "!")
+        rec = workstream.update_phase(repo, phase="WIP")
+        self.assertEqual(rec.tags, ["WIP", "PR", "custom"])
 
         rec = workstream.update_phase(repo, phase="MERGED")
         self.assertEqual(rec.tags, ["MERGED", "custom"])
@@ -640,6 +652,13 @@ class CliTests(WorkstreamTestBase):
         self.assertEqual(rec.tags, ["custom"])
         reloaded = workstream.load_record(repo)
         self.assertEqual(reloaded.tags, ["custom"])
+
+    def test_name_retag_without_a_record(self) -> None:
+        self.assertEqual(workstream.retag_name("[WIP][PR] Is1 x", review=("L", "next", False)), "[L1][PR] Is1 x")
+        self.assertEqual(workstream.retag_name("[REVIEWED][PR] Is1 x", phase="WIP"), "[WIP][PR] Is1 x")
+        self.assertEqual(workstream.retag_name("[spike] try X", phase="WIP"), "[WIP] [spike] try X")
+        self.assertEqual(workstream.name_prefix("[!][L1 H-][PR] Is2 x"), "[!][L1 H-][PR]")
+        self.assertEqual(workstream.retag_name("[!][L1✓][PR] Is2 x", clear=True), "Is2 x")
 
     def test_cli_phase_subcommand(self) -> None:
         repo = self.make_repo("widgets")
@@ -694,12 +713,22 @@ class CliTests(WorkstreamTestBase):
         # Completed local review + PR + remote review
         workstream.update_reviews(repo, local="2", remote="1")
         workstream.update_pr(repo, 205, url="https://github.com/IdahoEv/dotfiles/pull/205", state="APPROVED")
-        workstream.update_phase(repo, "REVIEWED")
+        workstream.update_phase(repo, plan_reviews=True)
+        workstream.update_phase(repo, review=("L", "2", True))
+        workstream.update_phase(repo, review=("G", "1", False))
         workstream.update_phase(repo, pr=True)
         self.assertEqual(
             workstream.format_statusline_line1(repo, project="dotfiles"),
-            "dotfiles | Is162+163 agent row statusline | [REVIEWED][PR] | PR #205 APPROVED | reviews: 2 local, 1 remote",
+            "dotfiles | Is162+163 agent row statusline | [L2✓ G1][PR] | PR #205 APPROVED | reviews: 2 local, 1 remote",
         )
+        workstream.update_phase(repo, review=("G", "keep", True))
+        fields = workstream.statusline_fields(repo, project="dotfiles")
+        self.assertEqual((fields["attn"], fields["tags"]), ("1", "[L2✓ G1✓][PR]"))
+        self.assertIn(" | [!] | [L2✓ G1✓][PR] | ", workstream.format_statusline_line1(repo, project="dotfiles"))
+
+    def test_review_drop_removes_planned_source(self) -> None:
+        tags = workstream.apply_transition(["L-", "G-"], review=("G", "drop", False))
+        self.assertEqual(tags, ["L-"])
 
 
 if __name__ == "__main__":

@@ -97,7 +97,7 @@ or "not run: <why>"). Never claim a pass that didn't run.
 
 Forward the user's `--provider`/`--env` and `--no-watch` verbatim if they gave them; omit otherwise.
 The script commits, pushes, opens or reuses the PR, triggers reviews, stamps the agent-view
-row (`[REVIEW][PR]` / `[REVIEWED][PR]` / `[PR]`), and starts the detached review watch. Don't
+row (`[L2✓ G1][PR]`-style review tags, `[PR]`), and starts the detached review watch. Don't
 repeat any of that by hand. It prints `pr_number`, `pr_url`, `pr_action`, `provider`,
 `trigger_mode`, `pr_title`, `pr_title_repaired_from` (only if it fixed a doubled prefix —
 mention it), `watch=started|skipped`, then a `Shipped … / PR … / Reviews …` block.

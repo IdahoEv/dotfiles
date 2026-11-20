@@ -3,7 +3,8 @@
 
     workstream.py init-ticket --dir <wt> --provider <p> --ids <csv> [--urls <csv>] [--title <t>] [--desc <d>] [--type <ty>] [--tag <tag>]...
     workstream.py show [--dir <wt>]
-    workstream.py phase [<PHASE>] [--dir <wt>] [--pr | --no-review | --clear | --show]
+    workstream.py phase [<PHASE>] [--dir <wt>] [--pr | --clear | --show | --attn | --ok | --plan-reviews
+                                    | --review SRC ROUND [ok] | --awaiting-merge]
     workstream.py chain-ids [--dir <wt>] [--fallback <id>]
     workstream.py chain-tag [--dir <wt>]
     workstream.py render <surface> [--dir <wt>]
@@ -32,7 +33,11 @@ import repo_facts  # noqa: E402
 
 RECORD_FILENAME = ".workstream.json"
 VALID_KINDS = ("ticket", "talk", "iteration")
-VALID_PHASES = ("PLAN", "WIP", "REVIEW", "REVIEWED", "MERGED", "DONE")
+VALID_PHASES = ("PLAN", "WIP", "MERGED", "DONE")
+# Stages written before the per-source review tags; parsed and dropped.
+LEGACY_PHASES = ("REVIEW", "REVIEWED", "READY")
+REVIEW_SOURCES = "LGH"
+_REVIEW_TAG = re.compile(r"^([LGH])(?:(\d+)(✓)?|(-)|(✓))$")
 VALID_FORMS = ("kebab", "words", "Title", "snake")
 SURFACES = ("key", "base", "branch", "worktree", "row", "pr", "commit")
 
@@ -352,20 +357,160 @@ def derive_key(record: WorkstreamRecord, dir_: str = ".") -> str:
     return record.key
 
 
-def format_phase_tags(record: WorkstreamRecord) -> str:
-    """Format a record's phase/kind/PR tags as '[WIP][PR]'."""
+def parse_review_tag(tag: str) -> tuple[str, int, str] | None:
+    """'L2✓' -> ('L', 2, 'ok'); 'G1' -> ('G', 1, 'run'); 'L-' -> ('L', 0, 'planned')."""
+    m = _REVIEW_TAG.match(tag.strip())
+    if not m:
+        return None
+    src, num, ok_after, dash, ok_bare = m.groups()
+    if dash:
+        return src, 0, "planned"
+    return src, int(num or 0), "ok" if (ok_after or ok_bare) else "run"
+
+
+def format_review_tag(src: str, num: int, status: str) -> str:
+    if status == "planned":
+        return f"{src}-"
+    return f"{src}{num or ''}{'✓' if status == 'ok' else ''}"
+
+
+def format_phase_tags(record: WorkstreamRecord, *, include_attn: bool = True) -> str:
+    """Format a record's tags as '[!][WIP][PR]'; review tags share one bracket: '[L2✓ G1]'."""
     tags = list(record.tags)
     if record.kind == "talk" and "TALK" not in tags:
         tags.insert(0, "TALK")
     elif record.kind == "iteration" and "ITERATE" not in tags:
         tags.insert(0, "ITERATE")
-    out = []
+    out: list[str] = []
+    group: list[str] = []
+
+    def flush() -> None:
+        if group:
+            out.append("[" + " ".join(group) + "]")
+            group.clear()
+
     for t in tags:
         t_clean = t.strip()
-        if not t_clean:
+        if not t_clean or (t_clean == "!" and not include_attn):
             continue
+        if parse_review_tag(t_clean):
+            group.append(t_clean)
+            continue
+        flush()
         out.append(t_clean if (t_clean.startswith("[") and t_clean.endswith("]")) else f"[{t_clean}]")
+    flush()
     return "".join(out)
+
+
+def planned_review_sources() -> list[str]:
+    """L always; G unless this machine is local-review-only; H never. A settings layer will replace this."""
+    flag = os.path.join(os.path.expanduser("~"), ".config", "local-review-only")
+    return ["L"] if os.path.exists(flag) else ["L", "G"]
+
+
+def awaiting_merge(tags: list[str]) -> bool:
+    """Every review source accepted and a PR open."""
+    reviews = [r for r in (parse_review_tag(t) for t in tags) if r]
+    return bool(reviews) and "PR" in [t.strip() for t in tags] and all(r[2] == "ok" for r in reviews)
+
+
+def _canonical(
+    has_attn: bool, stage: str | None, reviews: dict[str, tuple[int, str]], has_pr: bool, others: list[str]
+) -> list[str]:
+    out = ["!"] if has_attn else []
+    if stage:
+        out.append(stage)
+    out += [format_review_tag(s, *reviews[s]) for s in REVIEW_SOURCES if s in reviews]
+    if has_pr:
+        out.append("PR")
+    return out + others
+
+
+def apply_transition(
+    tags: list[str],
+    *,
+    phase: str | None = None,
+    pr: bool = False,
+    clear: bool = False,
+    attn: bool = False,
+    ok: bool = False,
+    plan_reviews: bool = False,
+    review: tuple[str, str, bool] | None = None,
+) -> list[str]:
+    """Apply one tag transition and return the canonical tag list.
+
+    Canonical order: '!', stage, review tags (L, G, H), 'PR', then any other tags. Every
+    stage, review or PR change clears '!'; it comes back when every review is accepted
+    with a PR open. `review` is (source, round, accepted); round is N, 'next', 'keep', '-' or 'drop'.
+    """
+    has_attn = False
+    stage: str | None = None
+    reviews: dict[str, tuple[int, str]] = {}
+    has_pr = False
+    others: list[str] = []
+    for raw in tags:
+        clean = raw.strip().strip("[]")
+        if not clean:
+            continue
+        rv = parse_review_tag(clean)
+        if clean == "!":
+            has_attn = True
+        elif clean.upper() in VALID_PHASES:
+            stage = clean.upper()
+        elif clean.upper() in LEGACY_PHASES:
+            continue
+        elif rv:
+            reviews[rv[0]] = (rv[1], rv[2])
+        elif clean.upper() == "PR":
+            has_pr = True
+        else:
+            others.append(raw.strip())
+
+    if clear:
+        return _canonical(False, None, {}, False, others)
+    if attn:
+        return _canonical(True, stage, reviews, has_pr, others)
+    if ok:
+        return _canonical(False, stage, reviews, has_pr, others)
+
+    if pr:
+        has_pr = True
+    elif plan_reviews:
+        stage = None
+        for src in planned_review_sources():
+            reviews.setdefault(src, (0, "planned"))
+    elif review is not None:
+        src, rnd, accepted = review
+        if src not in tuple(REVIEW_SOURCES):
+            raise ValueError(f"unknown review source: {src}")
+        prev = reviews.get(src, (0, "planned"))[0]
+        if rnd == "drop":
+            num = None
+        elif rnd == "-":
+            num = 0
+        elif rnd == "keep":
+            num = prev
+        elif rnd == "next":
+            num = prev + 1
+        elif rnd.isdigit() and int(rnd) >= 1:
+            num = int(rnd)
+        else:
+            raise ValueError(f"bad review round: {rnd}")
+        stage = None
+        if num is None:
+            reviews.pop(src, None)
+        else:
+            reviews[src] = (num, "ok" if accepted else "planned" if rnd == "-" else "run")
+    elif phase is not None:
+        norm = phase.strip().upper()
+        if norm not in VALID_PHASES:
+            raise ValueError(f"unknown phase: {phase}")
+        stage, reviews = norm, {}
+        if norm in ("MERGED", "DONE"):
+            has_pr = False
+
+    has_attn = (pr or review is not None) and awaiting_merge(_canonical(False, stage, reviews, has_pr, []))
+    return _canonical(has_attn, stage, reviews, has_pr, others)
 
 
 def update_phase(
@@ -373,13 +518,19 @@ def update_phase(
     phase: str | None = None,
     *,
     pr: bool = False,
-    no_review: bool = False,
     clear: bool = False,
+    attn: bool = False,
+    ok: bool = False,
+    plan_reviews: bool = False,
+    review: tuple[str, str, bool] | None = None,
 ) -> WorkstreamRecord | None:
-    """Update workflow phase/PR tags in <worktree>/.workstream.json when present."""
-    actions = int(phase is not None) + int(bool(pr)) + int(bool(no_review)) + int(bool(clear))
+    """Apply one tag transition to <worktree>/.workstream.json when present."""
+    actions = (
+        int(phase is not None) + int(bool(pr)) + int(bool(clear)) + int(bool(attn)) + int(bool(ok))
+        + int(bool(plan_reviews)) + int(review is not None)
+    )
     if actions != 1:
-        raise ValueError("specify exactly one of phase, pr, no_review, or clear")
+        raise ValueError("specify exactly one of phase, pr, clear, attn, ok, plan_reviews, or review")
     with _record_lock(worktree) as root:
         path = Path(root) / RECORD_FILENAME
         if not path.is_file():
@@ -387,46 +538,51 @@ def update_phase(
         rec = load_record(root)
         if rec is None:
             return None
-
-        other_tags: list[str] = []
-        cur_phase: str | None = None
-        cur_pr = False
-        for raw in rec.tags:
-            clean = raw.strip().strip("[]").upper()
-            if clean in VALID_PHASES:
-                cur_phase = clean
-            elif clean == "PR":
-                cur_pr = True
-            elif raw.strip():
-                other_tags.append(raw.strip())
-
-        new_phase, new_pr = cur_phase, cur_pr
-        if clear:
-            new_phase, new_pr = None, False
-        elif pr:
-            new_pr = True
-        elif no_review:
-            if cur_phase == "REVIEW":
-                new_phase = "REVIEWED"
-        elif phase is not None:
-            norm = phase.strip().upper()
-            if norm not in VALID_PHASES:
-                raise ValueError(f"unknown phase: {phase}")
-            new_phase = norm
-            if norm in ("MERGED", "DONE"):
-                new_pr = False
-
-        new_tags: list[str] = []
-        if new_phase:
-            new_tags.append(new_phase)
-        if new_pr:
-            new_tags.append("PR")
-        new_tags.extend(other_tags)
-
+        new_tags = apply_transition(
+            rec.tags, phase=phase, pr=pr, clear=clear, attn=attn, ok=ok,
+            plan_reviews=plan_reviews, review=review,
+        )
         if new_tags != rec.tags:
             rec.tags = new_tags
             _save_record_locked(root, rec)
         return rec
+
+
+def _split_name(name: str) -> tuple[list[str], str]:
+    """Split a session name into the tags we wrote and the rest. Bracketed title text is kept."""
+    tags: list[str] = []
+    rest = name
+    token = r"[LGH](?:\d+✓?|-|✓)"
+    m = re.match(r"\[!\]\s*", rest)
+    if m:
+        tags.append("!")
+        rest = rest[m.end():]
+    m = re.match(r"\[(%s)\]\s*" % "|".join(VALID_PHASES + LEGACY_PHASES), rest)
+    if m:
+        tags.append(m.group(1))
+        rest = rest[m.end():]
+    else:
+        m = re.match(r"\[(%s(?: %s)*)\]\s*" % (token, token), rest)
+        if m:
+            tags += m.group(1).split()
+            rest = rest[m.end():]
+    m = re.match(r"\[PR\]\s*", rest)
+    if m:
+        tags.append("PR")
+        rest = rest[m.end():]
+    return tags, rest
+
+
+def retag_name(name: str, **action: Any) -> str:
+    """Apply a transition to a session name that has no workstream record behind it."""
+    tags, bare = _split_name(name)
+    prefix = format_phase_tags(WorkstreamRecord(tags=apply_transition(tags, **action)))
+    return f"{prefix} {bare}" if prefix else bare
+
+
+def name_prefix(name: str) -> str:
+    tags, _ = _split_name(name)
+    return format_phase_tags(WorkstreamRecord(tags=tags))
 
 
 def _clean_rendered(text: str, form: str) -> str:
@@ -703,7 +859,8 @@ def statusline_fields(worktree: str = ".", project: str = "") -> dict[str, str] 
     root, rec = loaded
     proj = project or _project_name(root)
     ws_name = render_surface(rec, "base", dir_=root)
-    tags = format_phase_tags(rec)
+    tags = format_phase_tags(rec, include_attn=False)
+    attn = "1" if any(t.strip() == "!" for t in rec.tags) else ""
 
     pr_num = ""
     pr_url = ""
@@ -730,6 +887,7 @@ def statusline_fields(worktree: str = ".", project: str = "") -> dict[str, str] 
         "project": proj,
         "name": ws_name,
         "tags": tags,
+        "attn": attn,
         "pr_num": pr_num,
         "pr_url": pr_url,
         "pr_state": pr_state,
@@ -747,7 +905,8 @@ def format_statusline_line1(worktree: str = ".", project: str = "") -> str:
         state = fields["pr_state"].replace("_", " ")
         pr_seg = f"PR #{fields['pr_num']}" + (f" {state}" if state else "")
     rev_seg = f"reviews: {fields['reviews']}" if fields["reviews"] else ""
-    segs = [fields["project"], fields["name"], fields["tags"], pr_seg, rev_seg]
+    attn_seg = "[!]" if fields["attn"] else ""
+    segs = [fields["project"], fields["name"], attn_seg, fields["tags"], pr_seg, rev_seg]
     return " | ".join(s for s in segs if s)
 
 
@@ -773,9 +932,13 @@ def build_parser() -> argparse.ArgumentParser:
     p_phase.add_argument("--dir", default=".")
     p_phase_mx = p_phase.add_mutually_exclusive_group()
     p_phase_mx.add_argument("--pr", action="store_true")
-    p_phase_mx.add_argument("--no-review", action="store_true")
     p_phase_mx.add_argument("--clear", action="store_true")
     p_phase_mx.add_argument("--show", action="store_true")
+    p_phase_mx.add_argument("--attn", action="store_true")
+    p_phase_mx.add_argument("--ok", action="store_true")
+    p_phase_mx.add_argument("--plan-reviews", action="store_true")
+    p_phase_mx.add_argument("--awaiting-merge", action="store_true")
+    p_phase_mx.add_argument("--review", nargs="+", metavar="SRC [ROUND] [ok]")
 
     p_cids = sub.add_parser("chain-ids")
     p_cids.add_argument("--dir", default=".")
@@ -851,15 +1014,33 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.cmd == "phase":
-        has_flag = args.pr or args.no_review or args.clear or args.show
-        if has_flag and args.phase is not None:
-            parser.error("phase: cannot combine positional PHASE with --pr/--no-review/--clear/--show")
-        if not has_flag and args.phase is None:
-            parser.error("phase: specify a PHASE or one of --pr, --no-review, --clear, --show")
-        if args.show:
+        flags = (
+            args.pr, args.clear, args.show, args.attn, args.ok,
+            args.plan_reviews, args.awaiting_merge, args.review is not None,
+        )
+        if any(flags) and args.phase is not None:
+            parser.error("phase: cannot combine positional PHASE with a flag")
+        if not any(flags) and args.phase is None:
+            parser.error(
+                "phase: specify a PHASE or one of --pr, --clear, --show, --attn, --ok, "
+                "--plan-reviews, --review, --awaiting-merge"
+            )
+        review = None
+        if args.review is not None:
+            parts = args.review
+            accepted = parts[-1] == "ok"
+            parts = parts[:-1] if accepted else parts
+            if len(parts) == 1 and accepted:
+                parts.append("keep")
+            if len(parts) != 2:
+                parser.error("phase: --review takes SRC ROUND [ok] or SRC ok")
+            review = (parts[0], parts[1], accepted)
+        if args.show or args.awaiting_merge:
             rec = load_record(args.dir)
             if rec is None:
                 return 1
+            if args.awaiting_merge:
+                return 0 if awaiting_merge(rec.tags) else 1
             out = format_phase_tags(rec)
             if out:
                 sys.stdout.write(out + "\n")
@@ -869,8 +1050,11 @@ def main(argv: list[str] | None = None) -> int:
                 args.dir,
                 phase=args.phase,
                 pr=args.pr,
-                no_review=args.no_review,
                 clear=args.clear,
+                attn=args.attn,
+                ok=args.ok,
+                plan_reviews=args.plan_reviews,
+                review=review,
             )
         except ValueError as exc:
             sys.stderr.write(f"workstream: {exc}\n")
