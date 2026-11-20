@@ -132,19 +132,25 @@ check repo state, present a plan, and wait for approval before editing.
 **Workflow phase in the agent view.** Background ticket sessions carry their lifecycle
 phase as a name prefix (`[PLAN] Sc74618 …`) — a third state axis beside `status`
 (idle/busy) and `state` (working/blocked/done). `agent-phase.sh <PHASE>` sets it and
-no-ops outside a bg session. Phases: `PLAN → WIP → REVIEW → REVIEWED → MERGED → DONE`.
+no-ops outside a bg session. Stages: `PLAN → WIP → [review tags] → MERGED → DONE`.
 
-Scripts and commands own all of them but one: `start-ticket.sh` sets `PLAN`, `open-pr.sh`
-and the review commands set `REVIEW`, `/finalize` sets `MERGED` then `DONE`. **You own `PLAN → WIP`** — when I
-approve your plan and you start editing, run `agent-phase.sh WIP`. Approval is the
-trigger, not the first edit: if we're still iterating on the plan, stay at `PLAN`. Don't
-ask before running it and don't report it; it's bookkeeping.
+Scripts and commands own all of them but two: `start-ticket.sh` sets `PLAN`, `open-pr.sh`
+and the review commands set the review tags, `/finalize` sets `MERGED` then `DONE`. **You own
+`PLAN → WIP`** — when I approve your plan and you start editing, run `agent-phase.sh WIP`.
+Approval is the trigger, not the first edit: if we're still iterating on the plan, stay at
+`PLAN`. **You also own "ready for review"** — when the acceptance criteria are met and tests
+pass, run `agent-phase.sh --plan-reviews`. Don't ask before running these and don't report
+them; it's bookkeeping.
 
-A `[PR]` tag compounds with the phase once a PR exists (`open-pr.sh` adds it):
-`[REVIEW]` = local review running, no PR; `[REVIEW][PR]` = PR open and a review (local or
-GitHub) running; `[REVIEWED]` / `[REVIEWED][PR]` = review finished; `[PR]` alone = PR open,
-never reviewed. Review flows run `agent-phase.sh REVIEW` when a round starts and
-`agent-phase.sh --no-review` (REVIEW → REVIEWED) when review ends.
+Review is one tag per planned source: `L` local, `G` GitHub/bots, `H` human, each as
+`<source><round><status>` — `L-` planned, `L2` in round 2, `L2✓` accepted. `[L2✓ G1] [PR]` =
+local accepted, GitHub in round 1, PR open. Review flows run `agent-phase.sh --review <src>
+<round|next>` at each round start and `--review <src> ok` on acceptance.
+
+**Needs-you:** run `agent-phase.sh --attn` before any question or approval request to me
+(including presenting the plan), and when something fails that I must fix (auth, a reviewer
+that couldn't run, a stall). It puts `[!]` first in the row; a hook clears it when I reply. It
+is raised automatically when every planned review is accepted and a PR is open.
 
 `[TALK]` marks a non-ticket `/discuss` session. It has no phase until it files a ticket and
 moves into that worktree, at which point its kickoff relabels it `[PLAN]`.

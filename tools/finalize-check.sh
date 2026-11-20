@@ -67,7 +67,7 @@
 #                               makes merge commits — offer the config fix)
 #   verdict=ready|not-merged|no-pr|local-commits|squash-merged|not-on-base|
 #           unknown
-#   agent_phase=MERGED|REVIEW|  the agent-view phase this verdict implies, for
+#   agent_phase=MERGED|         the agent-view phase this verdict implies, for
 #               <empty>         the caller to pass to agent-phase.sh. Empty when
 #                               the verdict doesn't justify moving the label.
 #
@@ -506,7 +506,6 @@ printf 'merge_commit_landed=%s\nbase_fetch=%s\nshallow=%s\ntracking_refspec=%s\n
 # label a branch whose work demonstrably never reached the base.
 case "$verdict" in
   ready)      agent_phase="MERGED" ;;
-  not-merged) agent_phase="REVIEW" ;;
   *)          agent_phase="" ;;
 esac
 

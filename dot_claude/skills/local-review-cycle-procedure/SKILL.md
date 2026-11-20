@@ -18,7 +18,7 @@ Use the project's documented test commands. `FAST` is the quick suite; `FULL` is
 - Stop and report if the branch is the base/default branch or the tree is dirty (the implementing session must commit or resolve stray changes first). Do not rewrite history or force-update branches. If behind BASE, merge BASE into the branch and resolve conflicts before review.
 - Record the changed-file set from `git diff --name-only BASE...HEAD`. Stop if empty.
 - Run `FAST` as a baseline. Record pre-existing failures and compare later runs against them.
-- Run `agent-phase.sh REVIEW` when available. At the start of round k, mark the running round on the statusline with `~/.claude/skills/github-review-procedure/github-review-state.sh --set-local "<k-1>*"`.
+- Run `agent-phase.sh --plan-reviews` then `agent-phase.sh --review L 1` when available (it no-ops outside a background session). At the start of round k after the first, run `agent-phase.sh --review L <k>`. Mark the running round on the statusline with `~/.claude/skills/github-review-procedure/github-review-state.sh --set-local "<k-1>*"`.
 
 ## 2. Discover and select reviewers
 
@@ -76,13 +76,15 @@ Each round:
    Once the round is committed (or nothing changed), close it on the statusline with `~/.claude/skills/github-review-procedure/github-review-state.sh --set-local "<k>"`.
 7. Stop when there are no actionable findings or remaining feedback is only repeats, speculative hardening, or low-value nits. In later rounds, scope follows step 1: reviewers see only the fix-commit diff plus the correctness pass on touched files; a full `BASE...HEAD` re-review needs a concrete reason.
 
+Run `agent-phase.sh --attn` before every question to the user: the round approval, the design gate and the round-5 stop.
+
 If the first architecture review returns `DESIGN: unsound`, stop before changing code and ask the user whether to keep or rework the design. Include the concrete alternative and trade-offs. This gate applies only when the reviewer demonstrates a materially better alternative—not for style preferences.
 
 If significant, well-supported findings remain after round 5, stop and ask the user. Summarize what remains and the likely structural cause; do not silently extend the cycle.
 
 ## 4. Finish
 
-- Run `agent-phase.sh --no-review`.
+- Run `agent-phase.sh --review L ok`.
 - Run `FULL` once after final review fixes. Re-run only failing checks as needed and compare against the baseline.
 - Record the cycle totals with `wf-event.sh review.result round=<last round number> fixed=<n> dismissed=<n> deferred=<n> reviewers=<agent,agent>`, `round=` always, the other fields only when available; counts are triaged findings, so a finding raised by two reviewers counts once. A failure surfaced by `FULL` and fixed here still counts. `round=` also records the final local count on the statusline.
 - Report reviewers selected and why, rounds, findings fixed/dismissed/deferred (with validity), overlap count (findings raised by ≥2 reviewers), test status (including baseline failures), and commits added. Keep output terse: one line per round (`R<k>: N fixed / M dismissed or deferred`).

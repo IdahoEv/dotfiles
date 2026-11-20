@@ -2,7 +2,7 @@
 # Two-line statusline. Line 1 is project/task info, line 2 is Claude info.
 # The layout depends on the session's role, read from its title:
 #   "<Project> Governor"      long-running: no phase
-#   "[PHASE] <ticket label>"  ticket session (agent-phase.sh writes the prefix)
+#   "[!] [STAGE|reviews] [PR] <ticket label>"  ticket session (agent-phase.sh writes the prefix)
 #   "Workflow"                like a ticket session; phase shown once one is set
 #   anything else             plain session: directory and title
 input=$(cat)
@@ -58,8 +58,14 @@ project_seg=""; [ -n "$project" ] && project_seg="${BLUE}${project}${RST}"
 short_path=$(printf '%s' "$cwd" | awk -F/ '{if (NF <= 4) {print $0} else {printf "~/…"; for (i=NF-1; i<=NF; i++) {if ($i != "") printf "/%s", $i}}}' | sed "s|^$HOME|~|")
 
 # ---- role and phase from the title ---------------------------------------------
-phase="" title="$name"
-if [[ "$title" =~ ^\[(PLAN|WIP|REVIEW|REVIEWED|MERGED|DONE)\] ]]; then
+attn="" phase="" title="$name"
+if [[ "$title" =~ ^\[!\]\ * ]]; then
+  attn=1; title="${title#"${BASH_REMATCH[0]}"}"
+fi
+# Legacy REVIEW/REVIEWED/READY stay recognised for sessions named before the review tags.
+rtok='[LGH]([0-9]+✓?|-|✓)'
+if [[ "$title" =~ ^\[(PLAN|WIP|MERGED|DONE|REVIEW|REVIEWED|READY)\]\ * ]] \
+  || [[ "$title" =~ ^\[($rtok( $rtok)*)\]\ * ]]; then
   phase="${BASH_REMATCH[1]}"; title="${title#"${BASH_REMATCH[0]}"}"
 fi
 title="${title#\[PR\]}"; title="${title# }"
@@ -105,12 +111,13 @@ if [ -n "$pr_num" ] || [ -f "$rounds_file" ]; then
 fi
 
 # ---- line 1 --------------------------------------------------------------------------
-phase_seg=""; [ -n "$phase" ] && phase_seg="${ORANGE}[${phase}]${RST}"
+phase_seg=""; [ -n "$phase" ] && phase_seg="${ORANGE}[${phase//✓/${GREEN}✓${ORANGE}}]${RST}"
+attn_seg=""; [ -n "$attn" ] && attn_seg=$'\e[1m'"${RED}[!]${RST}"
 case "$role" in
-  governor) line1=$(join "$project_seg" "Governor" "$branch_seg" "$pr_seg" "$rounds_seg") ;;
+  governor) line1=$(join "$attn_seg" "$project_seg" "Governor" "$branch_seg" "$pr_seg" "$rounds_seg") ;;
   ticket|workflow)
-            line1=$(join "$project_seg" "$branch_seg" "$phase_seg" "$pr_seg" "$rounds_seg") ;;
-  *)        line1=$(join "${BLUE}${short_path}${RST}" "$branch_seg" "$title" "$pr_seg" "$rounds_seg") ;;
+            line1=$(join "$attn_seg" "$project_seg" "$branch_seg" "$phase_seg" "$pr_seg" "$rounds_seg") ;;
+  *)        line1=$(join "$attn_seg" "${BLUE}${short_path}${RST}" "$branch_seg" "$title" "$pr_seg" "$rounds_seg") ;;
 esac
 
 # ---- line 2 --------------------------------------------------------------------------

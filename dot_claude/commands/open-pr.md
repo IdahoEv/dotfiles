@@ -164,7 +164,7 @@ into one context.
 Run in the background. Exit 0 → re-invoke `/github-review-comments`, which runs each round in a
 fresh `github-review-repair-agent` so implementation context never reaches the review; 3 → signed off, ready to
 merge; 1 → timeout; 2 → no PR found; 4 → a reviewer said it couldn't run (e.g. Copilot
-billing): report that, run `agent-phase.sh --no-review`, and don't poll again.
+billing): report that, run `agent-phase.sh --attn`, and don't poll again.
 
 Skip **only** when `--review none` was passed *and* `trigger_mode=manual` — the one case
 where no bot will ever comment. Under `trigger_mode=auto` the bots fire on PR open

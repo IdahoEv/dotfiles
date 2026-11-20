@@ -42,7 +42,7 @@ Medians per merged ticket are shown only once there are ≥3 merged runs; the sa
 | `ticket.start` | `start-ticket.sh` (create / `--no-tab`) | `outcome`, `exit_code`, `duration_ms`, `mode`, `launcher`, `provider`, `ticket_in_progress` |
 | `session.launch` | `start-ticket.sh --tab-only` | same |
 | `session.start` / `session.end` / `session.fail` / `subagent.stop` | `wf-event.sh --hook` on SessionStart / SessionEnd / StopFailure / SubagentStop | `source` / `reason` / `error` / `agent_type` |
-| `phase` | `agent-phase.sh` (set and `--no-review`) | `phase` |
+| `phase` | `agent-phase.sh` (stage set, review start `--review`) | `phase` |
 | `review.round` | `github-review-state.sh --set-local` | `round`, `state=start\|end` |
 | `review.result` | Review prompts, one line at cycle end (bot batches: final report only) | `round`, `fixed`, `dismissed`, `deferred`, `reviewers`, `source=bot` for PR-bot batches. Bot-batch `deferred` means Skipped (nothing filed), unlike the local cycle's deferred-with-issue |
 | `review.finding` | `local-review-cycle-manager`, one line per triaged finding | `reviewer`, `severity`, `verdict=fixed\|dismissed\|deferred`, `validity=valid\|rejected\|partial` (the triager's judgment of the finding itself, independent of the verdict), `round`, `reason` (required for dismissed/deferred; short phrase, no code or prompt text), `key` (sha256 overlap hash; required on valid/partial). `wf-report.sh` renders per-reviewer verdict and validity counts, dismissed findings with reasons, and overlap |

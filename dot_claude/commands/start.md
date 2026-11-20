@@ -127,16 +127,19 @@ axis in the agent view beside `status` (idle/busy) and `state` (working/blocked/
 the session to run `session-label.sh --color project`, which colors the row with the
 project's key color: the `color` conf key if set, else `project-colors` in `tools/`.
 
-| Phase | Means | Set by |
+| Tag | Means | Set by |
 |---|---|---|
-| `PLAN` | awaiting plan approval | `start-ticket.sh` at launch |
+| `PLAN` | planning, awaiting plan approval | `start-ticket.sh` at launch |
 | `WIP` | plan approved, implementing | the ticket session itself |
-| `REVIEW` | a review (local or GitHub) is running | review commands, `open-pr.sh` |
-| `REVIEWED` | review finished, awaiting merge | `agent-phase.sh --no-review` |
+| `[L- G-]` | review planned, not started | the session, when the acceptance criteria are met |
+| `[L2 G1]` | review in progress per source (`L` local, `G` GitHub, `H` human); digit = round | `/local-review-cycle`, `open-pr.sh`, `/github-review-comments` |
+| `[L2✓]` | source accepted after 2 rounds | the same commands |
 | `MERGED` | merged, ready to finalize | `/finalize` step 1 |
 | `DONE` | finalized; safe to kill | `/finalize` last step |
+| `[!]` | needs the user; always first in the row | any command via `agent-phase.sh --attn`; cleared when you reply |
 
-A separate `[PR]` tag (set by `open-pr.sh`) compounds with the phase; see global CLAUDE.md.
+A separate `[PR]` tag (set by `open-pr.sh`) compounds with these; see global CLAUDE.md. Design:
+`docs/2026-11-19-workstream-tag-states.md`.
 
 `PLAN → WIP` is the one transition no script can see, and it belongs to the ticket
 session — `/start` has exited by the time the plan is approved. That rule lives in the

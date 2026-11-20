@@ -1,31 +1,39 @@
 #!/usr/bin/env bash
-# agent-phase.sh — stamp a ticket's workflow phase onto its agent-view row.
+# agent-phase.sh — stamp a workstream's state onto its agent-view row.
 #
-#   agent-phase.sh <PLAN|WIP|REVIEW|REVIEWED|MERGED|DONE>
-#   agent-phase.sh --pr          # add the [PR] tag (a PR has been issued)
-#   agent-phase.sh --no-review   # REVIEW -> REVIEWED, keep [PR] (review finished)
-#   agent-phase.sh --show
-#   agent-phase.sh --clear
+#   agent-phase.sh <PLAN|WIP|MERGED|DONE>      set the stage; drops review tags
+#   agent-phase.sh --plan-reviews              add the planned review sources (not started); keeps any already running
+#   agent-phase.sh --review <L|G|H> <N|next|-> [ok]
+#   agent-phase.sh --review <L|G|H> ok         N = round in progress, next = the round
+#                                              after the current one, - = planned, ok =
+#                                              accepted (keeps the current round)
+#   agent-phase.sh --pr                        a PR exists
+#   agent-phase.sh --attn | --ok               raise / clear the needs-you flag
+#   agent-phase.sh --show | --clear
 #
 # Claude Code's agent view (`claude agents`) shows two state axes already:
 # `status` (idle/busy — process level, set by the daemon) and `state`
 # (working/blocked/done — turn level, set by the model). Neither says where a
-# ticket is in ITS lifecycle: planning, implementing, in review, merged,
-# finalized. This script encodes that third axis as a prefix on the session's
-# display name, which is the only field that is model-writable, unbounded, and
-# visible in both the TUI and `claude agents --json`:
+# workstream is in ITS lifecycle. This script encodes that third axis as a prefix
+# on the session's display name, the only field that is model-writable, unbounded,
+# and visible in both the TUI and `claude agents --json`:
 #
-#   [PLAN]   Sc74618 Build Docker Image
-#   [WIP]    Sc74618 Build Docker Image
-#   [REVIEW] Sc74618 Build Docker Image
+#   [!] [L2✓ G1] [PR] Sc74618 Build Docker Image
 #
-# [PR] is a second, compounding tag: set once a PR exists, independent of phase.
-#   [REVIEW]         local review in progress, no PR yet
-#   [REVIEW][PR]     PR open and a review (local or GitHub) in progress
-#   [REVIEWED]       review finished, no PR yet
-#   [REVIEWED][PR]   PR open, review finished
-#   [PR]             PR open, never reviewed (or review skipped)
-# MERGED and DONE drop [PR]; the merge supersedes it.
+#   [!]        needs the user, whatever the cause; always first
+#   stage      [PLAN] [WIP] [MERGED] [DONE] — shown when no review is planned
+#   reviews    one tag per planned source, replacing the stage while review is active:
+#              <source><round><status>; source L local, G GitHub/bots, H human;
+#              status: none = in progress, - = planned, ✓ = accepted
+#   [PR]       a PR exists; MERGED and DONE drop it
+#
+# Any stage, review or PR change clears [!]. It is raised by --attn, and
+# automatically when every planned source is accepted and a PR is open (awaiting
+# merge). A UserPromptSubmit hook runs --ok so it clears when the user replies.
+# Design: docs/2026-11-19-workstream-tag-states.md.
+#
+# The planned sources are decided here and nowhere else: L always, G unless
+# ~/.config/local-review-only, H never. A settings layer will replace that.
 #
 # The name after the number is distilled from the ticket title by
 # start-ticket.sh (gt::distill_title); this script only rewrites the prefix.
@@ -42,35 +50,47 @@
 # no-ops (exit 0, silent) whenever it isn't looking at a background session it
 # understands. The alternative — the supported `/rename` command — can only be
 # driven by the model mid-conversation, not by a shell step in a hook or
-# script, which is exactly where the phase transitions happen.
+# script, which is exactly where the transitions happen.
 #
-# Nothing here is authoritative. The phase is self-reported, so a session that
+# Nothing here is authoritative. The state is self-reported, so a session that
 # dies mid-ticket keeps a stale prefix; `/board` recomputes true state from git
 # + the tracker and is the thing to trust when they disagree.
 #
 # Exit codes: 0 always on the happy path AND on every "not applicable" case
 #             (not a bg session, no job dir, unreadable state) — callers embed
 #             this in larger workflows and must not abort over a cosmetic label.
-#             1 usage error only (bad phase name).
+#             1 usage error only (bad stage, source or round).
 
 set -euo pipefail
 
 die() { printf 'agent-phase: %s\n' "$*" >&2; exit 1; }
 
-PHASES="PLAN WIP REVIEW REVIEWED MERGED DONE"
+PHASES="PLAN WIP MERGED DONE"
 
 usage() {
-  printf 'usage: agent-phase.sh <%s>\n       agent-phase.sh --pr | --no-review | --show | --clear\n' \
+  printf 'usage: agent-phase.sh <%s>\n       agent-phase.sh --review <L|G|H> <N|next|-> [ok]\n       agent-phase.sh --plan-reviews | --pr | --attn | --ok | --show | --clear\n' \
     "$(echo "$PHASES" | tr ' ' '|')" >&2
 }
 
 # ---- args -------------------------------------------------------------------
-phase="" action="set"
+phase="" action="set" src="" round="" accepted=""
 case "${1:-}" in
   --show)    action="show" ;;
   --clear)   action="clear" ;;
   --pr)      action="pr" ;;
-  --no-review) action="no-review" ;;
+  --attn)    action="attn" ;;
+  --ok)      action="ok" ;;
+  --plan-reviews) action="plan-reviews" ;;
+  --review)
+    action="review"
+    src="${2:-}" round="${3:-}"
+    case "$src" in L|G|H) ;; *) usage; die "unknown review source '$src' (expected L, G or H)" ;; esac
+    if [ "$round" = "ok" ]; then round="keep"; accepted=1; shift; fi
+    [[ "$round" =~ ^([1-9][0-9]*|-|next|keep)$ ]] || { usage; die "bad round '$round' (expected a number >= 1, -, next or keep)"; }
+    if [ -z "$accepted" ]; then
+      case "${4:-}" in "") ;; ok) accepted=1 ;; *) usage; die "unknown status '$4' (expected ok)" ;; esac
+    fi
+    ;;
   -h|--help) sed -n '2,/^set -euo/p' "$0" | sed '$d'; exit 0 ;;
   "")        usage; exit 1 ;;
   -*)        usage; die "unknown option: $1" ;;
@@ -93,11 +113,13 @@ while [ -h "$_src" ]; do
   [ "${_src#/}" = "$_src" ] && _src="$_dir/$_src"
 done
 SCRIPT_DIR="$(cd -P "$(dirname "$_src")" && pwd)"
+emit_phase() {
+  # shellcheck source=lib/telemetry.sh
+  { . "$SCRIPT_DIR/lib/telemetry.sh" && wf::emit phase "phase=$1"; } || true
+}
 case "$action" in
-  set|no-review)
-    # shellcheck source=lib/telemetry.sh
-    { . "$SCRIPT_DIR/lib/telemetry.sh" \
-      && wf::emit phase "phase=${phase:-REVIEWED}"; } || true ;;
+  set)    emit_phase "$phase" ;;
+  review) [ -n "$accepted" ] || [ "$round" = "-" ] || emit_phase REVIEW ;;
 esac
 
 # ---- locate the session's state file ----------------------------------------
@@ -113,18 +135,26 @@ state_file="$job_dir/state.json"
 
 command -v python3 >/dev/null || exit 0
 
-# ---- rewrite the name's phase prefix ----------------------------------------
+# ---- planned review sources ---------------------------------------------------
+planned="L"
+[ -e "$HOME/.config/local-review-only" ] || planned="L G"
+
+# ---- rewrite the name's tag prefix ------------------------------------------
 # Python rather than sed/jq: the write must be atomic (os.replace) because the
 # daemon rewrites this same file on every status change, and a partial write
 # would corrupt a session's state, not just its label. jq isn't guaranteed
 # present; python3 ships with macOS.
-PHASE="$phase" ACTION="$action" PHASES="$PHASES" python3 - "$state_file" <<'PY'
+out="$(PHASE="$phase" ACTION="$action" SRC="$src" ROUND="$round" ACCEPTED="$accepted" \
+  PLANNED="$planned" python3 - "$state_file" <<'PY'
 import json, os, re, sys, tempfile
 
-path    = sys.argv[1]
-phase   = os.environ["PHASE"]
-action  = os.environ["ACTION"]
-phases  = os.environ["PHASES"].split()
+path     = sys.argv[1]
+phase    = os.environ["PHASE"]
+action   = os.environ["ACTION"]
+src      = os.environ["SRC"]
+rnd      = os.environ["ROUND"]
+accepted = bool(os.environ["ACCEPTED"])
+planned  = os.environ["PLANNED"].split()
 
 try:
     with open(path) as fh:
@@ -136,38 +166,93 @@ name = state.get("name")
 if not isinstance(name, str):
     sys.exit(0)
 
-# Parse the prefix we previously applied: an optional phase tag, then an
-# optional [PR] tag. Anchored to the known phase set so a ticket whose real
-# title happens to start with bracketed text (e.g. "[spike] try X") keeps it.
-m = re.match(r"^(?:\[(%s)\])?(\[PR\])?\s*" % "|".join(phases), name)
-cur_phase, cur_pr = m.group(1), bool(m.group(2))
-bare = name[m.end():]
+# Parse the prefix we previously applied. Anchored to the known tag shapes so a
+# ticket whose real title starts with bracketed text (e.g. "[spike] try X") keeps
+# it. Legacy [REVIEW]/[REVIEWED]/[READY] stages are consumed and dropped.
+TOKEN = r"[LGH](?:\d+✓?|-|✓)"
+rest = name
+attn = stage = None
+reviews = {}
+m = re.match(r"\[!\]\s*", rest)
+if m:
+    attn, rest = True, rest[m.end():]
+m = re.match(r"\[(PLAN|WIP|MERGED|DONE|REVIEW|REVIEWED|READY)\]\s*", rest)
+if m:
+    stage = m.group(1) if m.group(1) in ("PLAN", "WIP", "MERGED", "DONE") else None
+    rest = rest[m.end():]
+else:
+    m = re.match(r"\[(%s(?: %s)*)\]\s*" % (TOKEN, TOKEN), rest)
+    if m:
+        for tok in m.group(1).split():
+            n = re.search(r"\d+", tok)
+            status = "ok" if tok.endswith("✓") else "planned" if tok.endswith("-") else "run"
+            reviews[tok[0]] = (int(n.group()) if n else 0, status)
+        rest = rest[m.end():]
+m = re.match(r"\[PR\]\s*", rest)
+pr = bool(m)
+if m:
+    rest = rest[m.end():]
+bare = rest
+
+def tag(s):
+    n, status = reviews[s]
+    if status == "planned":
+        return s + "-"
+    return s + (str(n) if n else "") + ("✓" if status == "ok" else "")
+
+def prefix():
+    middle = ""
+    if reviews:
+        middle = "[%s]" % " ".join(tag(s) for s in "LGH" if s in reviews)
+    elif stage:
+        middle = "[%s]" % stage
+    return " ".join(t for t in ("[!]" if attn else "", middle, "[PR]" if pr else "") if t)
+
+def render():
+    return " ".join(t for t in (prefix(), bare) if t)
+
+def awaiting_merge():
+    return bool(reviews) and pr and all(st == "ok" for _, st in reviews.values())
 
 if action == "show":
-    print("".join(["[%s]" % cur_phase] * bool(cur_phase)) + "[PR]" * cur_pr)
+    print(prefix())
     sys.exit(0)
 
-new_phase, new_pr = cur_phase, cur_pr
+emit = ""
 if action == "clear":
-    new_phase, new_pr = None, False
-elif action == "pr":
-    new_pr = True
-elif action == "no-review":
-    if cur_phase == "REVIEW":
-        new_phase = "REVIEWED"
+    attn, stage, reviews, pr = None, None, {}, False
+elif action == "attn":
+    attn = True
+elif action == "ok":
+    attn = None
 else:
-    new_phase = phase
-    if phase in ("MERGED", "DONE"):
-        new_pr = False
+    attn = None            # every real transition clears the flag
+    if action == "pr":
+        pr = True
+    elif action == "plan-reviews":
+        stage = None
+        for s in planned:
+            reviews.setdefault(s, (0, "planned"))
+    elif action == "review":
+        stage = None
+        prev = reviews.get(src, (0, "planned"))[0]
+        n = {"-": 0, "keep": prev, "next": prev + 1}.get(rnd) if not rnd.isdigit() else int(rnd)
+        reviews[src] = (n, "ok" if accepted else "planned" if rnd == "-" else "run")
+    else:
+        stage, reviews = phase, {}
+        if phase in ("MERGED", "DONE"):
+            pr = False
+    if action in ("pr", "review") and awaiting_merge():
+        attn = True
+        emit = "REVIEWED"
 
-tags = ("[%s]" % new_phase if new_phase else "") + ("[PR]" if new_pr else "")
-new = "%s %s" % (tags, bare) if tags else bare
+new = render()
 if new == name:
     sys.exit(0)
 
 state["name"] = new
-# nameSource=user stops Claude Code's auto-naming from overwriting the phase
-# prefix with a summary of the conversation partway through the ticket.
+# nameSource=user stops Claude Code's auto-naming from overwriting the tags
+# with a summary of the conversation partway through the ticket.
 state["nameSource"] = "user"
 
 # Atomic replace: write a sibling temp file, fsync, then rename over the
@@ -177,7 +262,7 @@ dirname = os.path.dirname(path) or "."
 fd, tmp = tempfile.mkstemp(dir=dirname, prefix=".state.json.")
 try:
     with os.fdopen(fd, "w") as fh:
-        json.dump(state, fh, indent=2)
+        json.dump(state, fh, indent=2, ensure_ascii=False)
         fh.flush()
         os.fsync(fh.fileno())
     os.replace(tmp, path)
@@ -188,5 +273,13 @@ except Exception:
         pass
     sys.exit(0)          # never fail a ticket workflow over a display label
 
+if emit:
+    print("emit=" + emit)
 print(new)
 PY
+)" || true
+
+# Review acceptance is only known once the name has been parsed, so the
+# REVIEWED telemetry event comes back from the rewrite.
+case "$out" in emit=REVIEWED*) emit_phase REVIEWED ;; esac
+[ -z "$out" ] || printf '%s\n' "${out##*$'\n'}"

@@ -45,11 +45,11 @@ If the agent runs in the background, wait for its completion notice. Don't act o
 
 ## 3. Report
 
-Print the agent's report **unaltered, at top level** — no blockquote, no code fence, tables emitted directly, because quoting or fencing stops the terminal rendering its tables. If it says `Files changed: no` and lists no planned actions, run `agent-phase.sh --no-review`, say the round found nothing to do and polling has stopped, and stop.
+Print the agent's report **unaltered, at top level** — no blockquote, no code fence, tables emitted directly, because quoting or fencing stops the terminal rendering its tables. If it says `Files changed: no` and lists no planned actions, run `agent-phase.sh --review G ok`, say the round found nothing to do and polling has stopped, and stop.
 
 ## 4. Approve the commit
 
-If files changed, ask one `AskUserQuestion`. Write it as if the printed report were never shown, because background sessions often don't show it.
+If files changed, run `agent-phase.sh --attn`, then ask one `AskUserQuestion`. Write it as if the printed report were never shown, because background sessions often don't show it.
 
 - `question`: the findings table (file:line, finding, verdict), one line per fix, the validation line, a count of the planned GitHub actions by kind, and the full proposed commit message. End with "Commit, push, then post the GitHub actions?"
 - Option 1, "Commit and push (Recommended)": `preview` = the full commit message, plus `git diff --stat` if it's short.
@@ -58,14 +58,14 @@ If files changed, ask one `AskUserQuestion`. Write it as if the printed report w
 
 A typed `execute` commits with the proposed message; `execute <text>` uses `<text>` as the full message instead. Append this session's commit attribution trailer unless the message already has one.
 
-**On "Don't commit yet"**, post nothing: list the planned actions as not posted, run `agent-phase.sh --no-review`, say polling has stopped, and stop.
+**On "Don't commit yet"**, post nothing: list the planned actions as not posted, run `agent-phase.sh --attn`, say polling has stopped, and stop.
 
 ## 5. Commit, push, post
 
 1. `git add` exactly the paths the agent listed, commit, and `git push`. If either fails, post nothing, report the error, and stop.
 2. **After the push succeeds**, run the planned actions in order using the `gh api` snippets in the `github-review-procedure` skill's §4d (reactions, Reply, Mark Resolved, including the review-body `[RESOLVED]` edit); `pr-comment` rows go through `gh pr comment`. Skip 4d's conversational steps — the bodies are already final. Post each body exactly as planned. Confirm each resolution through the API. Report every action that fails, and keep going.
 
-If no files changed but there are planned actions (for example, rejections only), post them directly. There's no commit to gate them on. Then run `agent-phase.sh --no-review`, say polling has stopped because nothing was pushed to trigger a new review, and stop. Skip steps 6 and 7.
+If no files changed but there are planned actions (for example, rejections only), post them directly. There's no commit to gate them on. Then run `agent-phase.sh --review G ok`, say polling has stopped because nothing was pushed to trigger a new review, and stop. Skip steps 6 and 7.
 
 ## 6. Re-request review
 
@@ -83,7 +83,7 @@ On request, run `request-review.sh`. Pass `--pr <N>` if needed, or `--level copi
 
 ## 7. Poll
 
-Run `agent-phase.sh REVIEW`, then run this in the background:
+Run `agent-phase.sh --review G next`, then run this in the background:
 
 ```bash
 ~/.claude/skills/github-review-procedure/github-review-poll.sh
@@ -92,9 +92,9 @@ Run `agent-phase.sh REVIEW`, then run this in the background:
 It polls every 45 s for up to 2 h. Exit codes:
 
 - **0**: new review activity. Re-invoke `/github-review-comments` immediately, without waiting for the user. Each round gets a fresh agent.
-- **3**: reviewers signed off and there are no unresolved threads. Announce it, e.g. "✅ Reviewers signed off (Copilot, 14:32) — no unresolved threads. PR looks ready to merge." Run `agent-phase.sh --no-review` and stop.
-- **1**: timeout. Say "No new bot activity after 2 hours. Polling stopped." and run `agent-phase.sh --no-review`.
-- **2**: no PR found. Say so, run `agent-phase.sh --no-review`, and stop.
-- **4**: a reviewer couldn't run (Actions billing or spending limit). Name it, run `agent-phase.sh --no-review`, and don't re-poll.
+- **3**: reviewers signed off and there are no unresolved threads. Announce it, e.g. "✅ Reviewers signed off (Copilot, 14:32) — no unresolved threads. PR looks ready to merge." Run `agent-phase.sh --review G ok` and stop.
+- **1**: timeout. Say "No new bot activity after 2 hours. Polling stopped." and run `agent-phase.sh --attn`.
+- **2**: no PR found. Say so, run `agent-phase.sh --attn`, and stop.
+- **4**: a reviewer couldn't run (Actions billing or spending limit). Name it, run `agent-phase.sh --attn`, and don't re-poll.
 
 A review with findings only in its body (Copilot Suppressed comments, CodeRabbit Outside-diff-range) doesn't match a sign-off marker, so it correctly exits 0.
