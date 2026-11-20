@@ -95,6 +95,8 @@ gt::ticket_from_branch() {  # <branch> [<dir>] → id, or nothing
     printf '%s' "${BASH_REMATCH[2]}"
   elif [[ "$b" =~ .*sc-([0-9]+) ]]; then
     printf '%s' "${BASH_REMATCH[1]}"
+  elif [ -n "$dir" ]; then
+    _gt ticket-from-branch "$b" "$dir"
   elif [[ "$b" =~ (^|/)\[([1-9][0-9]*)([,+_][0-9]+)*\](-|/|$) ]]; then
     printf '%s' "${BASH_REMATCH[2]}"
   elif [[ "$b" =~ ^([1-9][0-9]*)([+_,][0-9]+)+(-|/|$) ]]; then
@@ -123,13 +125,9 @@ gt::ticket_scheme() {  # <branch> [<dir>] → shortcut | github | unknown
   if   [[ "$b" =~ (^|/)sc-[0-9]+([+_,][0-9]+)*(-|/|$) ]]; then printf 'shortcut'
   elif [[ "$b" =~ (^|/)Is[0-9]+([+_,][0-9]+)*(-|/|$) ]];  then printf 'github'
   elif [[ "$b" =~ .*sc-[0-9]+ ]];                         then printf 'shortcut'
+  elif [ -n "$dir" ];                                     then _gt ticket-scheme "$b" "$dir"
   elif [[ "$b" =~ (^|/)\[[1-9][0-9]*([,+_][0-9]+)*\](-|/|$) || "$b" =~ ^[1-9][0-9]*([+_,][0-9]+)+(-|/|$) || "$b" =~ ^[1-9][0-9]*- ]]; then
-    if [ -n "$dir" ] && [ -f "$dir/.workstreams/settings.json" ] && command -v jq >/dev/null 2>&1; then
-      prov="$(jq -r '.provider // empty' "$dir/.workstreams/settings.json" 2>/dev/null || true)"
-    fi
-    if [ "$prov" = "shortcut" ]; then printf 'shortcut'
-    else printf 'github'
-    fi
+    printf 'github'
   else printf 'unknown'
   fi
 }

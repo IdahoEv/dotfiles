@@ -69,7 +69,7 @@ b3b22c41c6a743639e9cc5ee7d36f8b9541fb3e75f97df137853e51eef2ea7c5  644  tools/clo
 8e3f69c193164d57b5f964a41f48f52a7b835f8bf628751b08b1331d377d49bd  755  tools/codex-workflow.sh
 aba2b3934bec4b85ba04e090631da2057c981cac6059dec8ace4a8a3bd0fac9b  755  tools/finalize-check.sh
 2b0879df07b0123f330bd67e06e860453e229f422385f0c6da19e88277d855c9  755  tools/finalize-run.sh
-8a4beec463e0380eda34160e1a279f2d1b9e41d647e3edc8dddc372c554f097e  644  tools/lib/agy_tmux_dashboard.py
+9bdc3348c41461466ab1c8d3456efed0169291c7fe9f73c4e752d088befaadb3  644  tools/lib/agy_tmux_dashboard.py
 c65a9d624fbaf3e578e61a3665878270255cbc0c7581174eff5e4e420ae5fc80  644  tools/lib/codex_rpc.py
 b46a5fb41794ce2ac7b79ffdbfc7765c3bb0241fb005be870a7b7198408721f3  644  tools/lib/codex_workflow.py
 f7673606e34113d3fbd15395094c7fdbfddce405964cc5f0f7222260c6d2282d  644  tools/lib/finalize_check.py
@@ -82,8 +82,8 @@ f2a76fa675abd9ec93f935a0a9673ea6bbfac857b3ff2db535140c32a166db1e  644  tools/lib
 c35d14e612032aeb02db2a06ba9770e4b193f42c0c1570a96c0907613d0d959f  644  tools/lib/pr-risk.json
 ac8c0f92f9527fbb17c12a660565f1359150725ea34531f6e556cd0ff056a941  644  tools/lib/pr_body.py
 2022d3ea25c76656a2d963b30bf3ebc185d9bf0cc9c0ba58a15aa4b859ad150d  644  tools/lib/prune_worktrees.py
-0d3c21eccab00c8f4fdce929fe2c239d3cf46d5996270f6e3b4e2276674fe3a4  644  tools/lib/repo-facts.sh
-3e38c504eb02b6bb102744a801b30b5f72729795170efa317c61ed493d6b7d94  644  tools/lib/repo_facts.py
+4de4fd45ca97a02120427e23aa8b5b13eda0002c067f1f43960339d23e43389d  644  tools/lib/repo-facts.sh
+33ba04409c9a26a01f39f6cdc49e8bcedfef8a7b427474ac1ce3fbe420856971  644  tools/lib/repo_facts.py
 d86aa76659afb858f4f235ed3e222d4359072437ad4c817efef4076a4c4ed9e9  644  tools/lib/sibling_worktrees.py
 9d78e057b40a22ec2020b2cbf2cc50f8d555e9014a413d6012fd1bac434e2728  644  tools/lib/sync_gate.py
 629f3d01d0af9994e6fb09de65b9c34227c3384a7caaed4590e341e85f476198  644  tools/lib/sync_run.py
@@ -93,7 +93,7 @@ d6c45d70d96c21971b022ea65a73f2b0fd4af0dd0b8abb524a9fd34cfd7a43df  644  tools/lib
 bdc67f5e5e4a39317822f39d306cff15c4b9eb7b43335d2a656ac68f640bd6ed  644  tools/lib/wf_review_gaps.py
 3c46a31599092ceabb336ccd81b8e9a03631dbd0e8942152e8bbc420a74180fc  644  tools/lib/wf_tokens.py
 3b1a0716083c8f92ab94a60d59ecee59a1716e54cca16dd6cf25f77e2abfe41f  644  tools/lib/wf_usage.py
-5f8ecef8011aa8d2ae942d9760ea33062b6f9b68c16b64953892faea30f373f4  644  tools/lib/workstream.py
+ef1ce9d75c97cd157a1fb707fe4c59ce70f0b0bf6756a9af2fc75cf9d517e0a5  644  tools/lib/workstream.py
 f6d369e82e99df2b899a4e53f1418bced2ab931851ae6e9ea7603c2460975cbc  755  tools/mcp-notion.sh
 6a1180dd4d342705d243b1f0a8a1ecb59826860e67a7e0de6aa63b232c757cad  755  tools/mem-guard.sh
 1983059031a0f6fa099c539706b0f46edd41fd4aa675016a0ebbb0e126262b7b  755  tools/merge-run.sh
@@ -101,7 +101,7 @@ c8ce372b7286fdec6d59dc1cc586f65cffd3ad95cdeebdd089631832c46e1b09  755  tools/mig
 ebdb84b0473af44ffdc63fce69e007c3529d61f245f8008c8bd6c7a2b330373d  644  tools/open-pr-providers/github.sh
 4646c4c8143747fa1e8ccb52a499d01ae230c71e6f06c19508223edce007fc25  644  tools/open-pr-providers/shortcut.sh
 20e1ba6f76351bfc20a2c77acbac4195426e5dd7e2122a60229b0e27c02438b0  755  tools/open-pr-watch.sh
-d078b6af81123a4eb20320708a7c29700268c033a0ce18d85ba6d041f4ca7422  755  tools/open-pr.sh
+c1cbd52a088c3f754cd4e57708a43c87a8ac5567d1da5faee10fcf5412ede260  755  tools/open-pr.sh
 dc55a6a27785e8576b61964aeefb66b3e419c24bcb46ee280a2f8463befb450a  755  tools/pending-actions.sh
 924937befc2fa9b642c8cdd3407ec9958a32ca8cc05259bc2b31a1be387849fb  755  tools/pr-body.sh
 f6ec970038d77efb2159bd5818cb7fc4cbd72ceddfe0bcbc353d3a6f51061850  644  tools/project-colors

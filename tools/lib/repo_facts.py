@@ -170,6 +170,22 @@ def _custom_provider_prefixes(dir_: str | None) -> list[str]:
     return prefixes
 
 
+def _sep_pattern(dir_: str | None) -> str:
+    seps = ["+", "_", ","]
+    if dir_:
+        for key in (
+            "branch.ticket_separator",
+            "worktree.ticket_separator",
+            "key.ticket_separator",
+            "chain.sep",
+        ):
+            val = conf_get(key, dir_)
+            if val and val not in seps:
+                seps.append(val)
+    ordered = sorted(seps, key=len, reverse=True)
+    return "(?:" + "|".join(re.escape(s) for s in ordered) + ")"
+
+
 def ticket_from_branch(branch: str, dir_: str | None = None) -> str:
     """Ticket id from .workstream.json (when dir_ is given) or branch name, or "".
 
@@ -185,25 +201,26 @@ def ticket_from_branch(branch: str, dir_: str | None = None) -> str:
         info = _record_ticket_info(dir_)
         if info:
             return info[0]
-    m = re.search(r"(?:^|/)Is([0-9]+)(?:[+_,][0-9]+)*(?:-|/|$)", branch)
+    sep = _sep_pattern(dir_)
+    m = re.search(rf"(?:^|/)Is([0-9]+)(?:{sep}[0-9]+)*(?:-|/|$)", branch)
     if m:
         return m.group(1)
     ids = re.findall(r"sc-([0-9]+)", branch)
     if len(ids) > 1:
         return ids[-1]
-    m = re.search(r"(?:^|/)sc-([0-9]+)(?:[+_,][0-9]+)*(?:-|/|$)", branch)
+    m = re.search(rf"(?:^|/)sc-([0-9]+)(?:{sep}[0-9]+)*(?:-|/|$)", branch)
     if m:
         return m.group(1)
     if ids:
         return ids[-1]
     for prefix in _custom_provider_prefixes(dir_):
-        m = re.search(rf"(?:^|/){re.escape(prefix)}([0-9]+)(?:[+_,][0-9]+)*(?:-|/|$)", branch)
+        m = re.search(rf"(?:^|/){re.escape(prefix)}([0-9]+)(?:{sep}[0-9]+)*(?:-|/|$)", branch)
         if m:
             return m.group(1)
-    m = re.search(r"(?:^|/)\[([1-9][0-9]*)(?:[,+_][0-9]+)*\](?:-|/|$)", branch)
+    m = re.search(rf"(?:^|/)\[([1-9][0-9]*)(?:{sep}[0-9]+)*\](?:-|/|$)", branch)
     if m:
         return m.group(1)
-    m = re.match(r"([1-9][0-9]*)(?:[+_,][0-9]+)+(?:-|/|$)", branch)
+    m = re.match(rf"([1-9][0-9]*)(?:{sep}[0-9]+)+(?:-|/|$)", branch)
     if m:
         return m.group(1)
     m = re.match(r"([1-9][0-9]*)-", branch)
@@ -216,19 +233,20 @@ def ticket_scheme(branch: str, dir_: str | None = None) -> str:
         info = _record_ticket_info(dir_)
         if info:
             return info[1]
-    if re.search(r"(?:^|/)sc-[0-9]+(?:[+_,][0-9]+)*(?:-|/|$)", branch):
+    sep = _sep_pattern(dir_)
+    if re.search(rf"(?:^|/)sc-[0-9]+(?:{sep}[0-9]+)*(?:-|/|$)", branch):
         return "shortcut"
-    if re.search(r"(?:^|/)Is[0-9]+(?:[+_,][0-9]+)*(?:-|/|$)", branch):
+    if re.search(rf"(?:^|/)Is[0-9]+(?:{sep}[0-9]+)*(?:-|/|$)", branch):
         return "github"
     if re.search(r"sc-[0-9]+", branch):
         return "shortcut"
     has_unprefixed = bool(
-        re.search(r"(?:^|/)\[[1-9][0-9]*(?:[,+_][0-9]+)*\](?:-|/|$)", branch)
-        or re.match(r"[1-9][0-9]*(?:[+_,][0-9]+)+(?:-|/|$)", branch)
+        re.search(rf"(?:^|/)\[[1-9][0-9]*(?:{sep}[0-9]+)*\](?:-|/|$)", branch)
+        or re.match(rf"[1-9][0-9]*(?:{sep}[0-9]+)+(?:-|/|$)", branch)
         or re.match(r"[1-9][0-9]*-", branch)
     )
     has_custom = any(
-        re.search(rf"(?:^|/){re.escape(prefix)}[0-9]+(?:[+_,][0-9]+)*(?:-|/|$)", branch)
+        re.search(rf"(?:^|/){re.escape(prefix)}[0-9]+(?:{sep}[0-9]+)*(?:-|/|$)", branch)
         for prefix in _custom_provider_prefixes(dir_)
     )
     if has_unprefixed or has_custom:

@@ -300,6 +300,23 @@ class TicketParsing(Base):
             self.assertEqual(repo_facts.ticket_from_branch("sc#74-fix", repo), "74")
             self.assertEqual(repo_facts.ticket_scheme("sc#74-fix", repo), "shortcut")
 
+    def test_custom_ticket_separator_discovery(self):
+        with tempfile.TemporaryDirectory() as repo:
+            subprocess.run(["git", "-C", repo, "init", "-q"], check=True)
+            ws_dir = os.path.join(repo, ".workstreams")
+            os.makedirs(ws_dir, exist_ok=True)
+            with open(os.path.join(ws_dir, "settings.json"), "w", encoding="utf-8") as fh:
+                json.dump({"key.ticket_separator": ".", "provider.brief": "sc#"}, fh)
+            with open(os.path.join(ws_dir, "settings.local.json"), "w", encoding="utf-8") as fh:
+                json.dump({"provider": "shortcut"}, fh)
+            self.assertEqual(repo_facts.ticket_from_branch("Is12.13-fix", repo), "12")
+            self.assertEqual(repo_facts.ticket_scheme("Is12.13-fix", repo), "github")
+            self.assertEqual(repo_facts.ticket_from_branch("12.13-fix", repo), "12")
+            self.assertEqual(repo_facts.ticket_scheme("12.13-fix", repo), "shortcut")
+            self.assertEqual(repo_facts.ticket_from_branch("[12.13]-fix", repo), "12")
+            self.assertEqual(repo_facts.ticket_from_branch("sc#74.75-fix", repo), "74")
+            self.assertEqual(repo_facts.ticket_scheme("sc#74.75-fix", repo), "shortcut")
+
 
 class RepoKey(Base):
     def test_url_matrix(self):
@@ -660,6 +677,21 @@ class Facade(Base):
 
     def test_dash_value_through_the_facade(self):
         self.assertEqual(self.gt("gt::sanitize_label --force"), (0, "force"))
+
+    def test_ticket_discovery_with_dir_layered_settings(self):
+        repo = self.fake_remote_repo()
+        ws_dir = os.path.join(repo, ".workstreams")
+        os.makedirs(ws_dir, exist_ok=True)
+        with open(os.path.join(ws_dir, "settings.json"), "w", encoding="utf-8") as fh:
+            json.dump({"provider.brief": "sc#", "key.ticket_separator": "."}, fh)
+        with open(os.path.join(ws_dir, "settings.local.json"), "w", encoding="utf-8") as fh:
+            json.dump({"provider": "shortcut"}, fh)
+        self.assertEqual(self.gt(f'gt::ticket_from_branch "sc#74-fix" "{repo}"'), (0, "74"))
+        self.assertEqual(self.gt(f'gt::ticket_scheme "sc#74-fix" "{repo}"'), (0, "shortcut"))
+        self.assertEqual(self.gt(f'gt::ticket_from_branch "12+13-fix" "{repo}"'), (0, "12"))
+        self.assertEqual(self.gt(f'gt::ticket_scheme "12+13-fix" "{repo}"'), (0, "shortcut"))
+        self.assertEqual(self.gt(f'gt::ticket_from_branch "Is12.13-fix" "{repo}"'), (0, "12"))
+        self.assertEqual(self.gt(f'gt::ticket_scheme "Is12.13-fix" "{repo}"'), (0, "github"))
 
 
 if __name__ == "__main__":
