@@ -724,6 +724,11 @@ class CliTests(WorkstreamTestBase):
         workstream.update_phase(repo, review=("G", "keep", True))
         fields = workstream.statusline_fields(repo, project="dotfiles")
         self.assertEqual((fields["attn"], fields["tags"]), ("1", "[L2✓ G1✓][PR]"))
+        self.assertIn(" | [!] | [L2✓ G1✓][PR] | ", workstream.format_statusline_line1(repo, project="dotfiles"))
+
+    def test_review_drop_removes_planned_source(self) -> None:
+        tags = workstream.apply_transition(["L-", "G-"], review=("G", "drop", False))
+        self.assertEqual(tags, ["L-"])
 
 
 if __name__ == "__main__":

@@ -445,7 +445,11 @@ fi
 if { [ "$review" != "none" ] && [ -z "$review_failed" ]; } || [ "${PROVIDER_TRIGGER_MODE:-manual}" = "auto" ]; then
   "$SCRIPT_DIR/agent-phase.sh" --review G next >/dev/null 2>&1 || true
 fi
+if [ "$review" = "none" ] && [ "${PROVIDER_TRIGGER_MODE:-manual}" != "auto" ]; then
+  "$SCRIPT_DIR/agent-phase.sh" --review G drop >/dev/null 2>&1 || true
+fi
 "$SCRIPT_DIR/agent-phase.sh" --pr >/dev/null 2>&1 || true
+[ -z "$review_failed" ] || "$SCRIPT_DIR/agent-phase.sh" --attn >/dev/null 2>&1 || true
 if [ -x "$SCRIPT_DIR/workstream.sh" ]; then
   "$SCRIPT_DIR/workstream.sh" set-pr --dir . --number "$pr_number" --url "$pr_url" >/dev/null 2>&1 || true
 fi

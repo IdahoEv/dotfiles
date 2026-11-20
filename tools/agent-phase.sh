@@ -3,7 +3,7 @@
 #
 #   agent-phase.sh [--dir <path>] <PLAN|WIP|MERGED|DONE>   set the stage; drops review tags
 #   agent-phase.sh [--dir <path>] --plan-reviews            add the planned review sources, not started
-#   agent-phase.sh [--dir <path>] --review <L|G|H> <N|next|-> [ok]
+#   agent-phase.sh [--dir <path>] --review <L|G|H> <N|next|-|drop> [ok]
 #   agent-phase.sh [--dir <path>] --review <L|G|H> ok       N = round in progress, next = the round
 #                                                           after the current one, - = planned,
 #                                                           ok = accepted (keeps the current round)
@@ -71,7 +71,7 @@ die() { printf 'agent-phase: %s\n' "$*" >&2; exit 1; }
 PHASES="PLAN WIP MERGED DONE"
 
 usage() {
-  printf 'usage: agent-phase.sh [--dir <path>] <%s>\n       agent-phase.sh [--dir <path>] --review <L|G|H> <N|next|-> [ok] | --review <L|G|H> ok\n       agent-phase.sh [--dir <path>] --plan-reviews | --pr | --attn | --ok | --show | --clear\n' \
+  printf 'usage: agent-phase.sh [--dir <path>] <%s>\n       agent-phase.sh [--dir <path>] --review <L|G|H> <N|next|-|drop> [ok] | --review <L|G|H> ok\n       agent-phase.sh [--dir <path>] --plan-reviews | --pr | --attn | --ok | --show | --clear\n' \
     "$(echo "$PHASES" | tr ' ' '|')" >&2
 }
 
@@ -103,7 +103,7 @@ while [ "$#" -gt 0 ]; do
       if [ "$round" = "ok" ]; then
         round="keep" accepted=1; shift 3
       else
-        [[ "$round" =~ ^([1-9][0-9]*|-|next|keep)$ ]] || { usage; die "bad round '$round' (expected a number >= 1, -, next or keep)"; }
+        [[ "$round" =~ ^([1-9][0-9]*|-|next|keep|drop)$ ]] || { usage; die "bad round '$round' (expected a number >= 1, -, next, keep or drop)"; }
         case "${4:-}" in
           "") shift 3 ;;
           ok) accepted=1; shift 4 ;;
@@ -148,7 +148,7 @@ emit_phase() {
 }
 case "$action" in
   set)    emit_phase "$phase" ;;
-  review) [ -n "$accepted" ] || [ "$round" = "-" ] || emit_phase REVIEW ;;
+  review) [ -n "$accepted" ] || [ "$round" = "-" ] || [ "$round" = "drop" ] || emit_phase REVIEW ;;
 esac
 
 # ---- .workstream.json tags ----------------------------------------------------

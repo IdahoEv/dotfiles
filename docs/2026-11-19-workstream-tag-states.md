@@ -81,6 +81,7 @@ agent-phase.sh <PLAN|WIP|MERGED|DONE>
 agent-phase.sh --plan-reviews                    # add planned sources as "-"; keeps started ones
 agent-phase.sh --review <L|G|H> <N|next|-> [ok]  # round N, the next round, or planned
 agent-phase.sh --review <L|G|H> ok               # accepted, round kept
+agent-phase.sh --review <L|G|H> drop             # source no longer planned (e.g. /open-pr --review none)
 agent-phase.sh --attn | --ok
 agent-phase.sh --pr | --show | --clear
 ```

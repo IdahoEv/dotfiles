@@ -60,7 +60,7 @@ eab0f5075cd7db3dc802b6dfd427c13ff2a6ce3b3045580f3578dd3c8fe19ae3  755  dot_claud
 bddf25616fa63f0ca8ac5b4930003b30deab97b5058a623c8a88320938a8d6a7  644  dot_claude/skills/workflow/SKILL.md
 620422885b927180f9a5aa8be24e988ca6f21dcbefe231b5068a90da1e059d72  644  dot_claude/skills/workflow/delivery.md
 337f1a99f921ac9c485bd1f25a6b9b50393f3898ef9bd793896cfada59e336e3  755  dot_claude/skills/workflow/executable_wf-context.sh
-14e8ae45712f1bfb8295f0b3e7b081fb38ec4c1413bbe970cb816ede3b29ca4e  755  tools/agent-phase.sh
+4111a4b12fe7294bfcffde9603d25cb07ef4363f14cdf9e1d7ba032d9e4b6b84  755  tools/agent-phase.sh
 c8797dce111bbcfcf66eda3d7861ebec5a5629fd48d0f0db49d716c3ab8fd953  755  tools/agy-tmux.sh
 392b86f6854e4e3ffa1dcbd28904afa1c15536a1dea48039be0e3b69a5d35d71  644  tools/bootstrap-linux.sh
 56642e1c7439303b525d6b594ec2420f598feabe330d846e7420d4dad0f0e5d8  644  tools/bootstrap-mac.sh
@@ -93,7 +93,7 @@ d6c45d70d96c21971b022ea65a73f2b0fd4af0dd0b8abb524a9fd34cfd7a43df  644  tools/lib
 bdc67f5e5e4a39317822f39d306cff15c4b9eb7b43335d2a656ac68f640bd6ed  644  tools/lib/wf_review_gaps.py
 3c46a31599092ceabb336ccd81b8e9a03631dbd0e8942152e8bbc420a74180fc  644  tools/lib/wf_tokens.py
 3b1a0716083c8f92ab94a60d59ecee59a1716e54cca16dd6cf25f77e2abfe41f  644  tools/lib/wf_usage.py
-c5d79e15da32b64d93f2688ac1af225b3e7724f48b4c8dac3121031bc3fd0b4c  644  tools/lib/workstream.py
+bb45c5b4a639a17e3b774e82c0c9e3622e5a43f22dbb18973e3e7244770bf360  644  tools/lib/workstream.py
 f6d369e82e99df2b899a4e53f1418bced2ab931851ae6e9ea7603c2460975cbc  755  tools/mcp-notion.sh
 6a1180dd4d342705d243b1f0a8a1ecb59826860e67a7e0de6aa63b232c757cad  755  tools/mem-guard.sh
 1983059031a0f6fa099c539706b0f46edd41fd4aa675016a0ebbb0e126262b7b  755  tools/merge-run.sh
@@ -101,7 +101,7 @@ c8ce372b7286fdec6d59dc1cc586f65cffd3ad95cdeebdd089631832c46e1b09  755  tools/mig
 ebdb84b0473af44ffdc63fce69e007c3529d61f245f8008c8bd6c7a2b330373d  644  tools/open-pr-providers/github.sh
 4646c4c8143747fa1e8ccb52a499d01ae230c71e6f06c19508223edce007fc25  644  tools/open-pr-providers/shortcut.sh
 2780b4f1e4e9fd2d5e164dc36049e9259de11af2c58edd6488a0d896028a2060  755  tools/open-pr-watch.sh
-6c6de4f71fa0076af49416f4d05190cbb90c2e35b0e3e5a1bb084a816f3444c2  755  tools/open-pr.sh
+2db0a617bf4ea4a0b8aae862538e3e5f20293f2d0b87b26f3b63c866afede450  755  tools/open-pr.sh
 dc55a6a27785e8576b61964aeefb66b3e419c24bcb46ee280a2f8463befb450a  755  tools/pending-actions.sh
 924937befc2fa9b642c8cdd3407ec9958a32ca8cc05259bc2b31a1be387849fb  755  tools/pr-body.sh
 f6ec970038d77efb2159bd5818cb7fc4cbd72ceddfe0bcbc353d3a6f51061850  644  tools/project-colors

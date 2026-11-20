@@ -441,7 +441,7 @@ def apply_transition(
 
     Canonical order: '!', stage, review tags (L, G, H), 'PR', then any other tags. Every
     stage, review or PR change clears '!'; it comes back when every review is accepted
-    with a PR open. `review` is (source, round, accepted); round is N, 'next', 'keep' or '-'.
+    with a PR open. `review` is (source, round, accepted); round is N, 'next', 'keep', '-' or 'drop'.
     """
     has_attn = False
     stage: str | None = None
@@ -484,7 +484,9 @@ def apply_transition(
         if src not in tuple(REVIEW_SOURCES):
             raise ValueError(f"unknown review source: {src}")
         prev = reviews.get(src, (0, "planned"))[0]
-        if rnd == "-":
+        if rnd == "drop":
+            num = None
+        elif rnd == "-":
             num = 0
         elif rnd == "keep":
             num = prev
@@ -495,7 +497,10 @@ def apply_transition(
         else:
             raise ValueError(f"bad review round: {rnd}")
         stage = None
-        reviews[src] = (num, "ok" if accepted else "planned" if rnd == "-" else "run")
+        if num is None:
+            reviews.pop(src, None)
+        else:
+            reviews[src] = (num, "ok" if accepted else "planned" if rnd == "-" else "run")
     elif phase is not None:
         norm = phase.strip().upper()
         if norm not in VALID_PHASES:
@@ -900,7 +905,8 @@ def format_statusline_line1(worktree: str = ".", project: str = "") -> str:
         state = fields["pr_state"].replace("_", " ")
         pr_seg = f"PR #{fields['pr_num']}" + (f" {state}" if state else "")
     rev_seg = f"reviews: {fields['reviews']}" if fields["reviews"] else ""
-    segs = [fields["project"], fields["name"], fields["tags"], pr_seg, rev_seg]
+    attn_seg = "[!]" if fields["attn"] else ""
+    segs = [fields["project"], fields["name"], attn_seg, fields["tags"], pr_seg, rev_seg]
     return " | ".join(s for s in segs if s)
 
 
