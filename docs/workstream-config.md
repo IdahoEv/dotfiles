@@ -113,9 +113,8 @@ Nested JSON objects map to dotted keys (literal dotted keys at top level are als
 - `row.form`, `row.template` — agent/session row surface form/template
 - `pr.form`, `pr.template` — PR title surface form/template
 - `commit.form`, `commit.template`, `commit.key_prefix` — commit message surface
-- `provider.brief`, `provider.full`, `provider.form` — provider token overrides
+- `provider.brief`, `provider.full`, `provider.form` — provider token overrides (use literal dotted keys when `"provider"` is also set in the same JSON object)
 - `chain.mode`, `chain.sep` — ordered ticket chain rendering (`all` / `first` / `last`, separator default `+`)
-- `desc.source`, `desc.form` — description source and form
 
 ### Migration example
 
