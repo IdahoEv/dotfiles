@@ -83,6 +83,64 @@ agents/  commands/  skills/
 
 Model pricing (`lib/model-pricing.json`) is reference data, not config, and stays separate.
 
+## Workstreams JSON settings (implemented)
+
+Implemented across `repo_facts.py` (`conf_get_source` / `settings_get_source`), `workstream.py`, `session-label.sh`, `tracker.sh`, `start-ticket.sh`, and `agy_tmux_dashboard.py`.
+
+### Layers and precedence
+
+Resolved per key from highest to lowest precedence (partial files inherit unset keys):
+
+1. `<checkout>/.workstreams/settings.local.json` — gitignored, checkout-local overrides (never inherited from another checkout or main worktree)
+2. `<checkout>/.workstreams/settings.json` — shared, version-controlled project settings
+3. `<main-checkout>/.workstreams/settings.json` — shared project settings from the main checkout when running in a linked worktree whose own branch lacks the file or key
+4. `~/.config/workstreams/settings.json` — personal defaults across projects
+5. Legacy `.start-ticket.conf` layers and `tools/project-colors` (lowest fallback when a key is absent from JSON)
+6. Built-in defaults
+
+Explicit CLI flags (`--provider`, `--launcher`) and environment variables (`GT_LABEL_*`, `START_TICKET_MCP_DIR`) continue to override file settings where supported.
+
+### Keys
+
+Nested JSON objects map to dotted keys (literal dotted keys at top level are also accepted):
+
+- `provider` — ticket provider (`github`, `shortcut`, `github-mcp`)
+- `color` — project key color (`red`, `blue`, `green`, `yellow`, `purple`, `orange`, `pink`, `cyan`)
+- `launcher` — session launcher (`iterm`, `bg`, `agy-tmux`, `none`)
+- `base` — base naming template (default `"{key} {desc}"`)
+- `branch.form`, `branch.template` — branch surface form/template
+- `worktree.form`, `worktree.template` — worktree directory surface form/template
+- `row.form`, `row.template` — agent/session row surface form/template
+- `pr.form`, `pr.template` — PR title surface form/template
+- `commit.form`, `commit.template`, `commit.key_prefix` — commit message surface
+- `provider.brief`, `provider.full`, `provider.form` — provider token overrides
+- `chain.mode`, `chain.sep` — ordered ticket chain rendering (`all` / `first` / `last`, separator default `+`)
+- `desc.source`, `desc.form` — description source and form
+
+### Migration example
+
+Legacy `.start-ticket.conf` + `tools/project-colors`:
+
+```ini
+provider=github
+color=green
+```
+
+Migrated `<project>/.workstreams/settings.json`:
+
+```json
+{
+  "provider": "github",
+  "color": "green",
+  "branch": {
+    "form": "kebab",
+    "template": "{key}-{desc}"
+  }
+}
+```
+
+`.workstream.json` remains the per-worktree runtime record (tickets, provider, phase tags, PR, reviews, sessions) and is never read as config.
+
 ## Open items
 
 - Machine-layer location and per-host subdirectories.

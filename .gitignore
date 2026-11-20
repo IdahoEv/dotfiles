@@ -9,5 +9,6 @@ __pycache__/
 *.pyc
 
 *.local
+.workstreams/settings.local.json
 */.scratch
 

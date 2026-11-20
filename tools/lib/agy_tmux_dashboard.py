@@ -260,7 +260,7 @@ def _lookup_project_colors_file(project: str, colors_file: Path) -> str:
 
 
 def resolve_project_color(pane_path: str, colors_file: Path | None = None) -> str:
-    """Resolve a workstream's project color via .start-ticket.conf then project-colors."""
+    """Resolve a workstream's project color via Workstreams settings, .start-ticket.conf, then project-colors."""
     if not pane_path or not os.path.isdir(pane_path):
         return ""
     conf_val = repo_facts.conf_get("color", pane_path)
@@ -298,10 +298,7 @@ def load_workstream_meta(pane_path: str) -> tuple[str, str, str]:
         return ("", "", "")
     ticket_ref = rec.key or ""
     if not ticket_ref and rec.tickets:
-        ids = [t.get("id", "") for t in rec.tickets if t.get("id")]
-        if ids:
-            prefix = workstream.PROVIDER_TOKENS.get(rec.ticket_provider, {}).get("brief", "")
-            ticket_ref = f"{prefix}{'+'.join(ids)}"
+        ticket_ref = workstream.derive_key(rec, pane_path)
     return (ticket_ref, rec.desc or "", workstream.format_phase_tags(rec))
 
 

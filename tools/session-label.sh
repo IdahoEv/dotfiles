@@ -18,8 +18,9 @@
 # state.json for sessions colored by hand.
 #
 # Project color, first hit wins:
-#   1. `color=` in start-ticket.conf, via the usual per-key lookup (worktree
-#      .start-ticket.conf -> main repo -> config overlay -> ~/.config/start-ticket)
+#   1. `color` in the Workstreams settings (.workstreams/settings.local.json,
+#      settings.json, ~/.config/workstreams/settings.json), else `color=` in
+#      start-ticket.conf (worktree -> main repo -> config overlay -> ~/.config/start-ticket)
 #   2. project-colors (next to this script), keyed by the directory holding the
 #      repo's .git, so every worktree of Kardashev resolves to "Kardashev"
 #   3. none: the color is left alone
@@ -71,7 +72,7 @@ project_color() {  # <project> -> color or empty
 # Conf value first, then project-colors; validated here so --show and
 # --color project reject a typo the same way, naming the file to fix.
 resolve_color() {  # <project> -> color or empty
-  local c src=start-ticket.conf
+  local c src="start-ticket.conf or .workstreams settings"
   # Trimmed after lookup: conf_get keeps trailing blanks and CRs, and a blank
   # value must fall through to project-colors rather than fail the palette check.
   c="$(gt::conf_get color 2>/dev/null | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | tr '[:upper:]' '[:lower:]' || true)"

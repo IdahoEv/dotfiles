@@ -214,8 +214,9 @@ provider::fetch() { ST_TITLE="Fake ticket"; ST_BODY="body"; ST_URL=""; ST_PARENT
 provider::create_worktree() { echo "create $1" >> "$FAKE_LOG"; echo "$ROOT/should-not-exist"; }
 provider::mark_in_progress() { echo "mark $1" >> "$FAKE_LOG"; }
 P
-cp "$TOOLS/../.start-ticket.conf" "$ROOT/widgets/.start-ticket.conf"
-git -C "$ROOT/widgets" add .start-ticket.conf && git -C "$ROOT/widgets" commit -q -m "Add repo ticket config"
+mkdir -p "$ROOT/widgets/.workstreams"
+cp "$TOOLS/../.workstreams/settings.json" "$ROOT/widgets/.workstreams/settings.json"
+git -C "$ROOT/widgets" add .workstreams/settings.json && git -C "$ROOT/widgets" commit -q -m "Add repo ticket config"
 git clone -q "$ROOT/widgets" "$ROOT/cloud"
 git -C "$ROOT/cloud" checkout -q -b ccr-session
 : > "$FAKE_LOG"

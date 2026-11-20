@@ -116,6 +116,106 @@ class SettingsLayeringTests(WorkstreamTestBase):
         self.assertEqual(val, "fromenv")
 
 
+class WorkstreamsSettingsTests(WorkstreamTestBase):
+    def settings(self, rel: str, data: dict) -> None:
+        self.write(rel, json.dumps(data))
+
+    def chain_record(self) -> workstream.WorkstreamRecord:
+        return workstream.WorkstreamRecord(
+            tickets=[{"id": i, "url": ""} for i in ("12", "13", "14")],
+            ticket_provider="github",
+            desc="retry guard",
+        )
+
+    def test_layers_resolve_per_key_with_local_highest(self) -> None:
+        repo = self.make_repo("widgets")
+        self.settings("home/.config/workstreams/settings.json",
+                      {"provider": "shortcut", "color": "red", "chain": {"sep": "-"}})
+        self.settings("widgets/.workstreams/settings.json", {"provider": "github", "color": "blue"})
+        self.settings("widgets/.workstreams/settings.local.json", {"color": "green"})
+        self.assertEqual(repo_facts.conf_get("color", repo), "green")
+        self.assertEqual(repo_facts.conf_get("provider", repo), "github")
+        self.assertEqual(workstream.resolve_setting("chain.sep", repo, default="+"), ("-", "user"))
+
+    def test_partial_local_file_inherits_other_values(self) -> None:
+        repo = self.make_repo("widgets")
+        self.settings("widgets/.workstreams/settings.json", {"provider": "github", "branch": {"form": "snake"}})
+        self.settings("widgets/.workstreams/settings.local.json", {"branch": {"template": "{key}"}})
+        self.assertEqual(workstream.resolve_setting("branch.form", repo)[0], "snake")
+        self.assertEqual(workstream.resolve_setting("branch.template", repo)[0], "{key}")
+        self.assertEqual(repo_facts.conf_get("provider", repo), "github")
+
+    def test_legacy_conf_used_only_when_key_absent_from_json(self) -> None:
+        repo = self.make_repo("widgets")
+        self.write("widgets/.start-ticket.conf", "provider=shortcut\ncolor=pink\n")
+        self.assertEqual(repo_facts.conf_get("provider", repo), "shortcut")
+        self.settings("widgets/.workstreams/settings.json", {"provider": "github"})
+        self.assertEqual(repo_facts.conf_get("provider", repo), "github")
+        self.assertEqual(repo_facts.conf_get("color", repo), "pink")
+
+    def test_empty_json_value_falls_through(self) -> None:
+        repo = self.make_repo("widgets")
+        self.settings("home/.config/workstreams/settings.json", {"color": "red"})
+        self.settings("widgets/.workstreams/settings.json", {"color": ""})
+        self.assertEqual(repo_facts.conf_get("color", repo), "red")
+
+    def test_malformed_file_is_skipped_with_warning(self) -> None:
+        repo = self.make_repo("widgets")
+        self.write("widgets/.workstreams/settings.json", "{not json")
+        self.settings("home/.config/workstreams/settings.json", {"color": "red"})
+        with mock.patch("sys.stderr") as err:
+            self.assertEqual(repo_facts.conf_get("color", repo), "red")
+        self.assertTrue(err.write.called)
+
+    def test_boolean_values_read_as_text(self) -> None:
+        repo = self.make_repo("widgets")
+        self.settings("widgets/.workstreams/settings.json", {"commit": {"key_prefix": True}})
+        self.assertEqual(repo_facts.conf_get("commit.key_prefix", repo), "true")
+
+    def test_linked_worktree_reads_shared_settings_from_main_checkout(self) -> None:
+        repo = self.make_repo("widgets")
+        wt = os.path.join(self.root, "wt")
+        subprocess.run(["git", "-C", repo, "worktree", "add", "-q", wt, "-b", "feature"], check=True)
+        self.settings("widgets/.workstreams/settings.json", {"provider": "github", "color": "blue"})
+        self.assertEqual(repo_facts.conf_get("provider", wt), "github")
+        self.settings("wt/.workstreams/settings.json", {"color": "cyan"})
+        self.assertEqual(repo_facts.conf_get("color", wt), "cyan")
+        self.assertEqual(repo_facts.conf_get("provider", wt), "github")
+
+    def test_local_settings_stay_in_their_checkout(self) -> None:
+        repo = self.make_repo("widgets")
+        wt = os.path.join(self.root, "wt")
+        subprocess.run(["git", "-C", repo, "worktree", "add", "-q", wt, "-b", "feature"], check=True)
+        self.settings("widgets/.workstreams/settings.local.json", {"color": "red"})
+        self.assertIsNone(repo_facts.conf_get("color", wt))
+        self.assertEqual(repo_facts.conf_get("color", repo), "red")
+
+    def test_provider_reaches_bash_consumers_through_conf_get(self) -> None:
+        repo = self.make_repo("widgets")
+        self.settings("widgets/.workstreams/settings.json", {"provider": "github"})
+        r = subprocess.run([os.path.join(os.path.dirname(HERE), "repo-facts.sh"), "conf-get", "provider"],
+                           cwd=repo, capture_output=True, text=True, check=False)
+        self.assertEqual((r.returncode, r.stdout), (0, "github"))
+
+    def test_naming_surfaces_read_settings_through_the_renderer(self) -> None:
+        repo = self.make_repo("widgets")
+        rec = self.chain_record()
+        self.assertEqual(workstream.render_surface(rec, "branch", repo), "Is12+13+14-retry-guard")
+        self.settings("widgets/.workstreams/settings.json",
+                      {"branch": {"template": "{type}-{key}-{desc}"}, "chain": {"sep": "_"}})
+        self.settings("widgets/.workstreams/settings.local.json", {"row": {"form": "Title"}})
+        self.assertEqual(workstream.render_surface(rec, "key", repo), "Is12_13_14")
+        self.assertEqual(workstream.render_surface(rec, "branch", repo), "Is12_13_14-retry-guard")
+        self.assertEqual(workstream.render_surface(rec, "row", repo), "Is12_13_14 Retry Guard")
+
+    def test_template_source_sees_json_layers(self) -> None:
+        repo = self.make_repo("widgets")
+        self.settings("home/.config/workstreams/settings.json", {"pr": {"form": "Title"}})
+        self.assertEqual(workstream.detect_template_source(repo), "user")
+        self.settings("widgets/.workstreams/settings.json", {"row": {"form": "Title"}})
+        self.assertEqual(workstream.detect_template_source(repo), "project")
+
+
 class RecordPersistenceTests(WorkstreamTestBase):
     def test_record_writers_read_and_write_under_shared_lock(self) -> None:
         repo = self.make_repo("widgets")

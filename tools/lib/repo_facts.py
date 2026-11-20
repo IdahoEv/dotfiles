@@ -480,8 +480,72 @@ def conf_files(dir_: str = ".") -> list[str]:
     return [path for _, path in conf_layers(dir_)]
 
 
+SETTINGS_DIR = ".workstreams"
+
+
+def settings_layers(dir_: str = ".") -> list[tuple[str, str]]:
+    """Workstreams JSON settings files with their layer, highest precedence first.
+
+    settings.local.json is read from this checkout only. The shared file is
+    read from this checkout, then from the main checkout, so a branch that has
+    not committed it yet still sees the project's settings.
+    """
+    layers: list[tuple[str, str]] = []
+    top = git(dir_, "rev-parse", "--show-toplevel")
+    main = main_root(dir_)
+    if top:
+        layers.append(("project", f"{top}/{SETTINGS_DIR}/settings.local.json"))
+        layers.append(("project", f"{top}/{SETTINGS_DIR}/settings.json"))
+    if main and main != top:
+        layers.append(("project", f"{main}/{SETTINGS_DIR}/settings.json"))
+    layers.append(("user", os.path.join(
+        os.path.expanduser("~"), ".config", "workstreams", "settings.json")))
+    return layers
+
+
+def _settings_value(data: object, key: str) -> str:
+    """Value at a dotted `key` (nested objects, or a literal dotted member), as text."""
+    node = data
+    if isinstance(node, dict) and key in node:
+        node = node[key]
+    else:
+        for part in key.split("."):
+            if not isinstance(node, dict) or part not in node:
+                return ""
+            node = node[part]
+    if isinstance(node, bool):
+        return "true" if node else "false"
+    if isinstance(node, (str, int, float)):
+        return str(node)
+    return ""
+
+
+def settings_get_source(key: str, dir_: str = ".") -> tuple[str, str] | None:
+    """First non-empty `key` across settings_layers as (value, layer); None when unset."""
+    for layer, path in settings_layers(dir_):
+        p = Path(path)
+        if not p.is_file():
+            continue
+        try:
+            data = json.loads(p.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as exc:
+            print(f"warning: ignoring unreadable settings file {path}: {exc}", file=sys.stderr)
+            continue
+        value = _settings_value(data, key)
+        if value:
+            return (value, layer)
+    return None
+
+
 def conf_get_source(key: str, dir_: str = ".") -> tuple[str, str] | None:
-    """First non-empty `key=` across conf_layers as (value, layer); None when unset."""
+    """First non-empty value for `key` as (value, layer); None when unset.
+
+    The Workstreams JSON settings win; a key absent from them falls back to
+    the legacy `key=` lookup across conf_layers.
+    """
+    found = settings_get_source(key, dir_)
+    if found is not None:
+        return found
     for layer, path in conf_layers(dir_):
         p = Path(path)
         if not p.is_file():

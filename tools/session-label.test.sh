@@ -76,5 +76,21 @@ printf 'widgets teal\n' > "$ROOT/project-colors"; rm "$OV/start-ticket.conf"
 
 check "project checkout stays clean" "" "$(git -C "$ROOT/widgets" status --porcelain)"
 
+printf 'widgets blue\n' > "$ROOT/project-colors"
+mkdir -p "$ROOT/widgets/.workstreams"
+printf '{"color":"Orange"}\n' > "$ROOT/widgets/.workstreams/settings.json"
+check "shared settings color beats project-colors, read from the main checkout" "orange" "$(show)"
+printf 'color=cyan\n' > "$ROOT/widgets/.start-ticket.conf"
+check "settings color beats legacy conf" "orange" "$(show)"
+rm "$ROOT/widgets/.start-ticket.conf"
+printf '{"color":"purple"}\n' > "$ROOT/widgets/.workstreams/settings.local.json"
+check "main checkout's local settings do not reach the linked worktree" "orange" "$(show)"
+mkdir -p "$ROOT/wt/.workstreams"; printf '{"color":"pink"}\n' > "$ROOT/wt/.workstreams/settings.local.json"
+check "checkout-local settings beat shared settings" "pink" "$(show)"
+printf '{"color":"mauve"}\n' > "$ROOT/wt/.workstreams/settings.local.json"
+(cd "$ROOT/wt" && "$SL" --color project > /dev/null 2>&1); check "bad settings color rejected" "1" "$?"
+rm -rf "$ROOT/widgets/.workstreams" "$ROOT/wt/.workstreams"
+check "legacy lookup resumes without settings files" "blue" "$(show)"
+
 printf '%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

@@ -9,6 +9,7 @@ from __future__ import annotations
 import curses
 import json
 import os
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -611,6 +612,23 @@ class TestGroupingAndNavigation(unittest.TestCase):
 
 
 class TestProjectColors(unittest.TestCase):
+    def test_resolve_color_reads_workstreams_settings_over_legacy_sources(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp) / "My-Project"
+            repo.mkdir()
+            subprocess.run(["git", "init", "-q", str(repo)], check=True)
+            (repo / ".workstreams").mkdir()
+            (repo / ".workstreams" / "settings.json").write_text('{"color": "Orange"}', encoding="utf-8")
+            (repo / ".start-ticket.conf").write_text("color=cyan\n", encoding="utf-8")
+            colors_file = Path(tmp) / "project-colors"
+            colors_file.write_text("My-Project purple\n", encoding="utf-8")
+            home = Path(tmp) / "home"
+            home.mkdir()
+            with mock.patch.dict(os.environ, {"HOME": str(home)}):
+                self.assertEqual(dash.resolve_project_color(str(repo), colors_file=colors_file), "orange")
+                (repo / ".workstreams" / "settings.json").unlink()
+                self.assertEqual(dash.resolve_project_color(str(repo), colors_file=colors_file), "cyan")
+
     def test_resolve_color_conf_override_beats_project_colors(self):
         with tempfile.TemporaryDirectory() as tmp:
             wt = Path(tmp) / "My-Project" / "wt1"
