@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # finalize-check.sh — CLI of lib/finalize_check.py; /finalize parses its stdout
-# (28 key=value lines — see the module docstring). Same name, same flags, same
+# (29 key=value lines — see the module docstring). Same name, same flags, same
 # output bytes as the bash implementation it replaced.
 
 set -euo pipefail

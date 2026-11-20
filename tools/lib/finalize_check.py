@@ -363,9 +363,10 @@ def local_commits_in_base_status(head_oid: str, head_matches: str, base: str,
     """yes|no|unknown|"" — are the local commits beyond the PR head all
     already on origin/<base>? Only asked when the tip is ahead/diverged (else
     ""). Reachable, or patch-equivalent per `git cherry` (rebased or
-    cherry-picked), means deleting the branch loses nothing. Passing
-    pr_head_oid as <limit> excludes the PR's own commits so a multi-commit
-    squash-merged PR doesn't trigger false positives."""
+    cherry-picked) with no unmerged merge commits in the extra range, means
+    deleting the branch loses nothing. Passing pr_head_oid as <limit> excludes
+    the PR's own commits so a multi-commit squash-merged PR doesn't trigger
+    false positives."""
     if head_matches not in ("ahead", "diverged"):
         return ""
     if not base or not _git_ok(worktree, "rev-parse", "--verify", "--quiet",
@@ -373,6 +374,17 @@ def local_commits_in_base_status(head_oid: str, head_matches: str, base: str,
         return "unknown"
     if _git_ok(worktree, "merge-base", "--is-ancestor", head_oid, f"origin/{base}"):
         return "yes"
+    # `git cherry` skips merge commits (`--no-merges`), so a local merge with
+    # conflict-resolution edits would otherwise look empty and pass.
+    rev_cmd = ["git", "-C", worktree, "rev-list", "--merges", "-n", "1",
+               head_oid, f"^origin/{base}"]
+    if pr_head_oid:
+        rev_cmd.append(f"^{pr_head_oid}")
+    merges = _run(rev_cmd)
+    if merges.returncode != 0:
+        return "unknown"
+    if merges.stdout.strip():
+        return "no"
     cmd = ["git", "-C", worktree, "cherry", f"origin/{base}", head_oid]
     if pr_head_oid:
         cmd.append(pr_head_oid)

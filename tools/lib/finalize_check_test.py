@@ -471,6 +471,26 @@ class HeadMatches(Base):
         self.assertEqual(f["local_commits_in_base"], "yes")
         self.assertEqual(f["verdict"], "ready")
 
+    def test_ahead_conflict_resolution_merge_is_local_commits(self):
+        repo, wt = self.repo_with_wt()
+        pr_head = self.git(wt, "rev-parse", "HEAD")
+        merge_sha = self.merge_branch(repo)
+        (repo / "conflict.txt").write_text("from-main\n")
+        self.git(repo, "add", "-A")
+        self.git(repo, "commit", "-qm", "main change")
+        self.git(repo, "push", "-q", "origin", "main")
+        self.git(wt, "fetch", "-q", "origin")
+        # Merge origin/main locally with an extra manual edit in the merge commit.
+        self.git(wt, "merge", "--no-ff", "--no-commit", "origin/main")
+        (wt / "conflict.txt").write_text("manual-resolution\n")
+        self.git(wt, "add", "-A")
+        self.git(wt, "commit", "-qm", "merge main with resolution")
+        self.set_pr(self.pr(3, "MERGED", head=pr_head, merge=merge_sha))
+        f = self.facts(self.run_check("--dir", str(wt)))
+        self.assertEqual(f["head_matches"], "ahead")
+        self.assertEqual(f["local_commits_in_base"], "no")
+        self.assertEqual(f["verdict"], "local-commits")
+
     def test_diverged_is_local_commits(self):
         repo, wt = self.repo_with_wt()
         tip = self.git(wt, "rev-parse", "HEAD")
