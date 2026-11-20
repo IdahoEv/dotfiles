@@ -326,12 +326,13 @@ def merged_status(branch: str, base: str, worktree: str) -> tuple[str, str]:
     r = _run(["git", "-C", worktree, "fetch", "--quiet", "origin",
               f"+refs/heads/{base}:refs/remotes/origin/{base}"])
     base_fetch = "ok" if r.returncode == 0 else "failed"
-    if not _git_ok(worktree, "rev-parse", "--verify", "--quiet", f"origin/{base}"):
+    remote_base = f"refs/remotes/origin/{base}"
+    if not _git_ok(worktree, "rev-parse", "--verify", "--quiet", remote_base):
         return "unknown", base_fetch
-    # refs/heads/, not a bare name: a same-named TAG outranks a branch in
-    # git's disambiguation order and would answer the merged question for it.
+    # refs/heads/ and refs/remotes/, not bare names: a same-named TAG outranks
+    # both in git's disambiguation order and would answer the merged question for it.
     ok = _git_ok(worktree, "merge-base", "--is-ancestor",
-                 f"refs/heads/{branch}", f"origin/{base}")
+                 f"refs/heads/{branch}", remote_base)
     return ("yes" if ok else "no"), base_fetch
 
 
@@ -369,15 +370,16 @@ def local_commits_in_base_status(head_oid: str, head_matches: str, base: str,
     false positives."""
     if head_matches not in ("ahead", "diverged"):
         return ""
+    remote_base = f"refs/remotes/origin/{base}"
     if not base or not _git_ok(worktree, "rev-parse", "--verify", "--quiet",
-                               f"origin/{base}"):
+                               remote_base):
         return "unknown"
-    if _git_ok(worktree, "merge-base", "--is-ancestor", head_oid, f"origin/{base}"):
+    if _git_ok(worktree, "merge-base", "--is-ancestor", head_oid, remote_base):
         return "yes"
     # `git cherry` skips merge commits (`--no-merges`), so a local merge with
     # conflict-resolution edits would otherwise look empty and pass.
     rev_cmd = ["git", "-C", worktree, "rev-list", "--merges", "-n", "1",
-               head_oid, f"^origin/{base}"]
+               head_oid, f"^{remote_base}"]
     if pr_head_oid:
         rev_cmd.append(f"^{pr_head_oid}")
     merges = _run(rev_cmd)
@@ -385,7 +387,7 @@ def local_commits_in_base_status(head_oid: str, head_matches: str, base: str,
         return "unknown"
     if merges.stdout.strip():
         return "no"
-    cmd = ["git", "-C", worktree, "cherry", f"origin/{base}", head_oid]
+    cmd = ["git", "-C", worktree, "cherry", remote_base, head_oid]
     if pr_head_oid:
         cmd.append(pr_head_oid)
     r = _run(cmd)
@@ -402,14 +404,15 @@ def merge_commit_landed(pr_merge_commit: str, base: str, worktree: str) -> str:
     disambiguates squash-merged from a merely stale origin/<base>."""
     if not (pr_merge_commit and base):
         return "unknown"
-    if not _git_ok(worktree, "rev-parse", "--verify", "--quiet", f"origin/{base}"):
+    remote_base = f"refs/remotes/origin/{base}"
+    if not _git_ok(worktree, "rev-parse", "--verify", "--quiet", remote_base):
         return "unknown"
     if not _has_commit(worktree, pr_merge_commit):
         _run(["git", "-C", worktree, "fetch", "--quiet", "origin", pr_merge_commit])
     if not _has_commit(worktree, pr_merge_commit):
         return "unknown"
     ok = _git_ok(worktree, "merge-base", "--is-ancestor",
-                 pr_merge_commit, f"origin/{base}")
+                 pr_merge_commit, remote_base)
     return "yes" if ok else "no"
 
 

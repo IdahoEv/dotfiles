@@ -491,6 +491,22 @@ class HeadMatches(Base):
         self.assertEqual(f["local_commits_in_base"], "no")
         self.assertEqual(f["verdict"], "local-commits")
 
+    def test_tag_named_origin_base_does_not_shadow_remote_ref(self):
+        repo, wt = self.repo_with_wt()
+        pr_head = self.git(wt, "rev-parse", "HEAD")
+        merge_sha = self.merge_branch(repo)
+        (wt / "local.txt").write_text("unpushed\n")
+        self.git(wt, "add", "-A")
+        self.git(wt, "commit", "-qm", "local only")
+        # A local tag named origin/main pointing at HEAD would shadow
+        # refs/remotes/origin/main if origin/main were passed unqualified.
+        self.git(wt, "tag", "origin/main", "HEAD")
+        self.set_pr(self.pr(3, "MERGED", head=pr_head, merge=merge_sha))
+        f = self.facts(self.run_check("--dir", str(wt)))
+        self.assertEqual(f["head_matches"], "ahead")
+        self.assertEqual(f["local_commits_in_base"], "no")
+        self.assertEqual(f["verdict"], "local-commits")
+
     def test_diverged_is_local_commits(self):
         repo, wt = self.repo_with_wt()
         tip = self.git(wt, "rev-parse", "HEAD")
