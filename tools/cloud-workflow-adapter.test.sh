@@ -26,7 +26,7 @@ construct = re.compile(
 used = {}
 for path in commands:
     text = open(path, encoding="utf-8").read()
-    if adapter.endswith("/codex-local.md"):
+    if adapter.endswith(("/codex-local.md", "/opencode-local.md")):
         if Path(path).stem in {"merge", "land", "sync"}:
             used.setdefault("/" + Path(path).stem, path)
         for match in re.finditer(r"(?<![\w/.-])/(?:merge|land|sync)\b", text):
@@ -80,6 +80,9 @@ local_codex_commands=("${agy_commands[@]}"
 )
 check "$repo/workflow/adapters/codex-local.md" "${local_codex_commands[@]}" || fail "local Codex adapter has drifted"
 printf 'PASS local Codex adapter maps every covered command and nested review procedure\n'
+
+check "$repo/workflow/adapters/opencode-local.md" "${local_codex_commands[@]}" || fail "local OpenCode adapter has drifted"
+printf 'PASS local OpenCode adapter maps every covered command and nested review procedure\n'
 
 claude_commands=(
   "$repo/dot_claude/commands/start.md"
