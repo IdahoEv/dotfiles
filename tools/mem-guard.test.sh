@@ -43,8 +43,9 @@ MEM_GUARD_PS_FIXTURE="$ROOT/missing" "$MG" check >/dev/null 2>&1; check "unreada
 SECRET="sk-test-SECRET-ARGUMENT-123"
 # Daemonized so they are not children of whatever agent is running this test (a nested
 # agent is correctly attributed to its parent session, which would hide them from the report).
+# cwd is $ROOT so a .workstream.json above the caller's cwd cannot relabel them as a worktree session.
 spawn() {
-  python3 -c 'import subprocess, sys; subprocess.Popen(sys.argv[1:], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)' "$@"
+  python3 -c 'import subprocess, sys; subprocess.Popen(sys.argv[2:], cwd=sys.argv[1], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)' "$ROOT" "$@"
 }
 spawn "$ROOT/bin/claude" 300
 spawn "$ROOT/bin/agy" -f /dev/null "/nonexistent/$SECRET"
