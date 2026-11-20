@@ -9,7 +9,7 @@ model to work out command-by-command: which ticket does this branch belong
 to, is there a PR, did it merge, did it actually land on the base branch,
 are there local commits the PR never saw, and where is the base worktree.
 
-Stdout is 28 key=value lines, one per fact, in the order of the Facts
+Stdout is 29 key=value lines, one per fact, in the order of the Facts
 fields; `verdict` is the one-line summary a caller branches on. Exit 0
 whenever the repo could be inspected (read `verdict`, not $?) and 1 only on
 usage/precondition errors. Makes NO changes: no pushes, no deletes, no

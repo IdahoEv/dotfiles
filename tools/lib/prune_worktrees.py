@@ -157,7 +157,7 @@ def classify(c: Candidate) -> tuple[str, str]:
         return "skip", "detached HEAD"
     if c.dirty:
         return "skip", "uncommitted changes"
-    if c.ahead_of_upstream > 0 or c.verdict == "local-commits":
+    if c.verdict != "ready" and (c.ahead_of_upstream > 0 or c.verdict == "local-commits"):
         return "skip", SKIP_REASONS["local-commits"]
     if c.verdict != "ready":
         return "skip", SKIP_REASONS.get(c.verdict, SKIP_REASONS["unknown"])
