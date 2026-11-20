@@ -81,7 +81,7 @@ f2a76fa675abd9ec93f935a0a9673ea6bbfac857b3ff2db535140c32a166db1e  644  tools/lib
 3cc905bbaf8a45cb980ef6dfb458c57b334e867026f4e21602393c49292fb004  644  tools/lib/pending_actions.py
 c35d14e612032aeb02db2a06ba9770e4b193f42c0c1570a96c0907613d0d959f  644  tools/lib/pr-risk.json
 ac8c0f92f9527fbb17c12a660565f1359150725ea34531f6e556cd0ff056a941  644  tools/lib/pr_body.py
-32baf9bd8a3256f6e63a6adfedff2a79944f4e01defaf78c87b023a2d03043d9  644  tools/lib/prune_worktrees.py
+1bc8ae879a58b0dcb5f3f87a0fd97558202396e98decc72d907238eaa03b449c  644  tools/lib/prune_worktrees.py
 0d3c21eccab00c8f4fdce929fe2c239d3cf46d5996270f6e3b4e2276674fe3a4  644  tools/lib/repo-facts.sh
 1675c497552ffa7a8a3b23bdfe6b790c126bf1d4ec854f76a857d05a349aef21  644  tools/lib/repo_facts.py
 d86aa76659afb858f4f235ed3e222d4359072437ad4c817efef4076a4c4ed9e9  644  tools/lib/sibling_worktrees.py

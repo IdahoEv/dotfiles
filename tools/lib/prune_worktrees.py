@@ -4,9 +4,9 @@
     prune-worktrees.sh [--repo <dir>] [--yes] [--delete-remote] [--force-delete]
 
 A worktree is stale when its branch's PR is verified MERGED (via the same
-verdict ladder /finalize uses), the tree is clean, and nothing is unpushed.
-Everything else is reported with the reason it was kept, never removed.
-Default is a dry run; --yes performs the removal.
+verdict ladder /finalize uses), the tree is clean, and no unlanded commit is
+unpushed or beyond the PR head. Everything else is reported with the reason it
+was kept, never removed. Default is a dry run; --yes performs the removal.
 
 classify() is pure; remove_candidate() is the one place that deletes, so a
 single-ticket finalize can import it instead of re-implementing removal.
@@ -34,7 +34,8 @@ A worktree/branch is removable only when ALL hold:
   - its PR is MERGED and the work landed on the PR's base (merge-commit,
     squash and rebase merges all count; git ancestry alone does not, so a
     fresh branch with no PR is never removed)
-  - the working tree is clean and no commit is unpushed or beyond the PR head
+  - the working tree is clean and no unlanded commit is unpushed or beyond
+    the PR head (extra commits already on a fresh, non-shallow base are allowed)
   - no Claude session (`claude agents --json`) is running in it
   - it is not locked, detached, the primary worktree, the base branch's
     worktree, or the chezmoi deploy clone
@@ -74,7 +75,7 @@ failed.
 SKIP_REASONS = {
     "no-pr": "no PR found for this branch",
     "not-merged": "PR not merged (or another PR for the branch is open)",
-    "local-commits": "unpushed: commits beyond the PR head",
+    "local-commits": "unpushed or beyond PR head (not provably on base)",
     "not-on-base": "PR merge commit is not on the base branch",
     "squash-merged": "PR merged but landing could not be proven",
     "unknown": "merge state could not be determined",
