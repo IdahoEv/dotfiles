@@ -46,24 +46,41 @@ DEFAULT_SURFACE_FORMS: dict[str, str] = {
 
 TEMPLATE_KEYS: tuple[str, ...] = (
     "base",
+    "key.template",
+    "key.ticket_separator",
+    "base.key_template",
+    "base.ticket_separator",
     "branch.form",
     "branch.template",
+    "branch.key_template",
+    "branch.ticket_separator",
     "worktree.form",
     "worktree.template",
+    "worktree.key_template",
+    "worktree.ticket_separator",
     "row.form",
     "row.template",
+    "row.key_template",
+    "row.ticket_separator",
     "pr.form",
     "pr.template",
+    "pr.key_template",
+    "pr.ticket_separator",
     "commit.form",
     "commit.template",
     "commit.key_prefix",
+    "commit.key_template",
+    "commit.ticket_separator",
     "provider.brief",    "provider.full",
     "provider.form",
     "chain.mode",
     "chain.sep",
-    "desc.source",
-    "desc.form",
 )
+
+
+class WorkstreamValidationError(ValueError):
+    """Raised when a rendered name violates its destination's constraints."""
+
 
 PROVIDER_TOKENS: dict[str, dict[str, str]] = {
     "github": {"brief": "Is", "full": "Issue"},
@@ -328,11 +345,49 @@ def _provider_token(record: WorkstreamRecord, style: str = "", dir_: str = ".") 
     return custom if custom else defaults[mode]
 
 
-def _chain_token(record: WorkstreamRecord, option: str = "", dir_: str = ".") -> str:
+def _resolve_key_settings(dir_: str = ".", surface: str = "") -> tuple[str, str, str, str, str, str]:
+    """Return (tmpl, tmpl_key, tmpl_src, sep, sep_key, sep_src) for key rendering."""
+    tmpl = ""
+    tmpl_key = "key.template"
+    tmpl_src = "default"
+    if surface and surface != "key":
+        val, src = resolve_setting(f"{surface}.key_template", dir_, default="")
+        if val:
+            tmpl, tmpl_key, tmpl_src = val, f"{surface}.key_template", src
+    if not tmpl:
+        val, src = resolve_setting("key.template", dir_, default="{provider}{chain}")
+        tmpl, tmpl_key, tmpl_src = val or "{provider}{chain}", "key.template", src
+
+    sep = ""
+    sep_key = "key.ticket_separator"
+    sep_src = "default"
+    if surface and surface != "key":
+        val, src = resolve_setting(f"{surface}.ticket_separator", dir_, default="")
+        if val:
+            sep, sep_key, sep_src = val, f"{surface}.ticket_separator", src
+    if not sep:
+        val, src = resolve_setting("key.ticket_separator", dir_, default="")
+        if val:
+            sep, sep_key, sep_src = val, "key.ticket_separator", src
+    if not sep:
+        val, src = resolve_setting("chain.sep", dir_, default="+")
+        sep, sep_key, sep_src = val or "+", "chain.sep", src
+    return (tmpl, tmpl_key, tmpl_src, sep, sep_key, sep_src)
+
+
+def _chain_token(
+    record: WorkstreamRecord,
+    option: str = "",
+    dir_: str = ".",
+    sep_override: str = "",
+) -> str:
     ids = [t["id"] for t in record.tickets if t.get("id")]
     if not ids:
         return ""
-    sep = resolve_setting("chain.sep", dir_, default="+")[0] or "+"
+    if sep_override:
+        sep = sep_override
+    else:
+        _, _, _, sep, _, _ = _resolve_key_settings(dir_)
     mode = option or resolve_setting("chain.mode", dir_, default="all")[0]
     if mode == "first":
         return ids[0]
@@ -341,15 +396,25 @@ def _chain_token(record: WorkstreamRecord, option: str = "", dir_: str = ".") ->
     return sep.join(ids)
 
 
-def derive_key(record: WorkstreamRecord, dir_: str = ".") -> str:
-    """Compute deterministic key: {provider}{chain} for tickets, or stored key for talk/iteration."""
+def derive_key(record: WorkstreamRecord, dir_: str = ".", surface: str = "") -> str:
+    """Compute deterministic key from key.template (default '{provider}{chain}'), or stored key for talk/iteration."""
     if record.kind in ("talk", "iteration") and not record.tickets:
         return record.key
-    prov = _provider_token(record, "", dir_)
-    chain = _chain_token(record, "", dir_)
-    if prov or chain:
-        return f"{prov}{chain}"
-    return record.key
+    tmpl, _, _, sep, _, _ = _resolve_key_settings(dir_, surface)
+    if not (record.tickets or record.ticket_provider):
+        return record.key
+
+    def repl(match: re.Match[str]) -> str:
+        name = match.group(1)
+        opt = match.group(2) or ""
+        if name == "provider":
+            return _provider_token(record, opt, dir_)
+        if name == "chain":
+            return _chain_token(record, opt, dir_, sep_override=sep)
+        return match.group(0)
+
+    rendered = re.sub(r"\{([a-z]+)(?::([A-Za-z0-9_+-]+))?\}", repl, tmpl).strip()
+    return rendered if rendered else record.key
 
 
 def format_phase_tags(record: WorkstreamRecord) -> str:
@@ -447,10 +512,10 @@ def _clean_rendered(text: str, form: str) -> str:
     return s.strip()
 
 
-def render_base(record: WorkstreamRecord, form: str, dir_: str = ".") -> str:
+def render_base(record: WorkstreamRecord, form: str, dir_: str = ".", surface: str = "") -> str:
     """Render the base template (default '{key} {desc}') in <form>."""
     base_tmpl, _ = resolve_setting("base", dir_, default="{key} {desc}")
-    return render_template(base_tmpl, record, form=form, dir_=dir_, _in_base=True)
+    return render_template(base_tmpl, record, form=form, dir_=dir_, _in_base=True, surface=surface)
 
 
 def render_template(
@@ -459,9 +524,11 @@ def render_template(
     form: str = "words",
     dir_: str = ".",
     _in_base: bool = False,
+    surface: str = "",
 ) -> str:
     """Render a template string containing {provider}, {chain}, {desc}, {type}, {base}, {phase}/{tags}, {key}."""
-    key_val = derive_key(record, dir_)
+    key_val = derive_key(record, dir_, surface=surface)
+    _, _, _, sep, _, _ = _resolve_key_settings(dir_, surface)
 
     def repl(match: re.Match[str]) -> str:
         name = match.group(1)
@@ -471,7 +538,7 @@ def render_template(
         if name == "provider":
             return _provider_token(record, opt, dir_)
         if name == "chain":
-            return _chain_token(record, opt, dir_)
+            return _chain_token(record, opt, dir_, sep_override=sep)
         if name == "desc":
             target_form = opt if opt in VALID_FORMS else form
             return format_text(record.desc, target_form)
@@ -485,24 +552,89 @@ def render_template(
         if name == "base":
             if _in_base:
                 return f"{key_val} {format_text(record.desc, form)}".strip()
-            return render_base(record, form=form, dir_=dir_)
+            return render_base(record, form=form, dir_=dir_, surface=surface)
         return match.group(0)
 
     rendered = re.sub(r"\{([a-z]+)(?::([A-Za-z0-9_+-]+))?\}", repl, template)
     return _clean_rendered(rendered, form)
 
 
+def _active_naming_sources(surface: str, dir_: str) -> str:
+    """Describe non-default settings contributing to <surface>."""
+    tmpl, tmpl_key, tmpl_src, sep, sep_key, sep_src = _resolve_key_settings(dir_, surface)
+    parts: list[str] = []
+    if tmpl_src != "default":
+        parts.append(f"{tmpl_key}={tmpl!r} ({tmpl_src})")
+    if sep_src != "default":
+        parts.append(f"{sep_key}={sep!r} ({sep_src})")
+    for k in (f"{surface}.template", "base"):
+        if k == f"{surface}.template" and surface in ("key", "base"):
+            continue
+        val, src = resolve_setting(k, dir_, default="")
+        if src != "default" and val:
+            parts.append(f"{k}={val!r} ({src})")
+    return ", ".join(parts) if parts else "default settings"
+
+
+def _branch_violation(value: str) -> str:
+    if not value:
+        return "empty branch name"
+    if any(ch.isspace() for ch in value):
+        return "contains whitespace"
+    if any(ord(ch) < 0x20 or ord(ch) == 0x7F for ch in value):
+        return "contains control character"
+    for bad in ("~", "^", ":", "?", "*", "[", "\\", "..", "@{", "//"):
+        if bad in value:
+            return f"contains {bad!r}"
+    if value.startswith("-") or value.startswith("/") or value.endswith("/"):
+        return "invalid leading or trailing character"
+    if value.endswith(".") or value.endswith(".lock") or "/.lock" in value or "/." in value:
+        return "invalid dot or .lock segment"
+    if repo_facts.run_cmd(["git", "check-ref-format", f"refs/heads/{value}"]).returncode != 0:
+        return "rejected by git check-ref-format"
+    return ""
+
+
+def validate_surface_output(
+    value: str,
+    surface: str,
+    record: WorkstreamRecord,
+    dir_: str = ".",
+) -> None:
+    """Validate rendered output against <surface>'s constraints; raise WorkstreamValidationError on failure."""
+    has_content = bool(record.tickets or record.desc or record.key)
+    reason = ""
+    if any(ord(ch) < 0x20 or ord(ch) == 0x7F for ch in value):
+        reason = "contains control character or newline"
+    elif has_content and not value:
+        reason = "empty output"
+    elif surface == "branch":
+        reason = _branch_violation(value)
+    elif surface == "worktree":
+        if value in (".", "..") or "/" in value or "\\" in value:
+            reason = "invalid directory name"
+    if reason:
+        sources = _active_naming_sources(surface, dir_)
+        raise WorkstreamValidationError(
+            f"invalid {surface} name {value!r} ({reason}); produced by {sources}"
+        )
+
+
 def render_surface(record: WorkstreamRecord, surface: str, dir_: str = ".") -> str:
     """Render a named surface ('key' | 'base' | 'branch' | 'worktree' | 'row' | 'pr' | 'commit')."""
     if surface == "key":
-        return derive_key(record, dir_)
+        out = derive_key(record, dir_, surface="key")
+        validate_surface_output(out, "key", record, dir_)
+        return out
     default_form = DEFAULT_SURFACE_FORMS.get(surface, "words")
     form, _ = resolve_setting(f"{surface}.form", dir_, default=default_form)
     if form not in VALID_FORMS:
         form = default_form
 
     if surface == "base":
-        return render_base(record, form=form, dir_=dir_)
+        out = render_base(record, form=form, dir_=dir_, surface="base")
+        validate_surface_output(out, "base", record, dir_)
+        return out
 
     tmpl, _ = resolve_setting(f"{surface}.template", dir_, default="")
     if not tmpl:
@@ -520,9 +652,10 @@ def render_surface(record: WorkstreamRecord, surface: str, dir_: str = ".") -> s
         else:
             tmpl = "{base}"
 
-    out = render_template(tmpl, record, form=form, dir_=dir_)
+    out = render_template(tmpl, record, form=form, dir_=dir_, surface=surface)
     if surface == "worktree":
         out = out.replace("/", "-")
+    validate_surface_output(out, surface, record, dir_)
     return out
 
 
@@ -567,13 +700,25 @@ def init_ticket_record(
             sanitized = repo_facts.sanitize_label(desc)
             desc = format_text(sanitized, "words") if sanitized else format_text(_slug_phrase(title), "words")
 
+        aliases = list(existing.key_aliases) if existing else []
+        new_key = derive_key(
+            WorkstreamRecord(
+                kind="ticket",
+                tickets=merged_tickets,
+                ticket_provider=provider,
+            ),
+            root,
+        )
+        if existing and existing.key and existing.key != new_key and existing.key not in aliases:
+            aliases.append(existing.key)
+
         rec = WorkstreamRecord(
             version=1,
             kind="ticket",
             tickets=merged_tickets,
             ticket_provider=provider,
-            key="",
-            key_aliases=list(existing.key_aliases) if existing else [],
+            key=new_key,
+            key_aliases=aliases,
             desc=desc,
             type=type_ or (existing.type if existing else ""),
             template_source=detect_template_source(root),
@@ -583,7 +728,7 @@ def init_ticket_record(
             claude_sessions=list(existing.claude_sessions) if existing else [],
             codex_sessions=list(existing.codex_sessions) if existing else [],
         )
-        rec.key = derive_key(rec, root)
+        rec.key = rec.key or derive_key(rec, root)
         _save_record_locked(root, rec)
         return rec
 
@@ -927,7 +1072,11 @@ def main(argv: list[str] | None = None) -> int:
                 sanitized = repo_facts.sanitize_label(args.desc)
                 if sanitized:
                     rec.desc = format_text(sanitized, "words")
-        sys.stdout.write(render_surface(rec, args.surface, args.dir))
+        try:
+            sys.stdout.write(render_surface(rec, args.surface, args.dir))
+        except WorkstreamValidationError as exc:
+            sys.stderr.write(f"workstream: {exc}\n")
+            return 1
         return 0
 
     if args.cmd == "setting":

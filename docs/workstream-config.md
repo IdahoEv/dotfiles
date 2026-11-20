@@ -114,6 +114,12 @@ Nested JSON objects map to dotted keys (literal dotted keys at top level are als
 - `pr.form`, `pr.template` — PR title surface form/template
 - `commit.form`, `commit.template`, `commit.key_prefix` — commit message surface
 - `provider.brief`, `provider.full`, `provider.form` — provider token overrides (use literal dotted keys when `"provider"` is also set in the same JSON object)
+- `key.template`, `key.ticket_separator` — ticket key template (default `"{provider}{chain}"`) and chain separator (falls back to `chain.sep`, then `"+"`). Supports `{provider}`, `{provider:brief|full}`, `{chain}`, and `{chain:first|last|all}`:
+  - `Is12-13-14`: `"key": {"template": "{provider}{chain}", "ticket_separator": "-"}`
+  - `12+13+14`: `"key": {"template": "{chain}", "ticket_separator": "+"}`
+  - `Is12.`: `"key": {"template": "{provider}{chain:first}."}`
+  - `[12,13,14]`: `"key": {"template": "[{chain}]", "ticket_separator": ","}`
+- `<dest>.key_template`, `<dest>.ticket_separator` — per-destination key overrides for `base`, `branch`, `worktree`, `row`, `pr`, and `commit` (e.g., `row.key_template` + `row.ticket_separator` to show `[12,13,14]` in session rows while `branch` uses `Is12-13-14-retry-guard`). Changing rendered keys leaves stored ticket IDs, chain order, PR linking, and workstream discovery intact. Rendered names are validated against destination constraints (git ref rules for `branch`, path component rules for `worktree`, single-line text for other destinations) and errors name the destination and producing setting.
 - `chain.mode`, `chain.sep` — ordered ticket chain rendering (`all` / `first` / `last`, separator default `+`)
 
 ### Migration example

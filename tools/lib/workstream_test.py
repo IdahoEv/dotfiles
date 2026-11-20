@@ -215,6 +215,75 @@ class WorkstreamsSettingsTests(WorkstreamTestBase):
         self.settings("widgets/.workstreams/settings.json", {"row": {"form": "Title"}})
         self.assertEqual(workstream.detect_template_source(repo), "project")
 
+    def test_key_format_examples_for_ordered_chain(self) -> None:
+        repo = self.make_repo("widgets")
+        rec = self.chain_record()
+        self.assertEqual(workstream.render_surface(rec, "key", repo), "Is12+13+14")
+
+        cases = [
+            ({"key": {"template": "{provider}{chain}", "ticket_separator": "-"}}, "Is12-13-14"),
+            ({"key": {"template": "{chain}", "ticket_separator": "+"}}, "12+13+14"),
+            ({"key": {"template": "{provider}{chain:first}."}}, "Is12."),
+            ({"key": {"template": "[{chain}]", "ticket_separator": ","}}, "[12,13,14]"),
+        ]
+        for cfg, expected in cases:
+            self.settings("widgets/.workstreams/settings.json", cfg)
+            self.assertEqual(workstream.render_surface(rec, "key", repo), expected)
+
+    def test_per_destination_key_override_session_vs_branch(self) -> None:
+        repo = self.make_repo("widgets")
+        rec = self.chain_record()
+        self.settings("home/.config/workstreams/settings.json",
+                      {"key": {"template": "{provider}{chain}", "ticket_separator": "-"}})
+        self.settings("widgets/.workstreams/settings.local.json",
+                      {"row": {"key_template": "[{chain}]", "ticket_separator": ","}})
+        self.assertEqual(workstream.render_surface(rec, "branch", repo), "Is12-13-14-retry-guard")
+        self.assertEqual(workstream.render_surface(rec, "row", repo), "[12,13,14] retry guard")
+
+    def test_key_format_keeps_ticket_ids_chain_order_and_discovery(self) -> None:
+        repo = self.make_repo("widgets")
+        self.settings("widgets/.workstreams/settings.json",
+                      {"key": {"template": "{provider}{chain:first}."}})
+        tickets = [{"id": i, "url": f"https://example.test/issues/{i}"} for i in ("12", "13", "14")]
+        rec = workstream.init_ticket_record(repo, provider="github", tickets=tickets, desc="retry guard")
+        self.assertEqual(rec.key, "Is12.")
+        self.assertEqual(workstream.chain_ids(repo), ["12", "13", "14"])
+        self.assertEqual(repo_facts.ticket_from_branch("unrelated-branch", repo), "12")
+
+        self.settings("widgets/.workstreams/settings.local.json",
+                      {"key": {"template": "{chain}", "ticket_separator": "+"}})
+        rec2 = workstream.init_ticket_record(repo, provider="github", tickets=[{"id": "12", "url": ""}])
+        self.assertEqual(rec2.key, "12+13+14")
+        self.assertIn("Is12.", rec2.key_aliases)
+        self.assertEqual(workstream.chain_ids(repo), ["12", "13", "14"])
+
+    def test_validation_reports_destination_and_setting(self) -> None:
+        repo = self.make_repo("widgets")
+        rec = self.chain_record()
+        self.settings("widgets/.workstreams/settings.json",
+                      {"key": {"template": "[{chain}]", "ticket_separator": ","}})
+        with self.assertRaises(workstream.WorkstreamValidationError) as ctx:
+            workstream.render_surface(rec, "branch", repo)
+        msg = str(ctx.exception)
+        self.assertIn("branch", msg)
+        self.assertIn("key.template", msg)
+        self.assertIn("project", msg)
+
+        self.settings("widgets/.workstreams/settings.json",
+                      {"key": {"template": "{provider}{chain:first}."}, "branch": {"template": "{key}"}})
+        with self.assertRaises(workstream.WorkstreamValidationError) as ctx2:
+            workstream.render_surface(rec, "branch", repo)
+        self.assertIn("branch", str(ctx2.exception))
+        self.assertIn("branch.template", str(ctx2.exception))
+
+        r = subprocess.run(
+            [CLI, "render", "branch", "--dir", repo, "--ids", "12,13,14", "--desc", "retry guard"],
+            capture_output=True, text=True, check=False,
+        )
+        self.assertEqual(r.returncode, 1)
+        self.assertIn("branch", r.stderr)
+        self.assertIn("branch.template", r.stderr)
+
 
 class RecordPersistenceTests(WorkstreamTestBase):
     def test_record_writers_read_and_write_under_shared_lock(self) -> None:

@@ -296,9 +296,10 @@ def load_workstream_meta(pane_path: str) -> tuple[str, str, str]:
     rec = workstream.load_record(pane_path)
     if rec is None:
         return ("", "", "")
-    ticket_ref = rec.key or ""
-    if not ticket_ref and rec.tickets:
-        ticket_ref = workstream.derive_key(rec, pane_path)
+    if rec.tickets and (rec.ticket_provider or not rec.key):
+        ticket_ref = workstream.derive_key(rec, pane_path, surface="row")
+    else:
+        ticket_ref = rec.key or ""
     return (ticket_ref, rec.desc or "", workstream.format_phase_tags(rec))
 
 
