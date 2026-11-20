@@ -1,0 +1,58 @@
+---
+name: review-lens-contract
+description: Shared contract for periodic project-review lens agents — snapshot scope, finding-line format, word cap, read-only rule, and lens discovery. Preloaded by registered lenses via skills:, named in the launch prompt for tier-2 lenses; the diff-scoped counterpart is reviewer-contract.
+---
+
+# Review Lens Contract
+
+A **lens** (`project-lens-*`) reviews a read-only snapshot of the default branch, not a diff — each lens examines one dimension of the same whole-project snapshot (`Lens: collect` or `Lens: triage`). Its diff-scoped counterpart for PR/workstream reviews is `pr-reviewer-*` under `reviewer-contract`; `reviewer-contract` does not apply here.
+
+## Inputs
+
+The caller supplies:
+
+- Snapshot path (read-only checkout of the default branch).
+- Path to `project-review.md`. Scope, probes, doc roles and conventions come from it (a role it omits falls back to `governor.md` § Key documents); a lens holds no project text. A value still in `<...>` placeholder form counts as unset.
+- Word cap for the report.
+- Findings already ticketed or triaged in earlier runs, to tag as `KNOWN` or `ALREADY TICKETED`.
+
+Missing snapshot or word cap: ask, don't guess. Missing `project-review.md` or an unset section: report-only for that section, say so.
+
+## Output
+
+Within the word cap, most severe first. One line per finding:
+
+`SEVERITY | LENS | STATUS | file:line | defect | evidence | minimal fix`
+
+- Severity: P0, P1, P2, P3.
+- Status: `NEW`, `KNOWN` or `ALREADY TICKETED`. A finding matching an input entry takes that entry's tag; every other finding is `NEW`.
+- `LENS` is the lens's own `name`.
+- Evidence is a path and line in the snapshot, or a probe command with its output. No evidence, no finding.
+- Then `Verified clean:` listing what was checked and found sound. A clean lens says so; no praise, no summary.
+
+## Read-only
+
+No edits, commits, pushes, or tracker writes. Tracker reads only through the provider seam (`tracker.sh list`), and only for a lens tagged `Lens: triage`. Return findings only.
+
+## Proposed actions (triage lenses)
+
+A triage lens never edits, closes, labels or comments on a ticket. After `Verified clean:` it may add `Proposed actions:`, one line each: `#N | action | detail`. Skip a pair already queued (`pending-actions.sh has <file> --issue N --action A`; file path from `project-review.md` § Review state, unset = report-only). The caller queues the lines with `pending-actions.sh upsert`, keyed `(issue, action)`, so reruns replace rather than duplicate.
+
+## Authoring
+
+Agent file with `name`, `use_when: periodic project review.` directly above `description:`, optional `model`, `tools`, and the brief as body. A registered lens (tier 1 or 3) lists `review-lens-contract` under `skills:` so it receives this contract; tier 2 lenses get it through the launch prompt. The body states method and output only, under 60 lines, and begins with a `Lens: collect` or `Lens: triage` line. `use_when:` is required metadata here, not a selection filter.
+
+## Discovery
+
+Same tiers and name-dedup as `/local-review-cycle` (`local-review-cycle-procedure` §2). Subdirectories under `.claude/agents/`, `dot_claude/agents/`, and `~/.claude/agents/` (such as `project-lenses/`) are scanned recursively; `name:` must remain unique across the entire `agents/` tree. An earlier tier wins when names collide, so a project lens overrides a global lens of the same `name`. Map legacy `review-<role>` names to `project-lens-<role>` during dedup, still load them, and report unmigrated tier-1 `.claude/agents/` lenses in the `/project-review` report for manual or ticketed migration to `.claude/agents/project-lenses/project-lens-<role>.md` (never edit repo files during a read-only review).
+
+1. Repo `.claude/agents/` (and `dot_claude/agents/` in a chezmoi dotfiles repo).
+2. Personal `docs/local/reviewers/*.md` and overlay `claude/agents/` (`project-config.sh list agents`).
+3. Global `~/.claude/agents/`.
+
+Then:
+
+- Keep only files that declare `Lens: collect` or `Lens: triage`. Ordinary agents never launch as lenses.
+- Run every remaining lens unless its `name` is in the `Skip:` line of `project-review.md` § Lenses (`project-config.sh find project-review.md`).
+- No `use_when:` matching: there is no diff to match against.
+- Tier 2 files are not registered agent types. Launch one as a `general-purpose` agent whose prompt is the file body, honoring its `model` frontmatter, prefixed with the inputs above and an instruction to follow this contract. `tools` frontmatter is not enforced there; the read-only rule is the guard.

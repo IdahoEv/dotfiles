@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 # start-ticket.sh — spin up a worktree + Claude session for a tracker ticket.
 #
-#   start-ticket.sh <id>[,<id>…] [--provider github|shortcut] [--no-tab] [--launcher iterm|bg|none]
+#   start-ticket.sh <id>[,<id>…] [--provider github|github-mcp|shortcut] [--no-tab] [--launcher iterm|bg|agy-tmux|none]
 #   start-ticket.sh <id> --print-title            # read-only: title + proposed label
-#   start-ticket.sh --tab-only <worktree> <kickoff> [--launcher iterm|bg|none]
-#   start-ticket.sh --session [<topic>] [--about <text>] [--launcher iterm|bg|none]
+#   start-ticket.sh <id> --in-place --no-tab      # no worktree: check out the ticket branch here
+#   start-ticket.sh --tab-only <worktree> <kickoff> [--launcher iterm|bg|agy-tmux|none]
+#   start-ticket.sh --session [<topic>] [--about <text>] [--launcher iterm|bg|agy-tmux|none]
 #
 # --session opens a non-ticket discussion session (/discuss): no ticket, branch
 # or worktree. It launches in the main checkout (for a bare repo, the worktree
@@ -21,10 +22,15 @@
 #                    (`claude agents`): claude --bg --name "<label>" "<kickoff>".
 #                    The kickoff is SUBMITTED immediately, so it starts in plan
 #                    mode by default to keep a review gate (see bg_permission_mode).
+#   agy-tmux         a tmux window in the active `agy-tmux` dashboard session
+#                    (`agy --mode plan --prompt-interactive`, `remain-on-exit on`),
+#                    opened without stealing focus from the caller window.
 #   none             worktree + kickoff only (same as --no-tab).
 #
 # Launcher is chosen by, in order: --launcher flag → $START_TICKET_LAUNCHER →
-# `launcher=` in .start-ticket.conf / ~/.config/start-ticket/config → iterm (none off macOS).
+# `agy-tmux` (auto-selected when running in an `agy` session inside an
+# `@agy_dashboard=1` tmux session) → `launcher=` in .start-ticket.conf /
+# ~/.config/start-ticket/config → iterm (none off macOS).
 # Put `launcher=bg` in the per-machine ~/.config/start-ticket/config to opt in.
 #
 # A comma list (`12,13,14`, github only) is a chain: one worktree and
@@ -33,7 +39,8 @@
 # <git-dir>/chain (read by open-pr.sh and finalize-check.sh).
 #
 # Run from anywhere inside the target repo. Provider is chosen by, in order:
-#   --provider flag → .start-ticket.conf (provider=…) → autodetect (gh vs short).
+#   --provider flag → START_TICKET_MCP_DIR set (github-mcp) → .start-ticket.conf
+#   (provider=…) → autodetect (gh vs short).
 #
 # Env knobs: START_TICKET_CLAUDE_DELAY (secs before typing the prompt, default 3),
 #   START_TICKET_TAB_MAXLEN (default 30), START_TICKET_PROVIDER_DIR,
@@ -116,11 +123,12 @@ conf_get() {  # <key> → value; precedence is gt::conf_get's (repo, overlay, ma
   gt::conf_get "$1"
 }
 
-# setting <conf-key> <ENV_VAR> <default>: env var → conf file → default.
+# setting <conf-key> [<ENV_VAR>] [<default>]: env var → layered conf (project > machine > user) → default.
 setting() {
-  local v="${!2:-}"
-  [ -n "$v" ] || v="$(conf_get "$1" || true)"
-  printf '%s' "${v:-$3}"
+  local key="$1" env_var="${2:-}" def="${3:-}" v=""
+  [ -z "$env_var" ] || v="${!env_var:-}"
+  [ -n "$v" ] || v="$(conf_get "$key" || true)"
+  printf '%s' "${v:-$def}"
 }
 
 # Words that are noise in THIS repo's ticket titles — typically the project's
@@ -132,11 +140,14 @@ export GT_LABEL_NOISE
 
 # chain_tag <worktree> → "12+13" for a chain worktree, empty otherwise.
 chain_tag() {
+  if [ -f "$1/.workstream.json" ] && command -v python3 >/dev/null 2>&1; then
+    "$SCRIPT_DIR/workstream.sh" chain-tag --dir "$1" 2>/dev/null || true
+    return 0
+  fi
   local f ids
   f="$(git -C "$1" rev-parse --absolute-git-dir 2>/dev/null)/chain"
   [ -f "$f" ] || return 0
-  # Long chains collapse to first+last: the label is a glanceable row name, and
-  # <git-dir>/chain is the authoritative membership list.
+  # Long chains collapse to first+last: the label is a glanceable row name.
   ids="$(paste -sd+ "$f")"
   case "$ids" in
     *+*+*+*) ids="${ids%%+*}+${ids##*+}" ;;
@@ -159,12 +170,15 @@ chain_tag() {
 # came from distills to "Data Deletion Retention Policy". See gt::distill_title.
 make_label() {
   local branch="$1" maxlen="$2" pretty="${3:-}" num="" slug="$1" distilled=""
-  if [[ "$branch" =~ ^([0-9]+)-(.+)$ ]]; then
+  if [[ "$branch" =~ (^|/)Is([0-9]+(\+[0-9]+)*)[-/](.+)$ ]]; then
+    num="Is${ST_CHAIN_TAG:-${BASH_REMATCH[2]}}"
+    slug="${BASH_REMATCH[4]}"
+  elif [[ "$branch" =~ ^([0-9]+)-(.+)$ ]]; then
     num="Is${ST_CHAIN_TAG:-${BASH_REMATCH[1]}}"
     slug="${BASH_REMATCH[2]}"
-  elif [[ "$branch" =~ (^|/)sc-([0-9]+)/(.+)$ ]]; then
-    num="Sc${BASH_REMATCH[2]}"
-    slug="${BASH_REMATCH[3]}"
+  elif [[ "$branch" =~ (^|/)sc-([0-9]+(\+[0-9]+)*)[-/](.+)$ ]]; then
+    num="Sc${ST_CHAIN_TAG:-${BASH_REMATCH[2]}}"
+    slug="${BASH_REMATCH[4]}"
   fi
   if [ -n "${ST_TITLE:-}" ] || [ -n "${GT_LABEL_OVERRIDE:-}" ]; then
     distilled="$(gt::label_from_title "${ST_TITLE:-}")"
@@ -232,9 +246,16 @@ open_tab() {  # <worktree> <kickoff> [<label>]
   if [ -n "$label" ]; then
     label="$(fit "$label" "${START_TICKET_TAB_MAXLEN:-30}" words)"
   else
-    local branch; branch="$(git -C "$wt" branch --show-current 2>/dev/null || basename "$wt")"
-    ST_CHAIN_TAG="$(chain_tag "$wt")"
-    label="$(make_label "$branch" "${START_TICKET_TAB_MAXLEN:-30}")"
+    if [ -f "$wt/.workstream.json" ] && [ -x "$SCRIPT_DIR/workstream.sh" ] && command -v python3 >/dev/null 2>&1; then
+      label="$("$SCRIPT_DIR/workstream.sh" render base --dir "$wt" 2>/dev/null || true)"
+    fi
+    if [ -n "$label" ]; then
+      label="$(fit "$label" "${START_TICKET_TAB_MAXLEN:-30}" words)"
+    else
+      local branch; branch="$(git -C "$wt" branch --show-current 2>/dev/null || basename "$wt")"
+      ST_CHAIN_TAG="$(chain_tag "$wt")"
+      label="$(make_label "$branch" "${START_TICKET_TAB_MAXLEN:-30}")"
+    fi
   fi
 
   local delay="${START_TICKET_CLAUDE_DELAY:-3}"
@@ -324,16 +345,32 @@ open_bg() {  # <worktree> <kickoff> [<label>]
   local wt="$1" kf="$2" label="${3:-}"
   command -v claude >/dev/null || die "claude CLI not found (needed by the bg launcher)"
   if [ -z "$label" ]; then
-    local branch; branch="$(git -C "$wt" branch --show-current 2>/dev/null || basename "$wt")"
-    ST_CHAIN_TAG="$(chain_tag "$wt")"
-    label="$(make_label "$branch" "${START_TICKET_BG_MAXLEN:-70}" pretty)"
-    # The phase prefix is budgeted outside make_label's maxlen: truncating the
-    # slug is fine, truncating "[PLAN]" would defeat the point of the label.
-    label="[PLAN] $label"
+    if [ -f "$wt/.workstream.json" ] && [ -x "$SCRIPT_DIR/workstream.sh" ] && command -v python3 >/dev/null 2>&1; then
+      local ws_base ws_tags
+      ws_base="$("$SCRIPT_DIR/workstream.sh" render base --dir "$wt" 2>/dev/null || true)"
+      if [ -n "$ws_base" ]; then
+        ws_base="$(fit "$ws_base" "${START_TICKET_BG_MAXLEN:-70}" words)"
+        ws_tags="$("$SCRIPT_DIR/workstream.sh" phase --dir "$wt" --show 2>/dev/null || true)"
+        label="${ws_tags:+$ws_tags }${ws_base}"
+      fi
+    fi
+    if [ -z "$label" ]; then
+      local branch; branch="$(git -C "$wt" branch --show-current 2>/dev/null || basename "$wt")"
+      ST_CHAIN_TAG="$(chain_tag "$wt")"
+      label="$(make_label "$branch" "${START_TICKET_BG_MAXLEN:-70}" pretty)"
+      # The phase prefix is budgeted outside make_label's maxlen: truncating the
+      # slug is fine, truncating "[PLAN]" would defeat the point of the label.
+      label="[PLAN] $label"
+    fi
   fi
   local perm; perm="$(setting bg_permission_mode START_TICKET_BG_PERMISSION_MODE plan)"
   local args=(--bg --name "$label")
   [ "$perm" = "default" ] || args+=(--permission-mode "$perm")
+  # remoteControlAtStartup alone leaves --bg sessions stuck at "/rc connecting";
+  # the explicit flag is what registers them. Honor the user's setting only.
+  if python3 -c 'import json,os,sys; sys.exit(0 if json.load(open(os.path.expanduser("~/.claude/settings.json"))).get("remoteControlAtStartup") is True else 1)' 2>/dev/null; then
+    args+=(--remote-control "$label")
+  fi
 
   printf 'start-ticket: dispatching background session "%s" (permission mode: %s)\n' "$label" "$perm" >&2
   if ! ( cd "$wt" && claude "${args[@]}" "$(cat "$kf")" ) >&2; then
@@ -344,12 +381,40 @@ open_bg() {  # <worktree> <kickoff> [<label>]
   fi
 }
 
+# Launch guard (docs/memory-guard.md): refuse to start more agent work while the
+# host is under dangerous memory pressure. Skipped when nothing would be launched
+# (launcher none). Override: MEM_GUARD_OVERRIDE=1. An unusable guard warns, never blocks.
+mem_guard() {  # <context>
+  [ "$launcher" != none ] || return 0
+  local guard="${START_TICKET_MEM_GUARD:-$SCRIPT_DIR/mem-guard.sh}"
+  if [ ! -x "$guard" ]; then
+    printf 'start-ticket: mem-guard.sh not found (%s); launching without a memory check\n' "$guard" >&2
+    return 0
+  fi
+  local rc=0
+  "$guard" check --context "$1" >&2 || rc=$?
+  case "$rc" in
+    0) ;;
+    3) die "launch blocked by mem-guard (override: MEM_GUARD_OVERRIDE=1 $0 ...)" ;;
+    *) printf 'start-ticket: mem-guard failed (exit %s); launching without a memory check\n' "$rc" >&2 ;;
+  esac
+}
+
+open_agy_tmux() {  # <worktree> <kickoff>
+  local wt="$1" kf="$2"
+  local agy_tmux="${START_TICKET_AGY_TMUX:-$SCRIPT_DIR/agy-tmux.sh}"
+  [ -x "$agy_tmux" ] || command -v "$agy_tmux" >/dev/null 2>&1 \
+    || die "agy-tmux.sh not found ($agy_tmux)"
+  "$agy_tmux" --window "$wt" "$kf" >&2
+}
+
 launch_session() {  # <worktree> <kickoff> [<label>] — uses the resolved $launcher
   local tab_label="${3:-}"
   case "$launcher" in
-    iterm) open_tab "$1" "$2" "${tab_label#\[TALK\] }" ;;
-    bg)    open_bg  "$1" "$2" "${3:-}" ;;
-    none)  : ;;
+    iterm)    open_tab "$1" "$2" "${tab_label#\[TALK\] }" ;;
+    bg)       open_bg  "$1" "$2" "${3:-}" ;;
+    agy-tmux) open_agy_tmux "$1" "$2" ;;
+    none)     : ;;
   esac
 }
 
@@ -433,13 +498,47 @@ Tickets ${chain_csv//,/, } are one chain: one worktree, one branch, one PR.
 CHAIN
 }
 
+# Default sequence for every ticket session: plan gate, then unattended through review.
+# A project's `design_gate=` conf key (its own criteria for changes needing aesthetic
+# judgement) adds a pause between implement and the local review cycle.
+sequence_block() {
+  local gate; gate="$(conf_get design_gate || true)"
+  cat <<'SEQ'
+
+## Sequence
+
+1. Present your plan, then wait. Plan approval authorizes everything below; no further approval is needed for commits or pushes.
+2. After approval, do not pause for approval (a chain follows the Chain workflow block above instead: one PR, opened only after the last ticket): implement until the acceptance criteria are met; commit; run `/local-review-cycle`; push and run `/open-pr`; then the remote review cycle (home: `/open-pr` requests the first Copilot review and `/github-review-comments` re-requests after each round; work, where `~/.config/local-review-only` is set: the repo's review bots review every PR and update, so wait for them and request nothing).
+3. Stop before merge. The owner evaluates and merges (`/land`).
+4. If any step fails or a decision is needed, pause, notify the owner if the environment can, say what failed, and ask. No improvised workaround.
+SEQ
+  if [ -n "$gate" ]; then
+    printf '\n**Design gate.** After implementing and before `/local-review-cycle`, classify the diff against this project'"'"'s criteria: %s\nIf the diff needs aesthetic judgement (new or changed visuals, art, layout, style), pause and ask the owner to look and approve. Only design changes pause; straightforward UI or behaviour changes go straight to review.\n' "$gate"
+  fi
+}
+
+# Appended when this machine opted into unattended GitHub review.
+unattended_block() {
+  cat <<UNATTENDED
+
+## Unattended review
+
+This machine runs review unattended; do not pause for approval until the PR is ready.
+
+1. Local review and PR: for a chain, follow the chain steps above. Otherwise, once the acceptance criteria are met and the tests pass, commit, run \`/local-review-cycle\`, then run \`/open-pr\` yourself, without pausing.
+2. Run \`review-unattended.sh reset\`, then run \`~/.claude/skills/github-review-procedure/github-review-poll.sh\` to wait for the first review (exit 0 means review activity; any other exit means stop and report). Then run \`/github-review-comments\`. It commits, pushes, posts and re-requests Copilot each round with no prompts, up to its round cap (default 5; a prompt can pass \`--max-rounds N\`), and stops at reviewer sign-off or a round with no valid fixes.
+3. When it stops, print its single results table covering every local and GitHub round, then wait for my approval of the PR. Do not merge.
+UNATTENDED
+}
+
 # ---- args ------------------------------------------------------------------
-id="" provider="" mode="full" launcher_flag="" tab_wt="" tab_kf="" about=""
+id="" provider="" mode="full" launcher_flag="" tab_wt="" tab_kf="" about="" in_place=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --provider) provider="${2:?--provider needs a value}"; shift 2 ;;
     --no-tab)   mode="no-tab"; shift ;;
     --print-title) mode="print-title"; shift ;;
+    --in-place) in_place=1; shift ;;
     --session)  mode="session"; shift ;;
     --about)    about="${2:?--about needs a value}"; shift 2 ;;
     --tab-only) mode="tab-only"
@@ -460,13 +559,28 @@ if [ "$mode" = "tab-only" ]; then
   cd "$tab_wt" || die "worktree not found: $tab_wt"
 fi
 
+is_agy_tmux_session() {
+  [ "${ANTIGRAVITY_AGENT:-}" = 1 ] && [ -n "${TMUX:-}" ] || return 1
+  local tmux_bin="${AGY_TMUX_TMUX_BIN:-tmux}" dash=""
+  local args=()
+  [ -z "${AGY_TMUX_SOCKET:-}" ] || args+=(-L "$AGY_TMUX_SOCKET")
+  args+=(display-message)
+  [ -z "${TMUX_PANE:-}" ] || args+=(-t "$TMUX_PANE")
+  dash="$("$tmux_bin" "${args[@]}" -p '#{@agy_dashboard}' 2>/dev/null || true)"
+  [ "$dash" = 1 ]
+}
+
 launcher="$launcher_flag"
+[ -n "$launcher" ] || launcher="${START_TICKET_LAUNCHER:-}"
+if [ -z "$launcher" ] && is_agy_tmux_session; then
+  launcher=agy-tmux
+fi
 default_launcher=iterm
 [ "$(uname)" = Darwin ] || default_launcher=none
 [ -n "$launcher" ] || launcher="$(setting launcher START_TICKET_LAUNCHER "$default_launcher")"
 case "$launcher" in
-  iterm|bg|none) ;;
-  *) die "unknown launcher '$launcher' (expected iterm, bg, or none)" ;;
+  iterm|bg|agy-tmux|none) ;;
+  *) die "unknown launcher '$launcher' (expected iterm, bg, agy-tmux, or none)" ;;
 esac
 
 # shellcheck source=lib/telemetry.sh
@@ -494,16 +608,22 @@ case "$mode" in
 esac
 
 if [ "$mode" = "tab-only" ]; then
+  mem_guard "session launch"
   launch_session "$tab_wt" "$tab_kf"
   exit 0
 fi
 
 if [ "$mode" = "session" ]; then
+  mem_guard "discussion session"
   run_session "$id" "$about"
   exit 0
 fi
 
-[ -n "$id" ] || die "usage: start-ticket.sh <id>[,<id>…] [--provider github|shortcut] [--no-tab|--print-title] [--launcher iterm|bg|none]"
+[ -n "$id" ] || die "usage: start-ticket.sh <id>[,<id>…] [--provider github|github-mcp|shortcut] [--no-tab|--print-title] [--launcher iterm|bg|agy-tmux|none]"
+# Guard before any worktree or tracker write, so a blocked launch leaves no half-started ticket.
+# --no-tab and --print-title launch nothing: the later --tab-only call is the gate for /start,
+# and agy-tmux.sh guards each group itself, so guarding here would only check twice.
+[ "$mode" = "print-title" ] || [ "$mode" = "no-tab" ] || mem_guard "ticket $id"
 
 # ---- chain ids -------------------------------------------------------------
 # `12,13` → head 12 plus the rest. `id` stays the head, so everything that names
@@ -529,13 +649,20 @@ repo_root="$(git rev-parse --show-toplevel)"
 _url="$(git remote get-url origin 2>/dev/null || true)"
 if [ -n "$_url" ]; then repo_name="$(basename "${_url%.git}")"; else repo_name="$(basename "$repo_root")"; fi
 
+NO_GITHUB_MSG="github unavailable: gh is missing or not authenticated. Fix: run 'gh auth login', or in a cloud session fetch the tickets with the GitHub MCP tools and rerun with --provider github-mcp and START_TICKET_MCP_DIR set (see /start step 1)"
+# A handoff dir means the caller already fetched the tickets because gh can't, so it
+# outranks a committed provider=github.
+[ -n "$provider" ] || [ -z "${START_TICKET_MCP_DIR:-}" ] || provider=github-mcp
 [ -n "$provider" ] || provider="$(conf_get provider || true)"
 if [ -z "$provider" ]; then
   if command -v gh >/dev/null && gh repo view >/dev/null 2>&1; then provider=github
   elif command -v short >/dev/null; then provider=shortcut
-  else die "no ticket provider detected — set 'provider=' in .start-ticket.conf or pass --provider"
+  else die "$NO_GITHUB_MSG"
   fi
 fi
+# github-mcp is github with a different transport; workstream records, branch names and
+# telemetry know only the tracker, so they get the scheme.
+scheme="$provider"; [ "$provider" != github-mcp ] || scheme=github
 
 [ -z "$chain_csv" ] || [ "$provider" != shortcut ] \
   || die "chains need the github provider (Shortcut branches carry one story id); start the tickets separately"
@@ -549,10 +676,13 @@ WORKTREE_MANAGER="$(command -v worktree-manager.sh || echo "$SCRIPT_DIR/worktree
 [ -x "$WORKTREE_MANAGER" ] || die "worktree-manager.sh not found / not executable"
 export WORKTREE_MANAGER
 
-provider::available || die "provider '$provider' unavailable (CLI missing or not authed)"
+provider::available || case "$provider" in
+  github|github-mcp) die "$NO_GITHUB_MSG" ;;
+  *) die "provider '$provider' unavailable (CLI missing or not authed)" ;;
+esac
 
 # ---- run ---------------------------------------------------------------
-ST_TITLE="" ST_BODY="" ST_URL="" ST_PARENT="" ST_BRANCH="" ST_REF=""
+ST_TITLE="" ST_BODY="" ST_URL="" ST_PARENT="" ST_BRANCH="" ST_WORKTREE="" ST_REF="" ST_TYPE=""
 # Chain links are fetched first and the head last, so ST_* (branch, label,
 # parent) are the head's when the loop ends; the per-ticket arrays keep the
 # kickoff sections.
@@ -564,6 +694,35 @@ for ((_n = ${#ids[@]} - 1; _n >= 0; _n--)); do
 done
 : "${ST_REF:=${provider} ticket ${id}}"
 
+_ws_title="${chain_titles[0]:-}"
+[ "$_ws_title" != "untitled" ] || _ws_title=""
+if [ -z "$ST_BRANCH" ]; then
+  if [ -x "$SCRIPT_DIR/workstream.sh" ]; then
+    ST_BRANCH="$("$SCRIPT_DIR/workstream.sh" render branch \
+      --dir "$repo_root" \
+      --provider "$scheme" \
+      --ids "$(IFS=,; echo "${ids[*]}")" \
+      "--title=$_ws_title" \
+      "--desc=${GT_LABEL_SLUG_OVERRIDE:-}" \
+      "--type=$ST_TYPE" 2>/dev/null || true)"
+    ST_WORKTREE="$("$SCRIPT_DIR/workstream.sh" render worktree \
+      --dir "$repo_root" \
+      --provider "$scheme" \
+      --ids "$(IFS=,; echo "${ids[*]}")" \
+      "--title=$_ws_title" \
+      "--desc=${GT_LABEL_SLUG_OVERRIDE:-}" \
+      "--type=$ST_TYPE" 2>/dev/null || true)"
+  fi
+  if [ -z "$ST_BRANCH" ]; then
+    _fb_slug="$(gt::slug_title "$_ws_title")"
+    case "$scheme" in
+      github)   ST_BRANCH="${_fb_slug:+Is${id}-${_fb_slug}}"; : "${ST_BRANCH:=Is${id}}" ;;
+      shortcut) ST_BRANCH="${_fb_slug:+sc-${id}-${_fb_slug}}"; : "${ST_BRANCH:=sc-${id}}" ;;
+      *)        die "could not determine branch name for $provider #$id" ;;
+    esac
+  fi
+fi
+
 # --print-title: resolve the ticket and stop. Lets a caller that wants to supply
 # its own label (GT_LABEL_OVERRIDE) read the title FIRST — the branch and the
 # worktree dir are both named during create_worktree below, so an override
@@ -574,11 +733,41 @@ if [ "$mode" = "print-title" ]; then
   # GT_LABEL_OVERRIDE by design, so printing it here tells the caller the slug
   # is not theirs to choose (short of GT_LABEL_SLUG_OVERRIDE).
   printf 'title=%s\nproposed_label=%s\nproposed_slug=%s\n' \
-    "$ST_TITLE" "$(gt::distill_title "$ST_TITLE")" "$(gt::slug_title "$ST_TITLE")"
+    "$ST_TITLE" "$(gt::distill_title "$ST_TITLE")" "${ST_BRANCH:-$(gt::slug_title "$ST_TITLE")}"
   exit 0
 fi
 
-wt="$(provider::create_worktree "$id" | tail -1)"
+if [ -n "$in_place" ]; then
+  # Cloud sessions are one fixed checkout: no worktree. Put the deterministic
+  # ticket branch (what open-pr/finalize parse the ticket from) on this checkout.
+  [ -n "$ST_BRANCH" ] || die "provider gave no branch name for --in-place"
+  wt="$repo_root"
+  if [ "$(git -C "$wt" branch --show-current)" != "$ST_BRANCH" ]; then
+    # Switching branches would carry uncommitted edits, and untracked files a
+    # later `git add -A` would sweep in, onto the ticket branch. Ignored files don't count.
+    [ -z "$(git -C "$wt" status --porcelain)" ] \
+      || die "uncommitted or untracked files in $wt; commit, stash or remove them before --in-place switches to $ST_BRANCH"
+    git -C "$wt" fetch -q origin >&2 2>/dev/null || echo "start-ticket: WARN could not fetch origin; branching from local refs" >&2
+    if git -C "$wt" show-ref --verify --quiet "refs/heads/$ST_BRANCH"; then
+      git -C "$wt" checkout "$ST_BRANCH" >&2 || die "could not check out $ST_BRANCH"
+    elif git -C "$wt" show-ref --verify --quiet "refs/remotes/origin/$ST_BRANCH"; then
+      # A resumed ticket: continue the remote branch rather than forking a divergent one.
+      git -C "$wt" checkout -b "$ST_BRANCH" --track "origin/$ST_BRANCH" >&2 || die "could not check out origin/$ST_BRANCH"
+    else
+      # Same start point as the worktree path: the default branch, not whatever
+      # session branch the cloud harness left checked out.
+      base="$(cd "$wt" && gt::default_branch 2>/dev/null || true)"
+      if [ -n "$base" ] && git -C "$wt" rev-parse --verify --quiet "origin/$base" >/dev/null; then
+        git -C "$wt" checkout -b "$ST_BRANCH" "origin/$base" >&2 || die "could not create $ST_BRANCH"
+      else
+        echo "start-ticket: WARN no default branch resolved; branching $ST_BRANCH from HEAD" >&2
+        git -C "$wt" checkout -b "$ST_BRANCH" >&2 || die "could not create $ST_BRANCH"
+      fi
+    fi
+  fi
+else
+  wt="$(provider::create_worktree "$id" | tail -1)"
+fi
 [ -d "$wt" ] || die "worktree not created (got '$wt')"
 branch="$(git -C "$wt" branch --show-current)"
 wf_dir="$wt"
@@ -588,8 +777,19 @@ for _i in "${ids[@]}"; do
   provider::mark_in_progress "$_i" || echo "start-ticket: WARN mark_in_progress failed for $_i" >&2
 done
 
-chain_file="$(git -C "$wt" rev-parse --absolute-git-dir)/chain"
-[ -z "$chain_csv" ] || printf '%s\n' "${ids[@]}" > "$chain_file"
+_ws_title="${chain_titles[0]:-}"
+[ "$_ws_title" != "untitled" ] || _ws_title=""
+if ! "$SCRIPT_DIR/workstream.sh" init-ticket \
+  --dir "$wt" \
+  --provider "$scheme" \
+  --ids "$(IFS=,; echo "${ids[*]}")" \
+  --urls "$(IFS=,; echo "${chain_urls[*]}")" \
+  "--title=$_ws_title" \
+  "--desc=${GT_LABEL_OVERRIDE:-}" \
+  "--type=$ST_TYPE"; then
+  [ -z "$chain_csv" ] || die "workstream record not written (required for chain $chain_csv)"
+  echo "start-ticket: WARN workstream record not written" >&2
+fi
 
 # mark_in_progress is best-effort and some tracker CLIs fail while exiting 0, so
 # read the state back here rather than making the caller verify. ticket_state is
@@ -602,7 +802,10 @@ if declare -f provider::read_state >/dev/null; then
   for _i in "${ids[@]}"; do
     _ok=1; _st="$(provider::read_state "$_i")" || _ok=""
     [ "$_i" = "$id" ] && ticket_state="$_st"
-    [ -n "$_ok" ] || ticket_in_progress="no"
+    if [ -n "$_ok" ]; then :
+    elif [ "$_st" = unknown ]; then [ "$ticket_in_progress" = no ] || ticket_in_progress="unknown"
+    else ticket_in_progress="no"
+    fi
   done
 fi
 
@@ -619,6 +822,8 @@ _tmp="${TMPDIR:-/tmp}"; kickoff="${_tmp%/}/${repo_name}-kickoff-$(IFS=-; echo "$
     [ -z "${chain_urls[_n]}" ] || printf '\n<%s>\n' "${chain_urls[_n]}"
   done
   [ -z "$chain_csv" ] || chain_block
+  sequence_block
+  ! "$SCRIPT_DIR/review-unattended.sh" active || unattended_block
   # The repo's own preamble wins outright; else the per-project overlay's.
   if _doc="$(gt::find_doc kickoff-preamble.md "$repo_root")"; then
     pre="${_doc%%$'\t'*}"

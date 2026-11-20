@@ -7,6 +7,7 @@
 # Machine-local Claude settings (not meant to sync across machines)
 .shell_modules/.claude/settings.local.json
 .config/local-review-only
+.config/github-review-unattended
 
 {{ if ne .chezmoi.os "darwin" }}
 # iTerm2 is macOS-only; its symlink targets ~/Library

@@ -1,0 +1,1145 @@
+#!/usr/bin/env python3
+"""Workstream record, surface name resolver, and layered settings.
+
+    workstream.py init-ticket --dir <wt> --provider <p> --ids <csv> [--urls <csv>] [--title <t>] [--desc <d>] [--type <ty>] [--tag <tag>]...
+    workstream.py show [--dir <wt>]
+    workstream.py phase [<PHASE>] [--dir <wt>] [--pr | --clear | --show | --attn | --ok | --plan-reviews
+                                    | --review SRC ROUND [ok] | --awaiting-merge]
+    workstream.py chain-ids [--dir <wt>] [--fallback <id>]
+    workstream.py chain-tag [--dir <wt>]
+    workstream.py render <surface> [--dir <wt>]
+    workstream.py setting <key> [--dir <wt>] [--env <VAR>] [--default <val>] [--with-source]
+    workstream.py set-pr [--dir <wt>] --number <N> [--url <url>] [--state <state>]
+    workstream.py set-reviews [--dir <wt>] [--local <N[*]>] [--remote <N[*]>]
+    workstream.py statusline [--dir <wt>] [--project <name>] [--format text|json]
+"""
+
+from __future__ import annotations
+
+import argparse
+import dataclasses
+import fcntl
+import json
+import os
+import re
+import sys
+import tempfile
+from contextlib import contextmanager
+from pathlib import Path
+from typing import Any, Iterator
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import repo_facts  # noqa: E402
+
+RECORD_FILENAME = ".workstream.json"
+VALID_KINDS = ("ticket", "talk", "iteration")
+VALID_PHASES = ("PLAN", "WIP", "MERGED", "DONE")
+# Stages written before the per-source review tags; parsed and dropped.
+LEGACY_PHASES = ("REVIEW", "REVIEWED", "READY")
+REVIEW_SOURCES = "LGH"
+_REVIEW_TAG = re.compile(r"^([LGH])(?:(\d+)(✓)?|(-)|(✓))$")
+VALID_FORMS = ("kebab", "words", "Title", "snake")
+SURFACES = ("key", "base", "branch", "worktree", "row", "pr", "commit")
+
+DEFAULT_SURFACE_FORMS: dict[str, str] = {
+    "branch": "kebab",
+    "worktree": "kebab",
+    "row": "words",
+    "pr": "words",
+    "commit": "words",
+}
+
+TEMPLATE_KEYS: tuple[str, ...] = (
+    "base",
+    "branch.form",
+    "branch.template",
+    "worktree.form",
+    "worktree.template",
+    "row.form",
+    "row.template",
+    "pr.form",
+    "pr.template",
+    "commit.form",
+    "commit.template",
+    "commit.key_prefix",
+    "provider.brief",    "provider.full",
+    "provider.form",
+    "chain.mode",
+    "chain.sep",
+    "desc.source",
+    "desc.form",
+)
+
+PROVIDER_TOKENS: dict[str, dict[str, str]] = {
+    "github": {"brief": "Is", "full": "Issue"},
+    "shortcut": {"brief": "sc-", "full": "shortcut"},
+}
+
+
+@dataclasses.dataclass
+class WorkstreamRecord:
+    version: int = 1
+    kind: str = "ticket"
+    tickets: list[dict[str, str]] = dataclasses.field(default_factory=list)
+    ticket_provider: str = ""
+    key: str = ""
+    key_aliases: list[str] = dataclasses.field(default_factory=list)
+    desc: str = ""
+    type: str = ""
+    template_source: str = "default"
+    tags: list[str] = dataclasses.field(default_factory=list)
+    pr: dict[str, Any] | None = None
+    reviews: dict[str, Any] = dataclasses.field(
+        default_factory=lambda: {"local": 0, "remote": 0}
+    )
+    claude_sessions: list[str] = dataclasses.field(default_factory=list)
+    codex_sessions: list[str] = dataclasses.field(default_factory=list)
+
+    def to_dict(self) -> dict[str, Any]:
+        reviews_out: dict[str, Any] = {
+            "local": int((self.reviews or {}).get("local", 0)),
+            "remote": int((self.reviews or {}).get("remote", 0)),
+        }
+        if (self.reviews or {}).get("local_running"):
+            reviews_out["local_running"] = True
+        if (self.reviews or {}).get("remote_running"):
+            reviews_out["remote_running"] = True
+        return {
+            "version": self.version,
+            "kind": self.kind,
+            "tickets": [{"id": str(t.get("id", "")), "url": str(t.get("url", ""))} for t in self.tickets],
+            "ticket_provider": self.ticket_provider,
+            "key": self.key,
+            "key_aliases": list(self.key_aliases),
+            "desc": self.desc,
+            "type": self.type,
+            "template_source": self.template_source,
+            "tags": list(self.tags),
+            "pr": dict(self.pr) if isinstance(self.pr, dict) else None,
+            "reviews": reviews_out,
+            "claude_sessions": list(self.claude_sessions),
+            "codex_sessions": list(self.codex_sessions),
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> WorkstreamRecord:
+        reviews_raw = data.get("reviews")
+        reviews: dict[str, Any] = {"local": 0, "remote": 0}
+        if isinstance(reviews_raw, dict):
+            reviews["local"] = int(reviews_raw.get("local", 0) or 0)
+            reviews["remote"] = int(reviews_raw.get("remote", 0) or 0)
+            if reviews_raw.get("local_running"):
+                reviews["local_running"] = True
+            if reviews_raw.get("remote_running"):
+                reviews["remote_running"] = True
+        tickets_raw = data.get("tickets") or []
+        tickets = [
+            {"id": str(t.get("id", "")), "url": str(t.get("url", ""))}
+            for t in tickets_raw
+            if isinstance(t, dict) and t.get("id")
+        ]
+        pr_raw = data.get("pr")
+        pr = dict(pr_raw) if isinstance(pr_raw, dict) and pr_raw else None
+        return cls(
+            version=int(data.get("version", 1) or 1),
+            kind=str(data.get("kind", "ticket") or "ticket"),
+            tickets=tickets,
+            ticket_provider=str(data.get("ticket_provider", "") or ""),
+            key=str(data.get("key", "") or ""),
+            key_aliases=[str(a) for a in (data.get("key_aliases") or [])],
+            desc=str(data.get("desc", "") or ""),
+            type=str(data.get("type", "") or ""),
+            template_source=str(data.get("template_source", "default") or "default"),
+            tags=[str(t) for t in (data.get("tags") or [])],
+            pr=pr,
+            reviews=reviews,
+            claude_sessions=[str(s) for s in (data.get("claude_sessions") or [])],
+            codex_sessions=[str(s) for s in (data.get("codex_sessions") or [])],
+        )
+
+
+def resolve_setting(
+    key: str,
+    dir_: str = ".",
+    env_var: str = "",
+    default: str = "",
+) -> tuple[str, str]:
+    """Return (value, source) with precedence env > project > machine > user > default."""
+    if env_var:
+        env_val = os.environ.get(env_var, "")
+        if env_val:
+            return (env_val, "env")
+    found = repo_facts.conf_get_source(key, dir_)
+    if found is not None:
+        return found
+    return (default, "default")
+
+
+def detect_template_source(dir_: str = ".") -> str:
+    """Highest config tier ('project' | 'machine' | 'user' | 'default') supplying a template key."""
+    rank = {"project": 3, "machine": 2, "user": 1, "default": 0}
+    best = "default"
+    for k in TEMPLATE_KEYS:
+        found = repo_facts.conf_get_source(k, dir_)
+        if found is not None and rank.get(found[1], 0) > rank[best]:
+            best = found[1]
+            if best == "project":
+                return "project"
+    return best
+
+
+def _worktree_root(dir_: str = ".") -> str:
+    top = repo_facts.git(dir_, "rev-parse", "--show-toplevel")
+    return top if top else os.path.abspath(dir_)
+
+
+def ensure_excluded(worktree: str) -> None:
+    """Register .workstream.json in the repository's info/exclude file."""
+    rel = repo_facts.git(worktree, "rev-parse", "--git-path", "info/exclude")
+    if not rel:
+        return
+    exclude_path = Path(rel if os.path.isabs(rel) else os.path.join(worktree, rel))
+    exclude_path.parent.mkdir(parents=True, exist_ok=True)
+    existing = exclude_path.read_text(encoding="utf-8", errors="surrogateescape") if exclude_path.is_file() else ""
+    lines = [line.strip() for line in existing.splitlines()]
+    if RECORD_FILENAME not in lines and f"/{RECORD_FILENAME}" not in lines:
+        prefix = "" if (not existing or existing.endswith("\n")) else "\n"
+        with exclude_path.open("a", encoding="utf-8", errors="surrogateescape") as f:
+            f.write(f"{prefix}{RECORD_FILENAME}\n")
+
+
+@contextmanager
+def _record_lock(worktree: str) -> Iterator[str]:
+    """Lock the worktree record while reading or writing it."""
+    root = _worktree_root(worktree)
+    git_dir = repo_facts.git(root, "rev-parse", "--absolute-git-dir")
+    if git_dir:
+        lock_path = os.path.join(git_dir, "workstream-record.lock")
+        fd = os.open(lock_path, os.O_CREAT | os.O_RDWR, 0o600)
+    else:
+        fd = os.open(root, os.O_RDONLY)
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX)
+        yield root
+    finally:
+        os.close(fd)
+
+
+def _save_record_locked(root: str, record: WorkstreamRecord) -> str:
+    ensure_excluded(root)
+    target = os.path.join(root, RECORD_FILENAME)
+    payload = json.dumps(record.to_dict(), indent=2) + "\n"
+    fd, tmp_path = tempfile.mkstemp(dir=root, prefix=".workstream.", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(payload)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp_path, target)
+    except BaseException:
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
+        raise
+    return target
+
+
+def save_record(worktree: str, record: WorkstreamRecord) -> str:
+    """Atomically write .workstream.json in <worktree> and ensure info/exclude entry."""
+    with _record_lock(worktree) as root:
+        return _save_record_locked(root, record)
+
+
+def _legacy_chain_record(worktree: str) -> WorkstreamRecord | None:
+    git_dir = repo_facts.git(worktree, "rev-parse", "--absolute-git-dir")
+    if not git_dir:
+        return None
+    chain_path = Path(git_dir) / "chain"
+    if not chain_path.is_file():
+        return None
+    try:
+        text = chain_path.read_text(encoding="utf-8", errors="surrogateescape")
+    except OSError:
+        return None
+    ids = [line.strip() for line in text.splitlines() if line.strip()]
+    if not ids:
+        return None
+    branch = repo_facts.git(worktree, "branch", "--show-current")
+    scheme = repo_facts.ticket_scheme(branch) if branch else "github"
+    provider = scheme if scheme in ("github", "shortcut") else "github"
+    tickets = [{"id": tid, "url": ""} for tid in ids]
+    rec = WorkstreamRecord(
+        kind="ticket",
+        tickets=tickets,
+        ticket_provider=provider,
+        template_source=detect_template_source(worktree),
+    )
+    rec.key = derive_key(rec, worktree)
+    return rec
+
+
+def load_record(worktree: str = ".") -> WorkstreamRecord | None:
+    """Load .workstream.json from <worktree>, falling back to legacy <git-dir>/chain."""
+    root = _worktree_root(worktree)
+    path = Path(root) / RECORD_FILENAME
+    if path.is_file():
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+            if isinstance(data, dict):
+                return WorkstreamRecord.from_dict(data)
+        except (OSError, ValueError, TypeError, AttributeError):
+            pass
+    return _legacy_chain_record(root)
+
+
+def format_text(text: str, form: str) -> str:
+    """Render a phrase in kebab, words, Title, or snake form."""
+    words = repo_facts.ascii_separate(text).split()
+    if not words:
+        return ""
+    if form == "kebab":
+        return "-".join(w.lower() for w in words)
+    if form == "snake":
+        return "_".join(w.lower() for w in words)
+    if form == "Title":
+        return repo_facts.title_words([w.upper() if re.fullmatch(r"[A-Z0-9]{2,}", w) else w.lower() for w in words])
+    return " ".join(w if re.fullmatch(r"[A-Z0-9]{2,}", w) else w.lower() for w in words)
+
+
+def _slug_phrase(title: str) -> str:
+    override = os.environ.get("GT_LABEL_SLUG_OVERRIDE", "")
+    if override:
+        sanitized = repo_facts.sanitize_label(override)
+        if sanitized:
+            return sanitized
+    if not title:
+        return ""
+    return repo_facts.distill_title(
+        title,
+        os.environ.get("GT_LABEL_SLUG_WORDS") or repo_facts.DEFAULT_SLUG_WORDS,
+    )
+
+
+def _provider_token(record: WorkstreamRecord, style: str = "", dir_: str = ".") -> str:
+    provider = record.ticket_provider
+    if not provider:
+        return ""
+    mode = style or resolve_setting("provider.form", dir_, default="brief")[0]
+    if mode not in ("brief", "full"):
+        mode = "brief"
+    defaults = PROVIDER_TOKENS.get(provider, {"brief": f"{provider}-", "full": provider})
+    custom = resolve_setting(f"provider.{mode}", dir_, default="")[0]
+    return custom if custom else defaults[mode]
+
+
+def _chain_token(record: WorkstreamRecord, option: str = "", dir_: str = ".") -> str:
+    ids = [t["id"] for t in record.tickets if t.get("id")]
+    if not ids:
+        return ""
+    sep = resolve_setting("chain.sep", dir_, default="+")[0] or "+"
+    mode = option or resolve_setting("chain.mode", dir_, default="all")[0]
+    if mode == "first":
+        return ids[0]
+    if mode == "last":
+        return ids[-1]
+    return sep.join(ids)
+
+
+def derive_key(record: WorkstreamRecord, dir_: str = ".") -> str:
+    """Compute deterministic key: {provider}{chain} for tickets, or stored key for talk/iteration."""
+    if record.kind in ("talk", "iteration") and not record.tickets:
+        return record.key
+    prov = _provider_token(record, "", dir_)
+    chain = _chain_token(record, "", dir_)
+    if prov or chain:
+        return f"{prov}{chain}"
+    return record.key
+
+
+def parse_review_tag(tag: str) -> tuple[str, int, str] | None:
+    """'L2✓' -> ('L', 2, 'ok'); 'G1' -> ('G', 1, 'run'); 'L-' -> ('L', 0, 'planned')."""
+    m = _REVIEW_TAG.match(tag.strip())
+    if not m:
+        return None
+    src, num, ok_after, dash, ok_bare = m.groups()
+    if dash:
+        return src, 0, "planned"
+    return src, int(num or 0), "ok" if (ok_after or ok_bare) else "run"
+
+
+def format_review_tag(src: str, num: int, status: str) -> str:
+    if status == "planned":
+        return f"{src}-"
+    return f"{src}{num or ''}{'✓' if status == 'ok' else ''}"
+
+
+def format_phase_tags(record: WorkstreamRecord, *, include_attn: bool = True) -> str:
+    """Format a record's tags as '[!][WIP][PR]'; review tags share one bracket: '[L2✓ G1]'."""
+    tags = list(record.tags)
+    if record.kind == "talk" and "TALK" not in tags:
+        tags.insert(0, "TALK")
+    elif record.kind == "iteration" and "ITERATE" not in tags:
+        tags.insert(0, "ITERATE")
+    out: list[str] = []
+    group: list[str] = []
+
+    def flush() -> None:
+        if group:
+            out.append("[" + " ".join(group) + "]")
+            group.clear()
+
+    for t in tags:
+        t_clean = t.strip()
+        if not t_clean or (t_clean == "!" and not include_attn):
+            continue
+        if parse_review_tag(t_clean):
+            group.append(t_clean)
+            continue
+        flush()
+        out.append(t_clean if (t_clean.startswith("[") and t_clean.endswith("]")) else f"[{t_clean}]")
+    flush()
+    return "".join(out)
+
+
+def planned_review_sources() -> list[str]:
+    """L always; G unless this machine is local-review-only; H never. A settings layer will replace this."""
+    flag = os.path.join(os.path.expanduser("~"), ".config", "local-review-only")
+    return ["L"] if os.path.exists(flag) else ["L", "G"]
+
+
+def awaiting_merge(tags: list[str]) -> bool:
+    """Every review source accepted and a PR open."""
+    reviews = [r for r in (parse_review_tag(t) for t in tags) if r]
+    return bool(reviews) and "PR" in [t.strip() for t in tags] and all(r[2] == "ok" for r in reviews)
+
+
+def _canonical(
+    has_attn: bool, stage: str | None, reviews: dict[str, tuple[int, str]], has_pr: bool, others: list[str]
+) -> list[str]:
+    out = ["!"] if has_attn else []
+    if stage:
+        out.append(stage)
+    out += [format_review_tag(s, *reviews[s]) for s in REVIEW_SOURCES if s in reviews]
+    if has_pr:
+        out.append("PR")
+    return out + others
+
+
+def apply_transition(
+    tags: list[str],
+    *,
+    phase: str | None = None,
+    pr: bool = False,
+    clear: bool = False,
+    attn: bool = False,
+    ok: bool = False,
+    plan_reviews: bool = False,
+    review: tuple[str, str, bool] | None = None,
+) -> list[str]:
+    """Apply one tag transition and return the canonical tag list.
+
+    Canonical order: '!', stage, review tags (L, G, H), 'PR', then any other tags. Every
+    stage, review or PR change clears '!'; it comes back when every review is accepted
+    with a PR open. `review` is (source, round, accepted); round is N, 'next', 'keep' or '-'.
+    """
+    has_attn = False
+    stage: str | None = None
+    reviews: dict[str, tuple[int, str]] = {}
+    has_pr = False
+    others: list[str] = []
+    for raw in tags:
+        clean = raw.strip().strip("[]")
+        if not clean:
+            continue
+        rv = parse_review_tag(clean)
+        if clean == "!":
+            has_attn = True
+        elif clean.upper() in VALID_PHASES:
+            stage = clean.upper()
+        elif clean.upper() in LEGACY_PHASES:
+            continue
+        elif rv:
+            reviews[rv[0]] = (rv[1], rv[2])
+        elif clean.upper() == "PR":
+            has_pr = True
+        else:
+            others.append(raw.strip())
+
+    if clear:
+        return _canonical(False, None, {}, False, others)
+    if attn:
+        return _canonical(True, stage, reviews, has_pr, others)
+    if ok:
+        return _canonical(False, stage, reviews, has_pr, others)
+
+    if pr:
+        has_pr = True
+    elif plan_reviews:
+        stage = None
+        for src in planned_review_sources():
+            reviews.setdefault(src, (0, "planned"))
+    elif review is not None:
+        src, rnd, accepted = review
+        if src not in tuple(REVIEW_SOURCES):
+            raise ValueError(f"unknown review source: {src}")
+        prev = reviews.get(src, (0, "planned"))[0]
+        if rnd == "-":
+            num = 0
+        elif rnd == "keep":
+            num = prev
+        elif rnd == "next":
+            num = prev + 1
+        elif rnd.isdigit() and int(rnd) >= 1:
+            num = int(rnd)
+        else:
+            raise ValueError(f"bad review round: {rnd}")
+        stage = None
+        reviews[src] = (num, "ok" if accepted else "planned" if rnd == "-" else "run")
+    elif phase is not None:
+        norm = phase.strip().upper()
+        if norm not in VALID_PHASES:
+            raise ValueError(f"unknown phase: {phase}")
+        stage, reviews = norm, {}
+        if norm in ("MERGED", "DONE"):
+            has_pr = False
+
+    has_attn = (pr or review is not None) and awaiting_merge(_canonical(False, stage, reviews, has_pr, []))
+    return _canonical(has_attn, stage, reviews, has_pr, others)
+
+
+def update_phase(
+    worktree: str,
+    phase: str | None = None,
+    *,
+    pr: bool = False,
+    clear: bool = False,
+    attn: bool = False,
+    ok: bool = False,
+    plan_reviews: bool = False,
+    review: tuple[str, str, bool] | None = None,
+) -> WorkstreamRecord | None:
+    """Apply one tag transition to <worktree>/.workstream.json when present."""
+    actions = (
+        int(phase is not None) + int(bool(pr)) + int(bool(clear)) + int(bool(attn)) + int(bool(ok))
+        + int(bool(plan_reviews)) + int(review is not None)
+    )
+    if actions != 1:
+        raise ValueError("specify exactly one of phase, pr, clear, attn, ok, plan_reviews, or review")
+    with _record_lock(worktree) as root:
+        path = Path(root) / RECORD_FILENAME
+        if not path.is_file():
+            return None
+        rec = load_record(root)
+        if rec is None:
+            return None
+        new_tags = apply_transition(
+            rec.tags, phase=phase, pr=pr, clear=clear, attn=attn, ok=ok,
+            plan_reviews=plan_reviews, review=review,
+        )
+        if new_tags != rec.tags:
+            rec.tags = new_tags
+            _save_record_locked(root, rec)
+        return rec
+
+
+def _split_name(name: str) -> tuple[list[str], str]:
+    """Split a session name into the tags we wrote and the rest. Bracketed title text is kept."""
+    tags: list[str] = []
+    rest = name
+    token = r"[LGH](?:\d+✓?|-|✓)"
+    m = re.match(r"\[!\]\s*", rest)
+    if m:
+        tags.append("!")
+        rest = rest[m.end():]
+    m = re.match(r"\[(%s)\]\s*" % "|".join(VALID_PHASES + LEGACY_PHASES), rest)
+    if m:
+        tags.append(m.group(1))
+        rest = rest[m.end():]
+    else:
+        m = re.match(r"\[(%s(?: %s)*)\]\s*" % (token, token), rest)
+        if m:
+            tags += m.group(1).split()
+            rest = rest[m.end():]
+    m = re.match(r"\[PR\]\s*", rest)
+    if m:
+        tags.append("PR")
+        rest = rest[m.end():]
+    return tags, rest
+
+
+def retag_name(name: str, **action: Any) -> str:
+    """Apply a transition to a session name that has no workstream record behind it."""
+    tags, bare = _split_name(name)
+    prefix = format_phase_tags(WorkstreamRecord(tags=apply_transition(tags, **action)))
+    return f"{prefix} {bare}" if prefix else bare
+
+
+def name_prefix(name: str) -> str:
+    tags, _ = _split_name(name)
+    return format_phase_tags(WorkstreamRecord(tags=tags))
+
+
+def _clean_rendered(text: str, form: str) -> str:
+    """Collapse empty optional prefixes/separators left by empty tokens like {type} or {phase}."""
+    s = text.strip()
+    # Strip leading '/', ':', '-', '_' left when a prefix token such as {type} is empty
+    s = re.sub(r"^[/:\-_]+\s*", "", s)
+    # Strip trailing '-', '_', ':' left when {desc} is empty
+    s = re.sub(r"[\s:\-_]+$", "", s)
+    if form == "kebab":
+        s = re.sub(r"\s+", "-", s)
+        s = re.sub(r"-{2,}", "-", s)
+    elif form == "snake":
+        s = re.sub(r"\s+", "_", s)
+        s = re.sub(r"_{2,}", "_", s)
+    else:
+        s = re.sub(r" {2,}", " ", s)
+    return s.strip()
+
+
+def render_base(record: WorkstreamRecord, form: str, dir_: str = ".") -> str:
+    """Render the base template (default '{key} {desc}') in <form>."""
+    base_tmpl, _ = resolve_setting("base", dir_, default="{key} {desc}")
+    return render_template(base_tmpl, record, form=form, dir_=dir_, _in_base=True)
+
+
+def render_template(
+    template: str,
+    record: WorkstreamRecord,
+    form: str = "words",
+    dir_: str = ".",
+    _in_base: bool = False,
+) -> str:
+    """Render a template string containing {provider}, {chain}, {desc}, {type}, {base}, {phase}/{tags}, {key}."""
+    key_val = derive_key(record, dir_)
+
+    def repl(match: re.Match[str]) -> str:
+        name = match.group(1)
+        opt = match.group(2) or ""
+        if name == "key":
+            return key_val
+        if name == "provider":
+            return _provider_token(record, opt, dir_)
+        if name == "chain":
+            return _chain_token(record, opt, dir_)
+        if name == "desc":
+            target_form = opt if opt in VALID_FORMS else form
+            return format_text(record.desc, target_form)
+        if name == "type":
+            if not record.type:
+                return ""
+            target_form = opt if opt in VALID_FORMS else form
+            return format_text(record.type, target_form)
+        if name in ("phase", "tags"):
+            return format_phase_tags(record)
+        if name == "base":
+            if _in_base:
+                return f"{key_val} {format_text(record.desc, form)}".strip()
+            return render_base(record, form=form, dir_=dir_)
+        return match.group(0)
+
+    rendered = re.sub(r"\{([a-z]+)(?::([A-Za-z0-9_+-]+))?\}", repl, template)
+    return _clean_rendered(rendered, form)
+
+
+def render_surface(record: WorkstreamRecord, surface: str, dir_: str = ".") -> str:
+    """Render a named surface ('key' | 'base' | 'branch' | 'worktree' | 'row' | 'pr' | 'commit')."""
+    if surface == "key":
+        return derive_key(record, dir_)
+    default_form = DEFAULT_SURFACE_FORMS.get(surface, "words")
+    form, _ = resolve_setting(f"{surface}.form", dir_, default=default_form)
+    if form not in VALID_FORMS:
+        form = default_form
+
+    if surface == "base":
+        return render_base(record, form=form, dir_=dir_)
+
+    tmpl, _ = resolve_setting(f"{surface}.template", dir_, default="")
+    if not tmpl:
+        if surface == "worktree":
+            branch_tmpl, _ = resolve_setting("branch.template", dir_, default="")
+            tmpl = branch_tmpl if branch_tmpl else "{base}"
+        elif surface == "row":
+            tmpl = "{phase} {base}"
+        elif surface == "pr":
+            _, base_src = resolve_setting("base", dir_, default="{key} {desc}")
+            tmpl = "{base}" if base_src != "default" else "{key}: {desc}"
+        elif surface == "commit":
+            prefix_on, _ = resolve_setting("commit.key_prefix", dir_, default="false")
+            tmpl = "{key}: {desc}" if prefix_on.lower() == "true" else "{desc}"
+        else:
+            tmpl = "{base}"
+
+    out = render_template(tmpl, record, form=form, dir_=dir_)
+    if surface == "worktree":
+        out = out.replace("/", "-")
+    return out
+
+
+def init_ticket_record(
+    worktree: str,
+    provider: str,
+    tickets: list[dict[str, str]],
+    title: str = "",
+    desc: str = "",
+    type_: str = "",
+    tags: list[str] | None = None,
+) -> WorkstreamRecord:
+    """Create or update .workstream.json in <worktree> for a ticket or chain."""
+    with _record_lock(worktree) as root:
+        existing = load_record(root)
+
+        # Single-ticket re-run on an existing chain worktree keeps the chain membership
+        merged_tickets = list(tickets)
+        if (
+            existing is not None
+            and len(tickets) == 1
+            and len(existing.tickets) > 1
+            and existing.tickets[0].get("id") == tickets[0].get("id")
+        ):
+            merged_tickets = [dict(t) for t in existing.tickets]
+            if tickets[0].get("url"):
+                merged_tickets[0]["url"] = tickets[0]["url"]
+
+        if existing is not None and (
+            not existing.tickets
+            or not merged_tickets
+            or existing.tickets[0].get("id") != merged_tickets[0].get("id")
+        ):
+            existing = None
+
+        if not desc:
+            if existing and existing.desc and not title and not os.environ.get("GT_LABEL_SLUG_OVERRIDE"):
+                desc = existing.desc
+            else:
+                desc = format_text(_slug_phrase(title), "words")
+        else:
+            sanitized = repo_facts.sanitize_label(desc)
+            desc = format_text(sanitized, "words") if sanitized else format_text(_slug_phrase(title), "words")
+
+        rec = WorkstreamRecord(
+            version=1,
+            kind="ticket",
+            tickets=merged_tickets,
+            ticket_provider=provider,
+            key="",
+            key_aliases=list(existing.key_aliases) if existing else [],
+            desc=desc,
+            type=type_ or (existing.type if existing else ""),
+            template_source=detect_template_source(root),
+            tags=list(tags) if tags is not None else (list(existing.tags) if existing else ["PLAN"]),
+            pr=existing.pr if existing else None,
+            reviews=dict(existing.reviews) if existing else {"local": 0, "remote": 0},
+            claude_sessions=list(existing.claude_sessions) if existing else [],
+            codex_sessions=list(existing.codex_sessions) if existing else [],
+        )
+        rec.key = derive_key(rec, root)
+        _save_record_locked(root, rec)
+        return rec
+
+
+def chain_ids(worktree: str = ".", fallback_ticket_id: str = "") -> list[str]:
+    """Return ordered ticket IDs from .workstream.json or legacy <git-dir>/chain."""
+    rec = load_record(worktree)
+    if rec and rec.tickets:
+        ids = [t["id"] for t in rec.tickets if t.get("id")]
+        if ids:
+            return ids
+    return [fallback_ticket_id] if fallback_ticket_id else []
+
+
+def chain_tag(worktree: str = ".") -> str:
+    """Return '12+13' (or 'first+last' for 4+ tickets) for a chain worktree; '' for single ticket."""
+    ids = chain_ids(worktree)
+    if len(ids) < 2:
+        return ""
+    if len(ids) >= 4:
+        return f"{ids[0]}+{ids[-1]}"
+    return "+".join(ids)
+
+
+def _load_record_file(worktree: str = ".") -> tuple[str, WorkstreamRecord] | None:
+    root = _worktree_root(worktree)
+    path = Path(root) / RECORD_FILENAME
+    if not path.is_file():
+        return None
+    rec = load_record(root)
+    if rec is None:
+        return None
+    return root, rec
+
+
+def update_pr(
+    worktree: str,
+    number: int,
+    url: str = "",
+    state: str = "",
+) -> WorkstreamRecord | None:
+    """Record PR metadata in <worktree>/.workstream.json when present."""
+    with _record_lock(worktree) as root:
+        loaded = _load_record_file(root)
+        if loaded is None:
+            return None
+        root, rec = loaded
+        pr_data: dict[str, Any] = dict(rec.pr) if isinstance(rec.pr, dict) else {}
+        pr_data["number"] = int(number)
+        if url:
+            pr_data["url"] = url
+        if state:
+            pr_data["state"] = state
+        if pr_data != rec.pr:
+            rec.pr = pr_data
+            _save_record_locked(root, rec)
+        return rec
+
+
+def _parse_review_count(raw: str) -> tuple[int, bool]:
+    s = raw.strip()
+    running = s.endswith("*")
+    if running:
+        s = s[:-1]
+    if not s.isdigit():
+        raise ValueError(f"invalid review count '{raw}' (expected N or N*)")
+    return int(s), running
+
+
+def update_reviews(
+    worktree: str,
+    *,
+    local: str | None = None,
+    remote: str | None = None,
+) -> WorkstreamRecord | None:
+    """Update local/remote review counts in <worktree>/.workstream.json when present."""
+    if local is None and remote is None:
+        raise ValueError("specify at least one of local or remote")
+    with _record_lock(worktree) as root:
+        loaded = _load_record_file(root)
+        if loaded is None:
+            return None
+        root, rec = loaded
+        reviews: dict[str, Any] = dict(rec.reviews or {"local": 0, "remote": 0})
+        if local is not None:
+            cnt, running = _parse_review_count(local)
+            reviews["local"] = cnt
+            if running:
+                reviews["local_running"] = True
+            else:
+                reviews.pop("local_running", None)
+        if remote is not None:
+            cnt, running = _parse_review_count(remote)
+            reviews["remote"] = cnt
+            if running:
+                reviews["remote_running"] = True
+            else:
+                reviews.pop("remote_running", None)
+        if reviews != rec.reviews:
+            rec.reviews = reviews
+            _save_record_locked(root, rec)
+        return rec
+
+
+def _project_name(worktree: str) -> str:
+    common = repo_facts.git(worktree, "rev-parse", "--path-format=absolute", "--git-common-dir")
+    if common:
+        return os.path.basename(os.path.dirname(common))
+    return os.path.basename(os.path.abspath(worktree))
+
+
+def statusline_fields(worktree: str = ".", project: str = "") -> dict[str, str] | None:
+    """Return statusline line-1 fields derived from .workstream.json alone, or None."""
+    loaded = _load_record_file(worktree)
+    if loaded is None:
+        return None
+    root, rec = loaded
+    proj = project or _project_name(root)
+    ws_name = render_surface(rec, "base", dir_=root)
+    tags = format_phase_tags(rec, include_attn=False)
+    attn = "1" if any(t.strip() == "!" for t in rec.tags) else ""
+
+    pr_num = ""
+    pr_url = ""
+    pr_state = ""
+    if isinstance(rec.pr, dict) and rec.pr.get("number"):
+        pr_num = str(rec.pr["number"])
+        pr_url = str(rec.pr.get("url", "") or "")
+        pr_state = str(rec.pr.get("state", "") or "")
+
+    rev = rec.reviews or {}
+    local_n = int(rev.get("local", 0) or 0)
+    remote_n = int(rev.get("remote", 0) or 0)
+    local_star = "*" if rev.get("local_running") else ""
+    remote_star = "*" if rev.get("remote_running") else ""
+
+    reviews_str = ""
+    if local_n > 0 or local_star or remote_n > 0 or remote_star or pr_num:
+        parts = [f"{local_n}{local_star} local"]
+        if remote_n > 0 or remote_star or pr_num:
+            parts.append(f"{remote_n}{remote_star} remote")
+        reviews_str = ", ".join(parts)
+
+    return {
+        "project": proj,
+        "name": ws_name,
+        "tags": tags,
+        "attn": attn,
+        "pr_num": pr_num,
+        "pr_url": pr_url,
+        "pr_state": pr_state,
+        "reviews": reviews_str,
+    }
+
+
+def format_statusline_line1(worktree: str = ".", project: str = "") -> str:
+    """Format statusline line 1 from .workstream.json alone."""
+    fields = statusline_fields(worktree, project=project)
+    if fields is None:
+        return ""
+    pr_seg = ""
+    if fields["pr_num"]:
+        state = fields["pr_state"].replace("_", " ")
+        pr_seg = f"PR #{fields['pr_num']}" + (f" {state}" if state else "")
+    rev_seg = f"reviews: {fields['reviews']}" if fields["reviews"] else ""
+    segs = [fields["project"], fields["name"], fields["tags"], pr_seg, rev_seg]
+    return " | ".join(s for s in segs if s)
+
+
+def build_parser() -> argparse.ArgumentParser:
+    p = argparse.ArgumentParser(prog="workstream", description=__doc__.splitlines()[0])
+    sub = p.add_subparsers(dest="cmd", required=True)
+
+    p_init = sub.add_parser("init-ticket")
+    p_init.add_argument("--dir", default=".")
+    p_init.add_argument("--provider", required=True)
+    p_init.add_argument("--ids", required=True, help="Comma-separated ticket IDs")
+    p_init.add_argument("--urls", default="", help="Comma-separated ticket URLs")
+    p_init.add_argument("--title", default="")
+    p_init.add_argument("--desc", default="")
+    p_init.add_argument("--type", dest="type_", default="")
+    p_init.add_argument("--tag", dest="tags", action="append")
+
+    p_show = sub.add_parser("show")
+    p_show.add_argument("--dir", default=".")
+
+    p_phase = sub.add_parser("phase")
+    p_phase.add_argument("phase", nargs="?", default=None)
+    p_phase.add_argument("--dir", default=".")
+    p_phase_mx = p_phase.add_mutually_exclusive_group()
+    p_phase_mx.add_argument("--pr", action="store_true")
+    p_phase_mx.add_argument("--clear", action="store_true")
+    p_phase_mx.add_argument("--show", action="store_true")
+    p_phase_mx.add_argument("--attn", action="store_true")
+    p_phase_mx.add_argument("--ok", action="store_true")
+    p_phase_mx.add_argument("--plan-reviews", action="store_true")
+    p_phase_mx.add_argument("--awaiting-merge", action="store_true")
+    p_phase_mx.add_argument("--review", nargs="+", metavar="SRC [ROUND] [ok]")
+
+    p_cids = sub.add_parser("chain-ids")
+    p_cids.add_argument("--dir", default=".")
+    p_cids.add_argument("--fallback", default="")
+
+    p_ctag = sub.add_parser("chain-tag")
+    p_ctag.add_argument("--dir", default=".")
+
+    p_ren = sub.add_parser("render")
+    p_ren.add_argument("surface", choices=SURFACES)
+    p_ren.add_argument("--dir", default=".")
+    p_ren.add_argument("--provider", default="")
+    p_ren.add_argument("--ids", default="")
+    p_ren.add_argument("--title", default="")
+    p_ren.add_argument("--desc", default="")
+    p_ren.add_argument("--type", dest="type_", default="")
+
+    p_set = sub.add_parser("setting")
+    p_set.add_argument("key")
+    p_set.add_argument("--dir", default=".")
+    p_set.add_argument("--env", default="")
+    p_set.add_argument("--default", default="")
+    p_set.add_argument("--with-source", action="store_true")
+
+    p_pr = sub.add_parser("set-pr")
+    p_pr.add_argument("--dir", default=".")
+    p_pr.add_argument("--number", required=True, type=int)
+    p_pr.add_argument("--url", default="")
+    p_pr.add_argument("--state", default="")
+
+    p_rev = sub.add_parser("set-reviews")
+    p_rev.add_argument("--dir", default=".")
+    p_rev.add_argument("--local", default=None)
+    p_rev.add_argument("--remote", default=None)
+
+    p_sl = sub.add_parser("statusline")
+    p_sl.add_argument("--dir", default=".")
+    p_sl.add_argument("--project", default="")
+    p_sl.add_argument("--format", dest="fmt", choices=("text", "json"), default="text")
+
+    return p
+
+
+def main(argv: list[str] | None = None) -> int:
+    if sys.version_info < (3, 11):
+        sys.exit("workstream: Python 3.11+ required")
+    parser = build_parser()
+    args = parser.parse_args(argv)
+
+    if args.cmd == "init-ticket":
+        ids = [i.strip() for i in args.ids.split(",") if i.strip()]
+        urls = [u.strip() for u in args.urls.split(",")] if args.urls else []
+        tickets = [
+            {"id": tid, "url": urls[idx] if idx < len(urls) else ""}
+            for idx, tid in enumerate(ids)
+        ]
+        init_ticket_record(
+            args.dir,
+            provider=args.provider,
+            tickets=tickets,
+            title=args.title,
+            desc=args.desc,
+            type_=args.type_,
+            tags=args.tags,
+        )
+        return 0
+
+    if args.cmd == "show":
+        rec = load_record(args.dir)
+        if rec is None:
+            return 1
+        sys.stdout.write(json.dumps(rec.to_dict(), indent=2) + "\n")
+        return 0
+
+    if args.cmd == "phase":
+        flags = (
+            args.pr, args.clear, args.show, args.attn, args.ok,
+            args.plan_reviews, args.awaiting_merge, args.review is not None,
+        )
+        if any(flags) and args.phase is not None:
+            parser.error("phase: cannot combine positional PHASE with a flag")
+        if not any(flags) and args.phase is None:
+            parser.error(
+                "phase: specify a PHASE or one of --pr, --clear, --show, --attn, --ok, "
+                "--plan-reviews, --review, --awaiting-merge"
+            )
+        review = None
+        if args.review is not None:
+            parts = args.review
+            accepted = parts[-1] == "ok"
+            parts = parts[:-1] if accepted else parts
+            if len(parts) == 1 and accepted:
+                parts.append("keep")
+            if len(parts) != 2:
+                parser.error("phase: --review takes SRC ROUND [ok] or SRC ok")
+            review = (parts[0], parts[1], accepted)
+        if args.show or args.awaiting_merge:
+            rec = load_record(args.dir)
+            if rec is None:
+                return 1
+            if args.awaiting_merge:
+                return 0 if awaiting_merge(rec.tags) else 1
+            out = format_phase_tags(rec)
+            if out:
+                sys.stdout.write(out + "\n")
+            return 0
+        try:
+            rec = update_phase(
+                args.dir,
+                phase=args.phase,
+                pr=args.pr,
+                clear=args.clear,
+                attn=args.attn,
+                ok=args.ok,
+                plan_reviews=args.plan_reviews,
+                review=review,
+            )
+        except ValueError as exc:
+            sys.stderr.write(f"workstream: {exc}\n")
+            return 1
+        if rec is None:
+            return 1
+        out = format_phase_tags(rec)
+        if out:
+            sys.stdout.write(out + "\n")
+        return 0
+
+    if args.cmd == "chain-ids":
+        ids = chain_ids(args.dir, args.fallback)
+        if ids:
+            sys.stdout.write(",".join(ids))
+        return 0
+
+    if args.cmd == "chain-tag":
+        tag = chain_tag(args.dir)
+        if tag:
+            sys.stdout.write(tag)
+        return 0
+
+    if args.cmd == "render":
+        rec = load_record(args.dir)
+        if args.ids:
+            ids = [i.strip() for i in args.ids.split(",") if i.strip()]
+            sanitized = repo_facts.sanitize_label(args.desc) if args.desc else ""
+            if sanitized:
+                desc = format_text(sanitized, "words")
+            elif args.title:
+                desc = format_text(_slug_phrase(args.title), "words")
+            elif rec is not None and rec.desc:
+                desc = rec.desc
+            else:
+                desc = ""
+            rec = WorkstreamRecord(
+                version=1,
+                kind="ticket",
+                tickets=[{"id": tid, "url": ""} for tid in ids],
+                ticket_provider=args.provider or (rec.ticket_provider if rec else "") or "github",
+                desc=desc,
+                type=args.type_ or (rec.type if rec else ""),
+                tags=list(rec.tags) if rec else ["PLAN"],
+            )
+            rec.key = derive_key(rec, args.dir)
+        else:
+            if rec is None:
+                return 1
+            if args.provider:
+                rec.ticket_provider = args.provider
+                rec.key = derive_key(rec, args.dir)
+            if args.desc:
+                sanitized = repo_facts.sanitize_label(args.desc)
+                if sanitized:
+                    rec.desc = format_text(sanitized, "words")
+        sys.stdout.write(render_surface(rec, args.surface, args.dir))
+        return 0
+
+    if args.cmd == "setting":
+        val, src = resolve_setting(args.key, args.dir, env_var=args.env, default=args.default)
+        if args.with_source:
+            sys.stdout.write(f"{val}\t{src}")
+        else:
+            sys.stdout.write(val)
+        return 0
+
+    if args.cmd == "set-pr":
+        rec = update_pr(args.dir, args.number, url=args.url, state=args.state)
+        return 0 if rec is not None else 1
+
+    if args.cmd == "set-reviews":
+        try:
+            rec = update_reviews(args.dir, local=args.local, remote=args.remote)
+        except ValueError as exc:
+            sys.stderr.write(f"workstream: {exc}\n")
+            return 1
+        return 0 if rec is not None else 1
+
+    if args.cmd == "statusline":
+        fields = statusline_fields(args.dir, project=args.project)
+        if fields is None:
+            return 1
+        if args.fmt == "json":
+            sys.stdout.write(json.dumps(fields) + "\n")
+        else:
+            sys.stdout.write(format_statusline_line1(args.dir, project=args.project) + "\n")
+        return 0
+
+    return 2
+
+
+if __name__ == "__main__":
+    sys.exit(main())

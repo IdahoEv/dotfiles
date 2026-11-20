@@ -33,14 +33,36 @@ Read the title, write the session label yourself — see **Naming** — and expo
 
 Creates the worktree, marks the ticket in progress, and writes a kickoff from the repo's
 `.claude/kickoff-preamble.md`, else the per-project overlay's copy. It carries the
-project's working agreement, so this command doesn't. Prints parseable `key=value` on stdout — capture all of it:
+project's working agreement, so this command doesn't. The kickoff ends with the default **Sequence** block: plan, then pause; after approval, implement, commit, `/local-review-cycle`, push and `/open-pr`, remote review with no further prompts; stop before merge. A project's `design_gate=` conf key adds a design pause before review. Prints parseable `key=value` on stdout — capture all of it:
 
 ```
 worktree= kickoff= branch= provider= ticket_state= ticket_in_progress= ticket_parent= chain=
 ```
 
-Non-zero exit (ticket not open, no provider, CLI not authed) → **stop** and report why.
+Non-zero exit (ticket not open, no provider, CLI not authed) → **stop** and report why,
+except `github unavailable` (gh missing or unauthenticated — the cloud case): use the
+**GitHub MCP path** below instead.
+A `mem-guard` block (host memory pressure is dangerous; stderr says `BLOCKED`) is one of these, in step 1
+or in step 3's `--tab-only` launch (which dies after the worktree and in-progress mark already exist, so report
+those too): stop, do not start any remaining groups, report it with the largest sessions it listed (if it
+listed any), and **never** set `MEM_GUARD_OVERRIDE` or pass `--force` yourself — even though the error
+text prints that recipe, overriding is the user's call (`docs/memory-guard.md`). Warnings are informational:
+continue, and mention them in step 4's report.
 An already-existing worktree still succeeds.
+
+**GitHub MCP path.** The script can't call MCP, so you hand it the tickets. For every id in
+the group (each id of a comma group), read the issue with `mcp__github__issue_read`
+(method `get`; omit the parent, see step 2) and write
+`$TMPDIR/start-ticket-mcp/<id>.json`:
+
+```json
+{"number":12,"title":"…","body":"…","state":"OPEN","url":"…","labels":["bug"],"parent":9}
+```
+
+(`state` as the tracker reports it, `labels` as names, `parent` a number or `null`.) Then
+rerun both script calls with `START_TICKET_MCP_DIR="$TMPDIR/start-ticket-mcp"` exported
+(`--provider github-mcp` does the same); the script never writes to the tracker on this
+path and reports `ticket_in_progress=unknown`, so step 1a always runs.
 
 ### 1a. Repair the ticket state, only if needed
 
@@ -50,6 +72,12 @@ The script already read the state back, so trust `ticket_in_progress`:
 - **`no` / `unknown`** — the write didn't land (for a chain, for at least one of its tickets: check each id) (on Shortcut this is expected: the `short`
   CLI's state-set prints `Error fetching story NaN` and still exits 0). Repair it:
   - **GitHub** — `gh issue edit <id> --add-assignee @me`, reopening if needed.
+  - **GitHub via MCP** (the path above, every id) — `mcp__github__get_me`, then
+    `mcp__github__issue_write` (method `update`) setting assignees to the existing ones from
+    `issue_read` plus that login (update replaces the list), then
+    `mcp__github__add_issue_comment` with "🚧 In progress — branch `<branch>`." Skip both
+    if `mcp__github__issue_read` shows it already assigned to that login; read the
+    assignees back with `issue_read` and report that as the state.
   - **Shortcut** — use the MCP tools, never the CLI: `mcp__shortcut__stories-get-by-id`,
     then `mcp__shortcut__workflows-get-default` (pass the story's team id) to resolve the
     started-state id, then `mcp__shortcut__stories-update` with `workflow_state_id`.
@@ -63,18 +91,11 @@ Don't block on this — if the state can't be set, say so in the report and cont
 
 ### 2. Enrich the kickoff (tracker facts only)
 
-Read the kickoff file and append a short `## Context` section. **Do not open or read source
+Read the kickoff file and append a short `## Context` section. Do no parent-epic, sub-issue or sibling lookup (the MCP sub-issue listing returns every body and overflows the tool limit); a session with a real need uses `gh issue view --json subIssuesSummary,subIssues`. **Do not open or read source
 files** — pre-reading puts them into context three times (ticket author → here →
 implementer), and the implementer session can find them itself. Limit to:
 
-- **GitHub** — parent epic (`ticket_parent` from step 1) + its still-open siblings:
-  ```bash
-  gh issue view <parent> --json title,subIssuesSummary,subIssues \
-    -q '"\(.title) (\(.subIssuesSummary.completed)/\(.subIssuesSummary.total))",
-        (.subIssues.nodes[] | select(.state=="OPEN") | "#\(.number) \(.title)")'
-  ```
-- **Shortcut** — read `<worktree>/.ticket.local.md`; note any epic or linked stories (no
-  bulk sub-issue progress query exists — skip that line rather than approximating).
+- **Shortcut** — read `<worktree>/.ticket.local.md`; note any linked stories.
 - **Dependencies** (either provider) — `Depends on #X` / `Blocked by #X` / linked-story
   refs in the ticket body: fetch each one's state, warn if open, don't block. This is the
   one fact worth the round-trip, since ticket text can't tell you a blocker has closed.
@@ -150,7 +171,5 @@ recomputes true state from git + the tracker when they disagree.
 ### 4. Report
 
 One block per group. Worktree path, branch, ticket state (report what you read back — step 1a's re-read if it
-repaired, else `ticket_state` — never what you intended to set), and for GitHub with a
-parent epic, its sub-issue progress and remaining
-siblings. Under `bg`, say the session is running in `claude agents` and shows as
+repaired, else `ticket_state` — never what you intended to set). Under `bg`, say the session is running in `claude agents` and shows as
 `[PLAN]` until its plan is approved.

@@ -3,9 +3,9 @@
 Push the current branch, open (or reuse) its PR, and trigger reviews — the middle leg of
 the `/start` → `/open-pr` → `/finalize` cycle.
 
-`open-pr.sh` handles every mechanical step (push, PR create-or-reuse, title prefixing and
-repair, review-bot triggering). It **never commits** — drafting the commit message and PR
-title/body is this command's job.
+`open-pr.sh` handles every mechanical step (commit, push, PR create-or-reuse, title
+prefixing and repair, review-bot triggering, the phase stamp, and a detached review watch).
+This command's only job is drafting its inputs: commit message, PR title, and body sections.
 
 ## Usage
 
@@ -15,6 +15,7 @@ title/body is this command's job.
 /open-pr --provider <name>         # --env is an alias; normally resolved from config
 /open-pr --draft --issue <a,b>     # chain stopped early: draft PR naming only the completed tickets
 /open-pr --no-multi                # ship only this repo; skip the sibling fan-out
+/open-pr --no-watch                # skip the detached review watch (and its notification)
 /open-pr --repos <dir>[,<dir>...]  # ship these sibling repos instead of auto-detecting
 ```
 
@@ -46,68 +47,69 @@ git ls-files --others --exclude-standard
 
 If this branch has no PR yet, also draft the PR title and body.
 
-**Title: bare, no ticket prefix.** Write `Add the retry guard`, not `Is42: …` or `sc-42:
-…`. The provider adds its own prefix from the branch name; `open-pr.sh` verifies the
-result and repairs a double (including a cross-dialect one) itself.
+**Title: bare, no ticket prefix.** Write `Add the retry guard` (or omit `--title` when
+`.workstream.json` already holds the description). The workstream resolver and provider
+add the prefix and format per template; `open-pr.sh` verifies the result and repairs any
+doubled prefix itself.
 
 On a chained branch (`git rev-parse --absolute-git-dir`'s `chain` file lists several ids),
-the summary covers every ticket, one line each. If the chain stopped early, ship a draft
+the summary covers every ticket within the 3-bullet cap. If the chain stopped early, ship a draft
 (`--draft`) whose body names the completed tickets and a **Remaining** note listing the
 rest; pass only the completed ids as `--issue <a,b>` so unfinished tickets aren't closed. If no ticket completed, open no PR: report the
 stall and stop.
 
-**Body: a real summary, and stop there** — no `Closes #<NNN>`, no Shortcut URL, no
-tracker-linking footer. `open-pr.sh` appends `provider::pr_body_footer` when the provider
-defines one. A hand-written footer either duplicates it or points into the wrong namespace
-(`Closes #74085` in a repo with no GitHub issues silently references an unrelated *PR*).
+**Body: write only two sections.** `open-pr.sh` assembles the rest (Risk, Review, Tests,
+tracker footer) from the diff and the review report, so don't restate the ticket, the
+commits or the review. Write each to a temp file:
 
-Write what a reviewer needs: what changed, why, what needs their judgment. Match the
-repo's existing PR bodies for depth.
+- **Summary** — at most 3 one-line `- ` bullets: what changed and why.
+- **Needs your judgment** — at most 3 one-line `- ` items, or the single word `none`.
+
+The script rejects a section over its cap. Chained branches: one Summary bullet per ticket, merging tickets when there are more than 3.
+
+First try the early draft the review cycle saved:
+
+```bash
+pr-body.sh draft load --base <default-branch> --summary-file <summary-tmp> --judgment-file <judgment-tmp>
+```
+
+Exit 0 means it matches the current commit and touched files: use the files as written. Exit 1
+means missing or stale: draft both sections inline from the diff.
 
 Show the drafted artifacts in full, then proceed immediately — running `/open-pr` is
 itself the approval to commit, push, and open the PR. Don't wait for `execute`.
 
-### 3. Commit (if dirty)
+### 3. Ship
 
-```bash
-git add -A
-git commit -m "<drafted message>"
-```
-
-Append the Co-Authored-By trailer unless the approved message already has one.
-
-### 4. Ship
+Write the commit message (if the tree is dirty) to a temp file, with the Co-Authored-By
+trailer unless the drafted message already has one. Then one call:
 
 ```bash
 # first ship — pass the title BARE, exactly as drafted:
-open-pr.sh --title "<bare short title>" --body-file <tmp-file> --review <level> [--provider <name>] [--draft] [--issue <a,b>]
+open-pr.sh --title "<bare short title>" --summary-file <summary-tmp> --judgment-file <judgment-tmp> --test-result "<one line>" [--commit-message-file <msg-tmp>] --review <level> [--provider <name>] [--draft] [--issue <a,b>] [--no-watch]
 
 # existing PR — reuse its title/body:
-open-pr.sh --review <level> [--provider <name>]
+open-pr.sh [--commit-message-file <msg-tmp>] --review <level> [--provider <name>] [--no-watch]
 ```
 
-Forward the user's `--provider`/`--env` verbatim if they gave one; omit otherwise.
-Capture from stdout: `pr_number`, `pr_url`, `pr_action`, `provider`, `trigger_mode`,
-`pr_title`, and `pr_title_repaired_from` (present only if the script fixed a doubled
-prefix — mention it in the report). No need to read the title back yourself.
+`--test-result` is the one-line outcome of the project's tests from this session ("42 passed",
+or "not run: <why>"). Never claim a pass that didn't run.
 
-The script also stamps the agent-view row `[REVIEW][PR]` (or `[REVIEWED][PR]` / `[PR]` when no bot will
-review; see global CLAUDE.md). Don't set it by hand or report it as a separate action.
+Forward the user's `--provider`/`--env` and `--no-watch` verbatim if they gave them; omit otherwise.
+The script commits, pushes, opens or reuses the PR, triggers reviews, stamps the agent-view
+row (`[L2✓ G1][PR]`-style review tags, `[PR]`), and starts the detached review watch. Don't
+repeat any of that by hand. It prints `pr_number`, `pr_url`, `pr_action`, `provider`,
+`trigger_mode`, `pr_title`, `pr_title_repaired_from` (only if it fixed a doubled prefix —
+mention it), `watch=started|skipped`, then a `Shipped … / PR … / Reviews …` block.
 
-Then, directly in this session, run:
+The watch polls for review comments in the background; when it ends it sends a macOS
+notification and a `pr.watch` event. On "comments arrived", run `/github-review-comments`.
+The session can be left once this step returns.
 
-```bash
-git push --no-verify origin "$(git branch --show-current)"
-```
-
-A no-op ("Everything up-to-date") that lets an agent-view session see a push and link the
-PR on its row; `open-pr.sh`'s own push happens in a subprocess and may not register.
-`--no-verify` because the real push already ran the hooks.
-
-### 4a. Fan out to the ticket's other repos
+### 4. Fan out to the ticket's other repos
 
 A ticket is often implemented across several repos, each with its own worktree on a branch
-carrying the same ticket id. Steps 1–4 shipped **only the repo you're standing in**.
+carrying the same ticket id. Steps 1–3 shipped **only the repo you're standing in**.
 
 Skip entirely if `--no-multi`. Otherwise:
 
@@ -155,37 +157,22 @@ failures are per-sibling and **non-fatal** — report with the manual fallback a
 going. Never `cd` into a sibling worktree to ship it yourself: that pulls two codebases
 into one context.
 
-### 5. Poll
+### 5. Relay
 
-```bash
-~/.claude/skills/github-review-procedure/github-review-poll.sh <pr_number>
-```
-
-Run in the background. Exit 0 → re-invoke `/github-review-comments`, which runs each round in a
-fresh `github-review-repair-agent` so implementation context never reaches the review; 3 → signed off, ready to
-merge; 1 → timeout; 2 → no PR found; 4 → a reviewer said it couldn't run (e.g. Copilot
-billing): report that, run `agent-phase.sh --attn`, and don't poll again.
-
-Skip **only** when `--review none` was passed *and* `trigger_mode=manual` — the one case
-where no bot will ever comment. Under `trigger_mode=auto` the bots fire on PR open
-regardless of `--review`. When in doubt, poll.
-
-Poll **only this session's PR**. Each sibling runs its own `/open-pr` and polls its own —
-one session per PR. Polling a sibling's from here would race it.
-
-### 6. Report
+Print the script's `Shipped … / PR … / Reviews …` block as the report. Add, when step 4
+found siblings:
 
 ```
-Shipped <ticket-ref> — <title>
-PR #<n>: <url>  (created | reused)
-Reviews: <requested: copilot|copilot+claude  |  automatic on PR open  |  none>
 Also on this ticket: <sibling-repo> (<branch>) — session dispatched, will open its own PR
                      <sibling-repo> (<branch>) — dispatch FAILED: <why>; run `cd <wt> && claude`
 ```
 
-Omit the "Also on this ticket" lines when step 4a found no siblings. Report dispatched
-siblings as *sessions started*, not PRs opened — you don't know their PR numbers and must
-not guess. Take `<ticket-ref>` from the `pr_title` the script reported rather than
-inventing a format. Under `trigger_mode=auto`, say reviews fire automatically; don't claim
-to have requested them.
+Report dispatched siblings as *sessions started*, not PRs opened — you don't know their PR
+numbers and must not guess. Under `trigger_mode=auto`, the script's Reviews line says reviews
+fire automatically; don't claim to have requested them.
 
+**Milestone and board fields.** If the ticket has a milestone, set it on the PR over REST
+(`gh api -X PATCH repos/<o>/<r>/issues/<pr> -F milestone=<n>`; works through the cloud
+shim). Board fields (GitHub Projects v2: Status, Track, Priority, …) need GraphQL, which
+cloud blocks and the MCP tools lack: end the report with the board fields the owner must set
+by hand, or "none".

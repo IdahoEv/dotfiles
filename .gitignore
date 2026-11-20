@@ -1,7 +1,13 @@
 # Local Claude state is untracked; the kickoff preamble is shared.
 .claude/*
 !.claude/kickoff-preamble.md
+!.claude/project-review.md
+
 
 # Python bytecode from skill scripts.
 __pycache__/
 *.pyc
+
+*.local
+*/.scratch
+

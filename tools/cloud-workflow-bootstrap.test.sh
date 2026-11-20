@@ -6,6 +6,9 @@ bootstrap="$tools_dir/cloud-workflow-bootstrap.sh"
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
 
+export WORKFLOW_FETCH=archive   # the default tries archive then raw; most cases pin the archive path
+unset GITHUB_TOKEN WORKFLOW_SRC WORKFLOW_INSTALL WORKFLOW_HOME WORKFLOW_BIN_DIR CLAUDE_CONFIG_DIR CLAUDE_ENV_FILE
+
 sha=0123456789abcdef0123456789abcdef01234567
 pin=fedcba9876543210fedcba9876543210fedcba98
 
@@ -22,6 +25,7 @@ printf '%s\n' "$*" >> "$MOCK_CURL_ARGS"
 while (($#)); do
   case "$1" in
     -o) out="$2"; shift 2 ;;
+    --proto|--proto-redir) shift 2 ;;
     -*) shift ;;
     *) url="$1"; shift ;;
   esac
@@ -29,12 +33,12 @@ done
 printf '%s\n' "$url" >> "$MOCK_CURL_URLS"
 [[ "${MOCK_CURL_FAIL:-}" != 1 ]] || exit 22
 case "$url" in
-  https://api.github.com/repos/IdahoEv/dotfiles/commits/*)
-    if [[ -n "${MOCK_API_BODY:-}" ]]; then
-      printf '%s\n' "$MOCK_API_BODY"
-    else
-      printf '{"sha":"0123456789abcdef0123456789abcdef01234567"}\n'
-    fi ;;
+  https://raw.githubusercontent.com/IdahoEv/dotfiles/*/*)
+    rel="${url#https://raw.githubusercontent.com/IdahoEv/dotfiles/}"; rel="${rel#*/}"
+    [[ "$rel" != "${MOCK_RAW_FAIL:-}" ]] || exit 22
+    [[ -n "$out" ]] || exit 2
+    mkdir -p "$(dirname "$out")"
+    cp "$MOCK_RAW_DIR/$rel" "$out" ;;
   https://codeload.github.com/IdahoEv/dotfiles/tar.gz/*)
     [[ "${MOCK_ARCHIVE_FAIL:-}" != 1 ]] || exit 22
     [[ -n "$out" ]] || exit 2
@@ -44,10 +48,26 @@ esac
 MOCK_CURL
 chmod +x "$tmp/bin/curl"
 
+# pack <src-dir> <top-dir> <out.tar.gz> <commit>: a GitHub-style archive whose pax header names the commit.
+pack() {
+  python3 -I - "$@" <<'PY'
+import sys, tarfile
+src, top, out, commit = sys.argv[1:]
+with tarfile.open(out, "w:gz", format=tarfile.PAX_FORMAT, pax_headers={"comment": commit}) as tf:
+    tf.add(f"{src}/{top}", arcname=top)
+PY
+}
+
 # make_archive <name> [omit-path]: a repo snapshot shaped like the dotfiles checkout.
 make_archive() {
   local name="$1" omit="${2:-}" root="$tmp/src-$1/dotfiles-$sha"
-  mkdir -p "$root/dot_claude/commands" "$root/tools" "$root/workflow/adapters"
+  mkdir -p "$root/dot_claude/commands" "$root/dot_claude/agents" "$root/dot_claude/skills/proc" "$root/tools" "$root/workflow/adapters"
+  printf '# Agent\n' > "$root/dot_claude/agents/reviewer.md"
+  printf '# Skill\n' > "$root/dot_claude/skills/proc/SKILL.md"
+  printf '#!/usr/bin/env bash\necho poll\n' > "$root/dot_claude/skills/proc/executable_poll.sh"
+  printf '# Template\n' > "$root/dot_claude/CLAUDE.md.tmpl"
+  printf '#!/usr/bin/env python3\nprint("shim")\n' > "$root/tools/cloud-gh-shim.py"
+  printf '# Claude cloud adapter\n' > "$root/workflow/adapters/claude-cloud.md"
   printf '# Start\n' > "$root/dot_claude/commands/start.md"
   printf '# Open PR\n' > "$root/dot_claude/commands/open-pr.md"
   printf '# Codex adapter\n' > "$root/workflow/adapters/codex.md"
@@ -57,13 +77,15 @@ make_archive() {
   printf '#!/usr/bin/env bash\nexit 0\n' > "$root/tools/open-pr.test.sh"
   chmod +x "$root"/tools/*.sh
   [[ -z "$omit" ]] || rm -f "$root/$omit"
-  tar -czf "$tmp/$name.tar.gz" -C "$tmp/src-$name" "dotfiles-$sha"
+  pack "$tmp/src-$name" "dotfiles-$sha" "$tmp/$name.tar.gz" "$sha"
 }
 make_archive valid
 make_archive no-start dot_claude/commands/start.md
 make_archive no-adapter workflow/adapters/codex.md
 make_archive no-agy-adapter workflow/adapters/agy.md
+make_archive no-claude-adapter workflow/adapters/claude-cloud.md
 make_archive no-tool tools/open-pr.sh
+make_archive no-shim tools/cloud-gh-shim.py
 : > "$tmp/empty.tar.gz"
 printf 'not a tarball' > "$tmp/corrupt.tar.gz"
 
@@ -92,41 +114,202 @@ bin_dir="$(sed -n 's/^workflow_bin=//p' "$tmp/run.out")"
 [[ -x "$bin_dir/start-ticket.sh" && -x "$bin_dir/open-pr.sh" ]] || fail "tools should be exposed on workflow_bin"
 [[ ! -e "$bin_dir/open-pr.test.sh" ]] || fail "test scripts must not be exposed"
 [[ "$("$bin_dir/start-ticket.sh")" == start-ticket ]] || fail "exposed tool should run"
-grep -q 'IdahoEv/dotfiles/commits/main$' "$tmp/curl.urls" || fail "default ref should resolve main"
-grep -q "tar.gz/$sha\$" "$tmp/curl.urls" || fail "archive should be fetched by resolved SHA"
-pass "fetches the repo at one SHA, extracts it, exposes tools, reports the SHA"
+grep -q 'tar.gz/main$' "$tmp/curl.urls" || fail "default ref should fetch main"
+! grep -q 'api.github.com' "$tmp/curl.urls" || fail "the GitHub API must not be called"
+grep -q "workflow_source_url=.*tar.gz/$sha\$" "$tmp/run.out" || fail "the reported URL should be pinned to the commit"
+pass "fetches the repo once with no API call, reports the commit from the archive header"
 
+pack "$tmp/src-valid" "dotfiles-$sha" "$tmp/valid-pin.tar.gz" "$pin"
 : > "$MOCK_CURL_URLS"
-run valid WORKFLOW_REF="$pin" || fail "pinned SHA should load"
-! grep -q 'api.github.com' "$MOCK_CURL_URLS" || fail "a full SHA ref needs no API call"
+run valid-pin WORKFLOW_REF="$pin" || fail "pinned SHA should load"
 grep -q "tar.gz/$pin\$" "$MOCK_CURL_URLS" || fail "pinned SHA should be fetched verbatim"
 grep -q "workflow_source_commit=$pin" "$tmp/run.out" || fail "pinned SHA should be reported"
+expect_failure "pinned SHA mismatch" 'Pinned WORKFLOW_REF' valid "WORKFLOW_REF=$pin"
 : > "$MOCK_CURL_URLS"
 run valid WORKFLOW_REF=v1.2 || fail "tag ref should load"
-grep -q 'commits/v1.2$' "$MOCK_CURL_URLS" || fail "a tag ref should be resolved through the API"
+grep -q 'tar.gz/v1.2$' "$MOCK_CURL_URLS" || fail "a tag ref should be fetched by name"
 expect_failure "invalid ref" 'Invalid WORKFLOW_REF' valid 'WORKFLOW_REF=../etc'
-pass "WORKFLOW_REF pins a SHA or tag and rejects unsafe values"
+pass "WORKFLOW_REF pins a SHA (verified against the archive) or names a tag, and rejects unsafe values"
 
-expect_failure "API failure" 'Could not read' valid MOCK_CURL_FAIL=1
-expect_failure "malformed SHA" 'invalid commit response' valid 'MOCK_API_BODY={"sha":"abc"}'
-expect_failure "non-JSON body" 'invalid commit response' valid 'MOCK_API_BODY=not json'
-pass "fails closed when the ref cannot be resolved"
+tar -czf "$tmp/nopax.tar.gz" -C "$tmp/src-valid" "dotfiles-$sha"
+expect_failure "archive without a commit id" 'Could not determine the commit' nopax
+pass "fails closed when the archive does not name its commit"
 
 expect_failure "archive fetch failure" 'Could not fetch' valid MOCK_ARCHIVE_FAIL=1
-expect_failure "empty archive" 'Could not extract\|missing required' empty
-expect_failure "corrupt archive" 'Could not extract' corrupt
+expect_failure "empty archive" 'Could not determine the commit' empty
+expect_failure "corrupt archive" 'Could not determine the commit' corrupt
 pass "fails closed when the archive cannot be fetched or extracted"
 
 expect_failure "missing command" 'missing required' no-start
 expect_failure "missing codex adapter" 'missing required' no-adapter
 expect_failure "missing agy adapter" 'missing required' no-agy-adapter
+expect_failure "missing claude-cloud adapter" 'missing required' no-claude-adapter WORKFLOW_INSTALL=claude HOME="$tmp/h0"
+expect_failure "missing gh shim" 'missing required' no-shim WORKFLOW_INSTALL=claude HOME="$tmp/h0"
 expect_failure "missing tool" 'missing required' no-tool
 pass "rejects a snapshot missing a required command, adapter, or tool"
 
-! grep -q 'Authorization' "$MOCK_CURL_ARGS" || fail "no Authorization header expected without GITHUB_TOKEN"
 grep -q -- '--max-time' "$MOCK_CURL_ARGS" || fail "curl calls should set a total timeout"
 grep -q -- '--retry' "$MOCK_CURL_ARGS" || fail "curl calls should retry"
-: > "$MOCK_CURL_ARGS"
-run valid GITHUB_TOKEN=tok || fail "token run should succeed"
-[[ "$(grep -c 'Authorization: Bearer tok' "$MOCK_CURL_ARGS")" == 1 ]] || fail "token should be sent on the API call only"
-pass "sends timeouts/retry always and the token only on the API call when set"
+! grep -q 'Authorization' "$MOCK_CURL_ARGS" || fail "no credentials are sent"
+pass "sends timeouts/retry and no credentials"
+
+# Claude Code cloud install: commands/agents/skills land in the config dir, tools on PATH.
+home="$tmp/home"; mkdir -p "$home"
+env_file="$tmp/claude-env"; : > "$env_file"
+rm -rf "$tmp"/dotfiles-workflow.*
+run valid WORKFLOW_INSTALL=claude HOME="$home" WORKFLOW_BIN_DIR="$tmp/installbin" CLAUDE_ENV_FILE="$env_file" \
+  || fail "claude install should succeed"
+[[ -f "$home/.claude/commands/start.md" && -f "$home/.claude/agents/reviewer.md" ]] || fail "commands and agents should be installed"
+[[ -x "$home/.claude/skills/proc/poll.sh" ]] || fail "executable_ prefix should be stripped and the file made executable"
+[[ ! -e "$home/.claude/CLAUDE.md" && ! -e "$home/.claude/CLAUDE.md.tmpl" ]] || fail "the global CLAUDE.md template must not be installed"
+[[ "$("$tmp/installbin/start-ticket.sh")" == start-ticket ]] || fail "installed tool link should run"
+[[ ! -e "$tmp/installbin/open-pr.test.sh" ]] || fail "test scripts must not be linked"
+root="$(sed -n 's/^workflow_root=//p' "$tmp/run.out")"
+[[ "$root" == "$home/.cache/dotfiles-workflow/$sha" && -f "$root/workflow/adapters/claude-cloud.md" ]] || fail "install should keep the snapshot under WORKFLOW_HOME"
+grep -q 'export PATH=' "$env_file" || fail "PATH should be exported through CLAUDE_ENV_FILE"
+grep -q "workflow_claude_dir=$home/.claude" "$tmp/run.out" || fail "the config dir should be reported"
+[[ "$("$home/.cache/dotfiles-workflow/shim/gh")" == shim ]] || fail "the gh shim should be installed as gh"
+grep -q "workflow_shim=$home/.cache/dotfiles-workflow/shim" "$tmp/run.out" || fail "the shim dir should be reported"
+grep -q "shim:$tmp/installbin" "$env_file" || fail "the shim must precede the tool links on PATH"
+run valid WORKFLOW_INSTALL=claude HOME="$home" WORKFLOW_BIN_DIR="$tmp/installbin" || fail "no-hook install should succeed"
+grep -q "shim:$tmp/installbin" "$home/.bashrc" || fail "without CLAUDE_ENV_FILE, PATH should persist in ~/.bashrc"
+run valid WORKFLOW_INSTALL=claude HOME="$home" WORKFLOW_BIN_DIR="$tmp/installbin" || fail "re-running the install should succeed"
+[[ "$(grep -c 'shim:' "$env_file")" == 1 ]] || fail "CLAUDE_ENV_FILE must not collect duplicate PATH lines"
+no_leftovers || fail "a claude install should clean up its temp dir"
+[[ "$(grep -c 'shim:' "$home/.bashrc")" == 1 ]] || fail "~/.bashrc must not collect duplicate PATH lines"
+# Settings: allow-only file, merged into existing settings, no hooks, idempotent.
+[[ -f "$home/.claude/settings.json" ]] || fail "cloud allow settings should be installed"
+python3 - "$home/.claude/settings.json" <<'PY' || fail "settings should hold the allow rules and no hooks"
+import json, sys
+c = json.load(open(sys.argv[1]))
+a = c["permissions"]["allow"]
+assert "Bash(git commit:*)" in a and "Bash(git push -u origin:*)" in a and "Bash(git push --no-verify origin:*)" in a and len(a) == len(set(a))
+assert "hooks" not in c
+PY
+printf '{"model":"x","permissions":{"allow":["Bash(ls:*)"]}}\n' > "$home/.claude/settings.json"
+run valid WORKFLOW_INSTALL=claude HOME="$home" WORKFLOW_BIN_DIR="$tmp/installbin" || fail "install over existing settings should succeed"
+python3 - "$home/.claude/settings.json" <<'PY' || fail "existing settings must be kept and merged"
+import json, sys
+c = json.load(open(sys.argv[1]))
+assert c["model"] == "x" and "Bash(ls:*)" in c["permissions"]["allow"] and "Bash(git add:*)" in c["permissions"]["allow"]
+PY
+pass "claude install adds allow-only cloud settings without clobbering"
+
+# System gh: the shim replaces gh in the system bin dir; a real gh there is kept as gh.real.
+sysbin="$tmp/sysbin"; mkdir -p "$sysbin"; printf '#!/bin/sh\necho real\n' > "$sysbin/gh"; chmod +x "$sysbin/gh"
+run valid WORKFLOW_INSTALL=claude HOME="$home" WORKFLOW_BIN_DIR="$sysbin" WORKFLOW_SYSTEM_BIN="$sysbin" || fail "system gh install should succeed"
+[[ "$("$sysbin/gh.real")" == real ]] || fail "the displaced real gh should be kept as gh.real"
+[[ "$("$sysbin/gh")" == shim ]] || fail "the shim should be the system gh"
+grep -q "workflow_system_gh=$sysbin/gh" "$tmp/run.out" || fail "the system gh should be reported"
+run valid WORKFLOW_INSTALL=claude HOME="$home" WORKFLOW_BIN_DIR="$sysbin" WORKFLOW_SYSTEM_BIN="$sysbin" || fail "re-running system gh install should succeed"
+[[ "$("$sysbin/gh.real")" == real ]] || fail "re-install must not overwrite gh.real with the shim"
+pass "shim installs as the system gh with the real binary kept"
+
+expect_failure "unknown install mode" 'Invalid WORKFLOW_INSTALL' valid WORKFLOW_INSTALL=bogus
+pass "WORKFLOW_INSTALL=claude installs commands, agents, skills and tool links, idempotently"
+
+# A pre-Claude-support snapshot still loads for the hosts that do not install; only the install needs the new files.
+run no-claude-adapter || fail "a snapshot without claude-cloud files should still load for non-install runs"
+expect_failure "install without claude files" 'missing required' no-claude-adapter WORKFLOW_INSTALL=claude HOME="$home"
+# Symlinked tools are not linked or chmodded; a real binary of the same name is not replaced.
+make_archive evil
+ln -sf /etc/hostname "$tmp/src-evil/dotfiles-$sha/tools/evil.sh"
+pack "$tmp/src-evil" "dotfiles-$sha" "$tmp/evil.tar.gz" "$sha"
+mkdir -p "$tmp/evilbin"; printf '#!/bin/sh\necho real\n' > "$tmp/evilbin/open-pr.sh"; chmod +x "$tmp/evilbin/open-pr.sh"
+run evil WORKFLOW_INSTALL=claude HOME="$home" WORKFLOW_BIN_DIR="$tmp/evilbin" || fail "evil archive should still install"
+[[ ! -e "$tmp/evilbin/evil.sh" ]] || fail "symlinked tools must not be linked"
+[[ "$("$tmp/evilbin/open-pr.sh")" == real ]] || fail "an existing non-link binary must not be replaced"
+pass "install requires claude files only in install mode; skips symlinked tools; keeps existing binaries"
+
+# WORKFLOW_SRC: install from a local clone (a session whose GitHub scope refuses codeload for this repo).
+srcrepo="$tmp/clone"; mkdir -p "$srcrepo"
+cp -a "$tmp/src-valid/dotfiles-$sha/." "$srcrepo/"
+git -C "$srcrepo" init -q -b main && git -C "$srcrepo" add -A \
+  && git -C "$srcrepo" -c user.name=t -c user.email=t@t commit -q -m snapshot
+head_sha="$(git -C "$srcrepo" rev-parse HEAD)"
+echo "uncommitted" > "$srcrepo/dot_claude/commands/start.md"
+: > "$MOCK_CURL_URLS"
+home2="$tmp/home2"; mkdir -p "$home2"
+run valid WORKFLOW_SRC="$srcrepo" WORKFLOW_INSTALL=claude HOME="$home2" WORKFLOW_BIN_DIR="$tmp/srcbin" \
+  || fail "install from a local clone should succeed"
+[[ ! -s "$MOCK_CURL_URLS" ]] || fail "WORKFLOW_SRC must not download anything"
+grep -q "workflow_source_commit=$head_sha" "$tmp/run.out" || fail "the clone's HEAD should be reported"
+[[ "$(cat "$home2/.claude/commands/start.md")" == "# Start" ]] || fail "only the committed tree is installed, not uncommitted edits"
+[[ "$("$tmp/srcbin/start-ticket.sh")" == start-ticket ]] || fail "tools from the clone should run"
+git -C "$srcrepo" checkout -q -- .
+if run valid WORKFLOW_SRC="$tmp/not-a-repo"; then fail "a non-git WORKFLOW_SRC must fail closed"; fi
+grep -q 'not found in WORKFLOW_SRC' "$tmp/run.err" || fail "a bad WORKFLOW_SRC should be explained"
+pass "WORKFLOW_SRC installs the committed tree of a local clone without downloading"
+
+# Raw fetch: the archive is refused (a session scoped to other repos), so files come from
+# raw.githubusercontent.com, verified against workflow/manifest.txt.
+raw="$tmp/raw"; rm -rf "$raw"; mkdir -p "$raw"
+cp -a "$tmp/src-valid/dotfiles-$sha/." "$raw/"
+python3 -I - "$raw" <<'PY'
+import hashlib, os, sys
+root = sys.argv[1]
+lines = []
+for d, _, files in os.walk(root):
+    for f in files:
+        full = os.path.join(d, f)
+        rel = os.path.relpath(full, root)
+        if rel == "workflow/manifest.txt":
+            continue
+        mode = "755" if os.access(full, os.X_OK) else "644"
+        lines.append(f"{hashlib.sha256(open(full, 'rb').read()).hexdigest()}  {mode}  {rel}\n")
+os.makedirs(os.path.join(root, "workflow"), exist_ok=True)
+open(os.path.join(root, "workflow", "manifest.txt"), "w").write("".join(sorted(lines, key=lambda l: l.split("  ", 2)[2])))
+PY
+export MOCK_RAW_DIR="$raw"
+rawrun() { run valid MOCK_ARCHIVE_FAIL=1 WORKFLOW_FETCH= "$@"; }   # default mode: archive refused, raw fallback
+
+: > "$MOCK_CURL_URLS"
+rawrun || fail "raw fallback should install when the archive is refused"
+grep -q 'archive download failed' "$tmp/run.err" || fail "the fallback should be announced"
+grep -q 'workflow_source_commit=manifest-[0-9a-f]\{12\}$' "$tmp/run.out" || fail "a branch ref is stamped with the manifest digest"
+grep -q 'workflow_source_ref=main' "$tmp/run.out" || fail "the ref should be reported"
+root="$(sed -n 's/^workflow_root=//p' "$tmp/run.out")"
+[[ -f "$root/dot_claude/commands/start.md" && -x "$root/tools/open-pr.sh" ]] || fail "files and modes should come from the manifest"
+! grep -q 'api.github.com' "$MOCK_CURL_URLS" || fail "raw mode must not call the API"
+pass "falls back to raw.githubusercontent.com files verified against the manifest"
+
+: > "$MOCK_CURL_URLS"
+run valid WORKFLOW_FETCH=raw || fail "WORKFLOW_FETCH=raw should install"
+! grep -q 'codeload' "$MOCK_CURL_URLS" || fail "WORKFLOW_FETCH=raw must not touch codeload"
+run valid WORKFLOW_FETCH=raw WORKFLOW_REF="$pin" || fail "a pinned SHA should load via raw"
+grep -q "workflow_source_commit=$pin" "$tmp/run.out" || fail "a pinned SHA is its own commit stamp"
+expect_failure "invalid fetch mode" 'Invalid WORKFLOW_FETCH' valid WORKFLOW_FETCH=bogus
+pass "WORKFLOW_FETCH forces raw-only; a pinned SHA keeps its exact stamp"
+
+cp "$raw/tools/open-pr.sh" "$tmp/open-pr.sh.orig"
+printf '# tampered\n' >> "$raw/tools/open-pr.sh"
+expect_failure "tampered file" 'does not match workflow/manifest.txt' valid WORKFLOW_FETCH=raw
+cp "$tmp/open-pr.sh.orig" "$raw/tools/open-pr.sh"
+expect_failure "missing file" 'Could not fetch every file' valid WORKFLOW_FETCH=raw MOCK_RAW_FAIL=tools/open-pr.sh
+cp "$raw/workflow/manifest.txt" "$tmp/manifest.orig"
+printf '%s  644  ../escape.txt\n' "$(printf x | sha256sum | cut -d' ' -f1)" >> "$raw/workflow/manifest.txt"
+expect_failure "traversal in manifest" 'manifest.txt is malformed' valid WORKFLOW_FETCH=raw
+cp "$tmp/manifest.orig" "$raw/workflow/manifest.txt"
+pass "raw mode fails closed on tampered files, missing files, and a manifest with unsafe paths"
+
+home3="$tmp/home3"; mkdir -p "$home3"
+rawrun WORKFLOW_INSTALL=claude HOME="$home3" WORKFLOW_BIN_DIR="$tmp/rawbin" || fail "claude install should work from raw files"
+[[ -f "$home3/.claude/commands/start.md" && "$("$tmp/rawbin/start-ticket.sh")" == start-ticket ]] || fail "raw-fetched snapshot should install like an archive"
+pass "WORKFLOW_INSTALL=claude installs from a raw-fetched snapshot"
+
+# Local-clone provenance and ref handling.
+run valid WORKFLOW_SRC="$srcrepo" || fail "WORKFLOW_SRC with no ref should install HEAD"
+grep -q 'workflow_source_ref=local:HEAD$' "$tmp/run.out" || fail "the local ref should say HEAD, not main"
+grep -q 'does not have origin' "$tmp/run.err" || fail "a clone whose origin is not the repo should be warned about"
+git -C "$srcrepo" checkout -q -b feature/x
+run valid WORKFLOW_SRC="$srcrepo" WORKFLOW_REF=feature/x || fail "a slash ref should work against a local clone"
+grep -q 'workflow_source_ref=local:feature/x$' "$tmp/run.out" || fail "the requested local ref should be reported"
+expect_failure "option-like local ref" 'Invalid WORKFLOW_REF' valid WORKFLOW_SRC="$srcrepo" WORKFLOW_REF=--output=/tmp/x
+expect_failure "unknown local ref" 'not found in WORKFLOW_SRC' valid WORKFLOW_SRC="$srcrepo" WORKFLOW_REF=nope
+grep -q -- '--proto =https' "$MOCK_CURL_ARGS" || run valid || true
+run valid || fail "plain run"
+grep -q -- '--proto =https' "$MOCK_CURL_ARGS" || fail "curl must be limited to https, including redirects"
+grep -q -- '--proto-redir =https' "$MOCK_CURL_ARGS" || fail "curl redirects must stay on https"
+rawrun MOCK_RAW_FAIL=workflow/manifest.txt && fail "a missing manifest must fail"
+grep -q 'older than workflow/manifest.txt' "$tmp/run.err" || fail "a missing manifest should explain old refs"
+pass "local provenance names the real ref, slash refs work locally, curl is https-only, old refs are explained"

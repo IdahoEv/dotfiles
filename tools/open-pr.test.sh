@@ -4,7 +4,7 @@
 #
 #   open-pr.test.sh
 #
-# Plain script, exits non-zero on failure (see lib/repo-facts.test.sh). `gh` is
+# Plain script, exits non-zero on failure (see finalize-check.test.sh). `gh` is
 # a stub that records `pr create` args; git talks to a throwaway bare origin,
 # and HOME is a temp dir so ~/.config can't leak in.
 
@@ -31,6 +31,7 @@ cat > "$ROOT/bin/gh" <<'STUB'
 #!/usr/bin/env bash
 case "$1 $2" in
   "auth status") exit 0 ;;
+  "repo view")   exit 1 ;;
   "pr list")     [ -n "${GH_EXISTING_PR:-}" ] && echo "$GH_EXISTING_PR"; exit 0 ;;
   "pr create")
     shift 2
@@ -50,11 +51,32 @@ case "$1 $2" in
       *url*)    echo https://example.test/pr/1 ;;
       *title*)  cat "$GH_LOG.title" 2>/dev/null || echo "existing title" ;;
     esac ;;
+  "pr edit")
+    shift 2
+    while [ $# -gt 0 ]; do
+      case "$1" in
+        --title) printf '%s' "$2" > "$GH_LOG.title"; shift 2 ;;
+        *) shift ;;
+      esac
+    done ;;
   *) echo "gh $*" >> "$GH_LOG" ;;
 esac
 STUB
 chmod +x "$ROOT/bin/gh"
 export PATH="$ROOT/bin:$PATH"
+cat > "$ROOT/bin/watch-stub" <<'STUB'
+#!/usr/bin/env bash
+echo "$*" > "$WATCH_ARGS"
+STUB
+chmod +x "$ROOT/bin/watch-stub"
+export OPEN_PR_WATCH="$ROOT/bin/watch-stub" WATCH_ARGS="$ROOT/watch.args"
+cat > "$ROOT/bin/review-stub" <<'STUB'
+#!/usr/bin/env bash
+echo "$*" >> "$REVIEW_ARGS"
+exit "${REVIEW_STUB_RC:-0}"
+STUB
+chmod +x "$ROOT/bin/review-stub"
+export OPEN_PR_REQUEST_REVIEW="$ROOT/bin/review-stub" REVIEW_ARGS="$ROOT/review.args"
 
 # Fresh repo + origin on <branch>; leaves cwd inside it.
 new_repo() {  # <branch> [conf-contents]
@@ -80,7 +102,20 @@ body()  { cat "$GH_LOG.body" 2>/dev/null; }
 new_repo 42-foo
 out="$(run --title "Add foo" --review none)"
 check "github: default provider"      "provider=github" "$(grep '^provider=' <<<"$out")"
-check "github: plain title"           "Add foo" "$(title)"
+check "github: Is<NNN> title"         "Is42: Add foo" "$(title)"
+check "github: no repair needed"      "0" "$(grep -c '^pr_title_repaired_from=' <<<"$out")"
+
+new_repo 42-foo
+out="$(run --title "Is42: Add foo" --review none)"
+check "github: caller prefix not doubled" "Is42: Add foo" "$(title)"
+check "github: no repair for own prefix"  "0" "$(grep -c '^pr_title_repaired_from=' <<<"$out")"
+new_repo 42-foo
+out="$(run --title "Is42 Add foo" --review none)"
+check "github: colon-less prefix repaired" "Is42: Add foo" "$(title)"
+check "github: repair reported"            "pr_title_repaired_from=Is42: Is42 Add foo" "$(grep '^pr_title_repaired_from=' <<<"$out")"
+new_repo 42-foo
+run --title "sc-42: Add foo" --review none >/dev/null
+check "github: foreign prefix repaired"    "Is42: Add foo" "$(title)"
 check "github: default body"          "Closes #42" "$(body)"
 
 printf 'Summary\n' > "$ROOT/b.md"
@@ -92,10 +127,74 @@ printf 'Summary\n\nCloses #42\n' > "$ROOT/b.md"
 run --title "Add foo" --body-file "$ROOT/b.md" --review none >/dev/null
 check "github: footer not duplicated" "1" "$(body | grep -c 'Closes #42')"
 
+# ---- assembled body ---------------------------------------------------------
 new_repo 42-foo
+mkdir tools && echo x > tools/t.sh && git add tools && git commit -q -m tool
+printf -- '- Adds foo\n' > "$ROOT/s.md"; printf 'none\n' > "$ROOT/j.md"
+run --title "Add foo" --summary-file "$ROOT/s.md" --judgment-file "$ROOT/j.md" \
+  --test-result "all green" --body-footer "Provenance: x" --review none >/dev/null
+check "assembled: sections in order" "## Summary ## Needs your judgment ## Risk ## Review ## Tests" \
+  "$(body | grep '^## ' | tr '\n' ' ' | sed 's/ $//')"
+check "assembled: risk from paths"   "1" "$(body | grep -c '\*\*high\*\*')"
+check "assembled: test line"         "all green" "$(body | grep -A1 '^## Tests' | tail -1)"
+check "assembled: body footer kept"  "1" "$(body | grep -c 'Provenance: x')"
+check "assembled: provider footer"   "Closes #42" "$(body | tail -1)"
+
+new_repo 42-foo
+printf -- '- a\n- b\n- c\n- d\n' > "$ROOT/s.md"
+out="$(run --title "Add foo" --summary-file "$ROOT/s.md" --judgment-file "$ROOT/j.md" --review none)"; rc=$?
+check "assembled: over-cap section refused" "1" "$rc"
+check "assembled: nothing created on refusal" "" "$(cat "$GH_LOG" 2>/dev/null)"
+check "assembled: refusal names the cap" "1" "$(grep -c 'at most 3' <<<"$out")"
+
+review_args() { cat "$REVIEW_ARGS" 2>/dev/null; }
+
+new_repo 42-foo; rm -f "$REVIEW_ARGS"
+out="$(run --title "Add foo" --review copilot)"
+check "github home: PR created"            "created" "$(cat "$GH_LOG")"
+check "github home: requests Copilot"      "--pr 1 --level copilot" "$(review_args)"
+check "github home: Reviews line"          "1" "$(grep -c '^Reviews: requested: copilot' <<<"$out")"
+
+new_repo 42-foo; rm -f "$REVIEW_ARGS"
+run --title "Add foo" --review copilot+claude >/dev/null
+check "github home: passes copilot+claude" "--pr 1 --level copilot+claude" "$(review_args)"
+
+new_repo 42-foo; rm -f "$REVIEW_ARGS"
+mkdir -p "$HOME/.config"; touch "$HOME/.config/local-review-only"
+out="$(run --title "Add foo")"
+check "github work: no request"            "" "$(review_args)"
+check "github work: Reviews none"          "Reviews: none" "$(grep '^Reviews:' <<<"$out")"
+
+new_repo 42-foo; rm -f "$REVIEW_ARGS" "$WATCH_ARGS"
+out="$(REVIEW_STUB_RC=1 run --title "Add foo" --review copilot)"; rc=$?
+check "github work explicit: exit 0"       "0" "$rc"
+check "github work explicit: stub invoked" "--pr 1 --level copilot" "$(review_args)"
+check "github work explicit: warns"        "1" "$(grep -c 'review request failed' <<<"$out")"
+check "github work explicit: Reviews"      "1" "$(grep -c '^Reviews: request failed' <<<"$out")"
+check "github work explicit: no watch"     "watch=skipped" "$(grep '^watch=' <<<"$out")"
+check "github work explicit: not launched" "absent" "$([ -e "$WATCH_ARGS" ] && echo present || echo absent)"
+rm -f "$HOME/.config/local-review-only"
+
+new_repo 42-foo; rm -f "$REVIEW_ARGS"
+run --title "Add foo" --review none >/dev/null
+check "github --review none: no request"   "" "$(review_args)"
+
+new_repo 42-foo; rm -f "$REVIEW_ARGS"
+out="$(REVIEW_STUB_RC=1 run --title "Add foo" --review copilot)"; rc=$?
+check "github failed request: exit 0"      "0" "$rc"
+check "github failed request: PR created"  "created" "$(cat "$GH_LOG")"
+check "github failed request: warns"       "1" "$(grep -c 'review request failed' <<<"$out")"
+check "github failed request: Reviews"     "1" "$(grep -c '^Reviews: request failed' <<<"$out")"
+check "github failed request: no watch"    "watch=skipped" "$(grep '^watch=' <<<"$out")"
+
+phase_review_count() { "$TOOLS/agent-phase.sh" --show 2>/dev/null | grep -c "G1"; }
+ws_json='{"version":1,"kind":"ticket","tickets":[{"id":"42"}],"ticket_provider":"github"}'
+new_repo 42-foo; printf '%s\n' "$ws_json" > .workstream.json
+REVIEW_STUB_RC=1 run --title "Add foo" --review copilot >/dev/null
+check "github failed request: no G review tag" "0" "$(phase_review_count)"
+new_repo 42-foo; printf '%s\n' "$ws_json" > .workstream.json
 run --title "Add foo" --review copilot >/dev/null
-check "github: no review triggers"    "created" "$(cat "$GH_LOG")"
-check "github: warns review ignored"  "1" "$(run --title "Add foo" --review copilot | grep -c 'review triggers')"
+check "github ok request: REVIEW phase"        "1" "$(phase_review_count)"
 
 new_repo 42-foo
 out="$(GH_EXISTING_PR=9 run --review none)"
@@ -115,16 +214,18 @@ check "ticketless: body untouched"    "Just a summary" "$(body)"
 new_repo scratch
 run --title "Quick fix" --issue 7 --review none >/dev/null
 check "--issue on unnumbered branch"  "Closes #7" "$(body)"
+check "--issue on unnumbered branch: title" "Is7: Quick fix" "$(title)"
 
 # ---- chains (several issues, one PR) ------------------------------------------
 chain_file() { printf '%s\n' "$@" > "$(git rev-parse --absolute-git-dir)/chain"; }
 new_repo 42-foo
 run --title "Add foo" --issue 42,43,44 --review none >/dev/null
 check "--issue list: one Closes per issue" "Closes #42 Closes #43 Closes #44" "$(body | tr '\n' ' ' | sed 's/ $//')"
-check "--issue list: title uses the head"  "Add foo" "$(title)"
+check "--issue list: title uses the head"  "Is42: Add foo" "$(title)"
 new_repo 42-foo; chain_file 42 43
 run --title "Add foo" --review none >/dev/null
 check "chain file: Closes for every ticket" "Closes #42 Closes #43" "$(body | tr '\n' ' ' | sed 's/ $//')"
+check "chain file: title prefixes the head only" "Is42: Add foo" "$(title)"
 new_repo 42-foo; chain_file 42 43
 printf 'Summary\n\nCloses #43\n' > "$ROOT/b.md"
 run --title "Add foo" --body-file "$ROOT/b.md" --review none >/dev/null
@@ -149,6 +250,19 @@ run --title "Add foo" --review none >/dev/null
 check "no --draft by default" "no" "$([ -e "$GH_LOG.draft" ] && echo yes || echo no)"
 
 # ---- provider resolution ----------------------------------------------------
+# kardashev ships from the Kardashev repo's .project-overlays; stub it here via the override dir.
+mkdir -p "$ROOT/providers"
+cat > "$ROOT/providers/kardashev.sh" <<'PROV'
+PROVIDER_TRIGGER_MODE="manual"
+provider::available() { return 0; }
+provider::validate_issue() { [[ "$1" =~ ^[1-9][0-9]*$ ]]; }
+provider::issue_from_branch() { [[ "$1" =~ ^([1-9][0-9]*)-.+$ ]] && printf '%s\n' "${BASH_REMATCH[1]}"; return 0; }
+provider::pr_title() { printf 'Is%s: %s\n' "$1" "$2"; }
+provider::pr_body() { printf 'Closes #%s\n' "$1"; }
+provider::pr_body_footer() { printf 'Closes #%s\n' "$1"; }
+provider::trigger_reviews() { :; }
+PROV
+export OPEN_PR_PROVIDER_DIR="$ROOT/providers"
 resolved() {  # <branch> <conf> [args…] → provider= line
   local b="$1" c="$2"; shift 2
   new_repo "$b" "$c"
@@ -159,9 +273,108 @@ new_repo 42-foo 'openpr_provider=kardashev'; run --title "T" --review none >/dev
 check "kardashev: Is<NNN> title"       "Is42: T" "$(title)"
 check "kardashev: Closes body"         "Closes #42" "$(body)"
 check "start-ticket provider=github"   "github" "$(resolved 42-foo 'provider=github')"
-check "start-ticket provider=shortcut" "github" "$(resolved 42-foo 'provider=shortcut')"
+check "start-ticket provider=shortcut" "shortcut" "$(resolved 42-foo 'provider=shortcut')"
 check "openpr_provider beats provider" "kardashev" "$(resolved 42-foo $'provider=github\nopenpr_provider=kardashev')"
 check "--provider beats conf"          "github" "$(resolved 42-foo 'openpr_provider=kardashev' --provider github)"
+
+# ---- commit, watch, report ------------------------------------------------------
+new_repo 42-foo
+echo x > f.txt
+printf 'Add f\n\nCo-Authored-By: T <t@t>\n' > "$ROOT/m.txt"
+run --title "Add foo" --commit-message-file "$ROOT/m.txt" --review none >/dev/null
+check "commit: dirty tree committed with the message" "Add f" "$(git log -1 --format=%s)"
+check "commit: trailer kept verbatim"   "1" "$(git log -1 --format=%B | grep -c '^Co-Authored-By')"
+check "commit: tree clean afterwards"   "" "$(git status --porcelain)"
+check "commit: pushed"                  "$(git rev-parse HEAD)" "$(git --git-dir="$ROOT/origin.git" rev-parse 42-foo)"
+new_repo 42-foo
+echo x > f.txt
+out="$(run --title "Add foo" --review none)"
+check "no message file: change left uncommitted" "?? f.txt" "$(git status --porcelain)"
+check "no message file: warned"         "1" "$(grep -c 'uncommitted changes' <<<"$out")"
+new_repo 42-foo
+echo x > f.txt
+run --title "Add foo" --commit-message-file "$ROOT/nope" --review none >/dev/null 2>&1; rc=$?
+check "unreadable message file refused" "1" "$rc"
+
+watch_args() { for _ in $(seq 30); do [ -s "$WATCH_ARGS" ] && break; sleep 0.1; done; cat "$WATCH_ARGS" 2>/dev/null; }
+new_repo 42-foo; rm -f "$WATCH_ARGS"
+out="$(run --title "Add foo" --review copilot)"
+check "watch: started with the PR number" "1" "$(watch_args)"
+check "watch: reported"                 "watch=started" "$(grep '^watch=' <<<"$out")"
+check "report: Shipped line"            "Shipped Is42: Add foo" "$(grep '^Shipped ' <<<"$out")"
+check "report: PR line"                 "PR #1: https://example.test/pr/1  (created)" "$(grep '^PR #' <<<"$out")"
+check "report: Reviews line"            "1" "$(grep -c '^Reviews: requested: copilot; watching' <<<"$out")"
+new_repo 42-foo; rm -f "$WATCH_ARGS"
+out="$(run --title "Add foo" --review none)"
+check "watch: skipped for review none"  "watch=skipped" "$(grep '^watch=' <<<"$out")"
+check "watch: not launched"             "absent" "$([ -e "$WATCH_ARGS" ] && echo present || echo absent)"
+check "report: Reviews none"            "Reviews: none" "$(grep '^Reviews:' <<<"$out")"
+new_repo 42-foo; rm -f "$WATCH_ARGS"
+out="$(run --title "Add foo" --review copilot --no-watch)"
+check "--no-watch skips the watcher"    "watch=skipped" "$(grep '^watch=' <<<"$out")"
+
+# Cloud Is<N>- and chain Is<N>+<M>- branches extract the issue number instead of opening a ticketless PR.
+new_repo Is88-cloud-branch
+out="$(run --title "Cloud fix" --review none)"
+check "cloud Is<N>- branch: PR title prefixed" "Shipped Is88: Cloud fix" "$(grep '^Shipped ' <<<"$out")"
+
+# Single-ticket .workstream.json on a branch without Is<N> prefix resolves the ticket ID.
+new_repo feature/custom-branch
+cat > "$ROOT/repo/.workstream.json" <<'EOF'
+{"version":1,"kind":"ticket","tickets":[{"id":"88"}],"ticket_provider":"github"}
+EOF
+out="$(run --title "Custom branch fix" --review none)"
+check "single-ticket .workstream.json: PR title from resolver" "Shipped Is88: custom branch fix" "$(grep '^Shipped ' <<<"$out")"
+check "single-ticket .workstream.json: Closes footer" "Closes #88" "$(cat "$GH_LOG.body")"
+
+# .workstream.json without --title uses stored desc; chain uses full key.
+new_repo Is42+43-chain-fix
+cat > "$ROOT/repo/.workstream.json" <<'EOF'
+{"version":1,"kind":"ticket","tickets":[{"id":"42","url":""},{"id":"43","url":""}],"ticket_provider":"github","key":"Is42+43","desc":"chain fix","tags":["WIP"]}
+EOF
+out="$(run --review none)"
+check "chain .workstream.json without --title: PR title from resolver" "Shipped Is42+43: chain fix" "$(grep '^Shipped ' <<<"$out")"
+
+# Nested invocations resolve the root workstream record for title and resolver.
+new_repo feature/nested-custom
+mkdir -p "$ROOT/repo/nested/tools"
+cat > "$ROOT/repo/.workstream.json" <<'EOF'
+{"version":1,"kind":"ticket","tickets":[{"id":"89"}],"ticket_provider":"github","desc":"nested directory fix"}
+EOF
+out="$(cd "$ROOT/repo/nested/tools" && run --review none)"
+check "nested .workstream.json without --title: stored description used" "Shipped Is89: nested directory fix" "$(grep '^Shipped ' <<<"$out")"
+check "nested .workstream.json: Closes footer" "Closes #89" "$(cat "$GH_LOG.body")"
+
+# Shortcut open-pr provider: sc-<id> branch, --issue sc-<id>, Story footer (no Closes #).
+new_repo sc-7435-add-cache 'provider=shortcut'
+out="$(run --title "Add cache" --review none)"
+check "shortcut: PR title prefixed" "Shipped sc-7435: Add cache" "$(grep '^Shipped ' <<<"$out")"
+check "shortcut: Story footer, no Closes" "Story: [sc-7435]" "$(cat "$GH_LOG.body")"
+new_repo custom-branch 'provider=shortcut'
+out="$(run --title "Add cache" --issue sc-7435 --review none)"
+check "shortcut: non-integer --issue sc-7435 accepted" "Shipped sc-7435: Add cache" "$(grep '^Shipped ' <<<"$out")"
+
+# The workstream provider overrides config/branch inference; an explicit flag wins.
+new_repo custom-branch
+cat > "$ROOT/repo/.workstream.json" <<'EOF'
+{"version":1,"kind":"ticket","tickets":[{"id":"7435"}],"ticket_provider":"shortcut","desc":"Add cache"}
+EOF
+out="$(run --issue sc-7435 --review none)"
+check "workstream provider: Shortcut selected on custom branch" "shortcut" "$(grep '^provider=' <<<"$out" | cut -d= -f2)"
+check "workstream provider: prefixed issue normalized for title" "Shipped sc-7435: add cache" "$(grep '^Shipped ' <<<"$out")"
+check "workstream provider: prefixed issue footer" "Story: [sc-7435]" "$(cat "$GH_LOG.body")"
+new_repo custom-branch
+cat > "$ROOT/repo/.workstream.json" <<'EOF'
+{"version":1,"kind":"ticket","tickets":[{"id":"7435"}],"ticket_provider":"shortcut","desc":"Add cache"}
+EOF
+out="$(run --provider github --issue 7435 --review none)"
+check "explicit provider overrides workstream provider" "github" "$(grep '^provider=' <<<"$out" | cut -d= -f2)"
+check "explicit provider uses GitHub footer" "Closes #7435" "$(cat "$GH_LOG.body")"
+
+# bug/Is88-foo and Is88/foo branches extract the issue number even without .workstream.json.
+new_repo bug/Is88-foo
+out="$(run --title "Typed branch fix" --review none)"
+check "bug/Is88-foo branch: PR title prefixed" "Shipped Is88: Typed branch fix" "$(grep '^Shipped ' <<<"$out")"
 
 # ---- telemetry --------------------------------------------------------------
 export WF_TELEMETRY_LOG="$ROOT/events.jsonl"

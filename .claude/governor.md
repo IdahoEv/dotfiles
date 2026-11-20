@@ -19,9 +19,24 @@
 ## Adjacent systems
 - **chezmoi** — applies this repo to each machine
 
+## Issue labels
+Goal: make the full workstream command set (`/governor`, `/groom`, `/pick` through `/local-review-cycle` and `/finalize`) work identically across every backend and location.
+
+| Label | Meaning |
+| --- | --- |
+| `agy-parity` | Command support parity for `agy` agents (all Claude Code workflow commands, including `/finalize` and `/groom`) |
+| `codex-parity` | Command support parity for Codex agents |
+| `tmux-parity` | Tmux dashboard feature parity with Claude Code's agents view |
+| `cloud-claude-parity` | All workflow commands available in Claude Code cloud sessions |
+| `cloud-agy-parity` | All workflow commands available in Antigravity/Gemini cloud sessions |
+| `cloud-codex-parity` | All workflow commands available in ChatGPT Codex cloud sessions |
+| `workflow` | Improvements or consistency to the workflow itself (existing commands, new commands, efficiency, developer UI) |
+
 ## Standing responsibilities
 - Keep dotfiles free of project- or repo-specific information, especially work repos.
 - Keep them fast and efficient (shell startup, hooks, scripts).
 - Where they contain Claude or other AI prompts, keep them terse and minimal-token.
 - Changes must transfer and apply cleanly machine to machine (home and work); flag anything machine-specific.
 - Tickets must not contain sensitive or work-identifying details.
+
+Friction from any environment is logged in `docs/friction/<environment>.md`; sessions in other repos file an intake issue titled `[<environment>] <friction>`, which you fold into the matching file during triage.

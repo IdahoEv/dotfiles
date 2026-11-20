@@ -1,6 +1,6 @@
 ---
 name: prompt-review
-description: Canonical rubric for reviewing Claude prompt files — CLAUDE.md, skills, commands, agents, hooks, settings — for staleness, bloat, scope leakage, and duplication. Apply directly for small interactive reviews; branch reviews and corpus audits run it through the prompt-reviewer agent. Not for product code.
+description: Canonical rubric for reviewing Claude prompt files — CLAUDE.md, skills, commands, agents, hooks, settings — for staleness, bloat, scope leakage, and duplication. Apply directly for small interactive reviews; branch reviews and corpus audits run it through the pr-reviewer-prompt agent. Not for product code.
 ---
 
 # Prompt Review
@@ -14,7 +14,7 @@ unless the caller explicitly asks for fixes.
 
 ## Role in the review system
 
-This skill is the rubric. The `prompt-reviewer` agent executes it: in diff
+This skill is the rubric. The `pr-reviewer-prompt` agent executes it: in diff
 mode when `/local-review-cycle` selects it for a branch touching prompt
 files, in corpus mode for `/prompt-audit`. `/prompt-audit` owns committed-file
 collection, the durable report, and the limited `--fix` workflow. For a small
@@ -28,7 +28,7 @@ in a diff, so a diff-scoped pass cannot find it. Files in scope:
 - `CLAUDE.md` at any depth
 - `.claude/skills/**/SKILL.md` and the files a skill references
 - `.claude/commands/*.md`
-- `.claude/agents/*.md`
+- `.claude/agents/**/*.md`
 - `.claude/hooks/*`
 - `.claude/settings.json`, `settings.local.json`, and any other `.claude/*.json`
 - Other `.claude/*.md` a project keeps for context (`governor.md`,
@@ -126,10 +126,11 @@ Also flag: a rule firing every session that sits in a skill (belongs in
 `CLAUDE.md`), and a rule firing once per task that sits in `CLAUDE.md` (belongs
 in a skill, where it costs nothing until invoked). And a `description` that
 doesn't name the firing situations in the user's own words — it is matched
-before the body is ever read. A **reviewer agent's** `description` must
-additionally end with a `Use when: <conditions>.` clause: `/local-review-cycle`
-selects reviewers by matching that clause against the diff, so a reviewer
-without one is invisible to selection — a finding, not a nit.
+before the body is ever read. A **reviewer agent** must
+additionally carry a `use_when: <conditions>.` key above `description:`:
+`/local-review-cycle` selects reviewers by matching it against the diff, so a
+reviewer without one is invisible to selection — a finding, not a nit. A
+`Use when:` clause left inside a reviewer's `description` is also a finding.
 
 ## Output
 

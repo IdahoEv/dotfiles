@@ -1,15 +1,15 @@
 # Workstream tag states, transitions and needs-you signal
 
-Status: approved and implemented (#168).
+Status: approved and implemented (#168). Tags live in `.workstream.json`; logic is `apply_transition` in `tools/lib/workstream.py`. Tag groups are adjacent with no spaces, matching the existing `[WIP][PR]` rendering.
 
 ## Decision
 
-The session name prefix is `[!] <stage-or-review> [PR] <label>`. Each part is optional except the second slot.
+The session name prefix is `[!]<stage-or-review>[PR] <label>`. Each part is optional except the second slot.
 
 ```
-[!] [L2✓ G1] [PR] <label>      local accepted, GitHub in round 1, needs you
+[!][L2✓ G1][PR] <label>      local accepted, GitHub in round 1, needs you
 [WIP] <label>                  implementing
-[L- G-] [PR] <label>           both reviews planned, none started
+[L- G-][PR] <label>           both reviews planned, none started
 ```
 
 ## Slots
@@ -60,7 +60,7 @@ One function in `agent-phase.sh` derives the set: `L` always; `G` unless `~/.con
 | Poll timeout or stall | `/github-review-comments` |
 | Every planned source `✓` with a PR open (awaiting merge) | `--review ... ok` or `--pr`, automatically |
 
-**Clearing:** any `agent-phase.sh` stage, review or PR change clears it, and a `UserPromptSubmit` hook runs `agent-phase.sh --ok` so it clears when the user replies. Outside a background session both no-op. Unverified: that hook subprocesses inherit `CLAUDE_JOB_DIR`; if they don't, `[!]` clears at the next transition instead.
+**Clearing:** any `agent-phase.sh` stage, review or PR change clears it, and a `UserPromptSubmit` hook runs `agent-phase.sh --ok` so it clears when the user replies. The record (and so the statusline) clears from the hook's working directory. The agent-row mirror also needs `CLAUDE_JOB_DIR` in the hook's environment, which is unverified; if absent, the row clears at the next transition.
 
 ## Transitions
 

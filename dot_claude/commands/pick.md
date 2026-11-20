@@ -17,7 +17,10 @@ and stop. Then, in parallel:
 
 - Open tickets from the tracker named there, with dependencies, estimates, and status.
 - Work already in flight: `git worktree list`, open PRs, and other sessions via
-  `ListAgents`. Ticket refs found there are **taken**, not candidates.
+  `ListAgents`. Ticket refs found there are **taken**, not candidates. Where there are no
+  worktrees or session listing (cloud), use open PRs and remote branches only.
+- Toolchain: a ticket that needs a build or test run is offered only if the project's
+  toolchain is present here; otherwise list it as "unverifiable here".
 - Local planning docs (`docs/`, `TODO.md`) for sequencing the tracker doesn't encode.
 
 ## Filter: ready
@@ -27,8 +30,7 @@ A ticket is ready only if all hold:
 - Every prerequisite ticket is **merged**, or is **earlier in the same chain** (see below).
   A prerequisite whose PR is open, or that is in no chain of the pick, makes the ticket
   "ready after #N", not ready.
-- Acceptance criteria and an estimate exist. Missing either → not ready; list it under
-  *Needs refinement*.
+- Acceptance criteria exist. Missing → not ready; list it under *Needs refinement*.
 - Design is decided; no open question or unresolved spike upstream.
 - Not already assigned to a worktree, PR, or session.
 - Not sourced from a draft planning doc marked "for local review".
@@ -39,8 +41,8 @@ Group the ready tickets into **chains**: ordered runs worked serially in one wor
 one session, one PR. Chains run side by side with each other. Judge from ticket text and
 a quick look at the code areas named; don't read implementations in depth.
 
-- **No fixed link cap**, but keep the combined estimate within one "large" ticket — the
-  chain is one PR and one review pass. A single ticket is a chain of one.
+- **No fixed link cap**, but keep the combined scope (or estimate, when present) within one
+  "large" ticket — the chain is one PR and one review pass. A single ticket is a chain of one.
 - **Within a chain**, tickets may overlap in files and may depend on each other; order
   them so each prerequisite comes first. Chain tickets that share files or are
   dependency-ordered rather than leaving them to collide as separate sessions.

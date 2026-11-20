@@ -13,18 +13,25 @@ check() { # check <adapter.md> <command.md>...
   local adapter="$1"; shift
   python3 -I - "$adapter" "$@" <<'PY' || return 1
 import re, sys
+from pathlib import Path
 
 adapter, commands = sys.argv[1], sys.argv[2:]
 construct = re.compile(
-    r"mcp__[a-z_]+__|\b(?:AskUserQuestion|EnterWorktree|ExitWorktree|TodoWrite|EnterPlanMode|ExitPlanMode)\b"
-    r"|\b(?:agent-phase|session-label|sibling-worktrees|github-review-poll)\.sh\b"
-    r"|\bGT_LABEL_[A-Z_]+\b|--tab-only|--no-multi|--review|--launcher|github-review-repair-agent|~/\.config/local-review-only|claude agents|Co-Authored-By|git push --no-verify"
+    r"mcp__[a-z_]+__|\b(?:AskUserQuestion|EnterWorktree|ExitWorktree|ListAgents|TodoWrite|EnterPlanMode|ExitPlanMode)\b"
+    r"|\b(?:agent-phase|session-label|sibling-worktrees|github-review-poll|github-review-state|request-review|review-unattended)\.sh\b"
+    r"|\bGT_LABEL_[A-Z_]+\b|--tab-only|--no-multi|--no-watch|--review|--launcher|--confirm-commits|github-review-repair-agent|local-review-cycle-manager|~/\.config/local-review-only|claude agents|Co-Authored-By|git push --no-verify"
     r"|~/\.claude/"
-    r"|(?<![\w/.-])/(?:start|open-pr|finalize|discuss|board|github-review-comments|local-review-cycle)\b"
+    r"|(?<![\w/.-])/(?:add-dir|start|open-pr|finalize|discuss|board|governor|pick|github-review-comments|local-review-cycle)\b"
 )
 used = {}
 for path in commands:
-    for match in construct.finditer(open(path, encoding="utf-8").read()):
+    text = open(path, encoding="utf-8").read()
+    if adapter.endswith("/codex-local.md"):
+        if Path(path).stem in {"merge", "land", "sync"}:
+            used.setdefault("/" + Path(path).stem, path)
+        for match in re.finditer(r"(?<![\w/.-])/(?:merge|land|sync)\b", text):
+            used.setdefault(match.group(0), path)
+    for match in construct.finditer(text):
         used.setdefault(match.group(0), path)
 
 rows = {m.group(1) for line in open(adapter, encoding="utf-8")
@@ -40,23 +47,72 @@ sys.exit(1 if undocumented or stale else 0)
 PY
 }
 
-commands=("$repo/dot_claude/commands/start.md" "$repo/dot_claude/commands/open-pr.md")
-for adapter_name in codex agy; do
-  adapter="$repo/workflow/adapters/${adapter_name}.md"
-  check "$adapter" "${commands[@]}" || fail "${adapter_name} adapter has drifted from the commands it covers"
-  printf 'PASS %s adapter maps every Claude-only construct in its covered commands\n' "$adapter_name"
-done
+codex_commands=("$repo/dot_claude/commands/start.md" "$repo/dot_claude/commands/open-pr.md")
+check "$repo/workflow/adapters/codex.md" "${codex_commands[@]}" || fail "codex adapter has drifted from the commands it covers"
+printf 'PASS codex adapter maps every Claude-only construct in its covered commands\n'
+
+agy_commands=(
+  "$repo/dot_claude/commands/start.md"
+  "$repo/dot_claude/commands/local-review-cycle.md"
+  "$repo/dot_claude/agents/local-review-cycle-manager.md"
+  "$repo/dot_claude/skills/local-review-cycle-procedure/SKILL.md"
+  "$repo/dot_claude/commands/open-pr.md"
+  "$repo/dot_claude/commands/github-review-comments.md"
+  "$repo/dot_claude/agents/github-review-repair-agent.md"
+  "$repo/dot_claude/skills/github-review-procedure/SKILL.md"
+  "$repo/dot_claude/commands/governor.md"
+  "$repo/dot_claude/commands/pick.md"
+  "$repo/dot_claude/commands/discuss.md"
+  "$repo/dot_claude/commands/remind.md"
+)
+check "$repo/workflow/adapters/agy.md" "${agy_commands[@]}" || fail "agy adapter has drifted from the commands it covers"
+printf 'PASS agy adapter maps every Claude-only construct in its covered commands\n'
+
+local_codex_commands=("${agy_commands[@]}"
+  "$repo/dot_claude/commands/governor.md"
+  "$repo/dot_claude/commands/groom.md"
+  "$repo/dot_claude/commands/pick.md"
+  "$repo/dot_claude/commands/discuss.md"
+  "$repo/dot_claude/commands/finalize.md"
+  "$repo/dot_claude/commands/merge.md"
+  "$repo/dot_claude/commands/land.md"
+  "$repo/dot_claude/commands/sync.md"
+)
+check "$repo/workflow/adapters/codex-local.md" "${local_codex_commands[@]}" || fail "local Codex adapter has drifted"
+printf 'PASS local Codex adapter maps every covered command and nested review procedure\n'
+
+claude_commands=(
+  "$repo/dot_claude/commands/start.md"
+  "$repo/dot_claude/commands/open-pr.md"
+  "$repo/dot_claude/commands/finalize.md"
+  "$repo/dot_claude/commands/merge.md"
+  "$repo/dot_claude/commands/land.md"
+  "$repo/dot_claude/commands/sync.md"
+  "$repo/dot_claude/commands/pick.md"
+  "$repo/dot_claude/commands/local-review-cycle.md"
+  "$repo/dot_claude/agents/local-review-cycle-manager.md"
+  "$repo/dot_claude/skills/local-review-cycle-procedure/SKILL.md"
+  "$repo/dot_claude/commands/github-review-comments.md"
+  "$repo/dot_claude/agents/github-review-repair-agent.md"
+  "$repo/dot_claude/skills/github-review-procedure/SKILL.md"
+  "$repo/dot_claude/commands/project-review-apply.md"
+  "$repo/dot_claude/skills/project-review-apply-procedure/SKILL.md"
+)
+check "$repo/workflow/adapters/claude-cloud.md" "${claude_commands[@]}" || fail "claude-cloud adapter has drifted from the commands it covers"
+printf 'PASS claude-cloud adapter maps every Claude-only construct in its covered commands\n'
+
+commands=("${codex_commands[@]}")
 
 fixture="$(mktemp -d)"
 trap 'rm -rf "$fixture"' EXIT
 cp "$repo/workflow/adapters/codex.md" "$fixture/adapter.md"
 cp "${commands[@]}" "$fixture/"
 
-printf '\nCall AskUserQuestion here, then mcp__github__create.\n' >> "$fixture/start.md"
+printf '\nCall AskUserQuestion here, then mcp__slack__post.\n' >> "$fixture/start.md"
 if check "$fixture/adapter.md" "$fixture/start.md" "$fixture/open-pr.md" 2>"$fixture/err"; then
   fail "a new unmapped construct must be detected"
 fi
-grep -q 'mcp__github__' "$fixture/err" || fail "the unmapped construct should be named"
+grep -q 'mcp__slack__' "$fixture/err" || fail "the unmapped construct should be named"
 cp "${commands[0]}" "$fixture/start.md"
 pass_new=1
 
@@ -67,7 +123,7 @@ fi
 grep -q 'TodoWrite' "$fixture/err" || fail "the stale row should be named"
 [[ "$pass_new" == 1 ]] && printf 'PASS detects unmapped constructs and stale rows\n'
 
-for adapter_name in codex agy; do
+for adapter_name in codex agy claude-cloud; do
   adapter="$repo/workflow/adapters/${adapter_name}.md"
   if grep -q 'bash <(' "$adapter"; then fail "$adapter_name adapter must not run the bootstrap via process substitution (hides download failure)"; fi
   for rule in 'workflow_source_commit=' 'Never imply a check passed' 'Workflow source:'; do

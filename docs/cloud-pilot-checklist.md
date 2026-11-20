@@ -5,12 +5,14 @@ Results from the real phone-launched pilot required by issue #74. Fill in each r
 | Check | Result | Evidence |
 | --- | --- | --- |
 | Mobile launch | Not run | |
-| Outbound HTTPS to `api.github.com` and `codeload.github.com` in the agent phase | Not run | If blocked, move the fetch to a setup script and update the bootstrap docs. |
+| Outbound HTTPS to `raw.githubusercontent.com` (required) and `codeload.github.com` (preferred) in the agent phase (the bootstrap makes no API call) | Not run | If blocked, move the fetch to a setup script and update the bootstrap docs. |
 | Repository access and push/PR credentials | Not run | |
 | Tarball retrieval at a recorded SHA | Not run | |
 | `/start` and `/open-pr` executed from the fetched command files | Not run | Note any step the adapter had to stop on. |
 | Test execution | Mocked suites pass locally (`tools/cloud-workflow-bootstrap.test.sh`, `tools/cloud-workflow-adapter.test.sh`); project checks in the cloud task: Not run | |
 | Branch / PR creation | Not run | |
+| Push of a ticket branch when the environment names a different assigned branch (Claude cloud) | Accepted | Observed in a cloud session: the git proxy took the push, so it does not enforce the assigned-branch restriction (#242). |
+| Scheduled `/project-review-apply` against two repos with different config (one email, one ticket filing) | Not run | Recipe: `docs/project-review-scheduling.md`. Confirm the filed ticket carries a `project-review-key` and a rerun files nothing. |
 | Workflow SHA traceability | Not run | Same SHA in task output and PR body. |
 
 ## Completion rule

@@ -1,0 +1,7 @@
+{{- $email := promptStringOnce . "email" "Git email" -}}
+{{- $isWork := promptBoolOnce . "is_work" "Is this a work machine" false -}}
+{{- $opShellPlugins := promptBoolOnce . "op_shell_plugins" "Enable 1Password CLI shell plugins" false -}}
+[data]
+email = {{ $email | quote }}
+is_work = {{ $isWork }}
+op_shell_plugins = {{ $opShellPlugins }}

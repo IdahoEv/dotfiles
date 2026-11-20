@@ -2,13 +2,29 @@
 # open-pr.sh — push the current branch, open (or reuse) its PR, and trigger review bots.
 #
 #   open-pr.sh [--title "<short title>"] [--body-file <path>] [--issue <N>[,<N>…]] [--draft]
-#               [--review none|copilot|copilot+claude] [--provider github|kardashev]
+#               [--summary-file <path> --judgment-file <path> [--test-result <text>] [--body-footer <line>]…]
+#               [--commit-message-file <path>] [--review none|copilot|copilot+claude]
+#               [--provider github|kardashev] [--no-watch]
+#
+# Commit: with --commit-message-file, a dirty tree is committed (`git add -A`,
+# message verbatim — include any Co-Authored-By trailer in the file) before the
+# push; without it, uncommitted changes are warned about and left out.
+#
+# Watch: unless --no-watch (or --review none with a manual-trigger provider), a
+# detached open-pr-watch.sh polls for review comments and, on exit, sends a macOS
+# notification and a pr.watch event. $OPEN_PR_WATCH overrides the script path.
+#
+# Body: --summary-file/--judgment-file hand lib/pr_body.py the two model-written
+# sections (Summary <=3 bullets, Needs your judgment <=3 items or "none"); it adds
+# Risk, Review and Tests mechanically and rejects sections over the cap.
+# --body-file is the pre-assembled alternative. --body-footer lines are appended
+# verbatim (e.g. a cloud adapter's provenance lines).
 #
 # Provider: --provider, else `openpr_provider=` in .start-ticket.conf, else the
 # start-ticket `provider=` if an open-pr provider of that name exists, else
-# github. github: `<NNN>-slug` branch → issue NNN, title as given, `Closes #NNN`
-# footer, no review triggers (--review is ignored). kardashev: `Is<NNN>:` titles
-# plus Copilot/claude.yml triggers.
+# github. github: `<NNN>-slug` branch → issue NNN, `Is<NNN>:` title, `Closes #NNN`
+# footer, and request-review.sh at PR open (a failed request warns, never fails
+# the PR). kardashev: same title and footer plus its own Copilot/claude.yml triggers.
 #
 # Chains: --issue takes a comma list, and a branch with <git-dir>/chain (written by
 # start-ticket.sh 12,13) closes every ticket in it. The head issue (first) prefixes
@@ -21,17 +37,18 @@
 # exists (this machine's Copilot quota is out; delete the file to restore it).
 # Review then happens before this script, via /local-review-cycle.
 #
-# Assumes the working tree is already committed — this script never commits.
-# It handles the mechanical, judgment-free parts of `/open-pr`: push, PR
-# create-or-reuse, and review-bot triggering. Commit-message drafting, PR
-# title/body drafting, and the "wait for explicit approval before doing
-# anything" rule all stay in the calling command (.claude/commands/open-pr.md),
-# same division of labor as start-ticket.sh vs. /start's kickoff enrichment.
+# It handles the mechanical, judgment-free parts of `/open-pr`: commit, push, PR
+# create-or-reuse, review-bot triggering, the review watch and the phase stamp.
+# Commit-message and PR title/body drafting stay in the calling command
+# (.claude/commands/open-pr.md), same division of labor as start-ticket.sh vs.
+# /start's kickoff enrichment.
 #
 # On success, prints (stdout, parseable):
 #   pr_number=<n>
 #   pr_url=<url>
 #   pr_action=created|reused
+#   ... then provider/trigger_mode/pr_title/watch keys and a human-readable
+#   report block (Shipped / PR / Reviews) for the caller to relay verbatim.
 #
 # Exit codes: 0 success; 1 usage/precondition error (die); otherwise the
 # underlying git/gh command's exit status propagates via set -e.
@@ -91,15 +108,23 @@ find_provider_file() {  # <name> → path, or empty
 
 # ---- args -------------------------------------------------------------------
 title="" body_file="" issue="" review="" provider="" draft=""
+summary_file="" judgment_file="" test_result="" body_footers=()
+commit_msg_file="" no_watch=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --title)          title="${2:?--title needs a value}"; shift 2 ;;
     --body-file)      body_file="${2:?--body-file needs a value}"; shift 2 ;;
+    --summary-file)   summary_file="${2:?--summary-file needs a value}"; shift 2 ;;
+    --judgment-file)  judgment_file="${2:?--judgment-file needs a value}"; shift 2 ;;
+    --test-result)    test_result="${2:?--test-result needs a value}"; shift 2 ;;
+    --body-footer)    body_footers+=("${2:?--body-footer needs a value}"); shift 2 ;;
     --issue)          issue="${2:?--issue needs a value}"; shift 2 ;;
     --draft)          draft=1; shift ;;
+    --commit-message-file) commit_msg_file="${2:?--commit-message-file needs a value}"; shift 2 ;;
+    --no-watch)       no_watch=1; shift ;;
     --review)         review="${2:?--review needs a value}"; shift 2 ;;
     --provider|--env) provider="${2:?--provider needs a value}"; shift 2 ;;
-    -h|--help)        sed -n '2,32p' "$0"; exit 0 ;;
+    -h|--help)        sed -n '2,/^set -/p' "$0" | sed '$d'; exit 0 ;;
     *)                die "unknown arg: $1" ;;
   esac
 done
@@ -121,11 +146,16 @@ esac
 if [ -n "$issue" ]; then
   IFS=, read -ra _ids <<<"$issue"
   for _i in "${_ids[@]}"; do
-    [[ "$_i" =~ ^[1-9][0-9]*$ ]] || die "--issue must be positive integers, comma-separated (got '$issue')"
+    [[ "$_i" =~ ^[A-Za-z0-9][A-Za-z0-9_-]*$ ]] || die "--issue must be ticket ids, comma-separated (got '$issue')"
   done
 fi
 
 git rev-parse --is-inside-work-tree >/dev/null 2>&1 || die "not inside a git repo"
+worktree_root="$(git rev-parse --show-toplevel)"
+ws_record=""
+if [ -x "$SCRIPT_DIR/workstream.sh" ] && [ -f "$worktree_root/.workstream.json" ]; then
+  ws_record="$("$SCRIPT_DIR/workstream.sh" show --dir "$worktree_root" 2>/dev/null || true)"
+fi
 wf_t0="$(wf::mono_ms)"
 command -v gh >/dev/null || die "gh CLI not found"
 
@@ -141,6 +171,14 @@ else
   case "$branch" in
     main|master|development) die "refusing to open a PR from $branch" ;;
   esac
+fi
+
+if [ -n "$commit_msg_file" ] && [ ! -r "$commit_msg_file" ]; then
+  die "--commit-message-file is not a readable file: $commit_msg_file"
+fi
+dirty="$(git status --porcelain)"
+if [ -n "$dirty" ] && [ -z "$commit_msg_file" ]; then
+  printf 'open-pr: warning: uncommitted changes are not in this PR (pass --commit-message-file to commit them)\n' >&2
 fi
 
 # ---- provider ---------------------------------------------------------------
@@ -168,6 +206,9 @@ resolve_provider() {
   printf 'github'
 }
 
+if [ -z "$provider" ] && [ -n "$ws_record" ] && command -v python3 >/dev/null 2>&1; then
+  provider="$(python3 -c 'import json, sys; print(json.load(sys.stdin).get("ticket_provider", ""))' <<<"$ws_record" 2>/dev/null || true)"
+fi
 [ -n "$provider" ] || provider="$(resolve_provider)"
 pf="$(find_provider_file "$provider")"
 [ -n "$pf" ] || die "no provider script for '$provider' (searched: OPEN_PR_PROVIDER_DIR, <repo>/.project-overlays/open-pr-providers, ~/.config/project-overlays/.open-pr-providers, workflow-tools/open-pr-providers)"
@@ -178,6 +219,13 @@ source "$pf"
 provider::available || die "provider '$provider' unavailable (CLI missing or not authed)"
 : "${PROVIDER_TRIGGER_MODE:=manual}"
 
+if [ -n "$issue" ] && declare -f provider::validate_issue >/dev/null; then
+  IFS=, read -ra _ids <<<"$issue"
+  for _i in "${_ids[@]}"; do
+    provider::validate_issue "$_i" || die "invalid --issue '$_i' for provider '$provider'"
+  done
+fi
+
 # ---- PR: reuse if one already exists for this branch, else create ---------
 # Decide (and validate inputs) before pushing, so a usage error can't leave a
 # published branch behind as a side effect.
@@ -186,12 +234,35 @@ provider::available || die "provider '$provider' unavailable (CLI missing or not
 # validation) via set -e instead of being swallowed like a || true.
 existing_pr="$(gh pr list --head "$branch" --json number --jq '.[0].number // empty')"
 create_pr=""
+if [ -z "$existing_pr" ] && [ -z "$title" ]; then
+  if [ -n "$ws_record" ] && command -v python3 >/dev/null 2>&1; then
+    title="$(python3 -c 'import json, sys; print(json.load(sys.stdin).get("desc", ""))' <<<"$ws_record" 2>/dev/null || true)"
+  fi
+  [ -n "$title" ] || die "no existing PR for '$branch' and no --title given"
+fi
+# Committed before the body is assembled: the body's Risk and diff stat read HEAD.
+# A later usage error leaves a local commit, never a published one.
+if [ -n "$dirty" ] && [ -n "$commit_msg_file" ]; then
+  git add -A
+  git commit -q -F "$commit_msg_file"
+fi
 if [ -n "$existing_pr" ]; then
   pr_number="$existing_pr"
   pr_action="reused"
 else
   create_pr=1
-  [ -n "$title" ] || die "no existing PR for '$branch' and no --title given"
+  if [ -n "$summary_file$judgment_file" ]; then
+    [ -n "$summary_file" ] && [ -n "$judgment_file" ] || die "--summary-file and --judgment-file go together"
+    [ -z "$body_file" ] || die "--body-file can't be combined with --summary-file/--judgment-file"
+    body_tmp="$(mktemp "${TMPDIR:-/tmp}/open-pr-body.XXXXXX")"
+    footer_args=()
+    for _f in ${body_footers[@]+"${body_footers[@]}"}; do footer_args+=(--footer "$_f"); done
+    "$SCRIPT_DIR/pr-body.sh" assemble --base "${_default:-main}" \
+      --summary-file "$summary_file" --judgment-file "$judgment_file" \
+      ${test_result:+--test-result "$test_result"} ${footer_args[@]+"${footer_args[@]}"} \
+      > "$body_tmp" || die "PR body sections rejected (see above)"
+    body_file="$body_tmp"
+  fi
   if [ -n "$body_file" ] && { [ ! -f "$body_file" ] || [ ! -r "$body_file" ]; }; then
     die "--body-file is not a readable file: $body_file"
   fi
@@ -199,28 +270,58 @@ else
   # Resolve the issue number (branch convention first, else --issue). The
   # title/body conventions hang off it, so it's resolved for both — not just
   # the default body, as the old inline version did.
-  # A chain's membership is the fallback ahead of the branch name: the branch
-  # only carries the head ticket.
-  chain_file="$(git rev-parse --absolute-git-dir)/chain"
-  if [ -z "$issue" ] && [ -n "$draft" ] && [ -s "$chain_file" ]; then
+  # A chain's membership (.workstream.json or legacy <git-dir>/chain) is the
+  # fallback ahead of the branch name: the branch only carries the head ticket.
+  issue_explicit="$issue"
+  ws_chain_ids="$("$SCRIPT_DIR/workstream.sh" chain-ids --dir .)" \
+    || die "workstream.sh chain-ids failed; cannot determine the chain's tickets"
+  if [ -z "$issue" ] && [ -n "$draft" ] && [[ "$ws_chain_ids" == *,* ]]; then
     die "a draft PR on a chained branch must name the completed tickets with --issue <a,b>"
   fi
-  if [ -z "$issue" ] && [ -s "$chain_file" ]; then
-    issue="$(paste -sd, "$chain_file")"
+  if [ -z "$issue" ] && [ -n "$ws_chain_ids" ]; then
+    issue="$ws_chain_ids"
   fi
   if [ -z "$issue" ]; then
     issue="$(provider::issue_from_branch "$branch")"
   fi
+  issue_csv="$issue"
   issues=()
   if [ -n "$issue" ]; then
     IFS=, read -ra issues <<<"$issue"
     for _i in "${issues[@]}"; do
-      [[ "$_i" =~ ^[1-9][0-9]*$ ]] || die "issue number '$_i' isn't a positive integer"
+      if declare -f provider::validate_issue >/dev/null; then
+        provider::validate_issue "$_i" || die "issue id '$_i' is invalid for provider '$provider'"
+      else
+        [[ "$_i" =~ ^[A-Za-z0-9][A-Za-z0-9_-]*$ ]] || die "issue id '$_i' is invalid"
+      fi
     done
     issue="${issues[0]}"
   fi
 
-  title="$(provider::pr_title "$issue" "$title")"
+  used_resolver=""
+  resolver_issue_csv="$issue_csv"
+  if [ "$provider" = shortcut ] && [ -n "$issue_explicit" ]; then
+    resolver_issues=()
+    for _i in "${issues[@]}"; do resolver_issues+=("${_i#sc-}"); done
+    resolver_issue_csv="$(IFS=,; echo "${resolver_issues[*]}")"
+  fi
+  if [ -n "$ws_record" ]; then
+    bare_title="$title"
+    while [[ "$bare_title" =~ ^(Is[0-9]+(\+[0-9]+)*|sc-[0-9]+(\+[0-9]+)*)(:?)[[:space:]]+(.*)$ ]]; do
+      bare_title="${BASH_REMATCH[5]}"
+    done
+    ws_pr_title="$("$SCRIPT_DIR/workstream.sh" render pr --dir "$worktree_root" \
+      ${issue_explicit:+--ids "$resolver_issue_csv"} \
+      ${provider:+--provider "$provider"} \
+      ${bare_title:+--desc "$bare_title"} 2>/dev/null || true)"
+    if [ -n "$ws_pr_title" ]; then
+      title="$ws_pr_title"
+      used_resolver=1
+    fi
+  fi
+  if [ -z "$used_resolver" ]; then
+    title="$(provider::pr_title "$issue" "$title")"
+  fi
 
   if [ -n "$body_file" ]; then
     # The caller drafted a real summary. Any tracker-linking convention
@@ -259,7 +360,7 @@ else
   fi
 fi
 
-# ---- push --------------------------------------------------------------------
+# ---- push -------------------------------------------------------------------
 # stdout (the ref-update summary) is suppressed to keep this script's stdout
 # limited to the documented key=value fields; progress/errors go to stderr.
 git push -u origin "$branch" >/dev/null
@@ -275,6 +376,10 @@ if [ -n "$create_pr" ]; then
   pr_action="created"
 fi
 
+# A no-op push from this process lets an agent-view session see a push and link
+# the PR on its row. --no-verify: the real push above already ran the hooks.
+git push --no-verify origin "$branch" >/dev/null 2>&1 || true
+
 pr_url="$(gh pr view "$pr_number" --json url --jq '.url')"
 
 # ---- title self-check -------------------------------------------------------
@@ -286,7 +391,7 @@ pr_url="$(gh pr view "$pr_number" --json url --jq '.url')"
 # `sc-73237: Is73237: …` case). Repair it here and say so.
 pr_title_now="$(gh pr view "$pr_number" --json title --jq '.title')"
 pr_title_fixed=""
-if [ -n "$create_pr" ] && [ -n "${issue:-}" ]; then
+if [ -n "$create_pr" ] && [ -n "${issue:-}" ] && [ -z "${used_resolver:-}" ]; then
   expected="$(provider::pr_title "$issue" "")"
   expected="${expected% }"                     # bare prefix, e.g. "Is42:" / "sc-42:"
   if [ -n "$expected" ]; then
@@ -299,8 +404,8 @@ if [ -n "$create_pr" ] && [ -n "${issue:-}" ]; then
     while :; do
       if [ "${rest#"$expected"}" != "$rest" ]; then
         rest="${rest#"$expected"}"
-      elif [[ "$rest" =~ ^(Is[0-9]+|sc-[0-9]+):[[:space:]] ]]; then
-        rest="${rest#"${BASH_REMATCH[1]}":}"
+      elif [[ "$rest" =~ ^(Is[0-9+]+|sc-[0-9+]+)(:?)[[:space:]] ]]; then
+        rest="${rest#"${BASH_REMATCH[1]}${BASH_REMATCH[2]}"}"
       else
         break
       fi
@@ -315,6 +420,7 @@ if [ -n "$create_pr" ] && [ -n "${issue:-}" ]; then
 fi
 
 # ---- reviews ----------------------------------------------------------------
+review_failed=""
 if [ "$review" != "none" ]; then
   # trigger_mode seam: "manual" providers dispatch their review triggers here
   # (Copilot requestReviews, claude.yml workflow run, …) after the user
@@ -322,23 +428,27 @@ if [ "$review" != "none" ]; then
   # do here — that path is a later work-environment provider's concern and is
   # deliberately left unimplemented.
   case "${PROVIDER_TRIGGER_MODE:-manual}" in
-    manual) provider::trigger_reviews "$pr_number" "$review" ;;
+    manual) provider::trigger_reviews "$pr_number" "$review" || review_failed=1 ;;
     auto)   : ;;
     *)      die "provider '$provider' declares unknown trigger_mode '$PROVIDER_TRIGGER_MODE'" ;;
   esac
 fi
 
 # ---- agent-view phase --------------------------------------------------------
-# The PR exists, so tag it [PR]; GitHub review (G) starts whenever a bot will
-# review (requested here, or fired automatically on PR open under trigger_mode=auto).
+# The PR exists, so tag it [PR]; GitHub review (G) starts whenever a bot will review
+# (requested here successfully, or fired automatically on PR open under trigger_mode=auto).
 # Stamped here rather than left to /open-pr's prose because it's deterministic
-# and should hold even when the command is run by hand. No-ops outside a
-# background session, and never fails the ship — the PR is already open by now,
-# so aborting over a display label would be strictly worse than a stale one.
-if [ "$review" != "none" ] || [ "${PROVIDER_TRIGGER_MODE:-manual}" = "auto" ]; then
+# and should hold even when the command is run by hand. Updates `.workstream.json`
+# in the worktree (and the agent-view row in a background session); no-ops where
+# inapplicable and never fails the ship — the PR is already open by now, so
+# aborting over a display label would be strictly worse than a stale one.
+if { [ "$review" != "none" ] && [ -z "$review_failed" ]; } || [ "${PROVIDER_TRIGGER_MODE:-manual}" = "auto" ]; then
   "$SCRIPT_DIR/agent-phase.sh" --review G next >/dev/null 2>&1 || true
 fi
 "$SCRIPT_DIR/agent-phase.sh" --pr >/dev/null 2>&1 || true
+if [ -x "$SCRIPT_DIR/workstream.sh" ]; then
+  "$SCRIPT_DIR/workstream.sh" set-pr --dir . --number "$pr_number" --url "$pr_url" >/dev/null 2>&1 || true
+fi
 
 printf 'pr_number=%s\npr_url=%s\npr_action=%s\n' "$pr_number" "$pr_url" "$pr_action"
 # Reported so /open-pr can describe reviews accurately without re-reading the
@@ -346,4 +456,26 @@ printf 'pr_number=%s\npr_url=%s\npr_action=%s\n' "$pr_number" "$pr_url" "$pr_act
 printf 'provider=%s\ntrigger_mode=%s\npr_title=%s\n' \
   "$provider" "${PROVIDER_TRIGGER_MODE:-manual}" "$pr_title_now"
 [ -n "$pr_title_fixed" ] && printf 'pr_title_repaired_from=%s\n' "$pr_title_fixed"
+
+# ---- review watch -------------------------------------------------------------
+# Skipped only when no bot will ever comment: --review none on a manual-trigger
+# provider. Detached so the session can be left; the watcher notifies on exit.
+watch="started"
+if [ -n "$no_watch" ] || [ -n "$review_failed" ] || { [ "$review" = "none" ] && [ "${PROVIDER_TRIGGER_MODE:-manual}" = "manual" ]; }; then
+  watch="skipped"
+else
+  watch_log="$(git rev-parse --absolute-git-dir)/open-pr-watch.log"
+  nohup "${OPEN_PR_WATCH:-$SCRIPT_DIR/open-pr-watch.sh}" "$pr_number" >"$watch_log" 2>&1 </dev/null &
+  disown 2>/dev/null || true
+fi
+printf 'watch=%s\n' "$watch"
+
+if [ "${PROVIDER_TRIGGER_MODE:-manual}" = "auto" ]; then reviews_line="automatic on PR open"
+elif [ "$review" = "none" ]; then reviews_line="none"
+elif [ -n "$review_failed" ]; then reviews_line="request failed: $review (request it manually)"
+else reviews_line="requested: $review"
+fi
+printf '\nShipped %s\nPR #%s: %s  (%s)\nReviews: %s%s\n' \
+  "$pr_title_now" "$pr_number" "$pr_url" "$pr_action" "$reviews_line" \
+  "$([ "$watch" = started ] && echo '; watching in the background, will notify on exit')"
 exit 0

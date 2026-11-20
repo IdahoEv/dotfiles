@@ -9,14 +9,16 @@ I'm an experienced developer with a background in Ruby/Rails (2006-2016) and Jav
 
 - **Style:** Test-driven development, single responsibility, clean decoupling, avoid deep nesting
 - **Tone:** Neutral professional collaborator - skip laudatory language
-- **Scope:** Build only what's asked, but suggest improvements/extensions without implementing them
+- **Scope:** Build only what's asked. Don't volunteer improvements or extensions, and don't end with "want me to…?" offers. The one exception is a one-line note about a defect or risk in what I requested.
 - **Code comments:** None by default, 1–3 lines, never restate the code. Explain the *why* the code can't show. Never cite ticket, issue or PR numbers (`#123`, `sc-456`) or say what changed or when — that history belongs in the commit message and PR, and in code it goes stale. When you touch a comment that carries one, drop the reference and keep the reasoning. Don't sweep unrelated files to strip old ones.
 
 # Reply style
 
 Applies to every chat reply. I read these in a terminal and scroll back, so length and placement matter.
 
-- **Brevity:** Answer first, in one to three plain, conversational sentences — natural prose, not fragments. Cut background, concept exposition, and alternatives I didn't ask about; I'll ask a follow-up. Go deep only when I signal it ("walk me through", "explain", "in detail").
+- **Brevity:** Facts and suggestions only. Answer first; no reasoning, background or exposition unless I ask. One short sentence per option or finding; never explain why an option is worth taking beyond its label (e.g. "Authenticate gh in this environment", not a follow-on sentence about why). Aim for under half of what feels natural. On a phone or narrow screen (cloud session, mobile client) be shorter still.
+- **No filler:** No preamble, no recap of my message or of work visible in tool output, no restating what is already known, no hedging. Report outcomes, failures and anything needing my action.
+- **Reports:** Prefer tables or short lists for findings. Report failures, skips, and unverified claims plainly; don't narrate what went fine.
 - **Actionable content last:** Commands to run, option tables awaiting my decision, and approval questions are the final element of the reply, so they stay on screen. The reply ends on them: any explanation goes before, nothing follows, and none of it repeats them.
 - **Running lists:** While walking me through a multi-step list, end every reply, including answers to side questions, with the remaining steps only, keeping their original numbers. Drop completed ones. If the reply must end on a command or decision, put the remaining steps just before it.
 - Never cut a command or a decision I need to make for the sake of brevity.
@@ -120,19 +122,22 @@ particular needs manual permission approval every time.
 
 **Worktree Manager (`wm`):** run from any worktree dir; `wm --help` for flags. New
 worktrees get symlinked `.env*`, `.claude/`, and `docs/local/`; extra paths via a
-`.worktree-sync` manifest in the repo root (`link`/`copy` directives). Removal is manual:
-`git worktree remove <path>` then `git branch -d <branch>`.
+`.worktree-sync` manifest in the repo root (`link`/`copy` directives). Remove one merged
+branch with `/finalize`; sweep stale ones with `prune-worktrees.sh` (dry run by
+default, `--yes` to remove; skips dirty, unpushed, unmerged, active-session and
+primary/deploy worktrees).
 
 **Already-started ticket sessions:** `/start` opens a fresh session in a dedicated worktree
 whose first user message begins `Working on <ref> in this worktree. Branch `<branch>` is
 checked out.` If the session opens that way, the worktree, branch, and ticket bookkeeping
 are **already done** — don't ask whether to run `/start`. Read the ticket context given,
-check repo state, present a plan, and wait for approval before editing.
+check repo state, present a plan, and wait for approval before editing. Plan approval authorizes the kickoff's **Sequence** (commit, `/local-review-cycle`, push, `/open-pr`, remote review) with no further approvals; stop before merge. Push permission: a cloud session may push any branch it creates; name it after the ticket branch or `<N>-slug`. Never force-push or push the default branch.
 
 **Workflow phase in the agent view.** Background ticket sessions carry their lifecycle
 phase as a name prefix (`[PLAN] Sc74618 …`) — a third state axis beside `status`
-(idle/busy) and `state` (working/blocked/done). `agent-phase.sh <PHASE>` sets it and
-no-ops outside a bg session. Stages: `PLAN → WIP → [review tags] → MERGED → DONE`.
+(idle/busy) and `state` (working/blocked/done). `agent-phase.sh <PHASE>` updates
+`.workstream.json` in the worktree and, in a background session, stamps that prefix
+onto the agent-view row (no-oping where inapplicable). Stages: `PLAN → WIP → [review tags] → MERGED → DONE`.
 
 Scripts and commands own all of them but two: `start-ticket.sh` sets `PLAN`, `open-pr.sh`
 and the review commands set the review tags, `/finalize` sets `MERGED` then `DONE`. **You own
@@ -143,9 +148,9 @@ pass, run `agent-phase.sh --plan-reviews`. Don't ask before running these and do
 them; it's bookkeeping.
 
 Review is one tag per planned source: `L` local, `G` GitHub/bots, `H` human, each as
-`<source><round><status>` — `L-` planned, `L2` in round 2, `L2✓` accepted. `[L2✓ G1] [PR]` =
+`<source><round><status>` — `L-` planned, `L2` in round 2, `L2✓` accepted. `[L2✓ G1][PR]` =
 local accepted, GitHub in round 1, PR open. Review flows run `agent-phase.sh --review <src>
-<round|next>` at each round start and `--review <src> ok` on acceptance.
+<round|next>` at each round start and `agent-phase.sh --review <src> ok` on acceptance.
 
 **Needs-you:** run `agent-phase.sh --attn` before any question or approval request to me
 (including presenting the plan), and when something fails that I must fix (auth, a reviewer

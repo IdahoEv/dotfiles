@@ -394,7 +394,16 @@ Total unresolved comments: N
 Remaining unresolved: N - W (comments marked resolved are no longer unresolved)
 ```
 
-Then, when available, record the batch once — in the final report, not in per-round or Quick Mode up-front summaries (those either double-count or have no counts yet): `wf-event.sh review.result source=bot fixed=<Fixed> dismissed=<Disagreed> deferred=<Skipped> reviewers=<bots that commented, comma-separated>`. This is a local log append, not a GitHub write, so it is allowed in Automatic Mode. `deferred` here means Skipped (user chose Skip; nothing filed), unlike the local review cycle's deferred-with-issue. Replied and Resolved are not recorded; there is no `round`.
+Then record the verdicts for telemetry as described in **Bot telemetry** below. The emit itself is `wf-backfill.sh --live`, not hand-written events.
+
+#### Bot telemetry
+
+Bot findings reach the log through `wf-backfill.sh --live --pr <N> --verdicts <file>`, which reads the PR's Copilot comments and review bodies from GitHub, derives the run, and appends one `review.finding source=bot` per comment plus one `review.result source=bot` per round, skipping comments already logged. Do not call `wf-event.sh review.finding source=bot` by hand.
+
+- **Automatic Mode:** the controller runs the command after your report. Your part: before returning, write the verdicts for this round to `$(git rev-parse --git-dir)/bot-verdicts.json`, a JSON object keyed by the comment's `comment_id` (review-body findings: `"<path>:<line>"`) with `{"verdict": "fixed|dismissed|deferred", "validity": "valid|rejected|partial", "reason": "<short phrase>"}`. Mapping from the findings table: Valid → `fixed`/`valid`, Rejected → `dismissed`/`rejected`, Partially valid → `fixed`/`partial`, Skipped → `deferred` (validity is your judgment). Skipped comments are `deferred` (nothing filed), unlike the local review cycle's deferred-with-issue. Omit a comment and its verdict is inferred from the thread, which is wrong for a round whose actions aren't posted yet.
+- **Slow Mode, and Quick Mode after its fixes:** write the same file, run the command yourself in `### 5. Summary Report`, then delete the file so a later round can't reuse it. Not in Quick Mode's up-front summary.
+
+The command skips CodeRabbit and other bots, records Copilot's `original_commit_id` as `sha`, and takes `line` from `original_line`. Replied and Resolved aren't recorded.
 
 #### Structured findings table format
 
@@ -429,6 +438,7 @@ Automatic Mode is non-interactive and edits files only. It makes **no GitHub wri
   - High confidence that the action is right and the user will agree (fix, mark resolved, disagree, etc.): make any code edits now, and record each GitHub write the action needs as a planned action.
   - Low confidence, or a strong reason the user might disagree: skip it, take no action and plan none.
 3. Once all fixes are applied, run validation and formatting (see **Validation & Formatting** below) once across all changed files and resolve anything it surfaces. If a fix can't be made to pass validation, flag it rather than leaving it broken.
+4. Write the **Bot telemetry** verdicts file for this round before returning; the controller emits.
 
 Return this report:
 

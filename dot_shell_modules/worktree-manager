@@ -21,6 +21,10 @@ Worktree Manager Aliases:
   wmc <branch>    Create worktree + open Claude
   wmsc <ticket>   Shortcut ticket + open Claude
 
+Cleanup (separate tool):
+  prune-worktrees.sh          Dry-run list of stale worktrees/merged branches
+  prune-worktrees.sh --yes    Remove them (see --help)
+
 Examples:
   wm --init                    # First-time setup in a repo
   wm                           # Interactive selection
