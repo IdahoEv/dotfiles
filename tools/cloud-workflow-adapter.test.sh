@@ -64,6 +64,7 @@ agy_commands=(
   "$repo/dot_claude/commands/pick.md"
   "$repo/dot_claude/commands/discuss.md"
   "$repo/dot_claude/commands/remind.md"
+  "$repo/dot_claude/commands/finalize.md"
 )
 check "$repo/workflow/adapters/agy.md" "${agy_commands[@]}" || fail "agy adapter has drifted from the commands it covers"
 printf 'PASS agy adapter maps every Claude-only construct in its covered commands\n'
@@ -73,7 +74,6 @@ local_codex_commands=("${agy_commands[@]}"
   "$repo/dot_claude/commands/groom.md"
   "$repo/dot_claude/commands/pick.md"
   "$repo/dot_claude/commands/discuss.md"
-  "$repo/dot_claude/commands/finalize.md"
   "$repo/dot_claude/commands/merge.md"
   "$repo/dot_claude/commands/land.md"
   "$repo/dot_claude/commands/sync.md"
@@ -84,7 +84,6 @@ printf 'PASS local Codex adapter maps every covered command and nested review pr
 claude_commands=(
   "$repo/dot_claude/commands/start.md"
   "$repo/dot_claude/commands/open-pr.md"
-  "$repo/dot_claude/commands/finalize.md"
   "$repo/dot_claude/commands/merge.md"
   "$repo/dot_claude/commands/land.md"
   "$repo/dot_claude/commands/sync.md"
