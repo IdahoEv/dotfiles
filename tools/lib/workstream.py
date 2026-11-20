@@ -567,18 +567,21 @@ def _active_naming_sources(surface: str, dir_: str) -> str:
         parts.append(f"{tmpl_key}={tmpl!r} ({tmpl_src})")
     if sep_src != "default":
         parts.append(f"{sep_key}={sep!r} ({sep_src})")
-    surface_tmpl, surface_tmpl_src = ("", "default")
+    effective_tmpl = ""
     if surface not in ("key", "base"):
         surface_tmpl, surface_tmpl_src = resolve_setting(f"{surface}.template", dir_, default="")
         if surface_tmpl_src != "default" and surface_tmpl:
             parts.append(f"{surface}.template={surface_tmpl!r} ({surface_tmpl_src})")
+            effective_tmpl = surface_tmpl
         elif surface == "worktree":
             branch_tmpl, branch_tmpl_src = resolve_setting("branch.template", dir_, default="")
             if branch_tmpl_src != "default" and branch_tmpl:
                 parts.append(f"branch.template={branch_tmpl!r} ({branch_tmpl_src})")
-    base_tmpl, base_src = resolve_setting("base", dir_, default="")
-    if base_src != "default" and base_tmpl:
-        parts.append(f"base={base_tmpl!r} ({base_src})")
+                effective_tmpl = branch_tmpl
+    if surface == "base" or (surface != "key" and (not effective_tmpl or "{base}" in effective_tmpl)):
+        base_tmpl, base_src = resolve_setting("base", dir_, default="")
+        if base_src != "default" and base_tmpl:
+            parts.append(f"base={base_tmpl!r} ({base_src})")
     return ", ".join(parts) if parts else "default settings"
 
 

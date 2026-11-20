@@ -291,6 +291,12 @@ class WorkstreamsSettingsTests(WorkstreamTestBase):
         self.assertIn("branch.template", str(ctx3.exception))
         self.assertIn("project", str(ctx3.exception))
 
+        self.settings("widgets/.workstreams/settings.json",
+                      {"base": "custom-{key}", "key": {"template": "{provider}\n{chain}"}, "branch": {"template": "{key}"}})
+        with self.assertRaises(workstream.WorkstreamValidationError) as ctx4:
+            workstream.render_surface(rec, "key", repo)
+        self.assertNotIn("base=", str(ctx4.exception))
+
 
 class RecordPersistenceTests(WorkstreamTestBase):
     def test_record_writers_read_and_write_under_shared_lock(self) -> None:

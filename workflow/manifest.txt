@@ -69,7 +69,7 @@ b3b22c41c6a743639e9cc5ee7d36f8b9541fb3e75f97df137853e51eef2ea7c5  644  tools/clo
 8e3f69c193164d57b5f964a41f48f52a7b835f8bf628751b08b1331d377d49bd  755  tools/codex-workflow.sh
 aba2b3934bec4b85ba04e090631da2057c981cac6059dec8ace4a8a3bd0fac9b  755  tools/finalize-check.sh
 2b0879df07b0123f330bd67e06e860453e229f422385f0c6da19e88277d855c9  755  tools/finalize-run.sh
-cdf0eb78d6a968912f7c3ddbac1cf7231b1a3706fa5b55b46a4e091436fd35a8  644  tools/lib/agy_tmux_dashboard.py
+8a4beec463e0380eda34160e1a279f2d1b9e41d647e3edc8dddc372c554f097e  644  tools/lib/agy_tmux_dashboard.py
 c65a9d624fbaf3e578e61a3665878270255cbc0c7581174eff5e4e420ae5fc80  644  tools/lib/codex_rpc.py
 b46a5fb41794ce2ac7b79ffdbfc7765c3bb0241fb005be870a7b7198408721f3  644  tools/lib/codex_workflow.py
 f7673606e34113d3fbd15395094c7fdbfddce405964cc5f0f7222260c6d2282d  644  tools/lib/finalize_check.py
@@ -93,7 +93,7 @@ d6c45d70d96c21971b022ea65a73f2b0fd4af0dd0b8abb524a9fd34cfd7a43df  644  tools/lib
 bdc67f5e5e4a39317822f39d306cff15c4b9eb7b43335d2a656ac68f640bd6ed  644  tools/lib/wf_review_gaps.py
 3c46a31599092ceabb336ccd81b8e9a03631dbd0e8942152e8bbc420a74180fc  644  tools/lib/wf_tokens.py
 3b1a0716083c8f92ab94a60d59ecee59a1716e54cca16dd6cf25f77e2abfe41f  644  tools/lib/wf_usage.py
-2903b90af7c9a3e6bbf99053fb35b7ac157b520f6799805ad662fbd532b4df91  644  tools/lib/workstream.py
+551b1883ff779ef86c21480c6f7c1ee5a78f190809e66368b7689372ab46a60f  644  tools/lib/workstream.py
 f6d369e82e99df2b899a4e53f1418bced2ab931851ae6e9ea7603c2460975cbc  755  tools/mcp-notion.sh
 6a1180dd4d342705d243b1f0a8a1ecb59826860e67a7e0de6aa63b232c757cad  755  tools/mem-guard.sh
 1983059031a0f6fa099c539706b0f46edd41fd4aa675016a0ebbb0e126262b7b  755  tools/merge-run.sh

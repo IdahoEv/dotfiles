@@ -296,7 +296,7 @@ def load_workstream_meta(pane_path: str) -> tuple[str, str, str]:
     rec = workstream.load_record(pane_path)
     if rec is None:
         return ("", "", "")
-    if rec.tickets and (rec.ticket_provider or not rec.key):
+    if rec.tickets and (rec.ticket_provider or rec.kind == "ticket"):
         ticket_ref = workstream.derive_key(rec, pane_path, surface="row")
     else:
         ticket_ref = rec.key or ""
