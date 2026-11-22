@@ -38,10 +38,10 @@ line1=""
 if [ -n "$cwd" ] && command -v workstream.sh >/dev/null 2>&1; then
   ws_json="$(workstream.sh statusline --dir "$cwd" --format json 2>/dev/null || true)"
   if [ -n "$ws_json" ]; then
-    IFS=$US read -r ws_proj ws_name ws_tags ws_pr_num ws_pr_url ws_pr_state ws_rev < <(
+    IFS=$US read -r ws_proj ws_name ws_tags ws_pr_num ws_pr_url ws_pr_state ws_sync ws_rev < <(
       printf '%s' "$ws_json" | jq -r '[
         .project // "", .name // "", .tags // "",
-        .pr_num // "", .pr_url // "", .pr_state // "", .reviews // ""
+        .pr_num // "", .pr_url // "", .pr_state // "", .sync // "", .reviews // ""
       ] | map(tostring) | join("\u001f")' 2>/dev/null || true)
     if [ -n "$ws_name" ] || [ -n "$ws_proj" ]; then
       ws_proj_seg=""; [ -n "$ws_proj" ] && ws_proj_seg="${BLUE}${ws_proj}${RST}"
@@ -52,8 +52,16 @@ if [ -n "$cwd" ] && command -v workstream.sh >/dev/null 2>&1; then
         ws_pr_seg="PR #${ws_pr_num}${ws_pr_state:+ ${ws_pr_state//_/ }}"
         [ -n "$ws_pr_url" ] && ws_pr_seg=$'\e]8;;'"${ws_pr_url}"$'\a'"${ws_pr_seg}"$'\e]8;;\a'
       fi
+      ws_sync_seg=""
+      case "$ws_sync" in
+        clean)           ws_sync_seg="${GREEN}sync: clean${RST}" ;;
+        dirty|ahead)     ws_sync_seg="${AMBER}sync: ${ws_sync}${RST}" ;;
+        behind|diverged) ws_sync_seg="${RED}sync: ${ws_sync}${RST}" ;;
+        "")              ;;
+        *)               ws_sync_seg="${DIM}sync: ${ws_sync}${RST}" ;;
+      esac
       ws_rev_seg=""; [ -n "$ws_rev" ] && ws_rev_seg="reviews: ${ws_rev}"
-      line1=$(join "$ws_proj_seg" "$ws_name_seg" "$ws_tags_seg" "$ws_pr_seg" "$ws_rev_seg")
+      line1=$(join "$ws_proj_seg" "$ws_name_seg" "$ws_tags_seg" "$ws_pr_seg" "$ws_sync_seg" "$ws_rev_seg")
     fi
   fi
 fi

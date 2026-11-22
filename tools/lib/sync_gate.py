@@ -58,9 +58,25 @@ class Facts:
     base: str = ""
 
 
+def indicator_state(f: Facts) -> str:
+    """Local/PR sync state for the statusline: clean, dirty, ahead, behind, diverged."""
+    if f.dirty:
+        return "dirty"
+    if f.head_vs_pr == "ahead":
+        return "ahead"
+    if f.head_vs_pr == "behind":
+        return "behind"
+    if f.head_vs_pr == "diverged":
+        return "diverged"
+    if f.head_vs_pr == "equal":
+        return "clean"
+    return ""
+
+
 def choose_verdict(f: Facts) -> tuple[str, str]:
     """First failing check wins; local state is judged before the PR's."""
-    if f.dirty:
+    state = indicator_state(f)
+    if state == "dirty":
         v = "dirty"
     elif not f.gh_ok:
         v = "unknown"
@@ -72,11 +88,11 @@ def choose_verdict(f: Facts) -> tuple[str, str]:
         v = "closed"
     elif f.is_draft:
         v = "draft"
-    elif f.head_vs_pr == "ahead":
+    elif state == "ahead":
         v = "unpushed"
-    elif f.head_vs_pr == "behind":
+    elif state == "behind":
         v = "behind-pr"
-    elif f.head_vs_pr == "diverged":
+    elif state == "diverged":
         v = "diverged"
     elif f.mergeable == "CONFLICTING":
         v = "conflict"
@@ -97,6 +113,19 @@ def _relation(dir_: str, head: str, pr_head: str) -> str:
     if git_ok(dir_, "merge-base", "--is-ancestor", head, pr_head):
         return "behind"
     return "diverged"
+
+
+def local_sync_state(dir_: str, pr_head: str) -> str:
+    """Indicator state from the worktree and a known PR head, without a network call."""
+    if not pr_head:
+        return ""
+    f = Facts(head=git(dir_, "rev-parse", "HEAD"))
+    if not f.head:
+        return ""
+    f.dirty = [l for l in git(dir_, "status", "--porcelain").splitlines() if l]
+    if not f.dirty:
+        f.head_vs_pr = _relation(dir_, f.head, pr_head)
+    return indicator_state(f)
 
 
 def _view(dir_: str, branch: str) -> tuple[str, dict]:

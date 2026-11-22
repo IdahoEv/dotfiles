@@ -8,7 +8,7 @@
     workstream.py chain-tag [--dir <wt>]
     workstream.py render <surface> [--dir <wt>]
     workstream.py setting <key> [--dir <wt>] [--env <VAR>] [--default <val>] [--with-source]
-    workstream.py set-pr [--dir <wt>] --number <N> [--url <url>] [--state <state>]
+    workstream.py set-pr [--dir <wt>] --number <N> [--url <url>] [--state <state>] [--head <sha>]
     workstream.py set-reviews [--dir <wt>] [--local <N[*]>] [--remote <N[*]>]
     workstream.py statusline [--dir <wt>] [--project <name>] [--format text|json]
 """
@@ -29,6 +29,7 @@ from typing import Any, Iterator
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import repo_facts  # noqa: E402
+import sync_gate  # noqa: E402
 
 RECORD_FILENAME = ".workstream.json"
 VALID_KINDS = ("ticket", "talk", "iteration")
@@ -624,6 +625,7 @@ def update_pr(
     number: int,
     url: str = "",
     state: str = "",
+    head: str = "",
 ) -> WorkstreamRecord | None:
     """Record PR metadata in <worktree>/.workstream.json when present."""
     with _record_lock(worktree) as root:
@@ -637,6 +639,8 @@ def update_pr(
             pr_data["url"] = url
         if state:
             pr_data["state"] = state
+        if head:
+            pr_data["head"] = head
         if pr_data != rec.pr:
             rec.pr = pr_data
             _save_record_locked(root, rec)
@@ -708,10 +712,12 @@ def statusline_fields(worktree: str = ".", project: str = "") -> dict[str, str] 
     pr_num = ""
     pr_url = ""
     pr_state = ""
+    pr_head = ""
     if isinstance(rec.pr, dict) and rec.pr.get("number"):
         pr_num = str(rec.pr["number"])
         pr_url = str(rec.pr.get("url", "") or "")
         pr_state = str(rec.pr.get("state", "") or "")
+        pr_head = str(rec.pr.get("head", "") or "")
 
     rev = rec.reviews or {}
     local_n = int(rev.get("local", 0) or 0)
@@ -733,6 +739,7 @@ def statusline_fields(worktree: str = ".", project: str = "") -> dict[str, str] 
         "pr_num": pr_num,
         "pr_url": pr_url,
         "pr_state": pr_state,
+        "sync": sync_gate.local_sync_state(root, pr_head),
         "reviews": reviews_str,
     }
 
@@ -746,8 +753,9 @@ def format_statusline_line1(worktree: str = ".", project: str = "") -> str:
     if fields["pr_num"]:
         state = fields["pr_state"].replace("_", " ")
         pr_seg = f"PR #{fields['pr_num']}" + (f" {state}" if state else "")
+    sync_seg = f"sync: {fields['sync']}" if fields["sync"] else ""
     rev_seg = f"reviews: {fields['reviews']}" if fields["reviews"] else ""
-    segs = [fields["project"], fields["name"], fields["tags"], pr_seg, rev_seg]
+    segs = [fields["project"], fields["name"], fields["tags"], pr_seg, sync_seg, rev_seg]
     return " | ".join(s for s in segs if s)
 
 
@@ -805,6 +813,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_pr.add_argument("--number", required=True, type=int)
     p_pr.add_argument("--url", default="")
     p_pr.add_argument("--state", default="")
+    p_pr.add_argument("--head", default="")
 
     p_rev = sub.add_parser("set-reviews")
     p_rev.add_argument("--dir", default=".")
@@ -939,7 +948,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.cmd == "set-pr":
-        rec = update_pr(args.dir, args.number, url=args.url, state=args.state)
+        rec = update_pr(args.dir, args.number, url=args.url, state=args.state, head=args.head)
         return 0 if rec is not None else 1
 
     if args.cmd == "set-reviews":

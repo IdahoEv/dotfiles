@@ -701,6 +701,38 @@ class CliTests(WorkstreamTestBase):
             "dotfiles | Is162+163 agent row statusline | [REVIEWED][PR] | PR #205 APPROVED | reviews: 2 local, 1 remote",
         )
 
+    def test_statusline_sync_indicator(self) -> None:
+        repo = self.make_repo("dotfiles")
+        workstream.init_ticket_record(
+            repo,
+            provider="github",
+            tickets=[{"id": "214"}],
+            desc="sync indicator",
+        )
+        head = repo_facts.git(repo, "rev-parse", "HEAD")
+        workstream.update_pr(repo, 214, head=head)
+        self.assertEqual(workstream.statusline_fields(repo)["sync"], "clean")
+
+        Path(repo, "scratch.txt").write_text("x")
+        self.assertEqual(workstream.statusline_fields(repo)["sync"], "dirty")
+        os.unlink(os.path.join(repo, "scratch.txt"))
+
+        subprocess.run(
+            ["git", "-C", repo, "commit", "-q", "--allow-empty", "-m", "work"],
+            check=True,
+        )
+        self.assertEqual(workstream.statusline_fields(repo)["sync"], "ahead")
+
+        pr_head = repo_facts.git(repo, "rev-parse", "HEAD")
+        workstream.update_pr(repo, 214, head=pr_head)
+        subprocess.run(
+            ["git", "-C", repo, "reset", "-q", "--hard", "HEAD~1"],
+            check=True,
+        )
+        fields = workstream.statusline_fields(repo)
+        self.assertEqual(fields["sync"], "behind")
+        self.assertIn("sync: behind", workstream.format_statusline_line1(repo))
+
 
 if __name__ == "__main__":
     unittest.main()
