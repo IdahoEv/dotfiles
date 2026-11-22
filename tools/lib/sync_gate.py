@@ -132,17 +132,19 @@ def local_facts(dir_: str) -> Facts:
 
 
 def _comparison_head(dir_: str, pr_head: str) -> str:
-    """The PR head to compare against: local tracking ref first, record fallback."""
+    """The PR head to compare against: the record, unless the tracking ref moved ahead."""
     upstream = git(dir_, "rev-parse", "--verify", "--quiet", "@{upstream}")
     if not upstream:
         return pr_head
     if not pr_head or upstream == pr_head:
         return upstream
-    # A descendant record head means the PR advanced remotely; otherwise the
-    # tracking ref won, covering this worktree's own pushes and force-pushes.
-    if git_ok(dir_, "merge-base", "--is-ancestor", upstream, pr_head):
+    # A record head this clone lacks is newer than the local ref (remote advance).
+    if not git_ok(dir_, "cat-file", "-e", f"{pr_head}^{{commit}}"):
         return pr_head
-    return upstream
+    # The tracking ref descends from the record only when this worktree pushed last.
+    if git_ok(dir_, "merge-base", "--is-ancestor", pr_head, upstream):
+        return upstream
+    return pr_head
 
 
 def local_sync_state(dir_: str, pr_head: str) -> str:

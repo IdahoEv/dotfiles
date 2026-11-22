@@ -794,6 +794,38 @@ class CliTests(WorkstreamTestBase):
         )
         self.assertEqual(workstream.statusline_fields(repo)["sync"], "behind")
 
+        # The record head is a descendant the tracking ref has not caught up with.
+        subprocess.run(
+            ["git", "-C", repo, "checkout", "-q", "-b", "record-advance"],
+            check=True,
+        )
+        subprocess.run(
+            ["git", "-C", repo, "commit", "-q", "--allow-empty", "-m", "record"],
+            check=True,
+        )
+        record_head = repo_facts.git(repo, "rev-parse", "HEAD")
+        subprocess.run(
+            ["git", "-C", repo, "checkout", "-q", "main"],
+            check=True,
+        )
+        workstream.update_pr(repo, 214, head=record_head)
+        self.assertEqual(workstream.statusline_fields(repo)["sync"], "behind")
+
+        # A rewritten PR head is unrelated to the stale tracking ref.
+        tree = repo_facts.git(repo, "rev-parse", "HEAD^{tree}")
+        orphan = subprocess.run(
+            ["git", "-C", repo, "commit-tree", tree, "-m", "rewrite"],
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.strip()
+        workstream.update_pr(repo, 214, head=orphan)
+        self.assertEqual(workstream.statusline_fields(repo)["sync"], "diverged")
+
+        # A record head this clone never fetched is newer, not equal.
+        workstream.update_pr(repo, 214, head="f" * 40)
+        self.assertEqual(workstream.statusline_fields(repo)["sync"], "behind")
+
 
 if __name__ == "__main__":
     unittest.main()
