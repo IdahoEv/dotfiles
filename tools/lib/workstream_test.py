@@ -698,7 +698,7 @@ class CliTests(WorkstreamTestBase):
         workstream.update_phase(repo, pr=True)
         self.assertEqual(
             workstream.format_statusline_line1(repo, project="dotfiles"),
-            "dotfiles | Is162+163 agent row statusline | [REVIEWED][PR] | PR #205 APPROVED | reviews: 2 local, 1 remote",
+            "dotfiles | Is162+163 agent row statusline | [REVIEWED][PR] | PR #205 APPROVED | sync: unknown | reviews: 2 local, 1 remote",
         )
 
     def test_statusline_sync_indicator(self) -> None:
@@ -709,7 +709,13 @@ class CliTests(WorkstreamTestBase):
             tickets=[{"id": "214"}],
             desc="sync indicator",
         )
+        Path(repo, "scratch.txt").write_text("x")
+        self.assertEqual(workstream.statusline_fields(repo)["sync"], "dirty")
+        os.unlink(os.path.join(repo, "scratch.txt"))
+
         head = repo_facts.git(repo, "rev-parse", "HEAD")
+        workstream.update_pr(repo, 214)
+        self.assertEqual(workstream.statusline_fields(repo)["sync"], "unknown")
         workstream.update_pr(repo, 214, head=head)
         self.assertEqual(workstream.statusline_fields(repo)["sync"], "clean")
 
@@ -732,6 +738,61 @@ class CliTests(WorkstreamTestBase):
         fields = workstream.statusline_fields(repo)
         self.assertEqual(fields["sync"], "behind")
         self.assertIn("sync: behind", workstream.format_statusline_line1(repo))
+
+    def test_statusline_sync_follows_upstream_after_push(self) -> None:
+        repo = self.make_repo("dotfiles")
+        head = repo_facts.git(repo, "rev-parse", "HEAD")
+        subprocess.run(
+            ["git", "-C", repo, "update-ref", "refs/remotes/origin/main", head],
+            check=True,
+        )
+        subprocess.run(
+            ["git", "-C", repo, "config", "branch.main.remote", "origin"],
+            check=True,
+        )
+        subprocess.run(
+            ["git", "-C", repo, "config", "branch.main.merge", "refs/heads/main"],
+            check=True,
+        )
+        workstream.init_ticket_record(
+            repo,
+            provider="github",
+            tickets=[{"id": "214"}],
+            desc="sync indicator",
+        )
+        workstream.update_pr(repo, 214, head=head)
+
+        subprocess.run(
+            ["git", "-C", repo, "commit", "-q", "--allow-empty", "-m", "work"],
+            check=True,
+        )
+        self.assertEqual(workstream.statusline_fields(repo)["sync"], "ahead")
+
+        pushed = repo_facts.git(repo, "rev-parse", "HEAD")
+        subprocess.run(
+            ["git", "-C", repo, "update-ref", "refs/remotes/origin/main", pushed],
+            check=True,
+        )
+        self.assertEqual(workstream.statusline_fields(repo)["sync"], "clean")
+
+        subprocess.run(
+            ["git", "-C", repo, "checkout", "-q", "-b", "advance"],
+            check=True,
+        )
+        subprocess.run(
+            ["git", "-C", repo, "commit", "-q", "--allow-empty", "-m", "remote"],
+            check=True,
+        )
+        remote = repo_facts.git(repo, "rev-parse", "HEAD")
+        subprocess.run(
+            ["git", "-C", repo, "checkout", "-q", "main"],
+            check=True,
+        )
+        subprocess.run(
+            ["git", "-C", repo, "update-ref", "refs/remotes/origin/main", remote],
+            check=True,
+        )
+        self.assertEqual(workstream.statusline_fields(repo)["sync"], "behind")
 
 
 if __name__ == "__main__":

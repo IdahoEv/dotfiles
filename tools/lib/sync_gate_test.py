@@ -91,6 +91,9 @@ class Verdict(unittest.TestCase):
             self.assertEqual(sg.indicator_state(f), state)
             self.assertEqual(sg.choose_verdict(f)[0], verdict)
 
+    def test_every_indicator_state_has_a_local_verdict(self):
+        self.assertEqual(set(sg.LOCAL_VERDICTS), set(sg.INDICATOR_STATES))
+
 
 class Cli(Base):
     def setUp(self):

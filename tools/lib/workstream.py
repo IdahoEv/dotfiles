@@ -700,7 +700,7 @@ def _project_name(worktree: str) -> str:
 
 
 def statusline_fields(worktree: str = ".", project: str = "") -> dict[str, str] | None:
-    """Return statusline line-1 fields derived from .workstream.json alone, or None."""
+    """Return statusline line-1 fields from .workstream.json plus local git state, or None."""
     loaded = _load_record_file(worktree)
     if loaded is None:
         return None
@@ -732,6 +732,12 @@ def statusline_fields(worktree: str = ".", project: str = "") -> dict[str, str] 
             parts.append(f"{remote_n}{remote_star} remote")
         reviews_str = ", ".join(parts)
 
+    sync_state = sync_gate.local_sync_state(root, pr_head)
+    if pr_num:
+        sync = sync_state or "unknown"
+    else:
+        sync = "dirty" if sync_state == "dirty" else ""
+
     return {
         "project": proj,
         "name": ws_name,
@@ -739,13 +745,13 @@ def statusline_fields(worktree: str = ".", project: str = "") -> dict[str, str] 
         "pr_num": pr_num,
         "pr_url": pr_url,
         "pr_state": pr_state,
-        "sync": sync_gate.local_sync_state(root, pr_head),
+        "sync": sync,
         "reviews": reviews_str,
     }
 
 
 def format_statusline_line1(worktree: str = ".", project: str = "") -> str:
-    """Format statusline line 1 from .workstream.json alone."""
+    """Format statusline line 1 from the record plus local git state."""
     fields = statusline_fields(worktree, project=project)
     if fields is None:
         return ""

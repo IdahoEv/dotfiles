@@ -32,8 +32,9 @@ join() {  # join the non-empty arguments with the separator
 }
 
 # ---- line 1 --------------------------------------------------------------------------
-# Generated from .workstream.json when the repo has one; otherwise the legacy branch/title line.
-#   project | workstream name | tags | PR # | local/remote review counts
+# Generated from .workstream.json plus the worktree's local git state when the repo has
+# one; otherwise the legacy branch/title line.
+#   project | workstream name | tags | PR # | sync | local/remote review counts
 line1=""
 if [ -n "$cwd" ] && command -v workstream.sh >/dev/null 2>&1; then
   ws_json="$(workstream.sh statusline --dir "$cwd" --format json 2>/dev/null || true)"
@@ -64,6 +65,35 @@ if [ -n "$cwd" ] && command -v workstream.sh >/dev/null 2>&1; then
       line1=$(join "$ws_proj_seg" "$ws_name_seg" "$ws_tags_seg" "$ws_pr_seg" "$ws_sync_seg" "$ws_rev_seg")
     fi
   fi
+fi
+
+# ---- review rounds ---------------------------------------------------------------
+# Rounds need GitHub calls (seconds), so refresh in the background and show the
+# last result; a slow script would be cancelled by the next update. Local rounds
+# come from the file github-review-state.sh --set-local writes, so a change there also
+# triggers a refresh. The same pass refreshes the record's PR head, which keeps the
+# sync segment current when the PR advances remotely.
+rounds_seg=""
+gitdir=$(git -C "$cwd" rev-parse --absolute-git-dir 2>/dev/null)
+rounds_file="$gitdir/local-review-rounds"
+pr_ref="${pr_num:-$ws_pr_num}"
+if [ -n "$pr_ref" ] || [ -f "$rounds_file" ]; then
+  key="${sid:-$(printf '%s' "$gitdir" | cksum | cut -d' ' -f1)}"
+  cache="${TMPDIR:-/tmp}/statusline-rounds-$key"
+  if [ ! -f "$cache" ] || [ -n "$(find "$cache" -mmin +1 2>/dev/null)" ] || [ "$rounds_file" -nt "$cache" ]; then
+    # mkdir is an atomic lock; one older than a minute belongs to a dead refresh.
+    [ -n "$(find "$cache.lock" -maxdepth 0 -mmin +1 2>/dev/null)" ] && rmdir "$cache.lock" 2>/dev/null
+    if mkdir "$cache.lock" 2>/dev/null; then
+      # On failure (offline, rate-limited) touch the cache so the retry waits out
+      # the staleness window instead of firing on every render.
+      ( trap 'rm -f "$cache.tmp"; rmdir "$cache.lock"' EXIT
+        cd "$cwd" && ~/.claude/skills/github-review-procedure/github-review-state.sh --bare ${pr_ref:+--pr "$pr_ref"} \
+          > "$cache.tmp" 2>/dev/null && mv "$cache.tmp" "$cache" || touch "$cache"
+      ) </dev/null >/dev/null 2>&1 &
+    fi
+  fi
+  rounds=$(cat "$cache" 2>/dev/null)
+  [ -n "$rounds" ] && rounds_seg="reviews: ${rounds}"
 fi
 
 if [ -z "$line1" ]; then
@@ -111,33 +141,6 @@ pr_seg=""
 if [ -n "$pr_num" ]; then
   pr_seg="PR #${pr_num}${pr_state:+ ${pr_state//_/ }}"
   [ -n "$pr_url" ] && pr_seg=$'\e]8;;'"${pr_url}"$'\a'"${pr_seg}"$'\e]8;;\a'
-fi
-
-# ---- review rounds ---------------------------------------------------------------
-# Rounds need GitHub calls (seconds), so refresh in the background and show the
-# last result; a slow script would be cancelled by the next update. Local rounds
-# come from the file github-review-state.sh --set-local writes, so a change there also
-# triggers a refresh.
-rounds_seg=""
-gitdir=$(git -C "$cwd" rev-parse --absolute-git-dir 2>/dev/null)
-rounds_file="$gitdir/local-review-rounds"
-if [ -n "$pr_num" ] || [ -f "$rounds_file" ]; then
-  key="${sid:-$(printf '%s' "$gitdir" | cksum | cut -d' ' -f1)}"
-  cache="${TMPDIR:-/tmp}/statusline-rounds-$key"
-  if [ ! -f "$cache" ] || [ -n "$(find "$cache" -mmin +1 2>/dev/null)" ] || [ "$rounds_file" -nt "$cache" ]; then
-    # mkdir is an atomic lock; one older than a minute belongs to a dead refresh.
-    [ -n "$(find "$cache.lock" -maxdepth 0 -mmin +1 2>/dev/null)" ] && rmdir "$cache.lock" 2>/dev/null
-    if mkdir "$cache.lock" 2>/dev/null; then
-      # On failure (offline, rate-limited) touch the cache so the retry waits out
-      # the staleness window instead of firing on every render.
-      ( trap 'rm -f "$cache.tmp"; rmdir "$cache.lock"' EXIT
-        cd "$cwd" && ~/.claude/skills/github-review-procedure/github-review-state.sh --bare ${pr_num:+--pr "$pr_num"} \
-          > "$cache.tmp" 2>/dev/null && mv "$cache.tmp" "$cache" || touch "$cache"
-      ) </dev/null >/dev/null 2>&1 &
-    fi
-  fi
-  rounds=$(cat "$cache" 2>/dev/null)
-  [ -n "$rounds" ] && rounds_seg="reviews: ${rounds}"
 fi
 
 # ---- legacy line 1 -------------------------------------------------------------------
