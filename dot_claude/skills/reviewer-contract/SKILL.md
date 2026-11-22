@@ -24,7 +24,7 @@ For a diff with no symbols (docs, prompts, config), treat each factual claim or 
 
 Build a retrieval table in your reasoning before writing findings: one row per changed symbol, with its production caller/reader, the neighbor you read, and the seam you checked. A blank cell is either a finding or a name in the unverified list. The table stays internal; the output is still the finding lines.
 
-**Budget.** At most 20 retrieval calls per reviewer launch — Read, Glob, Grep, or a read-only Bash command — and no more than 3 on one symbol. Stop when every changed symbol has a caller/reader answer and its seams checked, or when the budget is spent. If the budget runs out first, name the symbols left unverified; an unverified symbol is not a finding.
+**Budget.** At most 20 retrieval calls per reviewer launch — Read, Glob, Grep, or a read-only Bash command — and no more than 3 on one symbol. Each call does one read or search: a Bash command must not chain or loop several (`grep` over a list, `for`, `;`/`&&` sequences, `xargs`), since that hides calls from the count. A single `grep -r` or one multi-pattern `rg` is one search. Stop when every changed symbol has a caller/reader answer and its seams checked, or when the budget is spent. If the budget runs out first, name the symbols left unverified; an unverified symbol is not a finding.
 
 **Grounding.** Every finding must cite what retrieval showed: the `file:line` call site, the grep result, the test that does not cover the path, or the seam left stale. Put it in the finding's concrete failing input/caller field. Drop a finding you cannot ground — "no caller found" is itself the evidence, not a reason to soften the claim.
 
