@@ -138,8 +138,11 @@ def _comparison_head(dir_: str, head: str, pr_head: str, head_source: str) -> st
         return pr_head
     if not pr_head or upstream == pr_head:
         return upstream
-    # A remote observation outranks the local tracking ref, which may be stale.
-    if head_source == "remote":
+    # A remote observation outranks the local tracking ref, which may be stale,
+    # unless the ref has advanced past it (this worktree pushed afterwards).
+    if head_source == "remote" and not git_ok(
+        dir_, "merge-base", "--is-ancestor", pr_head, upstream
+    ):
         return pr_head
     # A push-sourced head is superseded once this branch sits at its tracking ref.
     if head == upstream:

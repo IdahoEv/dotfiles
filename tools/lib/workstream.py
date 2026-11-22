@@ -9,7 +9,7 @@
     workstream.py render <surface> [--dir <wt>]
     workstream.py setting <key> [--dir <wt>] [--env <VAR>] [--default <val>] [--with-source]
     workstream.py set-pr [--dir <wt>] --number <N> [--url <url>] [--state <state>]
-                         [--head <sha>] [--head-source push|remote]
+                         [--head <sha>] [--head-source push|remote] [--head-if-unchanged <sha>]
     workstream.py refresh-pr-head [--dir <wt>]
     workstream.py set-reviews [--dir <wt>] [--local <N[*]>] [--remote <N[*]>]
     workstream.py statusline [--dir <wt>] [--project <name>] [--format text|json]
@@ -630,6 +630,7 @@ def update_pr(
     state: str = "",
     head: str = "",
     head_source: str = "",
+    expect_head: str | None = None,
 ) -> WorkstreamRecord | None:
     """Record PR metadata in <worktree>/.workstream.json when present."""
     with _record_lock(worktree) as root:
@@ -638,6 +639,12 @@ def update_pr(
             return None
         root, rec = loaded
         pr_data: dict[str, Any] = dict(rec.pr) if isinstance(rec.pr, dict) else {}
+        current_head = str(pr_data.get("head", "") or "")
+        if expect_head is not None and current_head != expect_head:
+            return rec
+        # A remote observation of the same head must not retire a push stamp.
+        if head and head == current_head and head_source == "remote":
+            return rec
         pr_data["number"] = int(number)
         if url:
             pr_data["url"] = url
@@ -699,7 +706,7 @@ def update_reviews(
 
 
 def refresh_pr_head(worktree: str = ".") -> WorkstreamRecord | None:
-    """Refresh pr.head from GitHub's pull ref, skipping a concurrent push write."""
+    """Refresh pr.head from the PR ref, skipping a concurrent push write."""
     loaded = _load_record_file(worktree)
     if loaded is None:
         return None
@@ -707,9 +714,6 @@ def refresh_pr_head(worktree: str = ".") -> WorkstreamRecord | None:
     if not isinstance(rec.pr, dict) or not rec.pr.get("number"):
         return None
     old_head = str(rec.pr.get("head", "") or "")
-    url = repo_facts.git(root, "remote", "get-url", "origin")
-    if "github.com" not in url:
-        return None
     number = str(rec.pr["number"])
     try:
         r = repo_facts.run_cmd(
@@ -721,20 +725,9 @@ def refresh_pr_head(worktree: str = ".") -> WorkstreamRecord | None:
     fields = r.stdout.split()
     if r.returncode != 0 or not fields:
         return None
-    head = fields[0]
-    with _record_lock(root) as locked_root:
-        loaded = _load_record_file(locked_root)
-        if loaded is None:
-            return None
-        locked_root, rec = loaded
-        if not isinstance(rec.pr, dict) or str(rec.pr.get("head", "") or "") != old_head:
-            return None
-        if rec.pr.get("head") == head:
-            return rec
-        rec.pr["head"] = head
-        rec.pr["head_source"] = "remote"
-        _save_record_locked(locked_root, rec)
-        return rec
+    return update_pr(
+        root, int(number), head=fields[0], head_source="remote", expect_head=old_head
+    )
 
 
 def _project_name(worktree: str) -> str:
@@ -868,6 +861,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_pr.add_argument("--state", default="")
     p_pr.add_argument("--head", default="")
     p_pr.add_argument("--head-source", default="")
+    p_pr.add_argument("--head-if-unchanged", default=None)
 
     p_ref = sub.add_parser("refresh-pr-head")
     p_ref.add_argument("--dir", default=".")
@@ -1006,7 +1000,8 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.cmd == "set-pr":
         rec = update_pr(args.dir, args.number, url=args.url, state=args.state,
-                        head=args.head, head_source=args.head_source)
+                        head=args.head, head_source=args.head_source,
+                        expect_head=args.head_if_unchanged)
         return 0 if rec is not None else 1
 
     if args.cmd == "refresh-pr-head":

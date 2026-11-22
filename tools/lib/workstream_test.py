@@ -848,6 +848,50 @@ class CliTests(WorkstreamTestBase):
         workstream.update_pr(repo, 214, head=pushed, head_source="push")
         self.assertEqual(workstream.statusline_fields(repo)["sync"], "clean")
 
+    def test_remote_observed_head_yields_to_a_newer_ref(self) -> None:
+        repo = self.make_repo("dotfiles")
+        head = repo_facts.git(repo, "rev-parse", "HEAD")
+        subprocess.run(
+            ["git", "-C", repo, "update-ref", "refs/remotes/origin/main", head],
+            check=True,
+        )
+        subprocess.run(["git", "-C", repo, "config", "branch.main.remote", "origin"], check=True)
+        subprocess.run(
+            ["git", "-C", repo, "config", "branch.main.merge", "refs/heads/main"],
+            check=True,
+        )
+        workstream.init_ticket_record(repo, provider="github", tickets=[{"id": "214"}])
+        workstream.update_pr(repo, 214, head=head, head_source="remote")
+
+        subprocess.run(["git", "-C", repo, "checkout", "-q", "-b", "advance"], check=True)
+        subprocess.run(
+            ["git", "-C", repo, "commit", "-q", "--allow-empty", "-m", "remote"], check=True
+        )
+        newer = repo_facts.git(repo, "rev-parse", "HEAD")
+        subprocess.run(["git", "-C", repo, "checkout", "-q", "main"], check=True)
+        subprocess.run(
+            ["git", "-C", repo, "update-ref", "refs/remotes/origin/main", newer], check=True
+        )
+        self.assertEqual(workstream.statusline_fields(repo)["sync"], "behind")
+
+        subprocess.run(["git", "-C", repo, "reset", "-q", "--hard", newer], check=True)
+        self.assertEqual(workstream.statusline_fields(repo)["sync"], "clean")
+
+    def test_update_pr_keeps_a_push_stamp_and_cas(self) -> None:
+        repo = self.make_repo("dotfiles")
+        workstream.init_ticket_record(repo, provider="github", tickets=[{"id": "214"}])
+        workstream.update_pr(repo, 214, head="a", head_source="push")
+        workstream.update_pr(repo, 214, head="a", head_source="remote")
+        rec = workstream.load_record(repo)
+        self.assertEqual(rec.pr["head_source"], "push")
+
+        workstream.update_pr(repo, 214, head="b", head_source="remote", expect_head="a")
+        rec = workstream.load_record(repo)
+        self.assertEqual((rec.pr["head"], rec.pr["head_source"]), ("b", "remote"))
+
+        workstream.update_pr(repo, 214, head="c", head_source="remote", expect_head="a")
+        self.assertEqual(workstream.load_record(repo).pr["head"], "b")
+
     def test_refresh_pr_head(self) -> None:
         repo = self.make_repo("dotfiles")
         workstream.init_ticket_record(repo, provider="github", tickets=[{"id": "214"}])
@@ -879,23 +923,49 @@ class CliTests(WorkstreamTestBase):
         self.assertEqual(calls[0].kwargs["timeout"], 10)
         self.assertIn("refs/pull/214/head", calls[0].args[0])
 
-    def test_refresh_pr_head_skips_non_github_origin(self) -> None:
+    def test_refresh_pr_head_handles_enterprise_remote(self) -> None:
         repo = self.make_repo("dotfiles")
         workstream.init_ticket_record(repo, provider="github", tickets=[{"id": "214"}])
         workstream.update_pr(repo, 214, head="old", head_source="push")
-        calls: list[list[str]] = []
+
+        def run_stub(url: str, out: str):
+            def run(cmd, **kwargs):
+                if "--show-toplevel" in cmd:
+                    return subprocess.CompletedProcess(cmd, 0, repo + "\n", "")
+                if "--absolute-git-dir" in cmd:
+                    return subprocess.CompletedProcess(cmd, 0, "", "")
+                if "get-url" in cmd:
+                    return subprocess.CompletedProcess(cmd, 0, url + "\n", "")
+                if "ls-remote" in cmd:
+                    return subprocess.CompletedProcess(cmd, 0, out, "")
+                return subprocess.CompletedProcess(cmd, 0, "", "")
+            return run
+
+        with mock.patch.object(
+            workstream.repo_facts,
+            "run_cmd",
+            side_effect=run_stub("git@ghe.example.com:acme/dotfiles.git", "new\trefs/pull/214/head\n"),
+        ):
+            workstream.refresh_pr_head(repo)
+        self.assertEqual(workstream.load_record(repo).pr["head"], "new")
+
+    def test_refresh_pr_head_without_a_pull_ref_is_a_noop(self) -> None:
+        repo = self.make_repo("dotfiles")
+        workstream.init_ticket_record(repo, provider="github", tickets=[{"id": "214"}])
+        workstream.update_pr(repo, 214, head="old", head_source="push")
 
         def run(cmd, **kwargs):
-            calls.append(cmd)
             if "--show-toplevel" in cmd:
                 return subprocess.CompletedProcess(cmd, 0, repo + "\n", "")
             if "--absolute-git-dir" in cmd:
                 return subprocess.CompletedProcess(cmd, 0, "", "")
-            return subprocess.CompletedProcess(cmd, 0, "git@gitlab.com:acme/dotfiles.git\n", "")
+            if "get-url" in cmd:
+                return subprocess.CompletedProcess(cmd, 0, "git@gitlab.com:acme/dotfiles.git\n", "")
+            return subprocess.CompletedProcess(cmd, 0, "", "")
 
         with mock.patch.object(workstream.repo_facts, "run_cmd", side_effect=run):
             self.assertIsNone(workstream.refresh_pr_head(repo))
-        self.assertFalse(any("ls-remote" in cmd for cmd in calls))
+        self.assertEqual(workstream.load_record(repo).pr["head"], "old")
 
     def test_refresh_pr_head_does_not_overwrite_a_push(self) -> None:
         repo = self.make_repo("dotfiles")
@@ -915,8 +985,9 @@ class CliTests(WorkstreamTestBase):
             return subprocess.CompletedProcess(cmd, 0, "", "")
 
         with mock.patch.object(workstream.repo_facts, "run_cmd", side_effect=run):
-            self.assertIsNone(workstream.refresh_pr_head(repo))
-        self.assertEqual(workstream.load_record(repo).pr["head"], "pushed")
+            workstream.refresh_pr_head(repo)
+        rec = workstream.load_record(repo)
+        self.assertEqual((rec.pr["head"], rec.pr["head_source"]), ("pushed", "push"))
 
 
 if __name__ == "__main__":
