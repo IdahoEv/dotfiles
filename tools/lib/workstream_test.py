@@ -881,9 +881,9 @@ class CliTests(WorkstreamTestBase):
         repo = self.make_repo("dotfiles")
         workstream.init_ticket_record(repo, provider="github", tickets=[{"id": "214"}])
         workstream.update_pr(repo, 214, head="a", head_source="push")
-        workstream.update_pr(repo, 214, head="a", head_source="remote")
+        workstream.update_pr(repo, 215, head="a", head_source="remote")
         rec = workstream.load_record(repo)
-        self.assertEqual(rec.pr["head_source"], "push")
+        self.assertEqual((rec.pr["number"], rec.pr["head_source"]), (215, "push"))
 
         workstream.update_pr(repo, 214, head="b", head_source="remote", expect_head="a")
         rec = workstream.load_record(repo)

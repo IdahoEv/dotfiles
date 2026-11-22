@@ -644,7 +644,8 @@ def update_pr(
             return rec
         # A remote observation of the same head must not retire a push stamp.
         if head and head == current_head and head_source == "remote":
-            return rec
+            head = ""
+            head_source = ""
         pr_data["number"] = int(number)
         if url:
             pr_data["url"] = url
