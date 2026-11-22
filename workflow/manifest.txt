@@ -139,3 +139,4 @@ f43faf2903f173dbf1dd180f1052053a9e7d6a59de2ee3f4952f15056be8c7ca  644  workflow/
 c42c6ae3b68ab2aca41bceff8ad42be91af428625cf0db30c670bc3345cd3548  644  workflow/adapters/claude-cloud.md
 6aababc08b7d64b5f10de317a1378587aae79d034067791dfb15f6002849a3b4  644  workflow/adapters/codex-local.md
 aae0f1c2a394dfa72012a412edcadc8eede575e652591c10db91bdea2932f73f  644  workflow/adapters/codex.md
+60694edaa204ca03ac920bbb44669fd447937a801a0bd6adeba13bf264865e22  644  workflow/adapters/opencode-local.md

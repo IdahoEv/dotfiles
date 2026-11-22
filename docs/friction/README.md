@@ -1,6 +1,6 @@
 # Friction logs
 
-One file per environment and backend: `local-cli-claude`, `local-gui-claude`, `mobile-claude`, `local-agy`, `cloud-claude`, `cloud-agy`, `cloud-codex`. Generic only: no project names, private repo details or work-identifying information (this repo is public).
+One file per environment and backend: `local-cli-claude`, `local-gui-claude`, `mobile-claude`, `local-agy`, `local-opencode`, `cloud-claude`, `cloud-agy`, `cloud-codex`. Generic only: no project names, private repo details or work-identifying information (this repo is public).
 
 ## Entry template
 

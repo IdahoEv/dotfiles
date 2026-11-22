@@ -57,13 +57,15 @@ Board fields (GitHub Projects v2) cannot be set from cloud; `/open-pr` sets mile
 - **Codex Cloud (`workflow/adapters/codex.md`):** Covers `/start` and `/open-pr`. Not covered: `/finalize`, review cycles (PRs from this path state `Independent review: not performed`), governor, discussion, planning. The Codex task is already an isolated checkout, so worktree and session-launch steps are skipped.
 - **Antigravity (`workflow/adapters/agy.md`):** Covers `/start`, `/local-review-cycle`, `/open-pr`, `/github-review-comments`, `/governor`, `/pick`, `/discuss`, `/remind`, and `/finalize`, `/merge`, `/land` (local interactive sessions only; remote and headless runs stop with the PR open). Maps `local-review-cycle-manager`, leaf reviewer specialists (`*-reviewer`), and `github-review-repair-agent` onto AGY's `define_subagent`/`invoke_subagent` tools, and deploys user rules and skill wrappers under `dot_gemini/config/` (`~/.gemini/config/`). Local AGY sessions create the ticket worktree; a multi-group `/start 100,101,102 143 156` opens one `agy-tmux` window per group inside a dashboard session, and outside one takes the first group inline and prints the start command for each other group; remote unreviewed runs skip the review cycle and state `Independent review: not performed`.
 
+- **OpenCode local (`workflow/adapters/opencode-local.md`):** Covers the same commands as `codex-local.md` (governor, groom, pick, start, discuss, local-review-cycle, open-pr, github-review-comments, finalize, merge, land, sync). Maps review fan-out onto the subagent tool (`experimental.subagent_depth` ≥ 2), `AskUserQuestion` onto `question`, and launches onto `opencode run` sessions opened in session tabs. No statusline, agent view or hooks until a plugin ports them; `/board` unsupported.
+
 Constructs without a mapping stop the task with a report, never an improvisation.
 
 The tests prove the bootstrap and adapter in source control, not that a phone-launched cloud task has network access, credentials, the right checkout, or build dependencies. Record those in `docs/cloud-pilot-checklist.md`.
 
 ## Adding a host
 
-Copy an existing adapter (`workflow/adapters/codex.md` or `agy.md`), change the construct behaviors, and add a `check` call for it in the drift test. The bootstrap and commands do not change.
+Copy an existing adapter (`workflow/adapters/codex.md` or `agy.md`), change the construct behaviors, and add a `check` call for it in the drift test. The bootstrap and commands do not change. For a local interactive host, copy a local adapter (`codex-local.md`, `opencode-local.md`) instead; the bootstrap is not involved.
 
 ## Ticket access when `gh` is unauthenticated
 
