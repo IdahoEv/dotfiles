@@ -9,7 +9,7 @@ model to work out command-by-command: which ticket does this branch belong
 to, is there a PR, did it merge, did it actually land on the base branch,
 are there local commits the PR never saw, and where is the base worktree.
 
-Stdout is 28 key=value lines, one per fact, in the order of the Facts
+Stdout is 29 key=value lines, one per fact, in the order of the Facts
 fields; `verdict` is the one-line summary a caller branches on. Exit 0
 whenever the repo could be inspected (read `verdict`, not $?) and 1 only on
 usage/precondition errors. Makes NO changes: no pushes, no deletes, no
@@ -73,6 +73,11 @@ HELP = """# finalize-check.sh — read-only post-merge verification for a featur
 #   head_oid=<sha>              (local tip)
 #   head_matches=same|behind|ahead|diverged|unknown
 #                               (local tip's relationship to the PR head)
+#   local_commits_in_base=yes|no|unknown|
+#                               (when head_matches is ahead/diverged: are all
+#                               commits beyond the PR head already on
+#                               origin/<base>, by ancestry or `git cherry`
+#                               patch-equivalence? Empty otherwise.)
 #   merged=yes|no|unknown       (branch is an ancestor of origin/<base>)
 #   merge_commit_landed=yes|no|unknown
 #                               (the PR's merge commit is an ancestor of
@@ -108,8 +113,11 @@ HELP = """# finalize-check.sh — read-only post-merge verification for a featur
 #                               the verdict doesn't justify moving the label.
 #
 # `verdict` is the one-line summary a caller can branch on:
-#   ready          PR merged AND branch is an ancestor of origin/<base> AND
-#                  local tip == PR head. Safe to clean up.
+#   ready          PR merged AND work landed on origin/<base> (branch or merge
+#                  commit is an ancestor) AND no unlanded local commits (tip
+#                  matches or is behind PR head, or every commit beyond it is
+#                  provably on a fresh, non-shallow origin/<base>). Safe to
+#                  clean up.
 #   no-pr          no PR found for this branch — nothing to finalize.
 #   not-merged     a PR exists but hasn't merged.
 #   squash-merged  PR says MERGED, the branch isn't an ancestor of
@@ -127,9 +135,15 @@ HELP = """# finalize-check.sh — read-only post-merge verification for a featur
 #                  Caller must stop — the branch may hold the only local ref to
 #                  work that never reached this base.
 #   local-commits  PR merged, but the local branch is ahead of or diverged from
-#                  the PR head: there is work here the PR never contained.
-#                  Caller must stop. (A branch merely *behind* the PR head is a
-#                  stale worktree with nothing to lose — that stays `ready`.)
+#                  the PR head, and some of those commits are not provably on a
+#                  fresh, non-shallow origin/<base>
+#                  (local_commits_in_base=no|unknown, base_fetch!=ok, or
+#                  shallow=yes): there is work here that would be lost. Caller
+#                  must stop. When every extra commit is on a fresh, non-shallow
+#                  base (e.g. the branch was merged forward with the base)
+#                  nothing is at risk and the verdict continues down the ladder.
+#                  (A branch merely *behind* the PR head is a stale worktree
+#                  with nothing to lose — that stays `ready`.)
 #   unknown        couldn't determine (no gh/jq, not the right host, no base,
 #                  or the PR-head commit isn't available locally).
 #
@@ -155,7 +169,7 @@ def _canon(path: str) -> str:
 
 @dataclasses.dataclass
 class Facts:
-    """The 28 output values, in output order (render pairs them with KEYS)."""
+    """The 29 output values, in output order (render pairs them with KEYS)."""
 
     branch: str
     ticket_id: str
@@ -171,6 +185,7 @@ class Facts:
     pr_open_other: str
     head_oid: str
     head_matches: str
+    local_commits_in_base: str
     merged: str
     merge_commit_landed: str
     base_fetch: str
@@ -311,12 +326,13 @@ def merged_status(branch: str, base: str, worktree: str) -> tuple[str, str]:
     r = _run(["git", "-C", worktree, "fetch", "--quiet", "origin",
               f"+refs/heads/{base}:refs/remotes/origin/{base}"])
     base_fetch = "ok" if r.returncode == 0 else "failed"
-    if not _git_ok(worktree, "rev-parse", "--verify", "--quiet", f"origin/{base}"):
+    remote_base = f"refs/remotes/origin/{base}"
+    if not _git_ok(worktree, "rev-parse", "--verify", "--quiet", remote_base):
         return "unknown", base_fetch
-    # refs/heads/, not a bare name: a same-named TAG outranks a branch in
-    # git's disambiguation order and would answer the merged question for it.
+    # refs/heads/ and refs/remotes/, not bare names: a same-named TAG outranks
+    # both in git's disambiguation order and would answer the merged question for it.
     ok = _git_ok(worktree, "merge-base", "--is-ancestor",
-                 f"refs/heads/{branch}", f"origin/{base}")
+                 f"refs/heads/{branch}", remote_base)
     return ("yes" if ok else "no"), base_fetch
 
 
@@ -342,6 +358,44 @@ def head_matches_status(head_oid: str, pr_head_oid: str, worktree: str) -> str:
     return "diverged"
 
 
+def local_commits_in_base_status(head_oid: str, head_matches: str, base: str,
+                                 worktree: str,
+                                 pr_head_oid: str = "") -> str:
+    """yes|no|unknown|"" — are the local commits beyond the PR head all
+    already on origin/<base>? Only asked when the tip is ahead/diverged (else
+    ""). Reachable, or patch-equivalent per `git cherry` (rebased or
+    cherry-picked) with no unmerged merge commits in the extra range, means
+    deleting the branch loses nothing. Passing pr_head_oid as <limit> excludes
+    the PR's own commits so a multi-commit squash-merged PR doesn't trigger
+    false positives."""
+    if head_matches not in ("ahead", "diverged"):
+        return ""
+    remote_base = f"refs/remotes/origin/{base}"
+    if not base or not _git_ok(worktree, "rev-parse", "--verify", "--quiet",
+                               remote_base):
+        return "unknown"
+    if _git_ok(worktree, "merge-base", "--is-ancestor", head_oid, remote_base):
+        return "yes"
+    # `git cherry` skips merge commits (`--no-merges`), so a local merge with
+    # conflict-resolution edits would otherwise look empty and pass.
+    rev_cmd = ["git", "-C", worktree, "rev-list", "--merges", "-n", "1",
+               head_oid, f"^{remote_base}"]
+    if pr_head_oid:
+        rev_cmd.append(f"^{pr_head_oid}")
+    merges = _run(rev_cmd)
+    if merges.returncode != 0:
+        return "unknown"
+    if merges.stdout.strip():
+        return "no"
+    cmd = ["git", "-C", worktree, "cherry", remote_base, head_oid]
+    if pr_head_oid:
+        cmd.append(pr_head_oid)
+    r = _run(cmd)
+    if r.returncode != 0:
+        return "unknown"
+    return "no" if any(l.startswith("+") for l in r.stdout.splitlines()) else "yes"
+
+
 def merge_commit_landed(pr_merge_commit: str, base: str, worktree: str) -> str:
     """Is the PR's merge commit an ancestor of origin/<base>?
 
@@ -350,14 +404,15 @@ def merge_commit_landed(pr_merge_commit: str, base: str, worktree: str) -> str:
     disambiguates squash-merged from a merely stale origin/<base>."""
     if not (pr_merge_commit and base):
         return "unknown"
-    if not _git_ok(worktree, "rev-parse", "--verify", "--quiet", f"origin/{base}"):
+    remote_base = f"refs/remotes/origin/{base}"
+    if not _git_ok(worktree, "rev-parse", "--verify", "--quiet", remote_base):
         return "unknown"
     if not _has_commit(worktree, pr_merge_commit):
         _run(["git", "-C", worktree, "fetch", "--quiet", "origin", pr_merge_commit])
     if not _has_commit(worktree, pr_merge_commit):
         return "unknown"
     ok = _git_ok(worktree, "merge-base", "--is-ancestor",
-                 pr_merge_commit, f"origin/{base}")
+                 pr_merge_commit, remote_base)
     return "yes" if ok else "no"
 
 
@@ -457,14 +512,17 @@ def choose_verdict(f: Facts) -> str:
     """The one-line summary a caller branches on. Pure: takes the collected
     facts, consults nothing else.
 
-      ready          PR merged AND branch on origin/<base> AND local tip
-                     matches the PR head (a provably-landed squash also
-                     qualifies) — safe to clean up.
+      ready          PR merged AND work landed on origin/<base> (branch or
+                     merge commit is an ancestor) AND no unlanded local
+                     commits (tip matches or is behind PR head, or all extra
+                     commits are provably on a fresh, non-shallow base) — safe
+                     to clean up.
       no-pr          no PR found for this branch.
       not-merged     a PR exists but hasn't merged (or another PR for the
                      branch is still open: an undelivered destination).
       local-commits  PR merged, but the local branch is ahead of or diverged
-                     from the PR head — work here the PR never contained.
+                     from the PR head with commits not provably on a fresh,
+                     non-shallow origin/<base>.
       not-on-base    PR merged, merge commit present locally and provably
                      NOT reachable from a freshly-fetched origin/<base> the
                      PR itself targeted. Disproof, not absence of proof.
@@ -482,7 +540,10 @@ def choose_verdict(f: Facts) -> str:
         return "not-merged"
     # Only ahead/diverged mean local work the PR never contained; `behind` is
     # a stale worktree with nothing to lose, so it stays cleanable.
-    if f.head_matches in ("ahead", "diverged"):
+    # Require a fresh, non-shallow base before trusting local_commits_in_base.
+    if f.head_matches in ("ahead", "diverged") and not (
+            f.local_commits_in_base == "yes"
+            and f.base_fetch == "ok" and f.shallow == "no"):
         return "local-commits"
     if f.head_matches == "unknown":
         return "unknown"
@@ -531,6 +592,7 @@ def collect_facts(branch: str, dir_: str) -> Facts:
     merged, base_fetch = merged_status(branch, base, worktree)
     head_oid = _git(worktree, "rev-parse", "--verify", "--quiet",
                     f"refs/heads/{branch}")
+    head_matches = head_matches_status(head_oid, pr.head_oid, worktree)
     f = Facts(
         branch=branch,
         ticket_id=ticket_id,
@@ -545,7 +607,9 @@ def collect_facts(branch: str, dir_: str) -> Facts:
         pr_count=str(pr.count),
         pr_open_other=pr.open_other,
         head_oid=head_oid,
-        head_matches=head_matches_status(head_oid, pr.head_oid, worktree),
+        head_matches=head_matches,
+        local_commits_in_base=local_commits_in_base_status(
+            head_oid, head_matches, base, worktree, pr.head_oid),
         merged=merged,
         merge_commit_landed=merge_commit_landed(pr.merge_commit, base, worktree),
         base_fetch=base_fetch,

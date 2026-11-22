@@ -26,7 +26,7 @@ construct = re.compile(
 used = {}
 for path in commands:
     text = open(path, encoding="utf-8").read()
-    if adapter.endswith(("/codex-local.md", "/opencode-local.md")):
+    if adapter.endswith(("/codex-local.md", "/opencode-local.md", "/agy.md")):
         if Path(path).stem in {"merge", "land", "sync"}:
             used.setdefault("/" + Path(path).stem, path)
         for match in re.finditer(r"(?<![\w/.-])/(?:merge|land|sync)\b", text):
@@ -64,6 +64,9 @@ agy_commands=(
   "$repo/dot_claude/commands/pick.md"
   "$repo/dot_claude/commands/discuss.md"
   "$repo/dot_claude/commands/remind.md"
+  "$repo/dot_claude/commands/finalize.md"
+  "$repo/dot_claude/commands/merge.md"
+  "$repo/dot_claude/commands/land.md"
 )
 check "$repo/workflow/adapters/agy.md" "${agy_commands[@]}" || fail "agy adapter has drifted from the commands it covers"
 printf 'PASS agy adapter maps every Claude-only construct in its covered commands\n'
@@ -73,9 +76,6 @@ local_codex_commands=("${agy_commands[@]}"
   "$repo/dot_claude/commands/groom.md"
   "$repo/dot_claude/commands/pick.md"
   "$repo/dot_claude/commands/discuss.md"
-  "$repo/dot_claude/commands/finalize.md"
-  "$repo/dot_claude/commands/merge.md"
-  "$repo/dot_claude/commands/land.md"
   "$repo/dot_claude/commands/sync.md"
 )
 check "$repo/workflow/adapters/codex-local.md" "${local_codex_commands[@]}" || fail "local Codex adapter has drifted"

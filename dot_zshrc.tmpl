@@ -30,3 +30,7 @@ for file in ~/.shell_modules/*
         fi
     done
 export PATH="$HOME/.local/bin:$PATH"
+{{ if not .is_work }}
+# opencode
+export PATH="$HOME/.opencode/bin:$PATH"
+{{ end }}
