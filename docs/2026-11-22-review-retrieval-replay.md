@@ -21,7 +21,7 @@ Evidence for #220's AC5: does the `reviewer-contract` retrieval section catch Co
 | #216 | 7 | 1 (remote delete not pinned to the PR head) | 1 (`sync_gate` documented read-only but fetches) |
 | **Total** | **24** | **3** | **5** |
 
-New-only: #154 claim truncation, #210 subdirectory record, #210 `sc-` normalization, #216 `sync_gate` fetch. Old-only: #210 stale manifest.
+New-only: #154 claim truncation, #210 subdirectory record, #210 `sc-` normalization, #216 `sync_gate` fetch. Old-only: #210 stale manifest, #216 remote delete not pinned to the PR head.
 
 ## Cost per reviewer, 4 PRs each
 

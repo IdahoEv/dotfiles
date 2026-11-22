@@ -36,7 +36,7 @@ The nine:
 | #196 | `workflow/manifest.txt:63` | introduced |
 | #200 | `tools/agent-phase.sh:135` | changed |
 
-Four of the nine are derived-artifact drift (three manifests, one dashboard key table), not logic written after review.
+Four of the nine are derived-artifact drift (two `workflow/manifest.txt` rows, two dashboard key-table lines), not logic written after review.
 
 ## Why the report looked worse
 
