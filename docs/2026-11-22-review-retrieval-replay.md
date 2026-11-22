@@ -36,11 +36,11 @@ New-only: #154 claim truncation, #210 subdirectory record, #210 `sc-` normalizat
 | **Total** | before | 20.0 s | 3,089,867 | $2.62 | 14 |
 | **Total** | after | 23.1 s | 3,201,143 | $2.69 | 23 |
 
-Tokens include cache reads; cost is the CLI's list-price estimate. Every run stayed under the 20-call budget (3–12 turns).
+Tokens include cache reads; cost is the CLI's list-price estimate. Runs took 3–12 turns; turns are only a proxy, since parallel calls in one turn count separately against the 20-call budget, and per-run call counts were not recorded.
 
 ## Reading
 
-Recall moved from 3/24 to 5/24 on this sample: retrieval helped, not enough to close the gap. Cost rose 3%, wall time 15%, and findings rose 14 → 23, so precision is untested — more volume may mean more false positives.
+Recall moved from 3/24 to 5/24 on this sample: one run per side, so this is suggestive rather than conclusive, and the gap stays open. Cost rose 3%, wall time 15%, and findings rose 14 → 23, so precision is untested — more volume may mean more false positives.
 
 The regression is the one the seam rule exists for: the after-architecture run on #210 did not run `tools/workflow-manifest.sh --check`, which fails at that head, while the per-agent bullet it replaced pointed at generated files and caught it. The contract states the rule; this sample shows a reviewer can still skip it.
 

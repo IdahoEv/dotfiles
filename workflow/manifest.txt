@@ -7,7 +7,7 @@ f3522de4dc0c92887d60d0b000c79c80cd724b6efae9cb09e2bed932c0bc4ad6  644  dot_claud
 6cc2a0ed6667e8ba0c167e9e76213f0c1d53cc5a43fc5a6f7e441c3bfa3a1040  644  dot_claude/agents/local-review-cycle-manager.md
 bd16daf5eb64aef0fcaca6613926317a218ddd0ae91aa40a6b2aff1d2381b2f7  644  dot_claude/agents/pr-reviewers/pr-reviewer-architecture.md
 3201c2ebfc5d3a4482c887a897c191da98257e1223954e30dd04f7407b74d2a9  644  dot_claude/agents/pr-reviewers/pr-reviewer-correctness.md
-92d2899333f62cb889bd32117f2988cafb71042e3e393a70e16338097c72b0cb  644  dot_claude/agents/pr-reviewers/pr-reviewer-prompt.md
+a85d2efab7cebb68f3940fc37f811bb7a3808f9ceafa8aaedcdbf9036552239d  644  dot_claude/agents/pr-reviewers/pr-reviewer-prompt.md
 5a5ca97c3f2734e1392087d411c5afff9c1c16d723daabec3062647fd353349b  644  dot_claude/agents/pr-reviewers/pr-reviewer-robustness.md
 d238bc76cb1340189536d171e754c7c859d0a6bc00ffb41af600566732089ccd  644  dot_claude/agents/pr-reviewers/pr-reviewer-security.md
 3a66ee9add41c9fc0ce5bcee1551bd4d6cc707b775280035033e763290419d93  644  dot_claude/agents/pr-reviewers/pr-reviewer-supply-chain.md
@@ -49,7 +49,7 @@ ee70fb1a401ed104231eb6f9ea72334263ca35b579f030d27946692cc57776be  644  dot_claud
 6df3c5e8b019a3ecb46bbd3f37c8d3866b39dd5596baea39734d710ab6cae649  644  dot_claude/skills/prompt-review/SKILL.md
 91f66b2780160f52a8cc5619c0659375c125a0070fbe7a8ec454a94190d8c413  644  dot_claude/skills/prompt-review/executable_prompt-metrics.sh
 947e3cfbb987c8dc9655ed68f2029ac6559d7d6b070a5d345f66f73659c064d0  644  dot_claude/skills/review-lens-contract/SKILL.md
-121a46305ad87166f0dee54c34b727232121735e41119e9e1ff27e6c7058da85  644  dot_claude/skills/reviewer-contract/SKILL.md
+c17b51a2155db7154d72c68b5566e1f4022b3bdd7163748b161cccb97f544fbd  644  dot_claude/skills/reviewer-contract/SKILL.md
 c706c17513c5c2662931c20f36a170db2f9b7640bc744ff0f88a6f0feec0fd98  644  dot_claude/skills/security-review-rubric/SKILL.md
 a331dc697855157141a83e160b4f6e44bd8b52541074e511e15dfd2680f3f34c  644  dot_claude/skills/terse-docs/SKILL.md
 4131c16b5f18b166d4bd2cabe73a121f9930254994f3ca82a48520cfa6027456  644  dot_claude/skills/tighten/SKILL.md

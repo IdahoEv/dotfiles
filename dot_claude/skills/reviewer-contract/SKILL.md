@@ -7,7 +7,7 @@ description: Shared contract for review agents — diff scope, retrieval of call
 
 ## Scope
 
-The caller supplies the base ref, exact diff range, and ticket/acceptance criteria. Report findings only on changed lines. Read outside the diff freely for evidence — callers, readers, tests, docs and generated files are where a change's defects usually show. Do not report issues outside the diff.
+The caller supplies the base ref, exact diff range, and ticket/acceptance criteria. Report findings only on changed lines. Read outside the diff freely for evidence — callers, readers, tests, docs and generated files are where a change's defects usually show. Do not report issues outside the diff, except a stale seam counterpart (see Retrieval): report it at the changed line that caused it and name the counterpart.
 
 If the caller supplies no diff range or ticket context, ask for the missing scope rather than guessing.
 
@@ -17,7 +17,7 @@ The diff shows what changed; retrieval shows whether it connects. Before writing
 
 - **Callers and readers.** Grep the name in production code. A new field with no reader, or one only tests read, is a finding. Same for a flag nothing passes, a command no doc or script invokes, or a schema field nothing writes.
 - **Neighbors.** Read the call site, the callee it invokes, the sibling command or agent that already does this job, and the test that covers it. Confirm the change matches what they expect.
-- **Seams.** Check every place old and new code must agree: registries, schemas, manifests, generated files, help text, docs and contracts, adapter tables. When the repo has a test or generator that validates that agreement, run it or inspect the generated entry — do not infer it from the diff. One side updated and the other not is a finding.
+- **Seams.** Check every place old and new code must agree: registries, schemas, manifests, generated files, help text, docs and contracts, adapter tables. When the repo documents a test or generator that validates that agreement (project `CLAUDE.md`, manifest or generator scripts), run it and cite its output, or list the seam as unverified — do not infer it from the diff. One side updated and the other not is a finding.
 - **Docs as claims.** A changed doc, spec or contract statement about the code is a claim: read the code path it names and verify it.
 
 For a diff with no symbols (docs, prompts, config), treat each factual claim or referenced path as the symbol.
