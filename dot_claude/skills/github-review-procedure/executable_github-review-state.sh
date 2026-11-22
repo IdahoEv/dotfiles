@@ -87,7 +87,7 @@ if [ -n "$pr" ]; then
     remote_star=""; [ -n "$star_c" ] || [ -n "$star_r" ] && remote_star="*"
     workstream.sh set-reviews --dir . --remote "$((copilot + rabbit))${remote_star}" >/dev/null 2>&1 || true
     if [ -n "${pr_head:-}" ]; then
-      workstream.sh set-pr --dir . --number "$pr" --head "$pr_head" >/dev/null 2>&1 || true
+      workstream.sh set-pr --dir . --number "$pr" --head "$pr_head" --head-source remote >/dev/null 2>&1 || true
     fi
   fi
 fi

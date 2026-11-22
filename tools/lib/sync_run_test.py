@@ -11,6 +11,7 @@ from sync_gate_test import GH_STUB
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 RUN = os.path.join(os.path.dirname(HERE), "sync-run.sh")
+WORKSTREAM = os.path.join(os.path.dirname(HERE), "workstream.sh")
 
 
 class Sync(Base):
@@ -66,6 +67,32 @@ class Sync(Base):
         r, _ = self.sync(wt)
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         self.assertEqual(self.remote_head("feat"), self.git(wt, "rev-parse", "HEAD"))
+
+    def test_push_records_the_pr_head(self):
+        wt = self.worktree("feat")
+        subprocess.run(
+            [WORKSTREAM, "init-ticket", "--dir", str(wt), "--provider", "github",
+             "--ids", "7", "--desc", "sync"],
+            env=self.env, check=True, capture_output=True,
+        )
+        subprocess.run(
+            [WORKSTREAM, "set-pr", "--dir", str(wt), "--number", "7",
+             "--head", "0" * 40, "--head-source", "push"],
+            env=self.env, check=True, capture_output=True,
+        )
+        self.advance_main()
+        r, _ = self.sync(wt)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        rec = json.loads((Path(wt) / ".workstream.json").read_text())
+        self.assertEqual(rec["pr"]["head"], self.git(wt, "rev-parse", "HEAD"))
+        self.assertEqual(rec["pr"]["head_source"], "push")
+
+    def test_push_without_a_record_writes_no_record(self):
+        wt = self.worktree("feat")
+        self.advance_main()
+        r, _ = self.sync(wt)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertFalse((Path(wt) / ".workstream.json").exists())
 
     def test_conflict_hands_back_with_files_and_pushes_nothing(self):
         wt = self.conflicting_branch()

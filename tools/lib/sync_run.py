@@ -101,7 +101,10 @@ def record_pushed_head(dir_: str) -> None:
         import workstream
         rec = workstream.load_record(dir_)
         if rec is not None and isinstance(rec.pr, dict) and rec.pr.get("number"):
-            workstream.update_pr(dir_, int(rec.pr["number"]), head=git(dir_, "rev-parse", "HEAD"))
+            workstream.update_pr(
+                dir_, int(rec.pr["number"]),
+                head=git(dir_, "rev-parse", "HEAD"), head_source="push",
+            )
     except (OSError, ValueError, TypeError):
         pass
 

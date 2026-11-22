@@ -448,7 +448,8 @@ if { [ "$review" != "none" ] && [ -z "$review_failed" ]; } || [ "${PROVIDER_TRIG
 fi
 "$SCRIPT_DIR/agent-phase.sh" --pr >/dev/null 2>&1 || true
 if [ -x "$SCRIPT_DIR/workstream.sh" ]; then
-  "$SCRIPT_DIR/workstream.sh" set-pr --dir . --number "$pr_number" --url "$pr_url" --head "${pr_head:-}" >/dev/null 2>&1 || true
+  "$SCRIPT_DIR/workstream.sh" set-pr --dir . --number "$pr_number" --url "$pr_url" \
+    --head "${pr_head:-}" --head-source push >/dev/null 2>&1 || true
 fi
 
 printf 'pr_number=%s\npr_url=%s\npr_action=%s\n' "$pr_number" "$pr_url" "$pr_action"

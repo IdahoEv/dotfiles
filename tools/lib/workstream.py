@@ -8,7 +8,9 @@
     workstream.py chain-tag [--dir <wt>]
     workstream.py render <surface> [--dir <wt>]
     workstream.py setting <key> [--dir <wt>] [--env <VAR>] [--default <val>] [--with-source]
-    workstream.py set-pr [--dir <wt>] --number <N> [--url <url>] [--state <state>] [--head <sha>]
+    workstream.py set-pr [--dir <wt>] --number <N> [--url <url>] [--state <state>]
+                         [--head <sha>] [--head-source push|remote]
+    workstream.py refresh-pr-head [--dir <wt>]
     workstream.py set-reviews [--dir <wt>] [--local <N[*]>] [--remote <N[*]>]
     workstream.py statusline [--dir <wt>] [--project <name>] [--format text|json]
 """
@@ -21,6 +23,7 @@ import fcntl
 import json
 import os
 import re
+import subprocess
 import sys
 import tempfile
 from contextlib import contextmanager
@@ -626,6 +629,7 @@ def update_pr(
     url: str = "",
     state: str = "",
     head: str = "",
+    head_source: str = "",
 ) -> WorkstreamRecord | None:
     """Record PR metadata in <worktree>/.workstream.json when present."""
     with _record_lock(worktree) as root:
@@ -641,6 +645,8 @@ def update_pr(
             pr_data["state"] = state
         if head:
             pr_data["head"] = head
+            if head_source:
+                pr_data["head_source"] = head_source
         if pr_data != rec.pr:
             rec.pr = pr_data
             _save_record_locked(root, rec)
@@ -692,6 +698,45 @@ def update_reviews(
         return rec
 
 
+def refresh_pr_head(worktree: str = ".") -> WorkstreamRecord | None:
+    """Refresh pr.head from GitHub's pull ref, skipping a concurrent push write."""
+    loaded = _load_record_file(worktree)
+    if loaded is None:
+        return None
+    root, rec = loaded
+    if not isinstance(rec.pr, dict) or not rec.pr.get("number"):
+        return None
+    old_head = str(rec.pr.get("head", "") or "")
+    url = repo_facts.git(root, "remote", "get-url", "origin")
+    if "github.com" not in url:
+        return None
+    number = str(rec.pr["number"])
+    try:
+        r = repo_facts.run_cmd(
+            ["git", "-C", root, "ls-remote", "origin", f"refs/pull/{number}/head"],
+            timeout=10,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    fields = r.stdout.split()
+    if r.returncode != 0 or not fields:
+        return None
+    head = fields[0]
+    with _record_lock(root) as locked_root:
+        loaded = _load_record_file(locked_root)
+        if loaded is None:
+            return None
+        locked_root, rec = loaded
+        if not isinstance(rec.pr, dict) or str(rec.pr.get("head", "") or "") != old_head:
+            return None
+        if rec.pr.get("head") == head:
+            return rec
+        rec.pr["head"] = head
+        rec.pr["head_source"] = "remote"
+        _save_record_locked(locked_root, rec)
+        return rec
+
+
 def _project_name(worktree: str) -> str:
     common = repo_facts.git(worktree, "rev-parse", "--path-format=absolute", "--git-common-dir")
     if common:
@@ -713,11 +758,13 @@ def statusline_fields(worktree: str = ".", project: str = "") -> dict[str, str] 
     pr_url = ""
     pr_state = ""
     pr_head = ""
+    pr_head_source = ""
     if isinstance(rec.pr, dict) and rec.pr.get("number"):
         pr_num = str(rec.pr["number"])
         pr_url = str(rec.pr.get("url", "") or "")
         pr_state = str(rec.pr.get("state", "") or "")
         pr_head = str(rec.pr.get("head", "") or "")
+        pr_head_source = str(rec.pr.get("head_source", "") or "")
 
     rev = rec.reviews or {}
     local_n = int(rev.get("local", 0) or 0)
@@ -732,7 +779,7 @@ def statusline_fields(worktree: str = ".", project: str = "") -> dict[str, str] 
             parts.append(f"{remote_n}{remote_star} remote")
         reviews_str = ", ".join(parts)
 
-    sync_state = sync_gate.local_sync_state(root, pr_head)
+    sync_state = sync_gate.local_sync_state(root, pr_head, pr_head_source)
     if pr_num:
         sync = sync_state or "unknown"
     else:
@@ -820,6 +867,10 @@ def build_parser() -> argparse.ArgumentParser:
     p_pr.add_argument("--url", default="")
     p_pr.add_argument("--state", default="")
     p_pr.add_argument("--head", default="")
+    p_pr.add_argument("--head-source", default="")
+
+    p_ref = sub.add_parser("refresh-pr-head")
+    p_ref.add_argument("--dir", default=".")
 
     p_rev = sub.add_parser("set-reviews")
     p_rev.add_argument("--dir", default=".")
@@ -954,8 +1005,12 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.cmd == "set-pr":
-        rec = update_pr(args.dir, args.number, url=args.url, state=args.state, head=args.head)
+        rec = update_pr(args.dir, args.number, url=args.url, state=args.state,
+                        head=args.head, head_source=args.head_source)
         return 0 if rec is not None else 1
+
+    if args.cmd == "refresh-pr-head":
+        return 0 if refresh_pr_head(args.dir) is not None else 1
 
     if args.cmd == "set-reviews":
         try:

@@ -131,30 +131,36 @@ def local_facts(dir_: str) -> Facts:
     return f
 
 
-def _comparison_head(dir_: str, pr_head: str) -> str:
-    """The PR head to compare against: the record, unless the tracking ref moved ahead."""
+def _comparison_head(dir_: str, head: str, pr_head: str, head_source: str) -> str:
+    """The PR head to compare against: the record, unless a later local push won."""
     upstream = git(dir_, "rev-parse", "--verify", "--quiet", "@{upstream}")
     if not upstream:
         return pr_head
     if not pr_head or upstream == pr_head:
         return upstream
+    # A remote observation outranks the local tracking ref, which may be stale.
+    if head_source == "remote":
+        return pr_head
+    # A push-sourced head is superseded once this branch sits at its tracking ref.
+    if head == upstream:
+        return upstream
     # A record head this clone lacks is newer than the local ref (remote advance).
     if not git_ok(dir_, "cat-file", "-e", f"{pr_head}^{{commit}}"):
         return pr_head
-    # The tracking ref descends from the record only when this worktree pushed last.
+    # The tracking ref descends from the record when a later push advanced it.
     if git_ok(dir_, "merge-base", "--is-ancestor", pr_head, upstream):
         return upstream
     return pr_head
 
 
-def local_sync_state(dir_: str, pr_head: str) -> str:
+def local_sync_state(dir_: str, pr_head: str, head_source: str = "") -> str:
     """Indicator state from the worktree and a known PR head, without a network call."""
     f = local_facts(dir_)
     if not f.head:
         return ""
     if f.dirty:
         return indicator_state(f)
-    target = _comparison_head(dir_, pr_head)
+    target = _comparison_head(dir_, f.head, pr_head, head_source)
     if not target:
         return ""
     f.head_vs_pr = _relation(dir_, f.head, target)
