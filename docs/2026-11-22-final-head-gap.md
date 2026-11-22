@@ -1,17 +1,17 @@
 # Post-review commit gap, 2026-11-22
 
-#227 asks whether the code Copilot flagged after local review existed when the local cycle last ran. It mostly did: **9 of 141** valid Copilot findings in the review window (**6.4%**) sit on a line introduced or changed after the local-review head. The missed subset is at most **9 of 123 (7.3%)**, so the share is small and no final-HEAD pass is added.
+#227 asks whether the code Copilot flagged after local review existed when the local cycle last ran. It mostly did: **9 of 141** valid Copilot findings in the review window (**6.4%**) sit on a line introduced or changed after the local-review head. The share of the missed subset is not measurable here (its size is unknown, so 6.4% is a floor, not a bound). The decision rests on the absolute count: 9 findings across 31 PRs, about 0.3 per PR, so no final-HEAD pass is added.
 
 ## Method
 
 - Window: PRs created 2026-10-30 through 2026-11-17, the 2026-11-17 telemetry baseline.
-- Corpus: 31 PRs with extractable Copilot findings, 141 valid/partial findings. The baseline report had 33 PRs and 145 findings; the difference is PRs whose comments yield no finding (deleted threads, review-body parsing).
+- Corpus: 31 PRs with extractable Copilot findings, 141 valid/partial findings. The baseline report had 33 PRs and 145 findings; the difference is PRs whose comments yield no finding (deleted threads, review-body parsing). The excluded 4 findings are unclassified; if all four were after-review, the share is (9+4)/145 = 9.0%.
 - Reviewed head: the newest commit on the PR branch at or before the PR's `created_at`. Local review runs before `/open-pr`, so that is the last full-scope local head. An unattended cycle that reviewed after open makes this conservative: the real head is later, so the share can only fall.
 - Classification per finding, at the Copilot comment's `original_commit_id`:
   - `introduced_after` — `git blame` attributes the flagged line to a commit that is a descendant of the reviewed head.
   - `changed_after` — the line is older but the reviewed-head..comment diff modifies that hunk.
   - `present_at_review` — neither.
-- The missed subset cannot be rebuilt on this machine (`events.jsonl` has 18 local findings and no 2026-11-17 gap report). Since all misses are a subset of the 141, the number of after-review misses is at most 9.
+- The missed subset cannot be rebuilt on this machine (`events.jsonl` has 18 local findings and no 2026-11-17 gap report). Every after-review finding is necessarily a miss, so the missed subset holds at least those 9; its share is 9 divided by the missed-subset size, which is unknown and at most 141 (so at least 6.4%).
 
 ## Result
 
@@ -44,4 +44,4 @@ Four of the nine are derived-artifact drift (three manifests, one dashboard key 
 
 ## Decision
 
-The share is small, so #227 AC4 applies: no final-HEAD pass, no procedure change, and no new `review.round`/`review.launch` telemetry. `docs/workflow-architecture.md` is unchanged because the cycle is unchanged. The limitation is the missing historical local findings; the bound is conservative and the direction is clear.
+Threshold: material means a recurring per-PR loss worth a new pass and telemetry; about 0.3 findings per PR, four of nine derived-artifact drift, does not meet it. #227 AC4 applies: no final-HEAD pass, no procedure change, and no new `review.round`/`review.launch` telemetry. `docs/workflow-architecture.md` is unchanged because the cycle is unchanged. The limitation is the missing historical local findings: the missed-subset share is unmeasured, and this decision is a judgment on the absolute count.
