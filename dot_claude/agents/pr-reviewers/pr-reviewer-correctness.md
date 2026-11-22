@@ -13,8 +13,6 @@ Follow the reviewer-contract skill: the caller's diff scope, finding-line format
 - Whether the change actually satisfies the ticket and preserves existing contracts.
 - Logic errors, boundary cases, invalid inputs, regressions, and incorrect assumptions about callers.
 - Whether tests cover the changed behavior, including meaningful failure cases.
-- Reachability: for each new field, flag, command, or registry entry, grep for a production caller or reader. Report any that only tests reference or that nothing consumes.
-- Design or spec docs: check each factual claim about the repo, git, or tooling against the source. A claim that contradicts it is a finding.
 
 Verify claims against the code and tests. Prefer a reproduced failure or a concrete caller/input path. Leave architectural trade-offs to `pr-reviewer-architecture` and lifecycle/failure resilience to `pr-reviewer-robustness`.
 

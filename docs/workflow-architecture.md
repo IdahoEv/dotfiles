@@ -1,6 +1,6 @@
 # Workflow & Review Architecture
 
-State as of 2026-10. **Keep this current:** any change to the dotfiles workflow — commands, agents, skills, hooks, or the scripts behind them — must check whether this document needs updating.
+State as of 2026-11. **Keep this current:** any change to the dotfiles workflow — commands, agents, skills, hooks, or the scripts behind them — must check whether this document needs updating.
 
 ## Flow: where review happens
 
@@ -38,7 +38,7 @@ flowchart TD
 | `agents/pr-reviewers/pr-reviewer-{security,supply-chain}.md` | Agent | Read-only security PR/diff leaf reviewers — code-level vulnerabilities and build/config risk, selected by `use_when:` like the rest. |
 | `skills/security-review-rubric/SKILL.md` | Skill | OWASP-anchored rubric preloaded into both security reviewers; usable directly for interactive checks. Separate from the built-in `/security-review`, which stays as the interactive whole-branch pass. |
 | `agents/github-review-repair-agent.md` | Agent | Fresh context with edit tools; never commits/pushes/writes to GitHub. |
-| `skills/reviewer-contract/SKILL.md` | Skill | Shared contract loaded into every `pr-reviewer-*` agent; avoids per-agent duplication. |
+| `skills/reviewer-contract/SKILL.md` | Skill | Shared contract loaded into every `pr-reviewer-*` agent: diff scope, retrieval of callers/readers/neighbors/seams within a fixed budget, grounded findings, output format, read-only rule; avoids per-agent duplication. |
 | `skills/review-lens-contract/SKILL.md` | Skill | Contract for periodic project-review lenses (`project-lens-*`, snapshot-scoped, not diff-scoped) and their discovery rules; mirrors `/local-review-cycle` tiers. |
 | `commands/project-review.md` | Command | Thin launcher for periodic project review: resolves repo, default branch, and cwd, then launches `project-review-manager` and prints its report unaltered. |
 | `commands/project-review-apply.md`, `skills/project-review-apply-procedure/SKILL.md` | Command, Skill | Scheduler entry point: runs the manager with `Findings block: yes`, acts on the report per `project-review.md` § Actions (`project-review-apply.sh`, doc PR), delivers per § Delivery. Report-only when § Actions is absent. Scheduling and per-provider auth: `docs/project-review-scheduling.md`. |
@@ -80,7 +80,7 @@ flowchart TD
 
 1. **Risk-based selection.** Each reviewer carries a `use_when:` frontmatter key above `description:`; the orchestrator reads it from the agent files (the catalog shows only `description`) and matches it against `git diff --name-only BASE...HEAD` and risk signals. Smallest set that covers the risks; no code reviewer on prompt-only diffs; deterministic issues go to formatter/linter/tests.
 2. **Shrinking rounds.** Round 1 reviews `BASE...HEAD`; round k+1 reviews only round k's fix commits plus a correctness pass on touched files.
-3. **Evidence bar + triage.** Findings need a credible failure path, test gap, or material design cost. Already-triaged findings pass forward; nothing is resurrected without new evidence.
+3. **Retrieval, evidence bar, triage.** Each changed symbol is grounded outside the diff — callers/readers, neighbors, and the seams where old and new code meet — inside a per-reviewer budget of 20 calls; each finding must cite what retrieval showed, and ungrounded findings are dropped. Findings also need a credible failure path, test gap, or material design cost. Already-triaged findings pass forward; nothing is resurrected without new evidence.
 4. **Gates and caps.** `DESIGN: unsound` halts before code changes; max 5 rounds; `FAST` per round, `FULL` once at finish (both documented in the project's `CLAUDE.md`; this repo's `FAST` includes `workflow-manifest.test.sh`, so a stale `workflow/manifest.txt` fails before review once the covered files are staged, since the manifest hashes index blobs); `--confirm-commits` is opt-in hold-for-review — by default the manager commits every round and human review happens on the PR.
 5. **Isolation of side effects.** Reviewers read-only; repair agent edits only; commands own GitHub writes. The cycle manager is the deliberate exception: it owns the working-tree edits, round commits, telemetry and statusline during the cycle — but never pushes or writes to GitHub. Planned GitHub replies are posted only after the parent pushes.
 6. **Chained sessions.** A chain (no fixed ticket-count cap — keep the combined estimate within one "large" ticket; overlapping files allowed, dependencies satisfied by order) is one session and one PR. The session plans the whole chain once (one approval), then per ticket: commit → `/local-review-cycle <previous link's SHA> --rounds 1` (design and obvious correctness only). After the last ticket: full cycle (up to 5 rounds) over `origin/<default>...HEAD`, then the session runs `/open-pr` itself. A ticket that fails its ACs or stalls after ~3 attempts stops the chain: draft PR for the completed links, unfinished tickets listed but not closed.
