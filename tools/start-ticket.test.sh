@@ -350,17 +350,19 @@ tab_only_default() {  # <uname-dir> → stdout
 }
 
 rm -f "$ROOT/claude.args"
-tab_only_default "$LR/darwin" >/dev/null; rc=$?
+out="$(tab_only_default "$LR/darwin")"; rc=$?
 check "no launcher setting on macOS defaults to bg" "0 yes" \
   "$rc $([ -e "$ROOT/claude.args" ] && echo yes || echo no)"
+check "tab-only names the resolved launcher" "launcher=bg" "$out"
 has "default launch names the bg session" "[PLAN] fake-7 fake ticket" "$ROOT/claude.args"
 check "session.launch keeps its event name and fields" "session.launch tab-only bg ok" \
   "$(tail -1 "$WF_TELEMETRY_LOG" | jq -r '"\(.event) \(.mode) \(.launcher) \(.outcome)"')"
 
 rm -f "$ROOT/claude.args"
-tab_only_default "$LR/linux" >/dev/null; rc=$?
+out="$(tab_only_default "$LR/linux")"; rc=$?
 check "no launcher setting off macOS defaults to none" "0 no" \
   "$rc $([ -e "$ROOT/claude.args" ] && echo yes || echo no)"
+check "tab-only names the none launcher" "launcher=none" "$out"
 check "none still reports the resolved launcher" "session.launch tab-only none ok" \
   "$(tail -1 "$WF_TELEMETRY_LOG" | jq -r '"\(.event) \(.mode) \(.launcher) \(.outcome)"')"
 

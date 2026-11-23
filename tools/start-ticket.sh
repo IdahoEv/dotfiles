@@ -471,7 +471,7 @@ default_launcher=bg
 [ -n "$launcher" ] || launcher="$(setting launcher START_TICKET_LAUNCHER "$default_launcher")"
 case "$launcher" in
   bg|agy-tmux|none) ;;
-  iterm) die "the 'iterm' launcher was removed; drop 'launcher=iterm' from ~/.config/start-ticket/config (bg is the default on macOS)" ;;
+  iterm) die "the 'iterm' launcher was removed; use bg (the macOS default), agy-tmux, or none (drop 'launcher=iterm' from --launcher, START_TICKET_LAUNCHER, .start-ticket.conf, or ~/.config/start-ticket/config)" ;;
   *) die "unknown launcher '$launcher' (expected bg, agy-tmux, or none)" ;;
 esac
 
@@ -501,6 +501,7 @@ esac
 
 if [ "$mode" = "tab-only" ]; then
   mem_guard "session launch"
+  printf 'launcher=%s\n' "$launcher"
   launch_session "$tab_wt" "$tab_kf"
   exit 0
 fi
