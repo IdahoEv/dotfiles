@@ -58,10 +58,36 @@ class Facts:
     base: str = ""
 
 
+INDICATOR_STATES = ("clean", "dirty", "ahead", "behind", "diverged")
+LOCAL_VERDICTS = {
+    "clean": "",
+    "dirty": "dirty",
+    "ahead": "unpushed",
+    "behind": "behind-pr",
+    "diverged": "diverged",
+}
+
+
+def indicator_state(f: Facts) -> str:
+    """Local/PR sync state for the statusline: clean, dirty, ahead, behind, diverged."""
+    if f.dirty:
+        return "dirty"
+    if f.head_vs_pr == "ahead":
+        return "ahead"
+    if f.head_vs_pr == "behind":
+        return "behind"
+    if f.head_vs_pr == "diverged":
+        return "diverged"
+    if f.head_vs_pr == "equal":
+        return "clean"
+    return ""
+
+
 def choose_verdict(f: Facts) -> tuple[str, str]:
     """First failing check wins; local state is judged before the PR's."""
-    if f.dirty:
-        v = "dirty"
+    state = indicator_state(f)
+    if state == "dirty":
+        v = LOCAL_VERDICTS[state]
     elif not f.gh_ok:
         v = "unknown"
     elif not f.pr_found:
@@ -72,18 +98,15 @@ def choose_verdict(f: Facts) -> tuple[str, str]:
         v = "closed"
     elif f.is_draft:
         v = "draft"
-    elif f.head_vs_pr == "ahead":
-        v = "unpushed"
-    elif f.head_vs_pr == "behind":
-        v = "behind-pr"
-    elif f.head_vs_pr == "diverged":
-        v = "diverged"
-    elif f.mergeable == "CONFLICTING":
-        v = "conflict"
-    elif f.mergeable != "MERGEABLE":
-        v = "mergeable-unknown"
     else:
-        v = "ready"
+        v = LOCAL_VERDICTS.get(state, "")
+        if not v:
+            if f.mergeable == "CONFLICTING":
+                v = "conflict"
+            elif f.mergeable != "MERGEABLE":
+                v = "mergeable-unknown"
+            else:
+                v = "ready"
     return v, REASONS[v]
 
 
@@ -97,6 +120,53 @@ def _relation(dir_: str, head: str, pr_head: str) -> str:
     if git_ok(dir_, "merge-base", "--is-ancestor", head, pr_head):
         return "behind"
     return "diverged"
+
+
+def local_facts(dir_: str) -> Facts:
+    """HEAD and dirty state; --no-optional-locks keeps a statusline render off the index."""
+    f = Facts(head=git(dir_, "rev-parse", "HEAD"))
+    f.dirty = [
+        l for l in git(dir_, "--no-optional-locks", "status", "--porcelain").splitlines() if l
+    ]
+    return f
+
+
+def _comparison_head(dir_: str, head: str, pr_head: str, head_source: str) -> str:
+    """The PR head to compare against: the record, unless a later local push won."""
+    upstream = git(dir_, "rev-parse", "--verify", "--quiet", "@{upstream}")
+    if not upstream:
+        return pr_head
+    if not pr_head or upstream == pr_head:
+        return upstream
+    # A remote observation outranks the local tracking ref, which may be stale.
+    if head_source == "remote":
+        if git_ok(dir_, "merge-base", "--is-ancestor", pr_head, upstream):
+            return upstream
+        return pr_head
+    # A push-sourced head is superseded once this branch sits at its tracking ref.
+    if head == upstream:
+        return upstream
+    # A record head this clone lacks is newer than the local ref (remote advance).
+    if not git_ok(dir_, "cat-file", "-e", f"{pr_head}^{{commit}}"):
+        return pr_head
+    # The tracking ref descends from the record when a later push advanced it.
+    if git_ok(dir_, "merge-base", "--is-ancestor", pr_head, upstream):
+        return upstream
+    return pr_head
+
+
+def local_sync_state(dir_: str, pr_head: str, head_source: str = "") -> str:
+    """Indicator state from the worktree and a known PR head, without a network call."""
+    f = local_facts(dir_)
+    if not f.head:
+        return ""
+    if f.dirty:
+        return indicator_state(f)
+    target = _comparison_head(dir_, f.head, pr_head, head_source)
+    if not target:
+        return ""
+    f.head_vs_pr = _relation(dir_, f.head, target)
+    return indicator_state(f)
 
 
 def _view(dir_: str, branch: str) -> tuple[str, dict]:
@@ -125,8 +195,7 @@ def _view(dir_: str, branch: str) -> tuple[str, dict]:
 
 
 def gather(dir_: str, branch: str) -> Facts:
-    f = Facts(head=git(dir_, "rev-parse", "HEAD"))
-    f.dirty = [l for l in git(dir_, "status", "--porcelain").splitlines() if l]
+    f = local_facts(dir_)
     if f.dirty:
         return f
     status, data = _view(dir_, branch)

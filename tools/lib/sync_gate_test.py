@@ -78,6 +78,22 @@ class Verdict(unittest.TestCase):
     def test_conflict_reason_points_at_sync(self):
         self.assertIn("/sync", sg.choose_verdict(facts(mergeable="CONFLICTING"))[1])
 
+    def test_indicator_state_matches_gate(self):
+        cases = {
+            "clean": (dict(), "ready"),
+            "dirty": (dict(dirty=[" M a.txt"]), "dirty"),
+            "ahead": (dict(head_vs_pr="ahead", pr_head="bbb"), "unpushed"),
+            "behind": (dict(head_vs_pr="behind", pr_head="bbb"), "behind-pr"),
+            "diverged": (dict(head_vs_pr="diverged", pr_head="bbb"), "diverged"),
+        }
+        for state, (kw, verdict) in cases.items():
+            f = facts(**kw)
+            self.assertEqual(sg.indicator_state(f), state)
+            self.assertEqual(sg.choose_verdict(f)[0], verdict)
+
+    def test_every_indicator_state_has_a_local_verdict(self):
+        self.assertEqual(set(sg.LOCAL_VERDICTS), set(sg.INDICATOR_STATES))
+
 
 class Cli(Base):
     def setUp(self):

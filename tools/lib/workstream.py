@@ -9,6 +9,8 @@
     workstream.py render <surface> [--dir <wt>]
     workstream.py setting <key> [--dir <wt>] [--env <VAR>] [--default <val>] [--with-source]
     workstream.py set-pr [--dir <wt>] --number <N> [--url <url>] [--state <state>]
+                         [--head <sha>] [--head-source push|remote] [--head-if-unchanged <sha>]
+    workstream.py refresh-pr-head [--dir <wt>]
     workstream.py set-reviews [--dir <wt>] [--local <N[*]>] [--remote <N[*]>]
     workstream.py statusline [--dir <wt>] [--project <name>] [--format text|json]
 """
@@ -21,6 +23,7 @@ import fcntl
 import json
 import os
 import re
+import subprocess
 import sys
 import tempfile
 from contextlib import contextmanager
@@ -29,6 +32,7 @@ from typing import Any, Iterator
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import repo_facts  # noqa: E402
+import sync_gate  # noqa: E402
 
 RECORD_FILENAME = ".workstream.json"
 VALID_KINDS = ("ticket", "talk", "iteration")
@@ -624,6 +628,9 @@ def update_pr(
     number: int,
     url: str = "",
     state: str = "",
+    head: str = "",
+    head_source: str = "",
+    expect_head: str | None = None,
 ) -> WorkstreamRecord | None:
     """Record PR metadata in <worktree>/.workstream.json when present."""
     with _record_lock(worktree) as root:
@@ -632,11 +639,22 @@ def update_pr(
             return None
         root, rec = loaded
         pr_data: dict[str, Any] = dict(rec.pr) if isinstance(rec.pr, dict) else {}
+        current_head = str(pr_data.get("head", "") or "")
+        if expect_head is not None and current_head != expect_head:
+            return rec
+        # A remote observation of the same head must not retire a push stamp.
+        if head and head == current_head and head_source == "remote":
+            head = ""
+            head_source = ""
         pr_data["number"] = int(number)
         if url:
             pr_data["url"] = url
         if state:
             pr_data["state"] = state
+        if head:
+            pr_data["head"] = head
+            if head_source:
+                pr_data["head_source"] = head_source
         if pr_data != rec.pr:
             rec.pr = pr_data
             _save_record_locked(root, rec)
@@ -688,6 +706,31 @@ def update_reviews(
         return rec
 
 
+def refresh_pr_head(worktree: str = ".") -> WorkstreamRecord | None:
+    """Refresh pr.head from the PR ref, skipping a concurrent push write."""
+    loaded = _load_record_file(worktree)
+    if loaded is None:
+        return None
+    root, rec = loaded
+    if not isinstance(rec.pr, dict) or not rec.pr.get("number"):
+        return None
+    old_head = str(rec.pr.get("head", "") or "")
+    number = str(rec.pr["number"])
+    try:
+        r = repo_facts.run_cmd(
+            ["git", "-C", root, "ls-remote", "origin", f"refs/pull/{number}/head"],
+            timeout=10,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    fields = r.stdout.split()
+    if r.returncode != 0 or not fields:
+        return None
+    return update_pr(
+        root, int(number), head=fields[0], head_source="remote", expect_head=old_head
+    )
+
+
 def _project_name(worktree: str) -> str:
     common = repo_facts.git(worktree, "rev-parse", "--path-format=absolute", "--git-common-dir")
     if common:
@@ -696,7 +739,7 @@ def _project_name(worktree: str) -> str:
 
 
 def statusline_fields(worktree: str = ".", project: str = "") -> dict[str, str] | None:
-    """Return statusline line-1 fields derived from .workstream.json alone, or None."""
+    """Return statusline line-1 fields from .workstream.json plus local git state, or None."""
     loaded = _load_record_file(worktree)
     if loaded is None:
         return None
@@ -708,10 +751,14 @@ def statusline_fields(worktree: str = ".", project: str = "") -> dict[str, str] 
     pr_num = ""
     pr_url = ""
     pr_state = ""
+    pr_head = ""
+    pr_head_source = ""
     if isinstance(rec.pr, dict) and rec.pr.get("number"):
         pr_num = str(rec.pr["number"])
         pr_url = str(rec.pr.get("url", "") or "")
         pr_state = str(rec.pr.get("state", "") or "")
+        pr_head = str(rec.pr.get("head", "") or "")
+        pr_head_source = str(rec.pr.get("head_source", "") or "")
 
     rev = rec.reviews or {}
     local_n = int(rev.get("local", 0) or 0)
@@ -726,6 +773,12 @@ def statusline_fields(worktree: str = ".", project: str = "") -> dict[str, str] 
             parts.append(f"{remote_n}{remote_star} remote")
         reviews_str = ", ".join(parts)
 
+    sync_state = sync_gate.local_sync_state(root, pr_head, pr_head_source)
+    if pr_num:
+        sync = sync_state or "unknown"
+    else:
+        sync = "dirty" if sync_state == "dirty" else ""
+
     return {
         "project": proj,
         "name": ws_name,
@@ -733,12 +786,13 @@ def statusline_fields(worktree: str = ".", project: str = "") -> dict[str, str] 
         "pr_num": pr_num,
         "pr_url": pr_url,
         "pr_state": pr_state,
+        "sync": sync,
         "reviews": reviews_str,
     }
 
 
 def format_statusline_line1(worktree: str = ".", project: str = "") -> str:
-    """Format statusline line 1 from .workstream.json alone."""
+    """Format statusline line 1 from the record plus local git state."""
     fields = statusline_fields(worktree, project=project)
     if fields is None:
         return ""
@@ -746,8 +800,9 @@ def format_statusline_line1(worktree: str = ".", project: str = "") -> str:
     if fields["pr_num"]:
         state = fields["pr_state"].replace("_", " ")
         pr_seg = f"PR #{fields['pr_num']}" + (f" {state}" if state else "")
+    sync_seg = f"sync: {fields['sync']}" if fields["sync"] else ""
     rev_seg = f"reviews: {fields['reviews']}" if fields["reviews"] else ""
-    segs = [fields["project"], fields["name"], fields["tags"], pr_seg, rev_seg]
+    segs = [fields["project"], fields["name"], fields["tags"], pr_seg, sync_seg, rev_seg]
     return " | ".join(s for s in segs if s)
 
 
@@ -805,6 +860,12 @@ def build_parser() -> argparse.ArgumentParser:
     p_pr.add_argument("--number", required=True, type=int)
     p_pr.add_argument("--url", default="")
     p_pr.add_argument("--state", default="")
+    p_pr.add_argument("--head", default="")
+    p_pr.add_argument("--head-source", default="")
+    p_pr.add_argument("--head-if-unchanged", default=None)
+
+    p_ref = sub.add_parser("refresh-pr-head")
+    p_ref.add_argument("--dir", default=".")
 
     p_rev = sub.add_parser("set-reviews")
     p_rev.add_argument("--dir", default=".")
@@ -939,8 +1000,13 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.cmd == "set-pr":
-        rec = update_pr(args.dir, args.number, url=args.url, state=args.state)
+        rec = update_pr(args.dir, args.number, url=args.url, state=args.state,
+                        head=args.head, head_source=args.head_source,
+                        expect_head=args.head_if_unchanged)
         return 0 if rec is not None else 1
+
+    if args.cmd == "refresh-pr-head":
+        return 0 if refresh_pr_head(args.dir) is not None else 1
 
     if args.cmd == "set-reviews":
         try:

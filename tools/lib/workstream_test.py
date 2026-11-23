@@ -698,8 +698,296 @@ class CliTests(WorkstreamTestBase):
         workstream.update_phase(repo, pr=True)
         self.assertEqual(
             workstream.format_statusline_line1(repo, project="dotfiles"),
-            "dotfiles | Is162+163 agent row statusline | [REVIEWED][PR] | PR #205 APPROVED | reviews: 2 local, 1 remote",
+            "dotfiles | Is162+163 agent row statusline | [REVIEWED][PR] | PR #205 APPROVED | sync: unknown | reviews: 2 local, 1 remote",
         )
+
+    def test_statusline_sync_indicator(self) -> None:
+        repo = self.make_repo("dotfiles")
+        workstream.init_ticket_record(
+            repo,
+            provider="github",
+            tickets=[{"id": "214"}],
+            desc="sync indicator",
+        )
+        Path(repo, "scratch.txt").write_text("x")
+        self.assertEqual(workstream.statusline_fields(repo)["sync"], "dirty")
+        os.unlink(os.path.join(repo, "scratch.txt"))
+
+        head = repo_facts.git(repo, "rev-parse", "HEAD")
+        workstream.update_pr(repo, 214)
+        self.assertEqual(workstream.statusline_fields(repo)["sync"], "unknown")
+        workstream.update_pr(repo, 214, head=head)
+        self.assertEqual(workstream.statusline_fields(repo)["sync"], "clean")
+
+        Path(repo, "scratch.txt").write_text("x")
+        self.assertEqual(workstream.statusline_fields(repo)["sync"], "dirty")
+        os.unlink(os.path.join(repo, "scratch.txt"))
+
+        subprocess.run(
+            ["git", "-C", repo, "commit", "-q", "--allow-empty", "-m", "work"],
+            check=True,
+        )
+        self.assertEqual(workstream.statusline_fields(repo)["sync"], "ahead")
+
+        pr_head = repo_facts.git(repo, "rev-parse", "HEAD")
+        workstream.update_pr(repo, 214, head=pr_head)
+        subprocess.run(
+            ["git", "-C", repo, "reset", "-q", "--hard", "HEAD~1"],
+            check=True,
+        )
+        fields = workstream.statusline_fields(repo)
+        self.assertEqual(fields["sync"], "behind")
+        self.assertIn("sync: behind", workstream.format_statusline_line1(repo))
+
+    def test_statusline_sync_follows_upstream_after_push(self) -> None:
+        repo = self.make_repo("dotfiles")
+        head = repo_facts.git(repo, "rev-parse", "HEAD")
+        subprocess.run(
+            ["git", "-C", repo, "update-ref", "refs/remotes/origin/main", head],
+            check=True,
+        )
+        subprocess.run(
+            ["git", "-C", repo, "config", "branch.main.remote", "origin"],
+            check=True,
+        )
+        subprocess.run(
+            ["git", "-C", repo, "config", "branch.main.merge", "refs/heads/main"],
+            check=True,
+        )
+        workstream.init_ticket_record(
+            repo,
+            provider="github",
+            tickets=[{"id": "214"}],
+            desc="sync indicator",
+        )
+        workstream.update_pr(repo, 214, head=head)
+
+        subprocess.run(
+            ["git", "-C", repo, "commit", "-q", "--allow-empty", "-m", "work"],
+            check=True,
+        )
+        self.assertEqual(workstream.statusline_fields(repo)["sync"], "ahead")
+
+        pushed = repo_facts.git(repo, "rev-parse", "HEAD")
+        subprocess.run(
+            ["git", "-C", repo, "update-ref", "refs/remotes/origin/main", pushed],
+            check=True,
+        )
+        self.assertEqual(workstream.statusline_fields(repo)["sync"], "clean")
+
+        subprocess.run(
+            ["git", "-C", repo, "checkout", "-q", "-b", "advance"],
+            check=True,
+        )
+        subprocess.run(
+            ["git", "-C", repo, "commit", "-q", "--allow-empty", "-m", "remote"],
+            check=True,
+        )
+        remote = repo_facts.git(repo, "rev-parse", "HEAD")
+        subprocess.run(
+            ["git", "-C", repo, "checkout", "-q", "main"],
+            check=True,
+        )
+        subprocess.run(
+            ["git", "-C", repo, "update-ref", "refs/remotes/origin/main", remote],
+            check=True,
+        )
+        self.assertEqual(workstream.statusline_fields(repo)["sync"], "behind")
+
+        # Point the tracking ref at the local tip so the next cases turn on the
+        # record-vs-ref rule rather than the branch simply being behind.
+        local = repo_facts.git(repo, "rev-parse", "HEAD")
+        subprocess.run(
+            ["git", "-C", repo, "update-ref", "refs/remotes/origin/main", local],
+            check=True,
+        )
+
+        # The record head is a descendant the tracking ref has not caught up with.
+        subprocess.run(
+            ["git", "-C", repo, "checkout", "-q", "-b", "record-advance"],
+            check=True,
+        )
+        subprocess.run(
+            ["git", "-C", repo, "commit", "-q", "--allow-empty", "-m", "record"],
+            check=True,
+        )
+        record_head = repo_facts.git(repo, "rev-parse", "HEAD")
+        subprocess.run(
+            ["git", "-C", repo, "checkout", "-q", "main"],
+            check=True,
+        )
+        workstream.update_pr(repo, 214, head=record_head, head_source="remote")
+        self.assertEqual(workstream.statusline_fields(repo)["sync"], "behind")
+
+        # A rewritten PR head is unrelated to the stale tracking ref.
+        tree = repo_facts.git(repo, "rev-parse", "HEAD^{tree}")
+        orphan = subprocess.run(
+            ["git", "-C", repo, "commit-tree", tree, "-m", "rewrite"],
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.strip()
+        workstream.update_pr(repo, 214, head=orphan, head_source="remote")
+        self.assertEqual(workstream.statusline_fields(repo)["sync"], "diverged")
+
+        # A record head this clone never fetched is newer, not equal.
+        workstream.update_pr(repo, 214, head="f" * 40, head_source="remote")
+        self.assertEqual(workstream.statusline_fields(repo)["sync"], "behind")
+
+        # An amend + force-push outside /sync: the tracking ref is at HEAD,
+        # while the push-sourced record head is the pre-amend commit.
+        subprocess.run(
+            ["git", "-C", repo, "commit", "-q", "--amend", "--allow-empty", "-m", "amended"],
+            check=True,
+        )
+        amended = repo_facts.git(repo, "rev-parse", "HEAD")
+        subprocess.run(
+            ["git", "-C", repo, "update-ref", "refs/remotes/origin/main", amended],
+            check=True,
+        )
+        workstream.update_pr(repo, 214, head=pushed, head_source="push")
+        self.assertEqual(workstream.statusline_fields(repo)["sync"], "clean")
+
+    def test_remote_observed_head_yields_to_a_newer_ref(self) -> None:
+        repo = self.make_repo("dotfiles")
+        head = repo_facts.git(repo, "rev-parse", "HEAD")
+        subprocess.run(
+            ["git", "-C", repo, "update-ref", "refs/remotes/origin/main", head],
+            check=True,
+        )
+        subprocess.run(["git", "-C", repo, "config", "branch.main.remote", "origin"], check=True)
+        subprocess.run(
+            ["git", "-C", repo, "config", "branch.main.merge", "refs/heads/main"],
+            check=True,
+        )
+        workstream.init_ticket_record(repo, provider="github", tickets=[{"id": "214"}])
+        workstream.update_pr(repo, 214, head=head, head_source="remote")
+
+        subprocess.run(["git", "-C", repo, "checkout", "-q", "-b", "advance"], check=True)
+        subprocess.run(
+            ["git", "-C", repo, "commit", "-q", "--allow-empty", "-m", "remote"], check=True
+        )
+        newer = repo_facts.git(repo, "rev-parse", "HEAD")
+        subprocess.run(["git", "-C", repo, "checkout", "-q", "main"], check=True)
+        subprocess.run(
+            ["git", "-C", repo, "update-ref", "refs/remotes/origin/main", newer], check=True
+        )
+        self.assertEqual(workstream.statusline_fields(repo)["sync"], "behind")
+
+        subprocess.run(["git", "-C", repo, "reset", "-q", "--hard", newer], check=True)
+        self.assertEqual(workstream.statusline_fields(repo)["sync"], "clean")
+
+    def test_update_pr_keeps_a_push_stamp_and_cas(self) -> None:
+        repo = self.make_repo("dotfiles")
+        workstream.init_ticket_record(repo, provider="github", tickets=[{"id": "214"}])
+        workstream.update_pr(repo, 214, head="a", head_source="push")
+        workstream.update_pr(repo, 215, head="a", head_source="remote")
+        rec = workstream.load_record(repo)
+        self.assertEqual((rec.pr["number"], rec.pr["head_source"]), (215, "push"))
+
+        workstream.update_pr(repo, 214, head="b", head_source="remote", expect_head="a")
+        rec = workstream.load_record(repo)
+        self.assertEqual((rec.pr["head"], rec.pr["head_source"]), ("b", "remote"))
+
+        workstream.update_pr(repo, 214, head="c", head_source="remote", expect_head="a")
+        self.assertEqual(workstream.load_record(repo).pr["head"], "b")
+
+    def test_refresh_pr_head(self) -> None:
+        repo = self.make_repo("dotfiles")
+        workstream.init_ticket_record(repo, provider="github", tickets=[{"id": "214"}])
+        workstream.update_pr(repo, 214, head="old", head_source="push")
+
+        def run_stub(url: str, out: str):
+            def run(cmd, **kwargs):
+                if "--show-toplevel" in cmd:
+                    return subprocess.CompletedProcess(cmd, 0, repo + "\n", "")
+                if "--absolute-git-dir" in cmd:
+                    return subprocess.CompletedProcess(cmd, 0, "", "")
+                if "get-url" in cmd:
+                    return subprocess.CompletedProcess(cmd, 0, url + "\n", "")
+                if "ls-remote" in cmd:
+                    return subprocess.CompletedProcess(cmd, 0, out, "")
+                return subprocess.CompletedProcess(cmd, 0, "", "")
+            return run
+
+        with mock.patch.object(
+            workstream.repo_facts,
+            "run_cmd",
+            side_effect=run_stub("git@github.com:acme/dotfiles.git", "new\trefs/pull/214/head\n"),
+        ) as run:
+            workstream.refresh_pr_head(repo)
+        rec = workstream.load_record(repo)
+        self.assertEqual(rec.pr["head"], "new")
+        self.assertEqual(rec.pr["head_source"], "remote")
+        calls = [c for c in run.call_args_list if "ls-remote" in c.args[0]]
+        self.assertEqual(calls[0].kwargs["timeout"], 10)
+        self.assertIn("refs/pull/214/head", calls[0].args[0])
+
+    def test_refresh_pr_head_handles_enterprise_remote(self) -> None:
+        repo = self.make_repo("dotfiles")
+        workstream.init_ticket_record(repo, provider="github", tickets=[{"id": "214"}])
+        workstream.update_pr(repo, 214, head="old", head_source="push")
+
+        def run_stub(url: str, out: str):
+            def run(cmd, **kwargs):
+                if "--show-toplevel" in cmd:
+                    return subprocess.CompletedProcess(cmd, 0, repo + "\n", "")
+                if "--absolute-git-dir" in cmd:
+                    return subprocess.CompletedProcess(cmd, 0, "", "")
+                if "get-url" in cmd:
+                    return subprocess.CompletedProcess(cmd, 0, url + "\n", "")
+                if "ls-remote" in cmd:
+                    return subprocess.CompletedProcess(cmd, 0, out, "")
+                return subprocess.CompletedProcess(cmd, 0, "", "")
+            return run
+
+        with mock.patch.object(
+            workstream.repo_facts,
+            "run_cmd",
+            side_effect=run_stub("git@ghe.example.com:acme/dotfiles.git", "new\trefs/pull/214/head\n"),
+        ):
+            workstream.refresh_pr_head(repo)
+        self.assertEqual(workstream.load_record(repo).pr["head"], "new")
+
+    def test_refresh_pr_head_without_a_pull_ref_is_a_noop(self) -> None:
+        repo = self.make_repo("dotfiles")
+        workstream.init_ticket_record(repo, provider="github", tickets=[{"id": "214"}])
+        workstream.update_pr(repo, 214, head="old", head_source="push")
+
+        def run(cmd, **kwargs):
+            if "--show-toplevel" in cmd:
+                return subprocess.CompletedProcess(cmd, 0, repo + "\n", "")
+            if "--absolute-git-dir" in cmd:
+                return subprocess.CompletedProcess(cmd, 0, "", "")
+            if "get-url" in cmd:
+                return subprocess.CompletedProcess(cmd, 0, "git@gitlab.com:acme/dotfiles.git\n", "")
+            return subprocess.CompletedProcess(cmd, 0, "", "")
+
+        with mock.patch.object(workstream.repo_facts, "run_cmd", side_effect=run):
+            self.assertIsNone(workstream.refresh_pr_head(repo))
+        self.assertEqual(workstream.load_record(repo).pr["head"], "old")
+
+    def test_refresh_pr_head_does_not_overwrite_a_push(self) -> None:
+        repo = self.make_repo("dotfiles")
+        workstream.init_ticket_record(repo, provider="github", tickets=[{"id": "214"}])
+        workstream.update_pr(repo, 214, head="old", head_source="push")
+
+        def run(cmd, **kwargs):
+            if "--show-toplevel" in cmd:
+                return subprocess.CompletedProcess(cmd, 0, repo + "\n", "")
+            if "--absolute-git-dir" in cmd:
+                return subprocess.CompletedProcess(cmd, 0, "", "")
+            if "get-url" in cmd:
+                return subprocess.CompletedProcess(cmd, 0, "git@github.com:acme/dotfiles.git\n", "")
+            if "ls-remote" in cmd:
+                workstream.update_pr(repo, 214, head="pushed", head_source="push")
+                return subprocess.CompletedProcess(cmd, 0, "stale\trefs/pull/214/head\n", "")
+            return subprocess.CompletedProcess(cmd, 0, "", "")
+
+        with mock.patch.object(workstream.repo_facts, "run_cmd", side_effect=run):
+            workstream.refresh_pr_head(repo)
+        rec = workstream.load_record(repo)
+        self.assertEqual((rec.pr["head"], rec.pr["head_source"]), ("pushed", "push"))
 
 
 if __name__ == "__main__":
