@@ -5,9 +5,9 @@ f3522de4dc0c92887d60d0b000c79c80cd724b6efae9cb09e2bed932c0bc4ad6  644  dot_claud
 1af82b59f92a026c19e45106c05c926ea8e9dd95a3b312d79b98c6184403eba0  644  dot_claude/agents/codebase-pattern-finder.md
 1d3c68de8ea88fb5b801cf131541f45b9b0853134398a7dfef8eeace30739aa3  644  dot_claude/agents/github-review-repair-agent.md
 6cc2a0ed6667e8ba0c167e9e76213f0c1d53cc5a43fc5a6f7e441c3bfa3a1040  644  dot_claude/agents/local-review-cycle-manager.md
-7d5f8c87843ccf69c4c3b3f27d6ba228249022da52cba8c08674f41bdbf62c7a  644  dot_claude/agents/pr-reviewers/pr-reviewer-architecture.md
-ce4926ee616dcbf604af0cf8e12f449af963e858ed5f36ff46429b266e484668  644  dot_claude/agents/pr-reviewers/pr-reviewer-correctness.md
-92d2899333f62cb889bd32117f2988cafb71042e3e393a70e16338097c72b0cb  644  dot_claude/agents/pr-reviewers/pr-reviewer-prompt.md
+bd16daf5eb64aef0fcaca6613926317a218ddd0ae91aa40a6b2aff1d2381b2f7  644  dot_claude/agents/pr-reviewers/pr-reviewer-architecture.md
+3201c2ebfc5d3a4482c887a897c191da98257e1223954e30dd04f7407b74d2a9  644  dot_claude/agents/pr-reviewers/pr-reviewer-correctness.md
+a85d2efab7cebb68f3940fc37f811bb7a3808f9ceafa8aaedcdbf9036552239d  644  dot_claude/agents/pr-reviewers/pr-reviewer-prompt.md
 5a5ca97c3f2734e1392087d411c5afff9c1c16d723daabec3062647fd353349b  644  dot_claude/agents/pr-reviewers/pr-reviewer-robustness.md
 d238bc76cb1340189536d171e754c7c859d0a6bc00ffb41af600566732089ccd  644  dot_claude/agents/pr-reviewers/pr-reviewer-security.md
 3a66ee9add41c9fc0ce5bcee1551bd4d6cc707b775280035033e763290419d93  644  dot_claude/agents/pr-reviewers/pr-reviewer-supply-chain.md
@@ -49,7 +49,7 @@ ee70fb1a401ed104231eb6f9ea72334263ca35b579f030d27946692cc57776be  644  dot_claud
 6df3c5e8b019a3ecb46bbd3f37c8d3866b39dd5596baea39734d710ab6cae649  644  dot_claude/skills/prompt-review/SKILL.md
 91f66b2780160f52a8cc5619c0659375c125a0070fbe7a8ec454a94190d8c413  644  dot_claude/skills/prompt-review/executable_prompt-metrics.sh
 947e3cfbb987c8dc9655ed68f2029ac6559d7d6b070a5d345f66f73659c064d0  644  dot_claude/skills/review-lens-contract/SKILL.md
-5007939e80dcb6995471729b546da8e3129b88447ee7a70fa2e98787abb72019  644  dot_claude/skills/reviewer-contract/SKILL.md
+9127f3d0e9194dc4d95ac6469668e751ac1f04fe45c5c9974df51db6f1dc9809  644  dot_claude/skills/reviewer-contract/SKILL.md
 c706c17513c5c2662931c20f36a170db2f9b7640bc744ff0f88a6f0feec0fd98  644  dot_claude/skills/security-review-rubric/SKILL.md
 a331dc697855157141a83e160b4f6e44bd8b52541074e511e15dfd2680f3f34c  644  dot_claude/skills/terse-docs/SKILL.md
 4131c16b5f18b166d4bd2cabe73a121f9930254994f3ca82a48520cfa6027456  644  dot_claude/skills/tighten/SKILL.md
@@ -139,4 +139,4 @@ f43faf2903f173dbf1dd180f1052053a9e7d6a59de2ee3f4952f15056be8c7ca  644  workflow/
 c42c6ae3b68ab2aca41bceff8ad42be91af428625cf0db30c670bc3345cd3548  644  workflow/adapters/claude-cloud.md
 6aababc08b7d64b5f10de317a1378587aae79d034067791dfb15f6002849a3b4  644  workflow/adapters/codex-local.md
 aae0f1c2a394dfa72012a412edcadc8eede575e652591c10db91bdea2932f73f  644  workflow/adapters/codex.md
-60694edaa204ca03ac920bbb44669fd447937a801a0bd6adeba13bf264865e22  644  workflow/adapters/opencode-local.md
+490417cc6bcaa55390610a53bd22c2fd9a0b7ad52069266ed890ee9535b780b3  644  workflow/adapters/opencode-local.md
