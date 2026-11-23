@@ -130,7 +130,7 @@ setting() {
 
 # Words that are noise in THIS repo's ticket titles — typically the project's
 # own name, which every ticket repeats and which therefore tells the reader
-# nothing when they're scanning a list of them. Set `label_noise=export report` in
+# nothing when they're scanning a list of them. Set `label_noise=acme` in
 # .start-ticket.conf. Consumed by gt::distill_title.
 GT_LABEL_NOISE="$(setting label_noise GT_LABEL_NOISE "")"
 export GT_LABEL_NOISE
@@ -368,7 +368,7 @@ run_session() {  # <topic> <about>
     printf '\n%s\n' "$(cat "$SCRIPT_DIR/session-kickoff.md")"
     printf '\nCosmetic, before your first reply: run `session-label.sh --color project` (skip if not found; silent outside a background session).\n'
   } > "$kf"
-  printf 'dir=%s\nkickoff=%s\nlabel=%s\n' "$dir" "$kf" "$label"
+  printf 'dir=%s\nkickoff=%s\nlabel=%s\nlauncher=%s\n' "$dir" "$kf" "$label" "$launcher"
   launch_session "$dir" "$kf" "$label"
 }
 

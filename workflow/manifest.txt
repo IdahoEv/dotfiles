@@ -20,7 +20,7 @@ ed0550c57438ad39f62ef174999f91662f07b4e1908a09e54e997b4637988359  644  dot_claud
 ea58bc9b9c8930c9319d82c98da9a91922efbcee227e7b55907f7490632d135a  644  dot_claude/agents/project-review-manager.md
 ba2e0f31de188900a843753131126fc1cfa9ed22a9982ab284440d79be4c6854  644  dot_claude/agents/test-generator.md
 c3c02fec04bfb82a8070f0da0dc957ae81a3ef0727bd2329a8129678a660ece6  644  dot_claude/agents/web-search-researcher.md
-dd6a9efb75104ba1957c2de3d958e9bbffb426d9963cb7ad6933fa16c0ef475d  644  dot_claude/commands/discuss.md
+8e36557562be08e2d5838609b0bfbc4d03c8e1405863590a43928b3d0e8612e9  644  dot_claude/commands/discuss.md
 8998b38bc79c43a9a0ed46b71cd239544d630001837e917275a7da64231f51c2  644  dot_claude/commands/finalize.md
 30f03e48c2f2bc6cc60d74195f3da6af3d7f868160a11f43daf759611194b83c  644  dot_claude/commands/generate_prd.md
 8ca6f1b239a9d536f92bdbe5d8801cd8ad1e523e2acc6245c38ff3b6c86032e5  644  dot_claude/commands/github-review-comments.md
@@ -38,7 +38,7 @@ ecfadd04ba6312298e060aaef496079f83d32dc809e39bc91089bf3101852ef1  644  dot_claud
 aba793872a6ce83be45735cf898183d8d2b290c72f5e62312e161883462615af  644  dot_claude/commands/prompt-audit.md
 51367b2883763ed4354e9f51f596d3ed865982d0f57e2c1a8502c96b645b97de  644  dot_claude/commands/remind.md
 36451ca7b0c0afb4b6877b075d92dd555afe76658fa3ad409d4fa40e27a0a41c  644  dot_claude/commands/research_codebase.md
-58d3c80554c432fbec4e7f250fc4ae8735b82cefce080f86af911c8a5317521d  644  dot_claude/commands/start.md
+7f23db91af11bb46b63b317c5d9fa6f964a8918d34e2e7e0059b51d10f275c3a  644  dot_claude/commands/start.md
 4443c3e1b526cdbc4c6ff95bbe13f2b183ce6dee93b90d6a0a41e0afca7c97b8  644  dot_claude/commands/sync.md
 2cde0450935a61a0384afac7655b46cea02adc0957dfe840cfcbfbe9c8393cdc  644  dot_claude/skills/github-review-procedure/SKILL.md
 ee70fb1a401ed104231eb6f9ea72334263ca35b579f030d27946692cc57776be  644  dot_claude/skills/github-review-procedure/executable_github-review-poll.sh
@@ -122,7 +122,7 @@ e366a502be678c6fa82962d428bbdc9414457a32835de696989c42582e500eca  755  tools/sib
 19cf2853382e6922ff9b03291f85d00e5a4b98a8acd0bc2e9a563ac91d2e68e6  644  tools/start-ticket-providers/github-mcp.sh
 18f70650d7898cbaa3a7b3f6f67038901cb331b9138a3494ad7b8501bb9411d5  644  tools/start-ticket-providers/github.sh
 ae4e93d3a0d38815b1c929d3ff237054c71a8a46dd01e30e2cd23c2ed9343fee  644  tools/start-ticket-providers/shortcut.sh
-80fb52b06eab24da5deabacffd3a12265213c60dcbed1103af93779378a5fa22  755  tools/start-ticket.sh
+93a95001ae53ae4d7d1b52fab2eefa77b64101a7422ebd5f237815b4bb67b712  755  tools/start-ticket.sh
 2f05e33075ba15221c8da189495317c293d22055b5548cd2db0f98b4c30c47e2  755  tools/sync-gate.sh
 1abff882cb55863b47da0513aec9a824a52a228f7da137c1562d638ad1d5fae6  755  tools/sync-run.sh
 c1e6502f75831f41c5316e583cd7c14f7a33d694d9837e08094d107237bfe0a7  755  tools/tracker.sh

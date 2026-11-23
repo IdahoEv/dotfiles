@@ -16,10 +16,11 @@ onto the ticket's worktree; its kickoff carries the rules.
    ```bash
    start-ticket.sh --session "<label>" [--about "<description>"]
    ```
-   Never pass `--launcher`. Output is `dir= kickoff= label=`.
-3. Report the label and launcher as `/start` step 3 describes: under `bg` the session is in
-   `claude agents` as `[TALK] <label>`; under `agy-tmux` a tmux window opens in the active
-   dashboard; under `none` give the `dir` and `kickoff` paths.
+   Never pass `--launcher`. Output is `dir= kickoff= label= launcher=`.
+3. Report the label and the launcher it names, as `/start` step 3 describes: under `bg` the
+   session is in `claude agents` as `[TALK] <label>`; under `agy-tmux` a tmux window opens
+   in the agy-tmux dashboard (the active session, else `agy-<repo>`); under `none` give the
+   `dir` and `kickoff` paths.
 
 Don't hold the discussion here.
 
