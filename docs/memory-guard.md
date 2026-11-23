@@ -32,7 +32,7 @@ Each process belongs to exactly one session: its **nearest root ancestor**. Suba
 | Path | Attributed as | Notes |
 | --- | --- | --- |
 | `agy-tmux.sh` windows | One row per tmux window (workstream key). | Window 0 (the dashboard) is excluded. Exited panes are listed as `exited`. |
-| `claude` / `agy` / `codex` started anywhere else (iTerm tab from `start-ticket.sh`, `claude --bg`, a plain terminal) | Found by **executable name**; matched to a workstream when the process's working directory (via one `lsof` call) is inside a worktree with `.workstream.json`, otherwise listed as `claude pid 1234 [dir] *`. | The `*` marks "started outside the launcher". |
+| `claude` / `agy` / `codex` started anywhere else (`claude --bg`, a plain terminal) | Found by **executable name**; matched to a workstream when the process's working directory (via one `lsof` call) is inside a worktree with `.workstream.json`, otherwise listed as `claude pid 1234 [dir] *`. | The `*` marks "started outside the launcher". |
 | The Claude **desktop app** (`Claude.app` bundles and helpers) and any `.app` bundle | **Not counted** as agent sessions; they still lower free memory and show in host pressure. |
 | Agents under a different executable name (e.g. a Node wrapper that shows as `node`) | **Not detected.** | Add the name: `mem_agent_names=claude,agy,codex,mytool` (or `MEM_GUARD_AGENT_NAMES`). Sessions that run inside a counted agent are included regardless. |
 | Memory used by non-agent processes (browsers, Docker, IDEs) | Not attributed. | They still lower free memory, so the host pressure line and the guard see them. |
@@ -45,7 +45,7 @@ Each process belongs to exactly one session: its **nearest root ancestor**. Suba
 | --- | --- |
 | `start-ticket.sh <id>` (full launch) | Dies before any worktree or tracker write. |
 | `start-ticket.sh --no-tab` (`/start` step 1, `agy-tmux.sh`) | Not guarded: it launches nothing. The later `--tab-only` call is the gate for `/start` (it can die after the worktree and in-progress mark exist; retrying reuses the worktree), and `agy-tmux.sh` guards each group itself. |
-| `start-ticket.sh --tab-only` (iTerm and `bg` launchers, `/start` step 3), `--session` (`/discuss`) | Dies before the session starts. |
+| `start-ticket.sh --tab-only` (`bg` launcher, `/start` step 3), `--session` (`/discuss`) | Dies before the session starts. |
 | `agy-tmux.sh <groups…>` | Each group is checked separately; blocked groups are skipped, others still launch if pressure allows. `--force` overrides. |
 | `launcher=none`, `--print-title`, cloud `--in-place` runs | Not guarded: nothing is launched locally. |
 | `codex-workflow.sh start`, `discuss`, `launch` | Checks each group/discussion before setup and again before creating a new daemon thread. A block stops remaining groups; if setup already completed, its worktree and tracker state are reported. Reusing a recorded thread launches nothing and skips the second check. |

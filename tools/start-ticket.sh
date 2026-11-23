@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # start-ticket.sh — spin up a worktree + Claude session for a tracker ticket.
 #
-#   start-ticket.sh <id>[,<id>…] [--provider github|github-mcp|shortcut] [--no-tab] [--launcher iterm|bg|agy-tmux|none]
+#   start-ticket.sh <id>[,<id>…] [--provider github|github-mcp|shortcut] [--no-tab] [--launcher bg|agy-tmux|none]
 #   start-ticket.sh <id> --print-title            # read-only: title + proposed label
 #   start-ticket.sh <id> --in-place --no-tab      # no worktree: check out the ticket branch here
-#   start-ticket.sh --tab-only <worktree> <kickoff> [--launcher iterm|bg|agy-tmux|none]
-#   start-ticket.sh --session [<topic>] [--about <text>] [--launcher iterm|bg|agy-tmux|none]
+#   start-ticket.sh --tab-only <worktree> <kickoff> [--launcher bg|agy-tmux|none]
+#   start-ticket.sh --session [<topic>] [--about <text>] [--launcher bg|agy-tmux|none]
 #
 # --session opens a non-ticket discussion session (/discuss): no ticket, branch
 # or worktree. It launches in the main checkout (for a bare repo, the worktree
@@ -16,9 +16,7 @@
 # Resolves a ticket (GitHub issue or Shortcut story) to a branch, creates a
 # worktree via worktree-manager.sh, marks the ticket in progress, writes a
 # kickoff prompt, and starts a Claude session for it with a "launcher":
-#   iterm (default)  a 2-pane iTerm tab: claude on top with the prompt typed in
-#                    but unsubmitted; a shell on the bottom.
-#   bg               a background session for Claude Code's agent view
+#   bg (default)     a background session for Claude Code's agent view
 #                    (`claude agents`): claude --bg --name "<label>" "<kickoff>".
 #                    The kickoff is SUBMITTED immediately, so it starts in plan
 #                    mode by default to keep a review gate (see bg_permission_mode).
@@ -30,8 +28,8 @@
 # Launcher is chosen by, in order: --launcher flag → $START_TICKET_LAUNCHER →
 # `agy-tmux` (auto-selected when running in an `agy` session inside an
 # `@agy_dashboard=1` tmux session) → `launcher=` in .start-ticket.conf /
-# ~/.config/start-ticket/config → iterm (none off macOS).
-# Put `launcher=bg` in the per-machine ~/.config/start-ticket/config to opt in.
+# ~/.config/start-ticket/config → bg on macOS (none elsewhere).
+# The retired `iterm` launcher is rejected with an error, never remapped.
 #
 # A comma list (`12,13,14`, github only) is a chain: one worktree and
 # branch named from the head (first) ticket, one kickoff and session for all of
@@ -42,13 +40,12 @@
 #   --provider flag → START_TICKET_MCP_DIR set (github-mcp) → .start-ticket.conf
 #   (provider=…) → autodetect (gh vs short).
 #
-# Env knobs: START_TICKET_CLAUDE_DELAY (secs before typing the prompt, default 3),
-#   START_TICKET_TAB_MAXLEN (default 30), START_TICKET_PROVIDER_DIR,
+# Env knobs: START_TICKET_PROVIDER_DIR,
 #   START_TICKET_BG_MAXLEN (agent-view row name length, default 70),
 #   START_TICKET_BG_PERMISSION_MODE or `bg_permission_mode=` in the conf files
 #   (bg launcher only; default "plan"; "default" passes no --permission-mode).
 #
-# Session/tab names are distilled from the ticket TITLE (gt::distill_title in
+# Session names are distilled from the ticket TITLE (gt::distill_title in
 # lib/repo-facts.sh), not from the branch — see make_label. Tune with
 # `label_noise=` in .start-ticket.conf (words this repo repeats in every title,
 # e.g. its own name) or GT_LABEL_WORDS (how many words to keep, default 4).
@@ -155,7 +152,7 @@ chain_tag() {
   case "$ids" in *+*) printf '%s' "$ids" ;; esac
 }
 
-# make_label <branch> <maxlen> [pretty] → short tab / agent-view row label.
+# make_label <branch> <maxlen> [pretty] → short session label.
 # Branch "<n>-<slug>" -> "Is<n> <slug>"; Shortcut "<user>/sc-<id>/<slug>" ->
 # "Sc<id> <slug>". The ticket number is ALWAYS kept; the slug is truncated.
 # "Is" (not "#") disambiguates issue numbers from PR numbers at a glance,
@@ -200,10 +197,10 @@ make_label() {
 
 # fit <text> <maxlen> [whole_words] → text trimmed to maxlen.
 # With <whole_words> non-empty, drop trailing WORDS until it fits rather than
-# cutting mid-word: at the iTerm tab width (30) a distilled label like
-# "Data Deletion Retention Policy" otherwise lands as "Data Deletion Retent…",
-# where the truncated word is the one carrying the meaning. Dropping to
-# "Data Deletion…" costs a word but keeps every word it shows readable.
+# cutting mid-word: a distilled label like "Data Deletion Retention Policy"
+# otherwise lands as "Data Deletion Retent…", where the truncated word is the one
+# carrying the meaning. Dropping to "Data Deletion…" costs a word but keeps every
+# word it shows readable.
 # Falls back to a character cut if even the first word is too long.
 fit() {
   local text="$1" maxlen="$2" whole="${3:-}"
@@ -221,111 +218,6 @@ fit() {
   printf '%s…' "${text:0:$((maxlen - 1))}"
 }
 
-# Tries each clipboard tool in turn (a tool on PATH can still fail, e.g. xclip
-# with no DISPLAY on WSL); returns 1 if none succeeds.
-copy_to_clipboard() {  # <file>
-  local f="$1" t
-  for t in pbcopy wl-copy "xclip -selection clipboard" clip.exe; do
-    command -v "${t%% *}" >/dev/null && $t < "$f" 2>/dev/null && return 0
-  done
-  return 1
-}
-
-# ---- iTerm tab ---------------------------------------------------------------
-# Opens a new iTerm tab, split into two horizontal panes:
-#   top    — `claude` (bare); the kickoff prompt is typed into its input via a
-#            bracketed paste after START_TICKET_CLAUDE_DELAY seconds, left
-#            UNSUBMITTED for review.
-#   bottom — a plain shell in the worktree.
-# The kickoff is also put on the clipboard as a fallback (paste with ⌘V).
-# Tab name = "Is<n> <slug>" where the ticket number is ALWAYS kept and the slug is
-# truncated instead (to START_TICKET_TAB_MAXLEN). The name is re-asserted after
-# commands are written so iTerm's automatic title updates don't clobber it.
-open_tab() {  # <worktree> <kickoff> [<label>]
-  local wt="$1" kf="$2" label="${3:-}"
-  if [ -n "$label" ]; then
-    label="$(fit "$label" "${START_TICKET_TAB_MAXLEN:-30}" words)"
-  else
-    if [ -f "$wt/.workstream.json" ] && [ -x "$SCRIPT_DIR/workstream.sh" ] && command -v python3 >/dev/null 2>&1; then
-      label="$("$SCRIPT_DIR/workstream.sh" render base --dir "$wt" 2>/dev/null || true)"
-    fi
-    if [ -n "$label" ]; then
-      label="$(fit "$label" "${START_TICKET_TAB_MAXLEN:-30}" words)"
-    else
-      local branch; branch="$(git -C "$wt" branch --show-current 2>/dev/null || basename "$wt")"
-      ST_CHAIN_TAG="$(chain_tag "$wt")"
-      label="$(make_label "$branch" "${START_TICKET_TAB_MAXLEN:-30}")"
-    fi
-  fi
-
-  local delay="${START_TICKET_CLAUDE_DELAY:-3}"
-
-  local copied=""
-  copy_to_clipboard "$kf" && copied=1
-
-  if [ "${TERM_PROGRAM:-}" != "iTerm.app" ] && [ "${LC_TERMINAL:-}" != "iTerm2" ]; then
-    if [ -n "$copied" ]; then
-      printf '\nNot in iTerm. Kickoff is on the clipboard and at %s\n  cd %q && claude   # then paste the kickoff\n' "$kf" "$wt"
-    else
-      printf '\nNot in iTerm. Kickoff is at %s\n  cd %q && claude   # then paste the kickoff\n' "$kf" "$wt"
-    fi
-    return
-  fi
-
-  osascript - "$wt" "$kf" "$label" "$delay" "$(cat "$kf")" <<'OSA'
-on run argv
-  set wt to item 1 of argv
-  set kf to item 2 of argv
-  set tabName to item 3 of argv
-  set startDelay to (item 4 of argv) as integer
-  set promptText to item 5 of argv
-  set ESC to (ASCII character 27)
-  tell application "iTerm2"
-    tell current window
-      try
-        set newTab to (create tab with profile "Ticket")
-      on error
-        -- "Ticket" dynamic profile not loaded yet. Install it via
-        -- setup-ticket-profile.sh (writes the DynamicProfiles JSON; iTerm
-        -- picks it up live), but fall back rather than fail outright.
-        set newTab to (create tab with default profile)
-      end try
-      tell newTab
-        set topPane to current session
-        tell topPane
-          set name to tabName
-          write text "cd " & quoted form of wt & " && claude"
-          -- Re-assert the name after launching: shells/Claude may set their own
-          -- title, which would bury the ticket number.
-          set name to tabName
-          try
-            set botPane to (split horizontally with profile "Ticket")
-          on error
-            set botPane to (split horizontally with default profile)
-          end try
-        end tell
-        tell botPane
-          set name to tabName
-          write text "cd " & quoted form of wt & " && clear"
-          write text "printf '%s\\n' '──── kickoff (typed into Claude above, unsubmitted; also on clipboard) ────'"
-          write text "(command -v bat >/dev/null && bat --style=plain --paging=never " & quoted form of kf & " || cat " & quoted form of kf & ")"
-          write text "printf '\\n%s\\n' '────' 'Looks good: click Claude above, press Enter.' 'Edit first: $EDITOR " & kf & " ; pbcopy < " & kf & " ; clear Claude input; paste; Enter.'"
-        end tell
-        delay startDelay
-        tell topPane
-          write text (ESC & "[200~" & promptText & ESC & "[201~") newline false
-          select
-          -- Final re-assert after the kickoff is typed: Claude's session-start
-          -- title update lands around here.
-          set name to tabName
-        end tell
-      end tell
-    end tell
-  end tell
-end run
-OSA
-}
-
 # ---- background session (Claude Code agent view) -----------------------------
 # Starts `claude --bg` in the worktree so the session shows up as a row in
 # `claude agents`, named "[PLAN] Is<n> <slug>" (hyphens → spaces,
@@ -338,8 +230,9 @@ OSA
 # Because the worktree already exists (worktree-manager.sh made it),
 # Claude Code uses it as-is rather than creating its own under .claude/worktrees/,
 # so .worktree-sync seeding is preserved and /finalize's cleanup still applies.
-# Unlike the iTerm launcher, the kickoff is submitted immediately; the default
-# permission mode is therefore "plan" (Claude proposes before editing).
+# Unlike the kickoff typed into an interactive session, the kickoff here is
+# submitted immediately; the default permission mode is therefore "plan"
+# (Claude proposes before editing).
 # claude's own output goes to stderr to keep this script's stdout parseable.
 open_bg() {  # <worktree> <kickoff> [<label>]
   local wt="$1" kf="$2" label="${3:-}"
@@ -409,9 +302,7 @@ open_agy_tmux() {  # <worktree> <kickoff>
 }
 
 launch_session() {  # <worktree> <kickoff> [<label>] — uses the resolved $launcher
-  local tab_label="${3:-}"
   case "$launcher" in
-    iterm)    open_tab "$1" "$2" "${tab_label#\[TALK\] }" ;;
     bg)       open_bg  "$1" "$2" "${3:-}" ;;
     agy-tmux) open_agy_tmux "$1" "$2" ;;
     none)     : ;;
@@ -575,12 +466,13 @@ launcher="$launcher_flag"
 if [ -z "$launcher" ] && is_agy_tmux_session; then
   launcher=agy-tmux
 fi
-default_launcher=iterm
+default_launcher=bg
 [ "$(uname)" = Darwin ] || default_launcher=none
 [ -n "$launcher" ] || launcher="$(setting launcher START_TICKET_LAUNCHER "$default_launcher")"
 case "$launcher" in
-  iterm|bg|agy-tmux|none) ;;
-  *) die "unknown launcher '$launcher' (expected iterm, bg, agy-tmux, or none)" ;;
+  bg|agy-tmux|none) ;;
+  iterm) die "the 'iterm' launcher was removed; drop 'launcher=iterm' from ~/.config/start-ticket/config (bg is the default on macOS)" ;;
+  *) die "unknown launcher '$launcher' (expected bg, agy-tmux, or none)" ;;
 esac
 
 # shellcheck source=lib/telemetry.sh
@@ -619,7 +511,7 @@ if [ "$mode" = "session" ]; then
   exit 0
 fi
 
-[ -n "$id" ] || die "usage: start-ticket.sh <id>[,<id>…] [--provider github|github-mcp|shortcut] [--no-tab|--print-title] [--launcher iterm|bg|agy-tmux|none]"
+[ -n "$id" ] || die "usage: start-ticket.sh <id>[,<id>…] [--provider github|github-mcp|shortcut] [--no-tab|--print-title] [--launcher bg|agy-tmux|none]"
 # Guard before any worktree or tracker write, so a blocked launch leaves no half-started ticket.
 # --no-tab and --print-title launch nothing: the later --tab-only call is the gate for /start,
 # and agy-tmux.sh guards each group itself, so guarding here would only check twice.

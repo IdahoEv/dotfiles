@@ -338,45 +338,44 @@ out="$(cd "$ROOT/cloud" && PATH="$ROOT/stubbin:$PATH" START_TICKET_PROVIDER_DIR=
 check "in-place: configured start succeeds without --provider" "0" "$rc"
 check "in-place: tracked config selects GitHub" "github" "$(get provider <<<"$out")"
 
-# ---- clipboard fallback (open_tab via --tab-only, not in iTerm) ----------------
-CB="$ROOT/clip"; mkdir -p "$CB/bin" "$CB/sys"
-for t in git cat dirname basename sed tr wc mktemp rm date grep awk head cut sort uname env bash; do
-  p="$(command -v "$t")" && ln -sf "$p" "$CB/sys/$t"
-done
-printf 'kickoff text\n' > "$CB/kf"
-stub_clip() {  # <name>
-  printf '#!/bin/sh\ncat > "%s/%s.out"\n' "$CB" "$1" > "$CB/bin/$1"; chmod +x "$CB/bin/$1"
+# ---- launcher resolution: default is bg on macOS, iterm is gone ---------------
+LR="$ROOT/launcher"; mkdir -p "$LR/darwin" "$LR/linux"
+printf '#!/bin/sh\necho Darwin\n' > "$LR/darwin/uname"; chmod +x "$LR/darwin/uname"
+printf '#!/bin/sh\necho Linux\n'  > "$LR/linux/uname";  chmod +x "$LR/linux/uname"
+printf 'kickoff text\n' > "$LR/kf"
+tab_only_default() {  # <uname-dir> → stdout
+  (cd "$ROOT/widgets" && env -u START_TICKET_LAUNCHER PATH="$1:$ROOT/stubbin:$PATH" \
+    "$ST" --tab-only "$ROOT/wt" "$LR/kf" 2>/dev/null)
 }
-tab_only() {  # PATH-dir-list → stdout
-  (cd "$ROOT/widgets" && env -u TERM_PROGRAM -u LC_TERMINAL PATH="$1" "$ST" --tab-only "$ROOT/wt" "$CB/kf" --launcher iterm 2>/dev/null)
-}
-out="$(tab_only "$CB/sys")"
-has "no clipboard tool: prints kickoff path" "Kickoff is at $CB/kf" <(printf '%s' "$out")
-check "no clipboard tool: does not claim clipboard" "" "$(grep -F 'on the clipboard' <<<"$out")"
-stub_clip xclip
-out="$(tab_only "$CB/bin:$CB/sys")"
-has "xclip fallback receives kickoff" "kickoff text" "$CB/xclip.out"
-has "xclip fallback claims clipboard" "on the clipboard" <(printf '%s' "$out")
-stub_clip wl-copy
-tab_only "$CB/bin:$CB/sys" >/dev/null
-has "wl-copy preferred over xclip" "kickoff text" "$CB/wl-copy.out"
-printf '#!/bin/sh\nexit 1\n' > "$CB/bin/wl-copy"; printf '#!/bin/sh\nexit 1\n' > "$CB/bin/xclip"
-stub_clip clip.exe
-out="$(tab_only "$CB/bin:$CB/sys")"
-has "failing wl-copy/xclip fall through to clip.exe" "kickoff text" "$CB/clip.exe.out"
 
-# ---- setup-ticket-profile.sh off macOS ----------------------------------------
-mkdir -p "$CB/uname-bin"
-printf '#!/bin/sh\necho Linux\n' > "$CB/uname-bin/uname"; chmod +x "$CB/uname-bin/uname"
-out="$(PATH="$CB/uname-bin:$PATH" "$TOOLS/setup-ticket-profile.sh" 2>&1)"; rc=$?
-check "profile setup exits 0 on Linux" "0" "$rc"
-check "profile setup creates no ~/Library" "no" "$([ -e "$HOME/Library" ] && echo yes || echo no)"
+rm -f "$ROOT/claude.args"
+tab_only_default "$LR/darwin" >/dev/null; rc=$?
+check "no launcher setting on macOS defaults to bg" "0 yes" \
+  "$rc $([ -e "$ROOT/claude.args" ] && echo yes || echo no)"
+has "default launch names the bg session" "[PLAN] fake-7 fake ticket" "$ROOT/claude.args"
+check "session.launch keeps its event name and fields" "session.launch tab-only bg ok" \
+  "$(tail -1 "$WF_TELEMETRY_LOG" | jq -r '"\(.event) \(.mode) \(.launcher) \(.outcome)"')"
+
+rm -f "$ROOT/claude.args"
+tab_only_default "$LR/linux" >/dev/null; rc=$?
+check "no launcher setting off macOS defaults to none" "0 no" \
+  "$rc $([ -e "$ROOT/claude.args" ] && echo yes || echo no)"
+check "none still reports the resolved launcher" "session.launch tab-only none ok" \
+  "$(tail -1 "$WF_TELEMETRY_LOG" | jq -r '"\(.event) \(.mode) \(.launcher) \(.outcome)"')"
+
+rm -f "$ROOT/claude.args"
+(cd "$ROOT/widgets" && PATH="$ROOT/stubbin:$PATH" "$ST" --tab-only "$ROOT/wt" "$LR/kf" \
+  --launcher iterm >/dev/null 2>"$ROOT/iterm.err"); rc=$?
+check "launcher iterm is refused" "1" "$rc"
+has "iterm refusal says the launcher was removed" "removed" "$ROOT/iterm.err"
+has "iterm refusal names the config line" "launcher=iterm" "$ROOT/iterm.err"
+check "iterm refusal launches nothing" "no" "$([ -e "$ROOT/claude.args" ] && echo yes || echo no)"
 
 # ---- mem-guard on the launch path ---------------------------------------------
 rm -f "$ROOT/claude.args"
 mem_tab() {  # <host fixture> [extra env...] → rc; stderr in $ROOT/mem.err
   (cd "$ROOT/widgets" && env MEM_GUARD_HOST_FIXTURE="$1" "${@:2}" PATH="$ROOT/stubbin:$PATH" \
-    "$ST" --tab-only "$ROOT/wt" "$CB/kf" --launcher bg >/dev/null 2>"$ROOT/mem.err")
+    "$ST" --tab-only "$ROOT/wt" "$LR/kf" --launcher bg >/dev/null 2>"$ROOT/mem.err")
 }
 mem_tab "level=critical free_pct=3"; rc=$?
 check "blocked by mem-guard: tab-only exits non-zero" "1" "$rc"
@@ -395,7 +394,7 @@ check "--no-tab launches nothing so is not guarded (--tab-only is the gate)" "0"
 check "launcher none is never guarded" "0" "$rc"
 (cd "$ROOT/widgets" && MEM_GUARD_HOST_FIXTURE="level=critical free_pct=3" START_TICKET_PROVIDER_DIR="$CP" "$ST" 7 --provider fake --print-title >/dev/null 2>&1); rc=$?
 check "print-title is read-only and never guarded" "0" "$rc"
-(cd "$ROOT/widgets" && START_TICKET_MEM_GUARD="$ROOT/nope" PATH="$ROOT/stubbin:$PATH" "$ST" --tab-only "$ROOT/wt" "$CB/kf" --launcher bg >/dev/null 2>"$ROOT/mem.err"); rc=$?
+(cd "$ROOT/widgets" && START_TICKET_MEM_GUARD="$ROOT/nope" PATH="$ROOT/stubbin:$PATH" "$ST" --tab-only "$ROOT/wt" "$LR/kf" --launcher bg >/dev/null 2>"$ROOT/mem.err"); rc=$?
 check "missing guard script does not block" "0" "$rc"
 has "missing guard script is reported" "launching without a memory check" "$ROOT/mem.err"
 
@@ -424,8 +423,8 @@ chmod +x "$TMUX_PLAIN_STUB"
 
 rm -f "$ROOT/agy-tmux.args" "$ROOT/claude.args"
 (cd "$ROOT/widgets" && START_TICKET_AGY_TMUX="$AT_STUB" PATH="$ROOT/stubbin:$PATH" \
-  "$ST" --tab-only "$ROOT/wt" "$CB/kf" --launcher agy-tmux >/dev/null 2>&1)
-has "explicit --launcher agy-tmux calls --window" "--window $ROOT/wt $CB/kf" "$ROOT/agy-tmux.args"
+  "$ST" --tab-only "$ROOT/wt" "$LR/kf" --launcher agy-tmux >/dev/null 2>&1)
+has "explicit --launcher agy-tmux calls --window" "--window $ROOT/wt $LR/kf" "$ROOT/agy-tmux.args"
 
 mkdir -p "$HOME/.config/start-ticket"
 printf 'launcher=bg\n' > "$HOME/.config/start-ticket/config"
@@ -433,27 +432,27 @@ printf 'launcher=bg\n' > "$HOME/.config/start-ticket/config"
 rm -f "$ROOT/agy-tmux.args" "$ROOT/claude.args"
 (cd "$ROOT/widgets" && ANTIGRAVITY_AGENT=1 TMUX="stub,1,0" TMUX_PANE="%1" \
   AGY_TMUX_TMUX_BIN="$TMUX_DASH_STUB" START_TICKET_AGY_TMUX="$AT_STUB" PATH="$ROOT/stubbin:$PATH" \
-  "$ST" --tab-only "$ROOT/wt" "$CB/kf" >/dev/null 2>&1)
-has "agy inside @agy_dashboard=1 auto-selects agy-tmux over bg config" "--window $ROOT/wt $CB/kf" "$ROOT/agy-tmux.args"
+  "$ST" --tab-only "$ROOT/wt" "$LR/kf" >/dev/null 2>&1)
+has "agy inside @agy_dashboard=1 auto-selects agy-tmux over bg config" "--window $ROOT/wt $LR/kf" "$ROOT/agy-tmux.args"
 check "agy inside @agy_dashboard=1 does not invoke claude" "no" "$([ -e "$ROOT/claude.args" ] && echo yes || echo no)"
 
 rm -f "$ROOT/agy-tmux.args" "$ROOT/claude.args"
 (cd "$ROOT/widgets" && env -u ANTIGRAVITY_AGENT TMUX="stub,1,0" TMUX_PANE="%1" \
   AGY_TMUX_TMUX_BIN="$TMUX_DASH_STUB" START_TICKET_AGY_TMUX="$AT_STUB" PATH="$ROOT/stubbin:$PATH" \
-  "$ST" --tab-only "$ROOT/wt" "$CB/kf" >/dev/null 2>&1)
+  "$ST" --tab-only "$ROOT/wt" "$LR/kf" >/dev/null 2>&1)
 check "claude inside @agy_dashboard=1 keeps bg launcher" "yes" "$([ -e "$ROOT/claude.args" ] && echo yes || echo no)"
 check "claude inside @agy_dashboard=1 does not invoke agy-tmux" "no" "$([ -e "$ROOT/agy-tmux.args" ] && echo yes || echo no)"
 
 rm -f "$ROOT/agy-tmux.args" "$ROOT/claude.args"
 (cd "$ROOT/widgets" && ANTIGRAVITY_AGENT=1 TMUX="stub,1,0" TMUX_PANE="%1" \
   AGY_TMUX_TMUX_BIN="$TMUX_PLAIN_STUB" START_TICKET_AGY_TMUX="$AT_STUB" PATH="$ROOT/stubbin:$PATH" \
-  "$ST" --tab-only "$ROOT/wt" "$CB/kf" >/dev/null 2>&1)
+  "$ST" --tab-only "$ROOT/wt" "$LR/kf" >/dev/null 2>&1)
 check "agy in non-dashboard tmux does not auto-select agy-tmux" "no" "$([ -e "$ROOT/agy-tmux.args" ] && echo yes || echo no)"
 
 rm -f "$ROOT/agy-tmux.args" "$HOME/.config/start-ticket/config"
 (cd "$ROOT/widgets" && MEM_GUARD_HOST_FIXTURE="level=critical free_pct=3" \
   START_TICKET_AGY_TMUX="$AT_STUB" PATH="$ROOT/stubbin:$PATH" \
-  "$ST" --tab-only "$ROOT/wt" "$CB/kf" --launcher agy-tmux >/dev/null 2>"$ROOT/mem.err"); rc=$?
+  "$ST" --tab-only "$ROOT/wt" "$LR/kf" --launcher agy-tmux >/dev/null 2>"$ROOT/mem.err"); rc=$?
 check "mem-guard blocks agy-tmux launcher" "1" "$rc"
 check "blocked agy-tmux never invokes agy-tmux.sh" "no" "$([ -e "$ROOT/agy-tmux.args" ] && echo yes || echo no)"
 

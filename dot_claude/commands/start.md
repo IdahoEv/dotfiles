@@ -109,16 +109,16 @@ start-ticket.sh --tab-only "<worktree>" "<kickoff>"
 ```
 
 Never pass `--launcher`; the script resolves it from the user's per-machine config.
-What you need for the report: **`iterm`** opens a tab with the kickoff typed but
-unsubmitted; **`bg`** starts a background session (findable in `claude agents`) with the
-kickoff submitted immediately; **`none`** starts nothing. If a `bg` launch fails over
+What you need for the report: **`bg`** starts a background session (findable in
+`claude agents`) with the kickoff submitted immediately; **`agy-tmux`** opens a tmux
+window in the active dashboard; **`none`** starts nothing. If a `bg` launch fails over
 workspace trust, the script prints a one-time `cd <worktree> && claude` fix — relay it.
 
 ### Naming
 
 **The session label is yours to write; the branch slug is not.** Two different jobs:
 
-- **Session label** (the agent-view row, the iTerm tab) — what the user scans to pick a
+- **Session label** (the agent-view row) — what the user scans to pick a
   session out of a list. Nothing matches on it and `agent-phase.sh` rewrites it on every
   phase change, so judgment costs nothing here. **Write it from the title.**
 - **Branch slug and worktree directory** — matched against later by `find_ticket_branch`,

@@ -146,7 +146,7 @@ fi
 # ---- locate the session's state file ----------------------------------------
 # CLAUDE_JOB_DIR is exported into every tool call of a background session and
 # names that session's own job dir. Its absence means we're in an interactive
-# session (iTerm launcher, plain `claude`), where there is no agent-view row to
+# session (plain `claude`), where there is no agent-view row to
 # label (`.workstream.json` was already updated above) — not an error, just
 # nothing to do for `state.json`.
 job_dir="${CLAUDE_JOB_DIR:-}"

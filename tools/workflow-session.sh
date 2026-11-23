@@ -11,11 +11,11 @@
 # /workflow's config edits happen in a separate session. The kickoff carries the
 # project's governor.md, a pointer to its CLAUDE.md, and a pointer to /workflow
 # for scope routing and intake. The session starts via
-# `start-ticket.sh --tab-only`, so the `launcher=` setting (iterm|bg|none) applies.
+# `start-ticket.sh --tab-only`, so the `launcher=` setting (bg|agy-tmux|none) applies.
 #
 # The caller (the /workflow skill) is the real governor gate. This only refuses
 # when a bg session's state.json names a non-governor title; with no state file
-# (iTerm, none), no title, or an unreadable one, it trusts the caller.
+# (none), no title, or an unreadable one, it trusts the caller.
 #
 # A reused worktree gets no new session by default: one may still be live in it,
 # and two sessions editing one checkout collide.

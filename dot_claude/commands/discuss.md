@@ -18,8 +18,7 @@ onto the ticket's worktree; its kickoff carries the rules.
    ```
    Never pass `--launcher`. Output is `dir= kickoff= label=`.
 3. Report the label and launcher as `/start` step 3 describes: under `bg` the session is in
-   `claude agents` as `[TALK] <label>`; under `iterm` a tab holds the unsubmitted kickoff;
-   under `none` give the `dir` and `kickoff` paths.
+   `claude agents` as `[TALK] <label>`; under `none` give the `dir` and `kickoff` paths.
 
 Don't hold the discussion here.
 
