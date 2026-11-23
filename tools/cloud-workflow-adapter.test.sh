@@ -84,6 +84,34 @@ printf 'PASS local Codex adapter maps every covered command and nested review pr
 check "$repo/workflow/adapters/opencode-local.md" "${local_codex_commands[@]}" || fail "local OpenCode adapter has drifted"
 printf 'PASS local OpenCode adapter maps every covered command and nested review procedure\n'
 
+# OpenCode discovers slash commands only from its own command directories, so each
+# covered command needs a chezmoi-managed wrapper that points back at the canonical
+# file. Keep the wrapper set and the adapter's covered-command list in lockstep.
+opencode_wrappers="$repo/dot_config/opencode/commands"
+opencode_covered=$(python3 -I - "$repo/workflow/adapters/opencode-local.md" <<'PY'
+import re, sys
+text = open(sys.argv[1], encoding="utf-8").read()
+match = re.search(r"Covered commands: ([^.]+)\.", text)
+if not match:
+    sys.exit("opencode adapter does not declare its covered commands")
+print("\n".join(name.strip() for name in match.group(1).split(",")))
+PY
+) || fail "local OpenCode adapter does not declare its covered commands"
+
+for name in $opencode_covered; do
+  wrapper="$opencode_wrappers/$name.md.tmpl"
+  [ -f "$wrapper" ] || fail "covered OpenCode command '$name' has no wrapper at $wrapper"
+  grep -qF '{{ .chezmoi.homeDir }}/.claude/commands/'"$name"'.md' "$wrapper" \
+    || fail "OpenCode wrapper '$name' does not read its canonical command file"
+  grep -qF '{{ .chezmoi.homeDir }}/.local/share/chezmoi/workflow/adapters/opencode-local.md' "$wrapper" \
+    || fail "OpenCode wrapper '$name' does not apply the local adapter"
+  grep -qF '$ARGUMENTS' "$wrapper" || fail "OpenCode wrapper '$name' drops invocation arguments"
+done
+wrapper_count=$(find "$opencode_wrappers" -maxdepth 1 -name '*.md.tmpl' | wc -l | tr -d ' ')
+covered_count=$(printf '%s\n' "$opencode_covered" | wc -l | tr -d ' ')
+[ "$wrapper_count" -eq "$covered_count" ] || fail "OpenCode has $wrapper_count wrappers but the adapter covers $covered_count commands"
+printf 'PASS every covered OpenCode command has a canonical-pointing wrapper\n'
+
 claude_commands=(
   "$repo/dot_claude/commands/start.md"
   "$repo/dot_claude/commands/open-pr.md"
