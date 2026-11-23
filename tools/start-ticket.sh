@@ -471,7 +471,7 @@ default_launcher=bg
 [ -n "$launcher" ] || launcher="$(setting launcher START_TICKET_LAUNCHER "$default_launcher")"
 case "$launcher" in
   bg|agy-tmux|none) ;;
-  iterm) die "the 'iterm' launcher was removed; use bg (the macOS default), agy-tmux, or none (drop 'launcher=iterm' from --launcher, START_TICKET_LAUNCHER, .start-ticket.conf, or ~/.config/start-ticket/config)" ;;
+  iterm) die "the 'iterm' launcher was removed; use bg (the macOS default), agy-tmux, or none (drop it from --launcher, START_TICKET_LAUNCHER, or 'launcher=' in any start-ticket conf)" ;;
   *) die "unknown launcher '$launcher' (expected bg, agy-tmux, or none)" ;;
 esac
 

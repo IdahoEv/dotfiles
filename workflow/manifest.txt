@@ -38,7 +38,7 @@ ecfadd04ba6312298e060aaef496079f83d32dc809e39bc91089bf3101852ef1  644  dot_claud
 aba793872a6ce83be45735cf898183d8d2b290c72f5e62312e161883462615af  644  dot_claude/commands/prompt-audit.md
 51367b2883763ed4354e9f51f596d3ed865982d0f57e2c1a8502c96b645b97de  644  dot_claude/commands/remind.md
 36451ca7b0c0afb4b6877b075d92dd555afe76658fa3ad409d4fa40e27a0a41c  644  dot_claude/commands/research_codebase.md
-a128d31daeffc847ae2c6f83e1d7f286a6be882d4d6d7a664f9fae5faac0e855  644  dot_claude/commands/start.md
+fe59b80528da91234fe661727d805e5ae5d58fe400085e31d3c59d234c0bdfe1  644  dot_claude/commands/start.md
 4443c3e1b526cdbc4c6ff95bbe13f2b183ce6dee93b90d6a0a41e0afca7c97b8  644  dot_claude/commands/sync.md
 2cde0450935a61a0384afac7655b46cea02adc0957dfe840cfcbfbe9c8393cdc  644  dot_claude/skills/github-review-procedure/SKILL.md
 ee70fb1a401ed104231eb6f9ea72334263ca35b579f030d27946692cc57776be  644  dot_claude/skills/github-review-procedure/executable_github-review-poll.sh
@@ -122,7 +122,7 @@ e366a502be678c6fa82962d428bbdc9414457a32835de696989c42582e500eca  755  tools/sib
 19cf2853382e6922ff9b03291f85d00e5a4b98a8acd0bc2e9a563ac91d2e68e6  644  tools/start-ticket-providers/github-mcp.sh
 18f70650d7898cbaa3a7b3f6f67038901cb331b9138a3494ad7b8501bb9411d5  644  tools/start-ticket-providers/github.sh
 ae4e93d3a0d38815b1c929d3ff237054c71a8a46dd01e30e2cd23c2ed9343fee  644  tools/start-ticket-providers/shortcut.sh
-f18ecc551f2b78e9ab4ccec89514cf0223720f8355583c0f46fa2a5282ddc79d  755  tools/start-ticket.sh
+23f63b2efc5dc8ab85bdc3938c865f1773d27ee24e48aa63a4543d66b1b3ccf4  755  tools/start-ticket.sh
 2f05e33075ba15221c8da189495317c293d22055b5548cd2db0f98b4c30c47e2  755  tools/sync-gate.sh
 1abff882cb55863b47da0513aec9a824a52a228f7da137c1562d638ad1d5fae6  755  tools/sync-run.sh
 c1e6502f75831f41c5316e583cd7c14f7a33d694d9837e08094d107237bfe0a7  755  tools/tracker.sh

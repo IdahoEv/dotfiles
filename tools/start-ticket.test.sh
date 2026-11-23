@@ -371,7 +371,8 @@ rm -f "$ROOT/claude.args"
   --launcher iterm >/dev/null 2>"$ROOT/iterm.err"); rc=$?
 check "launcher iterm is refused" "1" "$rc"
 has "iterm refusal says the launcher was removed" "removed" "$ROOT/iterm.err"
-has "iterm refusal names the config line" "launcher=iterm" "$ROOT/iterm.err"
+has "iterm refusal names the env override" "START_TICKET_LAUNCHER" "$ROOT/iterm.err"
+has "iterm refusal points at the conf files" "start-ticket conf" "$ROOT/iterm.err"
 check "iterm refusal launches nothing" "no" "$([ -e "$ROOT/claude.args" ] && echo yes || echo no)"
 
 # The migration case: launcher=iterm left in the per-machine config, no flag.

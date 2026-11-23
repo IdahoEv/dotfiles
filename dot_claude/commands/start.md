@@ -109,7 +109,7 @@ start-ticket.sh --tab-only "<worktree>" "<kickoff>"
 ```
 
 Never pass `--launcher`; the script resolves it from the user's per-machine config.
-The output's `launcher=` names the one that ran. What you need for the report:
+The output's `launcher=` names the resolved launcher. What you need for the report:
 **`bg`** starts a background session (findable in `claude agents`) with the kickoff
 submitted immediately; **`agy-tmux`** opens a tmux window in the agy-tmux dashboard (the
 active session, else `agy-<repo>`); **`none`** starts nothing. If a `bg` launch fails over
