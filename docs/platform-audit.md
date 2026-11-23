@@ -71,5 +71,5 @@ Confirmed absences (don't re-investigate): no `sed -i ''`, `date -j`, or `stat -
 | 3 | chezmoi OS branching + Windows delivery | `.chezmoi.os` logic, per-OS `.chezmoiignore`, Windows script-install mechanism replacing symlink/exec-bit delivery | Foundation for any Windows content |
 | 4 | PowerShell profile | `Microsoft.PowerShell_profile.ps1` equivalent: oh-my-posh prompt, fzf, aliases, directory/`DEV` conventions | First real PS artifact; validates #3 |
 | 5 | Claude config Windows surface | PS statusline, hooks per-OS in settings template, command bodies with platform branches, PS-native poll-pr/review-state | Builds on #3–4 |
-| 6 | tools/ PowerShell port | `wm`, `start-ticket` (wt.exe), `open-pr` `.ps1` siblings; `gh`/`ConvertFrom-Json` | Largest effort; depends on #3 |
+| 6 | tools/ PowerShell port | `wm`, `start-ticket`, `open-pr` `.ps1` siblings; `gh`/`ConvertFrom-Json` | Largest effort; depends on #3 |
 | 7 | Docs / support matrix | README + CLAUDE.md cross-platform notes, per-OS install instructions | Last; reflects the finished state |

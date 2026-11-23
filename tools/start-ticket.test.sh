@@ -371,6 +371,17 @@ has "iterm refusal says the launcher was removed" "removed" "$ROOT/iterm.err"
 has "iterm refusal names the config line" "launcher=iterm" "$ROOT/iterm.err"
 check "iterm refusal launches nothing" "no" "$([ -e "$ROOT/claude.args" ] && echo yes || echo no)"
 
+# The migration case: launcher=iterm left in the per-machine config, no flag.
+mkdir -p "$HOME/.config/start-ticket"
+printf 'launcher=iterm\n' > "$HOME/.config/start-ticket/config"
+rm -f "$ROOT/claude.args"
+(cd "$ROOT/widgets" && env -u START_TICKET_LAUNCHER PATH="$ROOT/stubbin:$PATH" \
+  "$ST" --tab-only "$ROOT/wt" "$LR/kf" >/dev/null 2>"$ROOT/iterm-conf.err"); rc=$?
+check "launcher=iterm in the per-machine config is refused" "1" "$rc"
+has "config refusal says the launcher was removed" "removed" "$ROOT/iterm-conf.err"
+check "config refusal launches nothing" "no" "$([ -e "$ROOT/claude.args" ] && echo yes || echo no)"
+rm -f "$HOME/.config/start-ticket/config"
+
 # ---- mem-guard on the launch path ---------------------------------------------
 rm -f "$ROOT/claude.args"
 mem_tab() {  # <host fixture> [extra env...] → rc; stderr in $ROOT/mem.err
