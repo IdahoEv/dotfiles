@@ -55,12 +55,17 @@ UNAVAILABLE_RE='job was not started because|spending limit needs to be increased
 
 copilot=0 rabbit=0 star_c="" star_r=""
 if [ -n "$pr" ]; then
+  current_head=""
+  if command -v workstream.sh >/dev/null 2>&1; then
+    current_head="$(workstream.sh show --dir . 2>/dev/null | jq -r '.pr.head // ""' 2>/dev/null || true)"
+  fi
   # Real reviews only; notices are kept separately so they can end a running round.
   rows="$(gh api "repos/{owner}/{repo}/pulls/$pr/reviews" --paginate \
     --jq ".[] | select((.body // \"\") | test(\"$UNAVAILABLE_RE\"; \"i\") | not) | [.user.login, .submitted_at] | @tsv")"
   notices="$(gh api "repos/{owner}/{repo}/pulls/$pr/reviews" --paginate \
     --jq ".[] | select((.body // \"\") | test(\"$UNAVAILABLE_RE\"; \"i\")) | [.user.login, .submitted_at] | @tsv")"
-  head_at="$(gh pr view "$pr" --json commits --jq '.commits[-1].committedDate')"
+  pr_meta="$(gh pr view "$pr" --json commits,headRefOid --jq '[.commits[-1].committedDate, .headRefOid] | @tsv')"
+  IFS=$'\t' read -r head_at pr_head <<<"$pr_meta"
   requested_at="$(gh api graphql -f query='
     query($o: String!, $r: String!, $n: Int!) {
       repository(owner: $o, name: $r) { pullRequest(number: $n) {
@@ -85,6 +90,10 @@ if [ -n "$pr" ]; then
   if command -v workstream.sh >/dev/null 2>&1; then
     remote_star=""; [ -n "$star_c" ] || [ -n "$star_r" ] && remote_star="*"
     workstream.sh set-reviews --dir . --remote "$((copilot + rabbit))${remote_star}" >/dev/null 2>&1 || true
+    if [ -n "${pr_head:-}" ]; then
+      workstream.sh set-pr --dir . --number "$pr" --head "$pr_head" --head-source remote \
+        --head-if-unchanged "${current_head:-}" >/dev/null 2>&1 || true
+    fi
   fi
 fi
 
