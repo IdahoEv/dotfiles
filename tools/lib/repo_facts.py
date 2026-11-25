@@ -55,11 +55,13 @@ DEFAULT_MAX_CHARS = 48
 
 # ---- subprocess helpers ------------------------------------------------------
 
-def run_cmd(cmd: list[str], cwd: str | None = None) -> subprocess.CompletedProcess[str]:
+def run_cmd(
+    cmd: list[str], cwd: str | None = None, timeout: float | None = None
+) -> subprocess.CompletedProcess[str]:
     # surrogateescape: git emits raw bytes (ref names, config values) and the
     # shell passed them through; a strict decode would crash instead.
     return subprocess.run(cmd, cwd=cwd, capture_output=True, text=True,
-                          errors="surrogateescape", check=False)
+                          errors="surrogateescape", check=False, timeout=timeout)
 
 
 def git(dir_: str, *args: str) -> str:

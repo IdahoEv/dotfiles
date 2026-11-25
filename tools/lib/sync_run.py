@@ -95,6 +95,20 @@ def unpushed_sync(dir_: str, branch: str, base_ref: str) -> bool:
             or not git_ok(dir_, "merge-base", "--is-ancestor", base_ref, remote))
 
 
+def record_pushed_head(dir_: str) -> None:
+    """Point the workstream's PR head at HEAD after this worktree pushes."""
+    try:
+        import workstream
+        rec = workstream.load_record(dir_)
+        if rec is not None and isinstance(rec.pr, dict) and rec.pr.get("number"):
+            workstream.update_pr(
+                dir_, int(rec.pr["number"]),
+                head=git(dir_, "rev-parse", "HEAD"), head_source="push",
+            )
+    except (OSError, ValueError, TypeError):
+        pass
+
+
 def push(dir_: str, branch: str, method: str) -> str:
     """"" on success, else the failure text."""
     ref = f"refs/heads/{branch}"
@@ -106,6 +120,7 @@ def push(dir_: str, branch: str, method: str) -> str:
     cmd += ["origin", f"HEAD:{ref}"]
     r = run_cmd(cmd, cwd=dir_)
     if r.returncode == 0:
+        record_pushed_head(dir_)
         return ""
     return (r.stderr.strip().splitlines() or ["git push failed"])[-1]
 
