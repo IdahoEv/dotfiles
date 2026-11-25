@@ -39,7 +39,7 @@ Maintained against the covered commands by `tools/cloud-workflow-adapter.test.sh
 | `/sync` | Not available. Stop and report. |
 | `/local-review-cycle` | Read and follow `local-review-cycle.md` using `run_command` and subagent tools. |
 | `/github-review-comments` | Read and follow `github-review-comments.md` using `run_command`, file tools, and subagent tools (in Quick or Slow mode, load `skills/github-review-procedure/SKILL.md` inline in the current session; in Automatic mode, launch `github-review-repair-agent` and retain parent ownership of commits, push, and GitHub thread writes). |
-| `/discuss` | Read and follow `discuss.md` using `run_command` (`start-ticket.sh --session ... --launcher none`); report `dir=`, `kickoff=`, and `label=` instead of opening a Claude tab or session. |
+| `/discuss` | Read and follow `discuss.md` using `run_command` (`start-ticket.sh --session ... --launcher none`); report `dir=`, `kickoff=`, `label=`, and `launcher=` (always `none` here) instead of opening a Claude session. |
 | `/governor` | Read and follow `governor.md` using `run_command` and file tools; stay in the primary worktree and end the first turn with a plain-text readiness line. |
 | `/pick` | Read and follow `pick.md` using `run_command` (`git worktree list`, `gh`) and file tools. |
 | `/board` | Not available. |

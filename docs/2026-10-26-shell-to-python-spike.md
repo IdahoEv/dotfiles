@@ -36,7 +36,6 @@ State: LOC from `wc -l` at the merge of `origin/main` (telemetry scripts include
 | `request-review.sh` | 80 | slash command | No | defer (80 lines, readable) | 1 |
 | `project-config.sh` | 73 | slash command (`/governor`); sourced by repo-facts | No | defer | 1 |
 | `wf-event.sh` | 73 | **hook** (SessionStart/End, StopFailure, SubagentStop) and prompts | **Yes**: hot path | see "Hot paths" | 1 |
-| `setup-ticket-profile.sh` | 45 | one-time human CLI | No | keep bash | — |
 | `wf-report.sh` | 18 | human CLI; `exec`s `lib/wf_report.py` | No | keep (already a wrapper) | — |
 | `lib/wf_report.py`, `wf_usage.py` | 547, 172 | Python already | — | — | — |
 | `project-colors`, `session-kickoff.md`, `model-pricing.json`, templates, providers | data / <70 each | data or plugin fragments | Follows parent | follows parent | — |
@@ -127,7 +126,7 @@ Verdict on a deployed `python3` dependency: **safe on both machines.** Both reso
 | `wf-event.sh` | Hot path | Step 6 prototype beats 41 ms |
 | `cloud-workflow-bootstrap.sh` | Runs before any dependency is installed | The cloud adapter can assume `python3` |
 | `workflow-session.sh`, `request-review.sh`, `project-config.sh` | 70–130 lines, readable | One grows past about 200 lines, or is edited twice in a quarter |
-| `setup-ticket-profile.sh`, `wf-report.sh` | One-time or a wrapper | Never expected |
+| `wf-report.sh` | A wrapper | Never expected |
 
 ## Method notes
 
