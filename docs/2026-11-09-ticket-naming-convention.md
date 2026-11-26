@@ -1,6 +1,6 @@
 # Ticket naming across surfaces
 
-> **Partly outdated.** [workstream-concept.md](workstream-concept.md) replaces this document wherever they disagree. Outdated here: the workstream definition; `kind` and talk or iteration as types (including a worktree created as soon as `/discuss` starts); a single `pr`, `claude_sessions` and a tag set as the record's model; a ticket-derived `key` as the identity and `(key, desc)` as the name; and the rename flags for a published PR.
+> **Partly outdated.** [workstream-concept.md](workstream-concept.md) replaces this document wherever they disagree. Outdated here: the workstream definition; `kind` and talk or iteration as types (including a worktree created as soon as `/discuss` starts); a single `pr`, `claude_sessions` and a tag set as the record's model; a ticket-derived `key` as the identity and `(key, desc)` as the name; the record as the single source of truth even for git and GitHub facts; the rule that every surface, branch and worktree included, always matches the names derived from the current inputs; and the rename flags for a published PR.
 
 Spike for #156. Today a ticket is spelled four ways (`sc-7`, `Sc7`, `Is7`, `#7`) by seven independent code paths, and nothing guarantees the branch, worktree, agent row and PR title read alike. Proposal: a **workstream** record in the worktree holds one name `(key, description)`; every surface is rendered from it by templates the user can override per user, machine or project.
 

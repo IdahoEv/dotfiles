@@ -2,7 +2,7 @@
 
 A **workstream** is one unit of agent-implemented work toward a change that lands on the base branch, with or without a PR. It keeps one identity from the commitment to change code until it is finished or dropped, and it owns its name. The ticket, branch, worktree, sessions, host and PRs are attached to it and can change.
 
-This is the target model, not a description of the current code. Where an older doc or ticket disagrees, this one wins. Points marked **(proposed)** or **(assumed)** are unconfirmed.
+This is the target model, not a description of the current code. Where an older doc or ticket disagrees, this one wins. Points marked **(proposed)** or **(assumed)** are unconfirmed and replace nothing until confirmed.
 
 ## Identity and lifetime
 
@@ -52,7 +52,7 @@ Sessions report when they need the user, and a workstream adds its own causes, s
 ## Names
 
 - One slug supplies the branch, worktree, session and PR names through per-surface formats. An optional fuller title defaults to the slug.
-- The slug comes from the ticket if it has one. Otherwise it is drafted at kickoff, close to the ticket title. A chain normally gets a new slug.
+- A ticket's own slug is used if it has one. Otherwise one is drafted at kickoff, close to the ticket title. A chain normally gets a new slug.
 - Renaming is expected only soon after creation. After publishing, the session name, statusline and PR title follow a rename. The branch and worktree keep the old name, and the tool says so. A forced change of those is done by hand until a real case needs more.
 
 ## Switching agents and hosts
@@ -75,7 +75,7 @@ Sessions report when they need the user, and a workstream adds its own causes, s
 | A design is rejected | The workstream is dropped and logged as dropped. A replacement gets a new ID and usually a new ticket. | Whether to link the two; what happens to the old branch and PR. |
 | A design fails during review | Planning is reopened, then implementation. Reviews that no longer apply are reset. | Whether reviews reset automatically or on request. |
 | Fixes are left unpushed after a merge | The workstream is still open. A second PR is added, and the PR and merge steps run again. | Whether it reuses the branch. |
-| A trivial ticket | Its copy of the steps is changed to one local review round and nothing more. A required step needs its stated override. | |
+| A trivial ticket | Its steps are changed to one local review round and nothing more. A required step needs its stated override. | |
 | A security-critical project | Project settings add an external audit as a third review and can mark it required. | |
 | Quota runs out | One command starts a new lead from the transcript and records the old session as no longer lead. | How to find each tool's transcript. |
 | A change spans two repos | Two workstreams, each with its own agent, reviews and PRs, share a group label. The user coordinates them. | |
@@ -86,5 +86,6 @@ Sessions report when they need the user, and a workstream adds its own causes, s
 - Data formats for the record, sessions and any status report. No reader of a snapshot has been settled.
 - What herdr supports: a view across hosts, emoji in names, renaming and session status. None of this is verified.
 - Attention: a stored level with a reason, or urgency computed from the stored details.
-- Settings layers, including [workstream-config.md](workstream-config.md).
+- Settings layers, including [workstream-config.md](workstream-config.md). It says nothing in `.workstream.json` is read as config, which conflicts with the proposed record layer.
+- What the slug of a workstream without a ticket is drafted from.
 - How existing tickets, open PRs and the current tag design change to fit this model. The tags can serve as a compact view of steps and attention, but a fixed set of review sources and a single flag cannot be the underlying data.
