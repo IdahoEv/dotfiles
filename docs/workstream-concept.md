@@ -47,7 +47,7 @@ Sessions report when they need the user, and a workstream adds its own causes, s
 | Updates | Workflow commands. For exceptions, the user asks in plain words and a general editing command, which the user can also run, makes the change. |
 | Authority | git and GitHub are right about their own facts. The record is right about the slug, steps and tickets. |
 | Surprises | When they disagree unexpectedly, pause, flag it, suggest a fix and wait. |
-| Expected changes | **(assumed)** They sync without asking, such as a merge when merging is the next step. |
+| Expected changes | **(assumed)** The record picks up expected git and GitHub changes without asking, such as a merged PR when merging is the next step. This updates the record and authorizes no merge. |
 
 ## Names
 
