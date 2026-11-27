@@ -48,7 +48,7 @@ agents/  commands/  skills/
 
 ## Separation from runtime state
 
-`.workstream.json` (per-worktree record: phase, PR, sessions) holds runtime state. As the workstream layer, it also holds the settings that differ for that workstream, plus its copy of the step plan. Nothing under a config dir is written at runtime.
+`.workstream.json` (per-worktree record: phase, PR, sessions) holds runtime state. As the workstream layer, it also holds the settings that differ for that workstream. Nothing under a config dir is written at runtime.
 
 ## Environment
 
