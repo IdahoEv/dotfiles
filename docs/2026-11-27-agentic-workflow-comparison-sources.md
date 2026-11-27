@@ -84,8 +84,8 @@ Catalog of material not analyzed in [the first comparison](2026-11-27-agentic-wo
 
 | Source | What / why | Form | Surfaced by | Next-round question | Priority |
 |---|---|---|---|---|---|
-| DORA 2025 report | Associates a 25% AI-adoption increase with ~1.5% lower throughput and ~7.2% lower stability | Research (reported) | Broad search | Whether these effects appear in local telemetry | High |
-| Sonar developer survey (1,149 developers) | 38% say reviewing AI code takes more effort than a colleague's | Survey (reported) | Broad search | Measure review time per AI-written diff here | High |
+| [DORA *Impact of Generative AI in Software Development* report](https://dora.dev/ai/gen-ai-report/) | Associates a 25% AI-adoption increase with ~1.5% lower throughput and ~7.2% lower stability | Research (reported) | Broad search | Whether these effects appear in local telemetry | High |
+| [Sonar 2026 State of Code Developer Survey](https://www.sonarsource.com/resources/developer-survey-report-2026/) (1,100+ developers) | 38% say reviewing AI code takes more effort than a colleague's | Survey (reported) | Broad search | Measure review time per AI-written diff here | High |
 
 Neither was independently verified for this round. Treat their numbers as hypotheses, not baselines, and pair any adoption with a before/after measurement from `wf-report.sh`.
 
