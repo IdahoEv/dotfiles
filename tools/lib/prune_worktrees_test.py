@@ -190,6 +190,11 @@ class Report(Base):
         self.commit(wt, "late-work")
         self.assertRegex(self.out(), r"SKIP .*feature-e.*unpushed")
 
+    def test_merged_forward_after_pr_merge_is_removable(self):
+        wt = self.merged_branch("feature-e2")
+        self.git(wt, "merge", "-q", "origin/main")
+        self.assertRegex(self.out(), r"REMOVE .*feature-e2")
+
     def test_primary_worktree_never_listed_as_removable(self):
         self.set_pr("main", "MERGED", self.git(self.repo, "rev-parse", "HEAD"))
         out = self.out()
@@ -456,7 +461,7 @@ class Classify(unittest.TestCase):
             "locked": dict(locked=True),
             "detached": dict(detached=True),
             "dirty": dict(dirty=True),
-            "ahead": dict(ahead_of_upstream=2),
+            "ahead": dict(verdict="local-commits"),
             "verdict": dict(verdict="not-merged"),
         }
         for name, kw in cases.items():

@@ -380,7 +380,8 @@ fi
 # the PR on its row. --no-verify: the real push above already ran the hooks.
 git push --no-verify origin "$branch" >/dev/null 2>&1 || true
 
-pr_url="$(gh pr view "$pr_number" --json url --jq '.url')"
+pr_meta="$(gh pr view "$pr_number" --json url,headRefOid --jq '[.url, .headRefOid] | @tsv')"
+IFS=$'\t' read -r pr_url pr_head <<<"$pr_meta"
 
 # ---- title self-check -------------------------------------------------------
 # This script applied the prefix (provider::pr_title), so it is also the thing
@@ -451,7 +452,8 @@ fi
 "$SCRIPT_DIR/agent-phase.sh" --pr >/dev/null 2>&1 || true
 [ -z "$review_failed" ] || "$SCRIPT_DIR/agent-phase.sh" --attn >/dev/null 2>&1 || true
 if [ -x "$SCRIPT_DIR/workstream.sh" ]; then
-  "$SCRIPT_DIR/workstream.sh" set-pr --dir . --number "$pr_number" --url "$pr_url" >/dev/null 2>&1 || true
+  "$SCRIPT_DIR/workstream.sh" set-pr --dir . --number "$pr_number" --url "$pr_url" \
+    --head "${pr_head:-}" --head-source push >/dev/null 2>&1 || true
 fi
 
 printf 'pr_number=%s\npr_url=%s\npr_action=%s\n' "$pr_number" "$pr_url" "$pr_action"

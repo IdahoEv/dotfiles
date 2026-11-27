@@ -4,7 +4,7 @@ Repo sweep (2026-10-26, branch `12-audit-dotfiles-for-platform-assumptions`). Wi
 
 **Headline findings:**
 - ~24 hard-coded `/Users/evan` paths — breaks Linux, WSL, and any other username on macOS. Prereq for everything else.
-- Linux/WSL: 90% works. Breakers: iTerm/osascript/pbcopy coupling in tools, `~/Library` writes, the `/Users/evan` paths, one broken `readlink -f` fallback.
+- Linux/WSL: 90% works. Breakers: `~/Library` writes, the `/Users/evan` paths, one broken `readlink -f` fallback.
 - Native PowerShell: 100% of scripts, hooks, statusline, and shell modules fail — all POSIX shell; zero PowerShell variants exist. Symlink/exec-bit tool delivery (`run_after_link-tools.sh`) has no Windows mechanism.
 
 OS key: **L** = Linux, **W** = WSL, **PS** = native PowerShell. "L" without W means WSL inherits the same fix.
@@ -31,9 +31,6 @@ OS key: **L** = Linux, **W** = WSL, **PS** = native PowerShell. "L" without W me
 
 | File | Assumption | Breaks on | Proposed fix |
 | --- | --- | --- | --- |
-| `tools/start-ticket.sh:219,227–280` | `osascript` AppleScript controlling iTerm2 | L, W, PS | Terminal abstraction layer: iTerm (macOS) / `wt.exe` (Windows) / print-instructions fallback (exists) |
-| `tools/start-ticket.sh:212,256` | `pbcopy` | L, W, PS | `command -v pbcopy \|\| xclip/wl-copy/clip.exe` fallback |
-| `tools/setup-ticket-profile.sh:5,15,40` | Writes `~/Library/Application Support/iTerm2/DynamicProfiles` | L, W, PS | Guard on macOS + iTerm presence; no-op elsewhere |
 | `tools/worktree-manager.sh:425,546` | `brew install short/fzf` hints | L, PS | Per-OS hints |
 | `tools/open-pr.sh:122`, `request-review.sh:44` | `gh` hard requirement | PS | gh is cross-platform; works in PS once the wrapper is PS |
 | `request-review.sh:64`, `finalize-check.sh:165–202`, `wf-event.sh:25–29` | `gh --jq` / `jq` | PS | Native PS: `ConvertFrom-Json`; keep jq on POSIX |
@@ -60,19 +57,19 @@ OS key: **L** = Linux, **W** = WSL, **PS** = native PowerShell. "L" without W me
 | --- | --- | --- | --- |
 | No `.chezmoi.os` usage anywhere | Templates assume macOS target implicitly | L, W, PS | Introduce `.chezmoi.os`/`.chezmoi.arch` branching; per-OS `.chezmoiignore` |
 | Exec bits on `tools/*.sh`, `executable_*` | POSIX exec-bit delivery | PS | On Windows chezmoi can't set exec bits; needs the shim strategy + `.ps1` naming |
-| `.chezmoiignore` | No OS logic; target-path patterns only | — | Add per-OS ignores (iterm2 config, iTerm DynamicProfiles, shell modules) |
+| `.chezmoiignore` | No OS logic; target-path patterns only | — | Add per-OS ignores (iterm2 config, shell modules) |
 | No `.chezmoi.toml.tmpl` in repo | Config template lives outside (unmanaged) | — | **Fixed (#83)** — `.chezmoi.toml.tmpl` prompts for `email`, `is_work`, and `op_shell_plugins`; OS vars still read from `.chezmoi.os` |
 
-Confirmed absences (don't re-investigate): no `sed -i ''`, `date -j`, or `stat -f` unguarded in tools/; no `open` (Finder) calls; no `osascript` outside `start-ticket.sh`; agents/*.md prompts shell out to nothing.
+Confirmed absences (don't re-investigate): no `sed -i ''`, `date -j`, or `stat -f` unguarded in tools/; no `open` (Finder) calls; no `osascript` outside the notification call in `open-pr-watch.sh`; no `pbcopy` in tools/; agents/*.md prompts shell out to nothing.
 
 ## Recommended order → sub-issues for epic #11
 
 | # | Sub-issue | Scope | Why this order |
 | --- | --- | --- | --- |
 | 1 | De-hardcode paths | `/Users/evan` → `{{ .chezmoi.homeDir }}`/`$HOME` across zshrc, shell modules, settings template, iterm2 symlink; fix quoted-tilde `DEV` bug | Breaks Linux today; prereq for every port. **Done — #65** |
-| 2 | Linux/WSL cleanup | iTerm/pbcopy guards, `~/Library` write guards, `readlink -f` portable fallback, per-OS install hints, fzf sourcing paths | Cheap wins; makes WSL near-fully working |
+| 2 | Linux/WSL cleanup | `~/Library` write guards, `readlink -f` portable fallback, per-OS install hints, fzf sourcing paths | Cheap wins; makes WSL near-fully working |
 | 3 | chezmoi OS branching + Windows delivery | `.chezmoi.os` logic, per-OS `.chezmoiignore`, Windows script-install mechanism replacing symlink/exec-bit delivery | Foundation for any Windows content |
 | 4 | PowerShell profile | `Microsoft.PowerShell_profile.ps1` equivalent: oh-my-posh prompt, fzf, aliases, directory/`DEV` conventions | First real PS artifact; validates #3 |
 | 5 | Claude config Windows surface | PS statusline, hooks per-OS in settings template, command bodies with platform branches, PS-native poll-pr/review-state | Builds on #3–4 |
-| 6 | tools/ PowerShell port | `wm`, `start-ticket` (wt.exe), `open-pr` `.ps1` siblings; `gh`/`ConvertFrom-Json` | Largest effort; depends on #3 |
+| 6 | tools/ PowerShell port | `wm`, `start-ticket`, `open-pr` `.ps1` siblings; `gh`/`ConvertFrom-Json` | Largest effort; depends on #3 |
 | 7 | Docs / support matrix | README + CLAUDE.md cross-platform notes, per-OS install instructions | Last; reflects the finished state |

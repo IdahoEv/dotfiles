@@ -2,6 +2,8 @@
 
 **Goal:** Evolve the ticket workflow (prompts, agents, skills, `.workstream.json`, scripts) and tmux dashboard into a **backend-agnostic agentic workflow** supporting `claude`, `agy`, and `codex` as peer backends—cleanly extractable from `dotfiles` into a standalone project.
 
+> **Partly outdated.** [workstream-concept.md](workstream-concept.md) defines a workstream and replaces this roadmap wherever they disagree. Outdated here: reading `.workstream.json` directly as the contract (access goes through workstream commands); the Phase 2 session fields and distilled handoff (handoff is transcript only for now); and the Phase 3 poller and context bundle (herdr or a similar tool is evaluated first, and host moves come later).
+
 ## Architecture Boundary
 
 - **Core contract:** `<worktree>/.workstream.json` + tmux window options (`@ws_backend`, `@ws_dashboard`, `@ws_phase`). In Phase 2, `.workstream.json` evolves `claude_sessions` into a provider-agnostic `sessions` list (`provider`, `id`, `log_path`, `context_dir`, `started_at`) for crash recovery and cross-provider handoff.

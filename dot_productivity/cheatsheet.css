@@ -52,11 +52,32 @@ p {
     margin: 2px 0;
 }
 
-/* Make section-groups display side-by-side in columns */
+html body[for=html-export]:not([data-presentation-mode]) .markdown-preview:has(.cheatsheet-columns) {
+    padding-inline: 1em;
+}
+
+.cheatsheet-columns {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr)) minmax(0, 1.3fr);
+    gap: 1em;
+}
+
 .section-group {
-    display: inline-block;
-    vertical-align: top;
-    margin-right: 30px;
-    margin-bottom: 10px;
-    max-width: 45%;
+    min-width: 0;
+}
+
+.tmux td:last-child {
+    white-space: nowrap;
+}
+
+@media screen and (max-width: 980px) {
+    .cheatsheet-columns {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media screen and (max-width: 600px) {
+    .cheatsheet-columns {
+        grid-template-columns: minmax(0, 1fr);
+    }
 }

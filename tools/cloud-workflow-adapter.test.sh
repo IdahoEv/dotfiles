@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Drift check: every Claude-only construct used by the commands a cloud adapter
+# Drift check: every Claude-only construct used by the commands a workflow adapter
 # covers must have a row in the adapter's construct map, and every row must
 # still occur in those commands.
 set -euo pipefail
@@ -26,7 +26,7 @@ construct = re.compile(
 used = {}
 for path in commands:
     text = open(path, encoding="utf-8").read()
-    if adapter.endswith("/codex-local.md"):
+    if adapter.endswith(("/codex-local.md", "/opencode-local.md", "/agy.md")):
         if Path(path).stem in {"merge", "land", "sync"}:
             used.setdefault("/" + Path(path).stem, path)
         for match in re.finditer(r"(?<![\w/.-])/(?:merge|land|sync)\b", text):
@@ -64,6 +64,9 @@ agy_commands=(
   "$repo/dot_claude/commands/pick.md"
   "$repo/dot_claude/commands/discuss.md"
   "$repo/dot_claude/commands/remind.md"
+  "$repo/dot_claude/commands/finalize.md"
+  "$repo/dot_claude/commands/merge.md"
+  "$repo/dot_claude/commands/land.md"
 )
 check "$repo/workflow/adapters/agy.md" "${agy_commands[@]}" || fail "agy adapter has drifted from the commands it covers"
 printf 'PASS agy adapter maps every Claude-only construct in its covered commands\n'
@@ -73,13 +76,41 @@ local_codex_commands=("${agy_commands[@]}"
   "$repo/dot_claude/commands/groom.md"
   "$repo/dot_claude/commands/pick.md"
   "$repo/dot_claude/commands/discuss.md"
-  "$repo/dot_claude/commands/finalize.md"
-  "$repo/dot_claude/commands/merge.md"
-  "$repo/dot_claude/commands/land.md"
   "$repo/dot_claude/commands/sync.md"
 )
 check "$repo/workflow/adapters/codex-local.md" "${local_codex_commands[@]}" || fail "local Codex adapter has drifted"
 printf 'PASS local Codex adapter maps every covered command and nested review procedure\n'
+
+check "$repo/workflow/adapters/opencode-local.md" "${local_codex_commands[@]}" || fail "local OpenCode adapter has drifted"
+printf 'PASS local OpenCode adapter maps every covered command and nested review procedure\n'
+
+# OpenCode discovers slash commands only from its own command directories, so each
+# covered command needs a chezmoi-managed wrapper that points back at the canonical
+# file. Keep the wrapper set and the adapter's covered-command list in lockstep.
+opencode_wrappers="$repo/dot_config/opencode/commands"
+opencode_covered=$(python3 -I - "$repo/workflow/adapters/opencode-local.md" <<'PY'
+import re, sys
+text = open(sys.argv[1], encoding="utf-8").read()
+match = re.search(r"Covered commands: ([^.]+)\.", text)
+if not match:
+    sys.exit("opencode adapter does not declare its covered commands")
+print("\n".join(name.strip() for name in match.group(1).split(",")))
+PY
+) || fail "local OpenCode adapter does not declare its covered commands"
+
+for name in $opencode_covered; do
+  wrapper="$opencode_wrappers/$name.md.tmpl"
+  [ -f "$wrapper" ] || fail "covered OpenCode command '$name' has no wrapper at $wrapper"
+  grep -qF '{{ .chezmoi.homeDir }}/.claude/commands/'"$name"'.md' "$wrapper" \
+    || fail "OpenCode wrapper '$name' does not read its canonical command file"
+  grep -qF '{{ .chezmoi.homeDir }}/.local/share/chezmoi/workflow/adapters/opencode-local.md' "$wrapper" \
+    || fail "OpenCode wrapper '$name' does not apply the local adapter"
+  grep -qF '$ARGUMENTS' "$wrapper" || fail "OpenCode wrapper '$name' drops invocation arguments"
+done
+wrapper_count=$(find "$opencode_wrappers" -maxdepth 1 -name '*.md.tmpl' | wc -l | tr -d ' ')
+covered_count=$(printf '%s\n' "$opencode_covered" | wc -l | tr -d ' ')
+[ "$wrapper_count" -eq "$covered_count" ] || fail "OpenCode has $wrapper_count wrappers but the adapter covers $covered_count commands"
+printf 'PASS every covered OpenCode command has a canonical-pointing wrapper\n'
 
 claude_commands=(
   "$repo/dot_claude/commands/start.md"
@@ -123,10 +154,14 @@ fi
 grep -q 'TodoWrite' "$fixture/err" || fail "the stale row should be named"
 [[ "$pass_new" == 1 ]] && printf 'PASS detects unmapped constructs and stale rows\n'
 
-for adapter_name in codex agy claude-cloud; do
+for adapter_name in codex agy claude-cloud codex-local opencode-local; do
   adapter="$repo/workflow/adapters/${adapter_name}.md"
   if grep -q 'bash <(' "$adapter"; then fail "$adapter_name adapter must not run the bootstrap via process substitution (hides download failure)"; fi
-  for rule in 'workflow_source_commit=' 'Never imply a check passed' 'Workflow source:'; do
+  case "$adapter_name" in
+    codex-local|opencode-local) sha_rule='workflow_source_commit' ;;
+    *) sha_rule='workflow_source_commit=' ;;
+  esac
+  for rule in "$sha_rule" 'Never imply a check passed' 'Workflow source:'; do
     grep -q -- "$rule" "$adapter" || fail "$adapter_name adapter protocol is missing: $rule"
   done
 done

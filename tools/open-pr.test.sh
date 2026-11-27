@@ -47,9 +47,10 @@ case "$1 $2" in
     echo created >> "$GH_LOG" ;;
   "pr view")
     case "$*" in
-      *number*) echo 1 ;;
-      *url*)    echo https://example.test/pr/1 ;;
-      *title*)  cat "$GH_LOG.title" 2>/dev/null || echo "existing title" ;;
+      *number*)          echo 1 ;;
+      *url,headRefOid*)  printf '%s\t%s\n' https://example.test/pr/1 "$(git rev-parse HEAD)" ;;
+      *url*)             echo https://example.test/pr/1 ;;
+      *title*)           cat "$GH_LOG.title" 2>/dev/null || echo "existing title" ;;
     esac ;;
   "pr edit")
     shift 2
@@ -200,6 +201,7 @@ check "github --review none: planned G dropped" "0" "$("$TOOLS/agent-phase.sh" -
 new_repo 42-foo; printf '%s\n' "$ws_json" > .workstream.json
 run --title "Add foo" --review copilot >/dev/null
 check "github ok request: REVIEW phase"        "1" "$(phase_review_count)"
+check "workstream: PR head recorded"           "$(git rev-parse HEAD)" "$(jq -r '.pr.head' .workstream.json)"
 
 new_repo 42-foo
 out="$(GH_EXISTING_PR=9 run --review none)"

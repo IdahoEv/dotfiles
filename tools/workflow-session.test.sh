@@ -104,7 +104,7 @@ has "--relaunch launches on reuse" "$ST_LOG" "--tab-only $ROOT/proj/workflow"
 
 rm -f "$SESSION_LABEL_STATE_FILE"
 out="$(run)"; rc=$?
-check "no state file (iTerm/none launcher): runs" "0" "$rc"
+check "no state file (none launcher): runs" "0" "$rc"
 echo '{"name":"widgets Governor"}' > "$SESSION_LABEL_STATE_FILE"
 
 rm -f "$ST_LOG"

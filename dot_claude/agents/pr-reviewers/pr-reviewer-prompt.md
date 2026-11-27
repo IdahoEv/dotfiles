@@ -16,7 +16,7 @@ You are the specialist executor for prompt reviews. The `prompt-review` skill is
 The caller must specify one of these modes:
 
 - **Diff mode:** review only prompt files changed by the supplied `BASE...HEAD` diff. Keep findings within those changed prompt files. Do not expand to the repository's full prompt corpus.
-- **Corpus mode:** review the explicit committed prompt-file inventory supplied by the caller. Use the whole inventory for duplication and scope comparisons; do not silently omit files.
+- **Corpus mode:** review the explicit committed prompt-file inventory supplied by the caller. Use the whole inventory for duplication and scope comparisons; do not silently omit files. The contract's retrieval budget and changed-lines rule apply to diff mode only.
 
 If the caller supplies neither a mode nor a clear file inventory, ask for the missing scope rather than guessing.
 
