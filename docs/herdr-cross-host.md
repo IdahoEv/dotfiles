@@ -1,6 +1,6 @@
 # Can herdr collect session and workstream data across hosts?
 
-**I recommend extending herdr (`herdr-core`) instead of building our own transport.** The [session and workstream records](workstream-schema.md) stay the only stored state. A small collector reads them through herdr, joins them to herdr's live terminal list, and copies a few short values into terminal labels for panes. A test panel in the `herdr-app` window showed emoji labels from both hosts. The recommendation depends on matching each record to its terminal, which is [only partly proven](#what-the-collector-and-records-need). In tests, remote changes arrived in under 0.25 s, but herdr sees only sessions in its own terminals and an unreachable host's rows **vanish from `terminal.list` while the app keeps showing the old ones**.
+**I recommend extending herdr (`herdr-core`) instead of building our own transport.** The [session and workstream records](workstream-schema.md) stay the only authoritative stored state; the collector's last-seen copy is derived, disposable and used only while a host is unreachable. A small collector reads the records through herdr, joins them to herdr's live terminal list, and copies a few short values into terminal labels for panes. A test panel in the `herdr-app` window showed emoji labels from both hosts. The recommendation depends on matching each record to its terminal, which is [only partly proven](#what-the-collector-and-records-need). In tests, remote changes arrived in under 0.25 s, but herdr sees only sessions in its own terminals and an unreachable host's rows **vanish from `terminal.list` while the app keeps showing the old ones**.
 
 Why:
 
@@ -37,13 +37,15 @@ Requirements for the two records ([record schemas](workstream-schema.md), from [
 | --- | --- | --- | --- |
 | Our session ID, the agent's own session ID, tool and transcript location | Session `id`, `native_id`, `tool`, `transcript_path` | Met | herdr's terminal record has no lasting native session ID or resume data; OpenCode's ID appears only while working (T) |
 | Role or purpose tag, project, optional workstream ID | Session `role`, `purpose`, `repo`, `workstream_id` | Met | herdr has no such fields (T) |
-| Whether a session is open or ended, and why | Session `state`, `end_reason` | Met | A destroyed record and an unreachable host look the same, so the collector still needs its last-seen copy |
+| Whether a session is open or ended, and why | Session `state`, `end_reason` | Met | A destroyed record and an unreachable host look the same (T), so the collector still needs its last-seen copy |
 | Optional herdr terminal address plus that core's permanent ID | Session `herdr.terminal`, `herdr.core_id`, **provisional** | Met, provisional | Joins a record to live state. Addresses are per core, machine names are local to the viewing host, and cores have [permanent IDs](https://github.com/herdrdev/herdr-core/blob/v0.1.22/schema/hc.openrpc.json) (D). A terminal may outlive its session, leaving old labels behind (U) |
 | Latest activity, and attention cause, request, start of waiting, what it holds up and effort | Session `activity.value`, `.updated_at`; `attention[].cause`, `.request`, `.since`, `.holds_up`, `.effort`; **provisional** | Met, provisional | The concept doc requires [activity](workstream-concept.md#two-records) and [attention data](workstream-concept.md#attention), and herdr has neither for sessions outside its terminals (T). The `cause` set already names workflow failures such as `auth` and `review-stalled` |
-| For sessions inside herdr, no copies of turn count, title or folder that herdr reports for that agent | [Left out](workstream-schema.md#left-out); session `cwd` is stored for resume and the lead check | Met | herdr already has them (T). `cwd` is the launch folder; the current one is [`foreground.cwd`](https://github.com/herdrdev/herdr-core/blob/v0.1.22/schema/README.md) (D) |
-| Last-updated time on everything it reads | `updated_at` on both records; the [open-workstream list](workstream-schema.md#open-workstream-list) entry has none | Met for records, **missing** on list entries | A file read carries no sign that its contents are current. A stale list entry looks like a live one, and hand edits can leave entries stale or missing |
-| A per-host list of open workstreams that maps each ID to its record location, readable without any session and updated on create, move, finish and drop | [Open-workstream list](workstream-schema.md#open-workstream-list): one file per workstream with `id` and `path`, location tentative | Met, tentative location | Records live in worktrees, and only sessions link to workstreams, by ID. A workstream without a session is [normal](workstream-concept.md#edge-cases) |
-| A read command that lists a host's sessions and open workstreams, including those with no session, and links them | None: the schemas fix file locations and writes only | **Missing** | The concept doc routes all reads through commands. Without one, the collector reads files directly and gives up that rule |
+| The workstream's goal, branch, tickets and PRs, to name and group its sessions | Workstream `title`, `slug`, `branch`, `tickets`, `prs` | Met | herdr has no project state (T), and only the records connect a project to its sessions |
+| Stage, review progress and workstream-level failures, to triage a host | Workstream `stage`, `stage_updated_at`, `reviews`, `attention` | Met | Local review rounds leave no GitHub trace and a failed command leaves nothing to query (D); herdr has neither (T) |
+| For sessions inside herdr, no copies of turn count, title or folder that herdr reports for that agent | [Not stored](workstream-schema.md#session-record); session `cwd` is stored for resume and the lead check | Met while live, **missing** once ended | herdr reports them only while the agent runs and clears the title on exit (T), so an ended session has no title anywhere. `cwd` is the launch folder; the current one is [`foreground.cwd`](https://github.com/herdrdev/herdr-core/blob/v0.1.22/schema/README.md) (D) |
+| Last-updated time on everything it reads | `updated_at` on both records; the [open-workstream list](workstream-schema.md#open-workstream-list) entry has none | Met for records, **missing** on list entries | A file read carries no sign that its contents are current (D); a stale list entry looks live and hand edits can leave entries stale or missing (U) |
+| A per-host list of open workstreams that maps each ID to its record location, readable without any session and updated on create, move, finish and drop | [Open-workstream list](workstream-schema.md#open-workstream-list): one file per workstream with `id` and `path`, location tentative | Met, tentative location | Records live in worktrees, and only sessions link to workstreams, by ID (D). A workstream without a session is [normal](workstream-concept.md#edge-cases) (D) |
+| A read command that lists a host's sessions and open workstreams, including those with no session, and links them | None: the schemas fix file locations and writes only | **Missing** | The concept doc routes all reads through commands (D). Without one, the collector reads files directly and gives up that rule |
 | A writer that works despite agent sandboxes, for example outside the agent | The [lifecycle](workstream-lifecycle.md#triggers-by-agent) lists writing session records from a sandbox as unverified on all four agents | Requirement stands, untested (U) | [Some agents could not label their own terminal](#can-an-agent-write-its-own-data) |
 
 While a host is connected, the collector shows herdr's value for anything both hold, such as activity; the records are what remain for sessions outside herdr terminals and for a host it cannot reach. [Coverage varies by agent](#what-herdr-already-tracks), status clears on exit and unreachable rows vanish (T).
@@ -54,7 +56,7 @@ The record-to-terminal join is partly proven. Claude Code's session-start hook r
 
 | Topic | Finding | Mark |
 | --- | --- | --- |
-| Transport | SSH runs `herdr-core connect`, a JSON API over standard input and output. SSH does authentication and encryption; no TCP port opens | T, [D](https://github.com/herdrdev/herdr-core/blob/v0.1.22/docs/machines.md) |
+| Transport | SSH runs `hc connect`, a JSON API over standard input and output. SSH does authentication and encryption; no TCP port opens | T, [D](https://github.com/herdrdev/herdr-core/blob/v0.1.22/docs/machines.md) |
 | Ownership | Each host's core owns its terminals and files; the local core merges lists and events | [D](https://github.com/herdrdev/herdr-core/blob/v0.1.22/docs/machines.md) |
 | Setup per host | `hc` installed (`machine add` offers to copy it, `--install` for scripts) and SSH access. Then `hc machine add <ssh target> --name box` | [D](https://github.com/herdrdev/herdr-core/blob/v0.1.22/docs/machines.md) |
 | Linux | The core needs systemd lingering to outlive logout; `machine ls` reports it as `keeps_running_after_logout` | T (already on), [D](https://github.com/herdrdev/herdr-core/blob/v0.1.22/docs/machines.md) |
@@ -82,7 +84,7 @@ Piped `hc ls --json` is shortened and omits labels, `msg`, `kind` and `status_ms
 | Remote label, including the call that set it | about 26 ms (3 samples) | T |
 | Shared document write | 27 ms | T |
 | Agent status report triggered by sending input | about 225 ms | T |
-| Foreground process | read about twice a second; heartbeat every 15 s | [D](https://github.com/herdrdev/herdr-core/blob/v0.1.22/docs/machines.md) |
+| Foreground process | read about twice a second; heartbeat every 15 s | [D](https://github.com/herdrdev/herdr-core/blob/v0.1.22/schema/README.md) |
 
 Changes made while disconnected appeared on reconnect. Restarting the remote test core kept the live terminal, its status, labels and a document (T).
 
@@ -135,7 +137,7 @@ Agents report their own state through the [OSC 7501 protocol](https://mitchellh.
 - `status_ms` is when the state last changed, and `turn` counts each exit from `working` ([source](https://github.com/herdrdev/herdr-core/blob/v0.1.22/crates/herdr-core/src/status.rs), D). Status clears when the program exits (T).
 - `send` to a `blocked` terminal is refused without `--force` (T).
 - herdr clients share a [`herdr.seen` label](https://github.com/herdrdev/herdr-app/blob/v0.1.18/docs/labels.md) to record that a finished turn was seen, and `herdr.pinned` to pin (D).
-- `herdr-app` documents a separate [resume signal](https://github.com/herdrdev/herdr-app/blob/v0.1.18/README.md) (OSC 7577) for agents that send it (D). I saw no resume data from these four (T).
+- `herdr-app` v0.1.18 documents no resume signal, and I saw no resume data from these four (T). Whether a newer version adds one is unverified (U).
 - **Only agents attached to an `hc` terminal are visible** (T). The `claude agents` view reported no status, though its title said two sessions awaited input (T). With my settings, bare `claude` opens that view; `claude "<prompt>"` opened a session that reported (T). A background session attached with `claude attach` did report its blocking question. Claude inside tmux inside `hc` reported nothing on either host. Cloud sessions are untested (U).
 
 ## Ways to carry our metadata
@@ -175,7 +177,7 @@ Each agent was asked to label its own terminal.
 
 In the `herdr-app` window (T):
 
-- In a mod (an add-on panel), `terminals()` gives `status` as a bare word. The kind and message are in a separate `report` field. `agents()` lacks them and labels ([source](https://github.com/herdrdev/herdr-app/blob/v0.1.18/src/hc.rs), D).
+- In a mod (an add-on panel), `terminals()` gives `status` as a bare word. The kind and message are in a separate `report` field. `agents()` lacks them and labels ([source](https://github.com/herdrdev/herdr-app/blob/v0.1.18/defaults/herdr.d.ts), D).
 - A new mod did not dock by itself in the default layout; `pane.split` opened it.
 - The built-in Agents list did not show my test terminals, which lacked the app's labels ([guide](https://github.com/herdrdev/herdr-app/blob/v0.1.18/defaults/AGENTS.md)).
 - Mods can also run commands and read files on a remote host ([guide](https://github.com/herdrdev/herdr-app/blob/v0.1.18/defaults/AGENTS.md), D).
@@ -200,6 +202,8 @@ Whether its custom tokens cross hosts is unverified (U). I saw only descriptions
 
 | Option | Verdict |
 | --- | --- |
-| Use herdr as is | No: misses sessions outside its terminals, our attention fields and last-known state of a lost host |
-| **Extend `herdr-core`** | **Recommended** |
-| Build our own collection | No: would rebuild SSH transport, live state and events that work today |
+| Use herdr as is | No: misses sessions outside its terminals, our attention fields and the last-known state of a lost host |
+| **Extend `herdr-core`** | **Recommended.** Build a collector beside it on the public API, which already carries live state, events and SSH transport; the only change it needs from `herdr-core` itself is a terminal rename |
+| Build our own collection | No: would rebuild the transport, live state and events that work today, including plain `ssh` at 88–99 ms a call |
+
+All three keep the records; the choice is only how a collector reaches the other hosts.
