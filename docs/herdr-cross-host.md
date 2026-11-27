@@ -1,6 +1,6 @@
 # Can herdr collect session and workstream data across hosts?
 
-**I recommend extending herdr (`herdr-core`) instead of building our own transport.** Session records stay the source for our metadata. A small collector reads them through herdr, joins them to herdr's live terminal list, and copies a few short values into terminal labels for panes. A test script showed labels in an `hc` terminal; showing them in the native `herdr-app` window is untested. The recommendation depends on matching each record to its terminal, and that [join is unproven](#what-the-collector-and-records-need). In tests, remote changes arrived in under 0.25 s, but herdr sees only sessions in its own terminals and **drops an unreachable host's rows instead of marking them stale**.
+**I recommend extending herdr (`herdr-core`) instead of building our own transport.** Session records stay the source for our metadata. A small collector reads them through herdr, joins them to herdr's live terminal list, and copies a few short values into terminal labels for panes. A test panel in the `herdr-app` window showed emoji labels from both hosts. The recommendation depends on matching each record to its terminal, which is [only partly proven](#what-the-collector-and-records-need). In tests, remote changes arrived in under 0.25 s, but herdr sees only sessions in its own terminals and an unreachable host's rows **vanish from `terminal.list` while the app keeps showing the old ones**.
 
 Why:
 
@@ -14,7 +14,7 @@ This design is for sessions started once it is built. Picking up sessions that a
 
 Marks: **T** tested, **D** read from docs or source (linked), **U** unverified, including inferences.
 
-Tested on 2026-11-27 with macOS arm64 and a second Linux x86_64 host: `herdr-core` (`hc`) 0.1.22 on both, `herdr-app` 0.1.18 on the Mac, Claude Code 2.1.332 and agy 1.5.13 on both, Codex 0.169.0 (Mac) and 0.171.0 (Linux), OpenCode 2.3.2 (Mac only). I used separate throwaway herdr sessions and installed no agent integrations.
+Tested on 2026-11-27 with macOS arm64 and a second Linux x86_64 host: `herdr-core` (`hc`) 0.1.22 on both, `herdr-app` 0.1.18 on the Mac, Claude Code 2.1.332 and agy 1.5.13 on both (1.5.18 in later reruns), Codex 0.169.0 (Mac) and 0.171.0 (Linux), OpenCode 2.3.2 (Mac) and 2.4.2 (Linux, later reruns). I used separate throwaway herdr sessions and installed no agent integrations.
 
 `hc` and `herdr-app` are different products from the older [`herdr` terminal UI](#the-older-herdr-terminal-ui), which I did not install.
 
@@ -24,9 +24,9 @@ Collector:
 
 - Keep a last-seen copy for each host. A missing row means unknown, not finished.
 - Check host state and do not rely on events to detect an outage.
-- Enforce its own deadline outside `hc` on every call, because `--timeout` [did not bound a hung `hc exec`](#when-a-host-is-unreachable). On expiry, treat that host's data from the call as unknown, not empty. Cutting off a hung `hc` call this way is untested (U).
+- Enforce its own deadline outside `hc` on every call, because `--timeout` [did not bound a hung `hc exec`](#when-a-host-is-unreachable). An outside 5 s deadline ended a hung `hc exec`, and a local call afterwards worked (T). On expiry, treat that host's data from the call as unknown, not empty.
 - Read records by running a workstream command with `hc exec --on <machine>`, because the [concept doc](workstream-concept.md#records-and-storage) routes all reads through those commands. `hc file read` was measured only as a transport.
-- Each monitored host needs that command, with a format version in its output; running it through `hc exec` is untested (U). A missing or incompatible command means that host's records are unknown, not empty.
+- Each monitored host needs that command, with a format version in its output; a stand-in command run through `hc exec` returned JSON in about 20 ms, and a missing one failed with `spawn_failed` (T). A missing or incompatible command means that host's records are unknown, not empty.
 - Decide who writes and clears each label it copies, since labels have no expiry.
 
 Requirements for the session and workstream records ([#274](https://github.com/IdahoEv/dotfiles/issues/274), [#275](https://github.com/IdahoEv/dotfiles/issues/275)):
@@ -45,7 +45,7 @@ Requirements for the session and workstream records ([#274](https://github.com/I
 | For sessions inside herdr, no copies of turn count, title or folder that herdr reports for that agent | herdr already has them (T). `cwd` is the launch folder; the current one is [`foreground.cwd`](https://github.com/herdrdev/herdr-core/blob/v0.1.22/schema/README.md) (D) |
 | A writer that works despite agent sandboxes, for example outside the agent | [Some agents could not label their own terminal](#can-an-agent-write-its-own-data) |
 
-The record-to-terminal join is unproven: whether agent hooks receive the terminal's address (`HC_TERMINAL_ID`) is untested (U), and it was [empty in Codex's shell](#can-an-agent-write-its-own-data) on the Mac (T). Labelling the terminal with our session ID at launch (`hc run --label`) is an untested alternative (U).
+The record-to-terminal join is partly proven. Claude Code's session-start hook received the terminal address (`HC_TERMINAL_ID`) on both hosts (T). Other agents' hooks are untested (U), and Codex's shell on the Mac [had no address](#can-an-agent-write-its-own-data) (T). Labelling the terminal at launch (`hc run --label`) is an untested alternative (U). One terminal is not always one session: see OpenCode [below](#what-herdr-already-tracks).
 
 ## How herdr collects across hosts
 
@@ -87,7 +87,7 @@ When an agent exits, its terminal becomes `finished`, status and title clear, an
 
 ### When a host is unreachable
 
-I broke the link from the Mac with a wrapper passed to `machine add --via`. That let me break it without changing the network or the second host, so failure timing with a plain SSH target is untested (U).
+I broke the link from the Mac with a wrapper passed to `machine add --via`. That let me break it without changing the network or the second host, and then cut a plain SSH link for real (below).
 
 | Behavior | Link cut | Link silently hung |
 | --- | --- | --- |
@@ -97,11 +97,24 @@ I broke the link from the Mac with a wrapper passed to `machine add --via`. That
 | Remote calls | `get`, `read`, `label` and `doc.get` fail at once with `unavailable` | see below |
 | Recovery | reconnected 4.2 s after restore (about 2 s with `machine.connect`), then sent a `missed` snapshot | reconnect at about 45 s, with a `missed` snapshot |
 
-All rows are T. The `terminal.list` result also has a [`machines` array](https://github.com/herdrdev/herdr-core/blob/v0.1.22/schema/hc.openrpc.json) with each host's `state`, `since_ms` and `why` (D). I did not record what it showed during either failure (U).
+All rows are T. The `terminal.list` result carries a `machines` array with each host's state. In a rerun it showed `unreachable`, `since_ms` and `why` after a cut, but **`connected` for about 43 s of a hang while the host's rows were missing** (T).
+
+### A real network cut
+
+I dropped all traffic on the Linux host for 3 minutes with a firewall rule, over a plain SSH link (T).
+
+| Time | `terminal.list` |
+| --- | --- |
+| 4 s after the cut (first sample) | rows gone, host still `connected`; the call took 3 s |
+| by 19 s | `connecting` |
+| about 29 s | `unreachable`; `why` quotes the SSH error, including the host's IP address |
+| 21 s after the network returned | `connected`, rows back, a `missed` event |
+
+Subscribers got no event during the cut.
 
 During a hang, `hc exec --on box --timeout 5` took **40.0 s** despite the timeout. A following `hc file read`, started about 40 s into the hang, failed 4.8 s later with "lost the line" and a warning that the call may have run. `hc machine ls` stayed instant (T).
 
-What the `herdr-app` window shows here is untested, because the test would have changed my live app. From its [source](https://github.com/herdrdev/herdr-app/blob/v0.1.18/src/hc.rs), I suspect it keeps old rows, since a cut sends no removal event (U). Its [guide](https://github.com/herdrdev/herdr-app/blob/v0.1.18/defaults/AGENTS.md) says an offline host's layout is `unavailable` (D).
+During the same cut, **`herdr-app` kept the old remote row, still `blocked`**. A test panel's `machines()` reported the host `unavailable`, the sidebar said `unreachable`, and the remote terminal showed a reconnecting notice; it was restored afterwards (T). A panel or collector must mark a row stale from the host's state, because the row alone looks current.
 
 ## What herdr already tracks
 
@@ -110,16 +123,17 @@ Agents report their own state through the [OSC 7501 protocol](https://mitchellh.
 | Agent | Activity (T) | Needs attention | Session identity (T) |
 | --- | --- | --- | --- |
 | Claude Code, both hosts | `working` with the current action; `done` with the final reply | `blocked` permission (folder trust); `blocked` question with its text and options (T) | session title; no session ID |
-| Codex, both hosts | `working`, `done`, `idle`; no message | `blocked` untested (U). **Nothing is reported during its update or hook-review startup dialogs** (T) | title; no session ID |
+| Codex, both hosts | `working`, `done`, `idle`; no message | `blocked` permission, without the request text (T); `blocked` question untested (U). **Nothing is reported during its update or hook-review startup dialogs** (T) | title; no session ID |
 | agy, both hosts | `working`, `done` with a message, `idle` | `blocked` permission, including the full command, and `blocked` question (T) | no title, no session ID |
-| OpenCode, Mac only (not installed on Linux) | `idle`, `working`; ends `idle`, not `done` | `blocked` untested (U) | title; a child record carries its session ID only while working |
+| OpenCode, both hosts | `idle`, `working`; ends `idle`, not `done` | `blocked` permission on both hosts and question on Linux, with a generic message (T) | title; a child record carries its session ID while working or blocked |
 
-- `error` and Claude subagent records are untested (U).
+- Claude reported `error` with the API error text. A subagent had its own `working` record, removed when it finished (T). `error` from other agents is untested (U).
+- **With two OpenCode terminals on Linux, one reported the other's blocking question** while its own session had finished (T). I infer they shared one OpenCode server (U).
 - `status_ms` is when the state last changed, and `turn` counts each exit from `working` ([source](https://github.com/herdrdev/herdr-core/blob/v0.1.22/crates/herdr-core/src/status.rs), D). Status clears when the program exits (T).
 - `send` to a `blocked` terminal is refused without `--force` (T).
 - herdr clients share a [`herdr.seen` label](https://github.com/herdrdev/herdr-app/blob/v0.1.18/docs/labels.md) to record that a finished turn was seen, and `herdr.pinned` to pin (D).
 - `herdr-app` documents a separate [resume signal](https://github.com/herdrdev/herdr-app/blob/v0.1.18/README.md) (OSC 7577) for agents that send it (D). I saw no resume data from these four (T).
-- **Only agents attached to an `hc` terminal are visible** (T). The `claude agents` view reported no status, though its title said two sessions awaited input (T). With my settings, bare `claude` opens that view; `claude "<prompt>"` opened a session that reported (T). Attaching from that view, tmux inside `hc` and cloud sessions are untested (U).
+- **Only agents attached to an `hc` terminal are visible** (T). The `claude agents` view reported no status, though its title said two sessions awaited input (T). With my settings, bare `claude` opens that view; `claude "<prompt>"` opened a session that reported (T). A background session attached with `claude attach` did report its blocking question. Claude inside tmux inside `hc` reported nothing on either host. Cloud sessions are untested (U).
 
 ## Ways to carry our metadata
 
@@ -130,9 +144,9 @@ Agents report their own state through the [OSC 7501 protocol](https://mitchellh.
 | Labels (`hc label`) | emoji tags, IDs, short values | a 5,000-character value and keys with spaces or emoji worked; upper limit unknown (U). No expiry | low | T |
 | Custom status report (OSC 7501) | emoji title, message of about 330 characters | the agent's next report would replace it (U); custom child records untested (U) | low | T |
 | Shared documents (`doc.set`) | structured values | 1 MiB each; API only; name rules as for terminal names | medium | T |
-| Records read through herdr (file read tested) | anything | we own the format, cache and timeouts; works for sessions outside herdr terminals | medium | T |
+| Records read through herdr (file read and a stand-in command tested) | anything | we own the format, cache and timeouts; works for sessions outside herdr terminals | medium | T |
 | Plain `ssh cat` | anything | 88–99 ms without connection reuse, against 13–15 ms for `hc file read` and 20–28 ms for `hc exec` | medium | T |
-| `herdr-app` mod | display only | needs its own data source for our records | medium | [D](https://github.com/herdrdev/herdr-app/blob/v0.1.18/docs/mods.md) |
+| `herdr-app` mod | labels and status | needs its own data source for our records | medium | T |
 
 - **Renaming:** Claude's `/rename` to `🔧⏳ 276 herdr` reached the other host. Codex on the Mac showed the same name with `| work` appended. agy set no title (T). OpenCode rename is untested (U).
 - **Labels:** they can be set from another host, sync through events and survive a core restart and agent exit. They last only as long as the terminal (T). herdr suggests them for [small, slowly changing values](https://github.com/herdrdev/herdr-app/blob/v0.1.18/docs/labels.md), reserves the `herdr.` prefix, and puts larger state in documents (D).
@@ -145,23 +159,23 @@ Each agent was asked to label its own terminal.
 | Agent | Mac | Linux |
 | --- | --- | --- |
 | Claude Code | worked, allowed by auto mode (T) | worked (T) |
-| OpenCode | worked (T) | not installed (U) |
-| agy | untested (U) | sandbox blocked it as read-only; worked after approval to run outside (T) |
-| Codex (`--no-daemon`) | failed: `HC_TERMINAL_ID` was empty in its shell (T) | failed (T); I suspect the sandbox (U) |
+| OpenCode | worked (T) | worked (T) |
+| agy | failed: running `hc` gave "operation not permitted" (T); cause not established (U) | sandbox blocked it as read-only; worked after approval to run outside (T) |
+| Codex (`--no-daemon`) | failed: `HC_TERMINAL_ID` was empty in its shell (T) | failed: its sandbox made the herdr state directory read-only (T) |
 
 ## Showing it in a pane and reading it from an agent
 
 | Use | Pane | Agent |
 | --- | --- | --- |
-| Tags and session state | **Yes** (T): my test script in an `hc` terminal listed both hosts, blocked first, with emoji labels, app, kind, message and host state | **Yes** (T): through my test scripts, Claude Code read both hosts' state and labels from the same `hc connect` JSON |
-| Triage | Same script showed remote blocking questions first (T). Holds-up and effort need our records (T) | the script read herdr fields (T); record files can be read remotely (T). I did not test an agent doing the triage (U) |
+| Tags and session state | **Yes** (T): a test script in an `hc` terminal and a `herdr-app` panel showed both hosts with emoji labels | **Yes** (T): through test scripts, Claude Code read both hosts' state and labels from `hc connect` |
+| Triage | The script showed remote blocking questions first (T). Holds-up and effort need our records (T) | **Yes** (T): a separate Claude run ranked blocked agents on both hosts using herdr data and stand-in remote records. It noted that permission requests lacked the command |
 
-For the native `herdr-app` window:
+In the `herdr-app` window (T):
 
-- Showing custom labels there is untested, because the test would have changed my live app (U).
-- A throwaway mod passed `herdr-app check`, which shows only that it loads and renders once (T).
-- The mod API's `agents()` list lacks `msg`, `kind` and labels; `terminals()` returns full core records ([source](https://github.com/herdrdev/herdr-app/blob/v0.1.18/src/hc.rs), D). Mods can also run commands and read files on a remote host ([guide](https://github.com/herdrdev/herdr-app/blob/v0.1.18/defaults/AGENTS.md), D).
-- App screens omit terminals without the app's labels, including ones on other hosts that it did not start ([guide](https://github.com/herdrdev/herdr-app/blob/v0.1.18/defaults/AGENTS.md), D).
+- In a mod (an add-on panel), `terminals()` gives `status` as a bare word. The kind and message are in a separate `report` field. `agents()` lacks them and labels ([source](https://github.com/herdrdev/herdr-app/blob/v0.1.18/src/hc.rs), D).
+- A new mod did not dock by itself in the default layout; `pane.split` opened it.
+- The built-in Agents list did not show my test terminals, which lacked the app's labels ([guide](https://github.com/herdrdev/herdr-app/blob/v0.1.18/defaults/AGENTS.md)).
+- Mods can also run commands and read files on a remote host ([guide](https://github.com/herdrdev/herdr-app/blob/v0.1.18/defaults/AGENTS.md), D).
 
 ## The older `herdr` terminal UI
 
