@@ -196,7 +196,7 @@ How earlier discussion cost is tied to the workstream is still open. The session
 1. PR 1 is merged with `/merge`. The record marks it merged and stays active. GitHub deleting the remote branch is an expected change.
 2. Unpushed fixes remain. You don't run `/finalize`.
 3. You continue on the same branch or a new one. A workflow command that switches branches updates the record; an unexplained switch pauses and asks.
-4. PR 2 is added to the same workstream, reviewed and merged. [Reviews accepted before PR 1 merged](workstream-schema.md#reviews) count as planned, so they can't mark PR 2 ready.
+4. PR 2 is added to the same workstream, reviewed and merged. [Reviews accepted before the record marked PR 1 merged](workstream-schema.md#reviews) count as planned, so they can't mark PR 2 ready.
 5. `/finalize` finishes it.
 
 ## Tolerated and manual cleanup

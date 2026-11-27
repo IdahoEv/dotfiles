@@ -143,7 +143,7 @@ This is the target design; none of it is built. [Record lifecycles](workstream-l
 - **A review starting moves `stage` to `review`.** Listing planned reviews doesn't. It stays there after all are accepted.
 - Setting `stage` to `plan` or `wip` returns every entry to `planned` and keeps its `round`. One reviewer can also be reset alone.
 - A reviewer that is no longer planned is removed.
-- After a merge, an `accepted` entry whose `updated_at` is not later than the latest `merged_at` counts as `planned`, in displays and the ready-to-merge check. The record isn't rewritten, and `round` is kept.
+- After a merge, an `accepted` entry whose `updated_at` is not later than the latest `merged_at` counts as `planned`, in displays and the ready-to-merge check. The record isn't rewritten, and `round` is kept. If the record finds a merge late, approvals made in between also count as `planned`, and `MERGED` can show over that work until the next stage or review write.
 - Old age alone never marks a review failed.
 - This is step tracking for reviews only. It enforces nothing; [general step tracking](workstream-concept.md#unproven-tracking-step-status) remains unproven.
 - **Gap:** no command records rounds per GitHub bot today.
@@ -285,7 +285,7 @@ Every reader must handle v0 before any command writes it. That includes code out
 | `reviews.local_running`, `reviews.remote_running` | Moved | `status: running` on that entry, made if missing; sets `stage: review` |
 | `claude_sessions`, `codex_sessions` | Dropped | No session records are made from them |
 
-- `branch` comes from the worktree. `stage_updated_at`, each review's `updated_at` and any `merged_at` are all the conversion time. A record with no stage or review tag gets `wip`. Old tags can't show whether a review or other work came after a merge, so once the PR is marked merged, at conversion or later, converted approvals count as [planned](#reviews). Until the next stage or review write, `MERGED` can show over later work.
+- `branch` comes from the worktree. `stage_updated_at`, each review's `updated_at` and any `merged_at` are all the conversion time. A record with no stage or review tag gets `wip`. Old tags can't show whether a review or other work came after a merge, so once the PR is marked merged, at conversion or later, converted approvals count as [planned](#reviews). Until the next stage or review write, `MERGED` can show over later work. A stage or review write that triggers conversion counts as later than `merged_at`.
 - Older `<git-dir>/chain` files convert the same way, as ticket lists.
 - A converted workstream has no lead record, so the [lead check](workstream-lifecycle.md#lead-check-and-takeover) asks. Codex launch can no longer reuse a thread from `codex_sessions`, for converted or new workstreams.
 
