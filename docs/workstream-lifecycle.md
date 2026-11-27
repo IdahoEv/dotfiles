@@ -102,7 +102,7 @@ The only stored state is **active**. Finished and dropped are outcomes, logged a
 
 Finish and drop destroy linked session records first and the workstream record last. An interrupted run leaves the workstream active; run it again. A rerun may log an event twice.
 
-**Gap:** [`prune-worktrees.sh`](../tools/lib/prune_worktrees.py) can remove a merged worktree, record included, without a finish. It must not destroy an active workstream that way. Whether it skips such a worktree or runs finish is not decided.
+[`prune-worktrees.sh`](../tools/lib/prune_worktrees.py) must skip and report any worktree with an active workstream. Run `/finalize` to finish it. This behavior is pending implementation.
 
 ## Before a record is destroyed
 
@@ -196,7 +196,7 @@ How earlier discussion cost is tied to the workstream is still open. The session
 1. PR 1 is merged with `/merge`. The record marks it merged and stays active. GitHub deleting the remote branch is an expected change.
 2. Unpushed fixes remain. You don't run `/finalize`.
 3. You continue on the same branch or a new one. A workflow command that switches branches updates the record; an unexplained switch pauses and asks.
-4. PR 2 is added to the same workstream, reviewed and merged. [Reviews accepted before the record marked PR 1 merged](workstream-schema.md#reviews) count as planned, so they can't mark PR 2 ready.
+4. PR 2 is added to the same workstream, reviewed and merged. [Reviews accepted at or before PR 1's `merged_at`](workstream-schema.md#reviews) count as planned, so they can't mark PR 2 ready.
 5. `/finalize` finishes it.
 
 ## Tolerated and manual cleanup

@@ -124,7 +124,7 @@ This is the target design; none of it is built. [Record lifecycles](workstream-l
 | `number` | integer | yes | Identifying the PR | A branch can have had several PRs |
 | `url` | string | no | Links without a GitHub call | Saves a lookup in offline displays |
 | `state` | `open`, `merged`, `closed` | yes | Display; GitHub stays authoritative | Offline display; noticing an unexpected change |
-| `merged_at` | time the record first marked it merged, not GitHub's merge time | when `merged` | Telling a fresh merge from later work | Compared offline with stage and review times |
+| `merged_at` | GitHub's merge time. For a PR imported from an older record, the time the record first marks it merged | when `merged` | Telling a fresh merge from later work | Compared offline with stage and review times |
 | `head` | commit SHA | no | The sync check | The sync check runs without a network call |
 | `head_source` | `push`, `remote` | with `head`, if known | Keeping a push from being overwritten by an older remote read | The SHA doesn't show where it came from |
 
@@ -143,7 +143,7 @@ This is the target design; none of it is built. [Record lifecycles](workstream-l
 - **A review starting moves `stage` to `review`.** Listing planned reviews doesn't. It stays there after all are accepted.
 - Setting `stage` to `plan` or `wip` returns every entry to `planned` and keeps its `round`. One reviewer can also be reset alone.
 - A reviewer that is no longer planned is removed.
-- After a merge, an `accepted` entry whose `updated_at` is not later than the latest `merged_at` counts as `planned`, in displays and the ready-to-merge check. The record isn't rewritten, and `round` is kept. If the record finds a merge late, approvals made in between also count as `planned`, and `MERGED` can show over that work until the next stage or review write.
+- After a merge, an `accepted` entry whose `updated_at` is not later than the latest `merged_at` counts as `planned`, in displays and the ready-to-merge check. The record isn't rewritten, and `round` is kept. If the record finds an imported PR's merge late, approvals between the merge and its discovery also count as `planned`, and `MERGED` can show over that work until the next stage or review write.
 - Old age alone never marks a review failed.
 - This is step tracking for reviews only. It enforces nothing; [general step tracking](workstream-concept.md#unproven-tracking-step-status) remains unproven.
 - **Gap:** no command records rounds per GitHub bot today.
@@ -191,7 +191,7 @@ Both records use the same entry.
 
 | Field | Type | Req | Needed for | Why stored |
 | --- | --- | --- | --- | --- |
-| `cause` | `question`, `plan-approval`, `design-gate`, `auth`, `reviewer-failed`, `review-stalled`, `no-pr`, `legacy` (migration only); open set | yes | Sorting the queue | Only the writer knows |
+| `cause` | `question`, `plan-approval`, `design-gate`, `auth`, `reviewer-failed`, `review-stalled`, `no-pr` (open set) | yes | Sorting the queue | Only the writer knows |
 | `request` | string | yes | What is being asked | Only the writer knows |
 | `since` | time | yes | How long it has waited | The moment isn't recorded elsewhere |
 | `holds_up` | string | no | Priority | Only the asker knows |
@@ -201,7 +201,7 @@ Both records use the same entry.
 | Entry on | Holds | Cleared when |
 | --- | --- | --- |
 | Session | Its own questions and approvals | You reply to that session. A reply to another session leaves it |
-| Workstream | Command failures, such as a stalled review or failed sign-in | Its subject changes or is removed, the failed command later succeeds, or `stage` takes a new value, which clears them all. With no subject, only the last two apply. A `legacy` entry is also cleared as the old `!` is: by your reply in the worktree, or by a stage, review or PR write, including the one that converts the record. The entry survives the session |
+| Workstream | Command failures, such as a stalled review or failed sign-in | Its subject changes or is removed, the failed command later succeeds, or `stage` takes a new value, which clears them all. With no subject, only the last two apply. The entry survives the session |
 
 - "Ready to merge" is not an entry. It is worked out when there is at least one review, all are accepted, and a PR is open.
 - **Unverified:** detecting a reply on each agent. A reply to a question dialog may fire no prompt hook, so the agent clears the entry.
@@ -276,7 +276,7 @@ Every reader must handle v0 before any command writes it. That includes code out
 | `template_source` | Dropped | Looked up from settings |
 | `tags`: `PLAN`, `WIP` | Moved | `stage` |
 | `tags`: review tags | Moved | `reviews`, with `L`/`G`/`H` as `source` and no `reviewer`. The digit is `round`, else `0`. `-` is `planned`, `✓` `accepted`, neither `running`. `stage` is `review` if any has started, else `wip` |
-| `tags`: `!` | Moved | One `attention` entry: cause `legacy`, a placeholder `request`, `since` the conversion time. Dropped if there are review tags, all `✓`, and `PR`: ready to merge is derived |
+| `tags`: `!` | Dropped | Ready to merge is derived |
 | `tags`: `PR` | Dropped | Derived from `prs` |
 | `tags`: `MERGED`, `DONE` | Moved | `stage: review`; the converted PR is `merged`. With no `pr` object, no PR entry is made and the merge isn't kept |
 | `tags`: `REVIEW`, `REVIEWED`, `READY`, custom | Dropped | None |
@@ -285,7 +285,7 @@ Every reader must handle v0 before any command writes it. That includes code out
 | `reviews.local_running`, `reviews.remote_running` | Moved | `status: running` on that entry, made if missing; sets `stage: review` |
 | `claude_sessions`, `codex_sessions` | Dropped | No session records are made from them |
 
-- `branch` comes from the worktree. `stage_updated_at`, each review's `updated_at` and any `merged_at` are all the conversion time. A record with no stage or review tag gets `wip`. Old tags can't show whether a review or other work came after a merge, so once the PR is marked merged, at conversion or later, converted approvals count as [planned](#reviews). Until the next stage or review write, `MERGED` can show over later work. A stage or review write that triggers conversion counts as later than `merged_at`.
+- `branch` comes from the worktree. `stage_updated_at` and each review's `updated_at` use the conversion time. An imported PR's `merged_at` uses the conversion time if the PR is already marked merged, or the time a later command first marks it merged. A record with no stage or review tag gets `wip`. Old tags can't show whether a review or other work came after a merge, so imported approvals count as [planned](#reviews) once the imported PR is marked merged. Until the next stage or review write, `MERGED` can show over later work. A stage or review write that triggers conversion counts as later than `merged_at` if the conversion marks the PR merged.
 - Older `<git-dir>/chain` files convert the same way, as ticket lists.
 - A converted workstream has no lead record, so the [lead check](workstream-lifecycle.md#lead-check-and-takeover) asks. Codex launch can no longer reuse a thread from `codex_sessions`, for converted or new workstreams.
 
@@ -301,7 +301,7 @@ None of these is edited here.
 | --- | --- |
 | [#270](https://github.com/IdahoEv/dotfiles/issues/270) sessions list | Its `sessions[]` list is replaced by session records and a one-way link. `log_path` becomes `transcript_path`. `model`, `effort`, `host`, `started_at`, `ended_at` and `context_dir` are dropped; an end is recorded without its time. Unmet as written: `sessions[]` and the version bump (AC 1), the model, effort and host flags (AC 2), recording at launch (AC 3), last-seen values (AC 4), the snapshot lookup (AC 5) and the tests that depend on that shape (AC 6). Per-agent hook gaps still apply. |
 | [#164](https://github.com/IdahoEv/dotfiles/issues/164) talk and iteration | Conflicts: a talk has no workstream until promoted; there is one kind and no key aliases; takeover replaces its resume script. A rename keeps the old branch and worktree names instead of moving them. Its prune sweep isn't part of these lifecycles. |
-| [#255](https://github.com/IdahoEv/dotfiles/pull/255) tag states (merged) | Tags become output. Review counts and tag strings merge into per-reviewer entries. Stored stages are `plan`, `wip`, `review`. `[L- G-]` no longer shows before a review starts. A prompt no longer clears workstream failures (except a migrated `legacy` entry) or the ready-to-merge `!`, and a review or PR change clears only the failures about it. Session names stop being parsed for state. |
+| [#255](https://github.com/IdahoEv/dotfiles/pull/255) tag states (merged) | Tags become output. Review counts and tag strings merge into per-reviewer entries. Stored stages are `plan`, `wip`, `review`. `[L- G-]` no longer shows before a review starts. Workstream failures and the ready-to-merge `!` survive a prompt. A review or PR change clears only the failures about it. Session names stop being parsed for state. |
 | [PR #262](https://github.com/IdahoEv/dotfiles/pull/262) layered settings | Its JSON files and `.workstreams/` folder differ from [workstream-config.md](workstream-config.md), which it marks superseded; expect an edit conflict. Nested `settings` works with either. It preserves key aliases, which v0 drops. |
 
 ## Open
