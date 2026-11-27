@@ -2,14 +2,14 @@
 
 **Session tracking is automatic and unobtrusive; a workstream may ask more of you.** The agent's start hook creates each session record. An unlinked record goes away when you remove the session from the agent's own list, where that can be detected. A workstream record lasts until you finish or drop the workstream, never just because a PR merged.
 
-This is the target design; none of it is built. It extends the [concept](workstream-concept.md). Items marked **provisional** depend on what herdr provides.
+This is the target design; none of it is built. It extends the [concept](workstream-concept.md); [record schemas](workstream-schema.md) defines the fields. Items marked **provisional** depend on what herdr provides.
 
 ## Terms
 
 | Term | Meaning |
 | --- | --- |
 | Linked | The session record holds a workstream ID. |
-| Unlinked | It holds none: talk, governor, project review and most ad hoc sessions. A talk can gain one later. A link to a workstream that no longer exists is cleaned up like no link; a failed lookup or unreadable record does not show that, so the session record stays. How to confirm it is gone is not yet decided. |
+| Unlinked | It holds none: talk, governor, project review and most ad hoc sessions. A talk can gain one later. A link to a [gone](workstream-schema.md#open-workstream-list) workstream, one listed on this host whose worktree is missing, is cleaned up like no link. With no list entry, or a failed lookup or unreadable record, the session record stays. |
 | Lead | The one linked session responsible for moving the workstream forward. It is a role, not a status: a lead can be working, waiting or exited. v0 has at most one. |
 | Helper | Any other linked session. |
 | Not running | Confirmed from evidence on the same host, never from age. A stopped process may still be resumable. |
@@ -55,7 +55,8 @@ Updates come from the start events below, purpose changes, takeover, promotion, 
 | Agent | May fill a blank on an unlinked ad hoc session when your prompt makes it clear. It never asks. |
 
 - Setting talk or governor removes the link. A guessed purpose never changes a link.
-- A talk promoted to work keeps its record, gains the link, and its tag becomes implement.
+- A talk promoted to work keeps its record, gains the link, and its tag becomes implement. The workstream slug is drafted from the talk's goal, unless a ticket supplies one.
+- A lead has no goal of its own and shows the slug. Helpers and unlinked sessions can have one, declared by you or written by an agent when it's clear. It is never asked for.
 
 ### End and destroy
 
@@ -81,9 +82,9 @@ The check runs when a session starts or is asked to resume work in a workstream,
 
 - The start hook only prompts the agent to run the check.
 - An unattended session that can't tell does not take the role.
-- **One takeover command** covers abandoned worktrees and agent switches. It marks the old lead `ended` without its cooperation, makes the new session lead, and gives it the old transcript path if there is one.
+- **One takeover command** covers abandoned worktrees and agent switches. It marks the old lead `ended` and a helper without its cooperation, makes the new session lead, and gives it the old transcript path if there is one.
 - Replacing a lead that is still running, such as one out of quota, takes your explicit request.
-- A governor can also list workstreams with no running lead and offer to start one. It marks those it can't determine. It scans project folders for workstream records and keeps no index. Other hosts are **provisional**.
+- A governor can also list workstreams with no running lead and offer to start one. It marks those it can't determine. It reads this host's [open-workstream list](workstream-schema.md#open-workstream-list). Other hosts are **provisional**.
 
 ## Workstream record
 
@@ -93,11 +94,11 @@ The only stored state is **active**. Finished and dropped are outcomes, logged a
 
 | Transition | Owner and trigger | Effect |
 | --- | --- | --- |
-| Create | Kickoff (`/start` → `start-ticket.sh`), `/iterate` (not built yet), talk promotion, or your request for an existing worktree | A permanent ID and an active record in the worktree. |
-| Update | Workflow commands, and the general editing command | [Expected changes](workstream-concept.md#records-and-storage) are picked up; surprises pause and ask. |
+| Create | Kickoff (`/start` → `start-ticket.sh`), `/iterate` (not built yet), talk promotion, or your request for an existing worktree | A permanent ID, an active record in the worktree and a list entry. |
+| Update | Workflow commands, and the general editing command | [Expected changes](workstream-concept.md#records-and-storage) are picked up; surprises pause and ask. A command that moves the worktree updates the list entry. |
 | PR merged | `/merge`, or a command that finds the merge | Only the PR's state changes. |
-| Finish | `/finalize`, so also `/land` | Asks first if commits are unpushed or no PR merged. Logs, then destroys the records. |
-| Drop | A new drop command | Ends and finalizes without a merge. Asks separately about the PR, remote branch, unpushed or uncommitted work, and worktree. It closes or deletes only what you confirm. The records are destroyed even if the worktree stays. |
+| Finish | `/finalize`, so also `/land` | Asks first if commits are unpushed or no PR merged. Logs, then destroys the records and the list entry. |
+| Drop | A new drop command | Ends and finalizes without a merge. Asks separately about the PR, remote branch, unpushed or uncommitted work, and worktree. It closes or deletes only what you confirm. The records and list entry are destroyed even if the worktree stays. |
 
 Finish and drop destroy linked session records first and the workstream record last. An interrupted run leaves the workstream active; run it again. A rerun may log an event twice.
 
@@ -137,7 +138,7 @@ Record writes belong to the workstream commands; hooks and launchers only call t
 | Running check | Per-process files matched 4 of 4 live processes (**Seen**, one look); idle-stopped sessions **Unverified** | Lock files and shared server (**Unverified**) | **Gap** | `presence/` lock files (**Unverified**) |
 | Hook can prompt the lead check | Added context (**Doc**) | Added context (**Doc**) | **Unverified** | **Unverified** |
 
-| Activity and attention (**provisional**) | `Stop`, `Notification`, `PermissionRequest`, `UserPromptSubmit` (hooked here for tab color) | The same events except `Notification` (hooked here) | **Unverified** | `Stop`, `PreInvocation` (**Doc**) |
+| Activity and attention (**provisional**) | `Stop`, `Notification`, `PermissionRequest`, `UserPromptSubmit` (hooked here for tab color; the last also clears `!`) | The same events except `Notification` (hooked here) | **Unverified** | `Stop`, `PreInvocation` (**Doc**) |
 
 ### Codex end events
 
@@ -152,7 +153,7 @@ Command-owned transitions work the same way on every agent. Claude Code runs the
 | Purpose, link, promotion | The launching or promoting command; your plain-words request | As above |
 | Lead check, takeover, dismiss, list, drop | New commands | None (**Gap**) |
 | General record edit | New command, which you can also run yourself | None (**Gap**) |
-| Destroy unlinked and broken-link records | A hook or the next workstream command; which ones is not yet decided | None (**Gap**) |
+| Destroy unlinked records and gone links | A hook or the next workstream command; which ones is not yet decided | None (**Gap**) |
 | Finish | `/finalize`, `/land` | All three |
 
 Hook limits:
@@ -204,7 +205,9 @@ Nothing here is repaired automatically. Removing unlinked records and broken lin
 | --- | --- |
 | Session record whose running state is unknown | Stays; dismiss it if it bothers you. |
 | Linked record in a workstream that is never finished | Stays with the workstream. |
-| Worktree deleted by hand | The workstream record goes with it, and no outcome is logged. Its sessions become broken links. |
+| Worktree deleted by hand | The workstream record goes with it, and no outcome is logged. Its sessions' links are then gone. The stale list entry stays. |
+| Worktree moved by hand | It looks gone, so its non-running sessions can be destroyed. Move it with a workflow command. |
+| Missing list entry | The workstream isn't listed, and its sessions' records stay. |
 | Corrupt or unreadable record | Reported; fix or delete it by hand. |
 | Worktree or branch kept after a drop | Clean up by hand. |
 | Missing or pruned transcript | Handoff proceeds without it. |

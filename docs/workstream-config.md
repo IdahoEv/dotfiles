@@ -19,7 +19,7 @@ Lowest to highest precedence:
 | machine | `~/.config/workstream/machine/` (open item) |
 | project overlay | `<overlays-root>/<owner>/<repo>/`, keyed by the origin remote, outside the checkout |
 | project committed | `<repo>/.workstream/` |
-| workstream | `<worktree>/.workstream.json`, for that workstream only ([concept](workstream-concept.md)) |
+| workstream | the `settings` object in `<worktree>/.workstream.json`, for that workstream only ([schema](workstream-schema.md#setting-overrides)) |
 
 Merge rules:
 
@@ -48,11 +48,11 @@ agents/  commands/  skills/
 
 ## Separation from runtime state
 
-`.workstream.json` (per-worktree record: phase, PR, sessions) holds runtime state. As the workstream layer, it also holds the settings that differ for that workstream. Nothing under a config dir is written at runtime.
+`.workstream.json` (the per-worktree [workstream record](workstream-schema.md#workstream-record): stage, reviews, PRs, attention) holds runtime state. It holds no session list; each session record links to its workstream. As the workstream layer, its `settings` object holds only the values that differ for that workstream, nested like config keys. Nothing under a config dir is written at runtime.
 
 ## Environment
 
-`GT_*`, `GIT_TOOLS_PROJECTS_DIR` and `PROJECT_OVERLAYS_DIR` become a single `WS_*` prefix. Every key is also settable by env var for one-off overrides.
+`GT_*`, `GIT_TOOLS_PROJECTS_DIR` and `PROJECT_OVERLAYS_DIR` become a single `WS_*` prefix. Keys are also settable by `WS_*` env var for one-off overrides, which outrank every layer, including the workstream's. The exception: an env var cannot set a key that declares a required check. Weakening a required check through any layer needs the user's approval.
 
 ## Tooling
 

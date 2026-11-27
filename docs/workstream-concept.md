@@ -4,7 +4,7 @@ A **session** is one agent session. Every session you run or want to monitor get
 
 A **workstream** is one unit of agent-implemented work toward a change that lands on the base branch, with or without a PR. It keeps one identity from the commitment to change code until it is finished or dropped, and it owns its name. Its ticket, branch, worktree, sessions, host and PRs can change.
 
-This is the target model, not a description of the current code. Where an older doc or ticket disagrees, this one wins. [Record lifecycles](workstream-lifecycle.md) defines how both records are created, ended and destroyed.
+This is the target model, not a description of the current code. Where an older doc or ticket disagrees, this one wins. [Record lifecycles](workstream-lifecycle.md) defines how both records are created, ended and destroyed, and [record schemas](workstream-schema.md) defines their v0 fields.
 
 ## Identity and lifetime
 
@@ -23,7 +23,7 @@ This is the target model, not a description of the current code. Where an older 
 | Record | Applies to | Holds | Lasts |
 | --- | --- | --- | --- |
 | Session | Every session | ID, purpose tag, tool, role, project, transcript location, activity, attention details and an optional workstream ID | While it needs to be monitored, resumed or handed off |
-| Workstream | Work meant to change code | ID, slug, tickets, branch, PRs and setting overrides | Until finished or dropped |
+| Workstream | Work meant to change code | ID, slug, tickets, branch, PRs, stage, reviews, attention and setting overrides | Until finished or dropped |
 
 - The two are separate records because work outlives sessions and several sessions can share it. A new agent session gets a new session record linked to the same workstream. Resuming a session keeps its record.
 - The link goes one way: a session stores the workstream ID, and the workstream keeps no session list. Shared details live only in the workstream.
@@ -31,6 +31,7 @@ This is the target model, not a description of the current code. Where an older 
 - Governor and talk sessions have no workstream, even when a governor session makes a small direct change.
 - A project review session is monitored and logged like any other. One running unattended asks for attention only when it is stuck or has something for the user.
 - A workstream supports one lead session, plus any number of helpers and subagents. The lead is the session responsible for moving the workstream forward, whether or not it is running. The data format must not rule out more than one lead.
+- The records are the only stored session and workstream state. Tags, statuslines, session names and herdr panels are generated from them, the same way for every agent.
 - Collect what tools can detect. Agents add only what they alone know, such as what they need from the user.
 
 ### Edge cases
@@ -51,7 +52,7 @@ The step list is the default happy path, used much like a default prompt. The ag
 
 An earlier design had each workstream keep a list of planned steps, each marked pending, active or done. **This is unproven and not approved for building.** It must be kept accurate to be useful, and no use for it has been established yet.
 
-The simpler alternative to try first keeps no tracked plan. Progress is the latest reported activity and review results, plus PR status from GitHub. Nothing needs resetting when work jumps back. It cannot reliably show what is left to do or whether a required check was missed, so required checks need separate enforcement.
+The simpler alternative to try first keeps no tracked plan, apart from [the list of planned reviews](workstream-schema.md#reviews). Progress is the stage, latest reported activity and review results, plus PR status from GitHub. Nothing needs resetting when work jumps back. It cannot reliably show what is left to do or whether a required check was missed, so required checks need separate enforcement.
 
 ## Attention
 
@@ -85,7 +86,7 @@ A change is **expected** only when it fits the next step on the happy path and l
 ## Names
 
 - One slug supplies the branch, worktree, session and PR names through per-surface formats. An optional fuller title defaults to the slug.
-- A ticket's own slug is used if it has one. Otherwise one is drafted at kickoff, close to the ticket title. A chain normally gets a new slug.
+- A ticket's own slug is used if it has one. Otherwise one is drafted at kickoff, close to the ticket title, or from the talk's goal when there is no ticket. A chain normally gets a new slug.
 - Renaming is expected only soon after creation. After publishing, the session name, statusline and PR title follow a rename. The branch and worktree keep the old name, and the tool says so. A forced change of those is done by hand until a real case needs more.
 
 ## Switching agents and hosts
@@ -116,8 +117,8 @@ A change is **expected** only when it fits the next step on the happy path and l
 
 ## Open
 
-- Data formats for the session record, workstream record and any status report. No reader of a snapshot has been settled.
-- Whether to track step status at all.
+- A format for any status report. No reader of a snapshot has been settled.
+- Whether to track the status of steps other than reviews.
 - Session storage: whether herdr already covers it, and whether sandboxed agents can write to the folder. Age alone does not show that a session is dead.
 - The unverified agent signals in [record lifecycles](workstream-lifecycle.md#triggers-by-agent).
 - Where workstreams live: the worktree is the current decision. A per-host folder remains an option now that sessions need one.
@@ -125,5 +126,4 @@ A change is **expected** only when it fits the next step on the happy path and l
 - What herdr supports: a view across hosts, emoji in names, renaming and session status. None of this is verified.
 - Attention: a stored level with a reason, or urgency computed from the stored details.
 - The rest of the settings layer design in [workstream-config.md](workstream-config.md), which is still to be reviewed.
-- What the slug of a workstream without a ticket is drafted from.
-- How existing tickets, open PRs and the current tag design change to fit this model. The tags can serve as a compact view of steps and attention, but a fixed set of review sources and a single flag cannot be the underlying data.
+- Changing existing tickets and open PRs to fit this model; [their effects](workstream-schema.md#effect-on-related-work) are listed.
