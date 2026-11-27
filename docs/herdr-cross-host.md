@@ -1,6 +1,6 @@
 # Can herdr collect session and workstream data across hosts?
 
-**I recommend extending herdr (`herdr-core`) instead of building our own transport.** Session records stay the source for our metadata. A small collector reads them through herdr, joins them to herdr's live terminal list, and copies a few short values into terminal labels for panes. In tests, remote changes arrived in under 0.25 s, but herdr sees only sessions in its own terminals and **drops an unreachable host's rows instead of marking them stale**.
+**I recommend extending herdr (`herdr-core`) instead of building our own transport.** Session records stay the source for our metadata. A small collector reads them through herdr, joins them to herdr's live terminal list, and copies a few short values into terminal labels for panes. A test script showed labels in an `hc` terminal; showing them in the native `herdr-app` window is untested. In tests, remote changes arrived in under 0.25 s, but herdr sees only sessions in its own terminals and **drops an unreachable host's rows instead of marking them stale**.
 
 Why:
 
@@ -23,7 +23,8 @@ Tested on 2026-11-27 with macOS arm64 and a second Linux x86_64 host: `herdr-cor
 Collector:
 
 - Keep a last-seen copy for each host. A missing row means unknown, not finished.
-- Check host state, set its own timeout on every call, and do not rely on events to detect an outage.
+- Check host state and do not rely on events to detect an outage.
+- Enforce its own deadline outside `hc` on every call, because `--timeout` [did not bound a hung `hc exec`](#when-a-host-is-unreachable). On expiry, treat that host's data from the call as unknown, not empty. Cutting off a hung `hc` call this way is untested (U).
 - Read records by running a workstream command with `hc exec --on <machine>`, because the [concept doc](workstream-concept.md#records-and-storage) routes all reads through those commands. `hc file read` was measured only as a transport.
 - Each monitored host needs that command, with a format version in its output; running it through `hc exec` is untested (U). A missing or incompatible command means that host's records are unknown, not empty.
 - Decide who writes and clears each label it copies, since labels have no expiry.
