@@ -19,6 +19,7 @@ Lowest to highest precedence:
 | machine | `~/.config/workstream/machine/` (open item) |
 | project overlay | `<overlays-root>/<owner>/<repo>/`, keyed by the origin remote, outside the checkout |
 | project committed | `<repo>/.workstream/` |
+| workstream | `<worktree>/.workstream.json`, for that workstream only ([concept](workstream-concept.md)) |
 
 Merge rules:
 
@@ -31,7 +32,7 @@ Merge rules:
 
 Keys marked sensitive (hostnames, private repo names, credential references) are accepted only from the user, machine and overlay layers, never from the committed layer, because committed config can sit in a public repo.
 
-## Layout (identical in every layer)
+## Layout (identical in every layer below workstream)
 
 ```
 config.yaml
@@ -47,7 +48,7 @@ agents/  commands/  skills/
 
 ## Separation from runtime state
 
-`.workstream.json` (per-worktree record: phase, PR, sessions) stays runtime state. Nothing under a config dir is written at runtime, and nothing in `.workstream.json` is read as config.
+`.workstream.json` (per-worktree record: phase, PR, sessions) holds runtime state. As the workstream layer, it also holds the settings that differ for that workstream. Nothing under a config dir is written at runtime.
 
 ## Environment
 
