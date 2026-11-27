@@ -436,7 +436,7 @@ if [ "$review" != "none" ]; then
 fi
 
 # ---- agent-view phase --------------------------------------------------------
-# The PR exists, so tag it [PR]; it is also [REVIEW] whenever a bot will review
+# The PR exists, so tag it [PR]; GitHub review (G) starts whenever a bot will review
 # (requested here successfully, or fired automatically on PR open under trigger_mode=auto).
 # Stamped here rather than left to /open-pr's prose because it's deterministic
 # and should hold even when the command is run by hand. Updates `.workstream.json`
@@ -444,9 +444,13 @@ fi
 # inapplicable and never fails the ship — the PR is already open by now, so
 # aborting over a display label would be strictly worse than a stale one.
 if { [ "$review" != "none" ] && [ -z "$review_failed" ]; } || [ "${PROVIDER_TRIGGER_MODE:-manual}" = "auto" ]; then
-  "$SCRIPT_DIR/agent-phase.sh" REVIEW >/dev/null 2>&1 || true
+  "$SCRIPT_DIR/agent-phase.sh" --review G next >/dev/null 2>&1 || true
+fi
+if [ "$review" = "none" ] && [ "${PROVIDER_TRIGGER_MODE:-manual}" != "auto" ]; then
+  "$SCRIPT_DIR/agent-phase.sh" --review G drop >/dev/null 2>&1 || true
 fi
 "$SCRIPT_DIR/agent-phase.sh" --pr >/dev/null 2>&1 || true
+[ -z "$review_failed" ] || "$SCRIPT_DIR/agent-phase.sh" --attn >/dev/null 2>&1 || true
 if [ -x "$SCRIPT_DIR/workstream.sh" ]; then
   "$SCRIPT_DIR/workstream.sh" set-pr --dir . --number "$pr_number" --url "$pr_url" \
     --head "${pr_head:-}" --head-source push >/dev/null 2>&1 || true

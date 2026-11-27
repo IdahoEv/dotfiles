@@ -20,7 +20,7 @@ argument-hint: "[automatically|quickly|slowly] [--max-rounds N]"
 
 Run `review-unattended.sh active`. Exit 0 means **unattended mode**: this machine opted in with `~/.config/github-review-unattended` and `local-review-only` is absent. Then run `review-unattended.sh next-round`, adding `--max <N>` when the user's prompt gave `--max-rounds <N>` (the default cap is 5; a project can set `review_max_rounds` in `.start-ticket.conf`, or the environment `REVIEW_UNATTENDED_MAX`). It prints `round=<n>`, with `last=1` on the final round; remember whether this round is the last. If it prints `cap=reached`, skip to the stop procedure below with reason "round cap". Any other `next-round` result (an error exit) stops with the error, via the stop procedure. If `active` exits non-zero, behavior is interactive and every step below applies as written.
 
-**Stop procedure (unattended only).** Every stop in this command, including "No PR", a failed commit or push, and each exit below, goes through it. Run `review-unattended.sh reset` and `agent-phase.sh --no-review`, then print the final report: one table across every local-review-cycle round and every GitHub round (columns: Cycle = `local` or `github`, Round, Reviewer, Findings, Fixed, Dismissed, Deferred), built from this session's history, followed by the stop reason. Then stop and wait for the user to review and approve the PR. Never merge.
+**Stop procedure (unattended only).** Every stop in this command, including "No PR", a failed commit or push, and each exit below, goes through it. Run `review-unattended.sh reset` and `agent-phase.sh --attn`, then print the final report: one table across every local-review-cycle round and every GitHub round (columns: Cycle = `local` or `github`, Round, Reviewer, Findings, Fixed, Dismissed, Deferred), built from this session's history, followed by the stop reason. Then stop and wait for the user to review and approve the PR. Never merge.
 
 ## 1. Identify the PR
 
@@ -55,7 +55,7 @@ Before anything else, whatever the report says (even `Files changed: no`), run `
 
 ## 4. Report
 
-Print the agent's report **unaltered, at top level** — no blockquote, no code fence, tables emitted directly, because quoting or fencing stops the terminal rendering its tables. If it says `Files changed: no` and lists no planned actions, run `agent-phase.sh --no-review`, say the round found nothing to do and polling has stopped, and stop. In unattended mode, use the stop procedure instead, reason "no valid fixes".
+Print the agent's report **unaltered, at top level** — no blockquote, no code fence, tables emitted directly, because quoting or fencing stops the terminal rendering its tables. If it says `Files changed: no` and lists no planned actions, run `agent-phase.sh --review G ok`, say the round found nothing to do and polling has stopped, and stop. In unattended mode, use the stop procedure instead, reason "no valid fixes".
 
 ## 5. Approve the commit
 
@@ -70,14 +70,14 @@ Otherwise, if files changed, ask one `AskUserQuestion`. Write it as if the print
 
 A typed `execute` commits with the proposed message; `execute <text>` uses `<text>` as the full message instead. Append this session's commit attribution trailer unless the message already has one.
 
-**On "Don't commit yet"**, post nothing: list the planned actions as not posted, run `agent-phase.sh --no-review`, say polling has stopped, and stop.
+**On "Don't commit yet"**, post nothing: list the planned actions as not posted, run `agent-phase.sh --attn`, say polling has stopped, and stop.
 
 ## 6. Commit, push, post
 
 1. `git add` exactly the paths the agent listed, commit, and `git push`. If either fails, post nothing, report the error, and stop (unattended: the stop procedure, reason "commit or push failed").
 2. **After the push succeeds**, run the planned actions in order using the `gh api` snippets in the `github-review-procedure` skill's §4d (reactions, Reply, Mark Resolved, including the review-body `[RESOLVED]` edit); `pr-comment` rows go through `gh pr comment`. Skip 4d's conversational steps — the bodies are already final. Post each body exactly as planned. Confirm each resolution through the API. Report every action that fails, and keep going.
 
-If no files changed but there are planned actions (for example, rejections only), post them directly. There's no commit to gate them on. Then run `agent-phase.sh --no-review`, say polling has stopped because nothing was pushed to trigger a new review, and stop (unattended: the stop procedure, reason "no valid fixes"). Skip steps 7 and 8.
+If no files changed but there are planned actions (for example, rejections only), post them directly. There's no commit to gate them on. Then run `agent-phase.sh --review G ok`, say polling has stopped because nothing was pushed to trigger a new review, and stop (unattended: the stop procedure, reason "no valid fixes"). Skip steps 7 and 8.
 
 In unattended mode, if this is the last round (`last=1`), run the stop procedure with reason "round cap" once the actions are posted, and skip steps 7 and 8: another review would never be handled.
 
@@ -97,7 +97,7 @@ On request, run `request-review.sh`. Pass `--pr <N>` if needed, or `--level copi
 
 ## 8. Poll
 
-Run `agent-phase.sh REVIEW`, then run this in the background:
+Run `agent-phase.sh --review G next`, then run this in the background:
 
 ```bash
 ~/.claude/skills/github-review-procedure/github-review-poll.sh
@@ -106,10 +106,10 @@ Run `agent-phase.sh REVIEW`, then run this in the background:
 It polls every 45 s for up to 2 h. Exit codes:
 
 - **0**: new review activity. Re-invoke `/github-review-comments` immediately, without waiting for the user. Each round gets a fresh agent.
-- **3**: reviewers signed off and there are no unresolved threads. Announce it, e.g. "✅ Reviewers signed off (Copilot, 14:32) — no unresolved threads. PR looks ready to merge." Run `agent-phase.sh --no-review` and stop.
-- **1**: timeout. Say "No new bot activity after 2 hours. Polling stopped." and run `agent-phase.sh --no-review`.
-- **2**: no PR found. Say so, run `agent-phase.sh --no-review`, and stop.
-- **4**: a reviewer couldn't run (Actions billing or spending limit). Name it, run `agent-phase.sh --no-review`, and don't re-poll.
+- **3**: reviewers signed off and there are no unresolved threads. Announce it, e.g. "✅ Reviewers signed off (Copilot, 14:32) — no unresolved threads. PR looks ready to merge." Run `agent-phase.sh --review G ok` and stop.
+- **1**: timeout. Say "No new bot activity after 2 hours. Polling stopped." and run `agent-phase.sh --attn`.
+- **2**: no PR found. Say so, run `agent-phase.sh --attn`, and stop.
+- **4**: a reviewer couldn't run (Actions billing or spending limit). Name it, run `agent-phase.sh --attn`, and don't re-poll.
 
 In unattended mode, every exit other than 0 ends with the stop procedure, naming the reason: 3 is "reviewer sign-off", 1 "poll timeout", 2 "no PR", 4 "reviewer unavailable". Exit 0 re-invokes (repeat any `--max-rounds <N>` you were given), and `next-round` in step 0 enforces the round cap.
 

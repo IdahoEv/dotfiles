@@ -290,6 +290,14 @@ MANAGED = json.loads(r"""
         "hooks": [
           {
             "type": "command",
+            "command": "[ -x {{ .chezmoi.homeDir }}/.local/bin/agent-phase.sh ] && {{ .chezmoi.homeDir }}/.local/bin/agent-phase.sh --ok >/dev/null 2>&1; true"
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
             "command": "[ \"$TERM_PROGRAM\" = iTerm.app ] && printf '\\033]6;1;bg;red;brightness;0\\a\\033]6;1;bg;green;brightness;0\\a\\033]6;1;bg;blue;brightness;0\\a' 2>/dev/null >/dev/tty; true"
           }
         ]

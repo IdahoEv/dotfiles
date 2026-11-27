@@ -61,7 +61,7 @@ Medians per merged ticket are shown only once there are ≥3 merged runs; the sa
 | `ticket.start` | `start-ticket.sh` (create / `--no-tab`) | `outcome`, `exit_code`, `duration_ms`, `mode`, `launcher`, `provider`, `ticket_in_progress` |
 | `session.launch` | `start-ticket.sh --tab-only` | same |
 | `session.start` / `session.end` / `session.fail` / `subagent.stop` | `wf-event.sh --hook` on SessionStart / SessionEnd / StopFailure / SubagentStop | `source` / `reason` / `error` / `agent_type` |
-| `phase` | `agent-phase.sh` (set and `--no-review`) | `phase` |
+| `phase` | `agent-phase.sh` (stage set, review start `--review`, and `REVIEWED` when every review is accepted with a PR open) | `phase` |
 | `review.round` | `github-review-state.sh --set-local` | `round`, `state=start\|end`, `sha` (head commit at the emit) |
 | `review.result` | Review prompts, one line at cycle end (bot batches: `wf-backfill.sh --live`, once per `/github-review-comments` round that has new comments) | `round`, `fixed`, `dismissed`, `deferred`, `reviewers`, `source=bot` for PR-bot batches. Bot-batch `deferred` means Skipped (nothing filed), unlike the local cycle's deferred-with-issue |
 | `review.launch` | `local-review-cycle-manager`, one line per reviewer launch | `reviewer`, `round`, `model` (launch override or the reviewer's `model` frontmatter; `auto` stays `auto`), `effort` (only when set), `source=local`. Model-reported |
