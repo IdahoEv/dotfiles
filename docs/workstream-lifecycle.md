@@ -132,12 +132,16 @@ Record writes belong to the workstream commands; hooks and launchers only call t
 | Compact | `compact` (**Seen**) | `compact` (**Doc**) | **Unverified** | **Gap** |
 | Clear | `clear` (**Doc**); new ID and old-to-new match **Unverified** | `clear` (**Doc**); same two **Unverified** | **Gap** | **Gap** |
 | Fork | `fork` (**Seen**); finding the original **Unverified** | `fork` (**Doc**); same | **Gap** | **Gap** |
-| Clean end | `SessionEnd` (**Seen**), often missing | `SessionEnd` (**Doc**), also after 30 idle minutes | **Gap** | **Gap**; `Stop` ends a run, not a session |
-| Removal from the agent's list | **Unverified**: hook and on-disk effect of double Ctrl-X | `SessionEnd` on archive or delete of an open conversation (**Doc**); same reason as other ends | **Gap**; standalone delete skips plugins (**3P**) | **Gap** |
+| Clean end | `SessionEnd` (**Seen**), often missing | `SessionEnd` (**Doc**), also after 30 idle minutes; [not trusted alone](#codex-end-events) | **Gap** | **Gap**; `Stop` ends a run, not a session |
+| Removal from the agent's list | **Unverified**: hook and on-disk effect of double Ctrl-X | `SessionEnd` on archive or delete of an open conversation (**Doc**); same reason as other ends, so [not trusted alone](#codex-end-events) | **Gap**; standalone delete skips plugins (**3P**) | **Gap** |
 | Running check | Per-process files matched 4 of 4 live processes (**Seen**, one look); idle-stopped sessions **Unverified** | Lock files and shared server (**Unverified**) | **Gap** | `presence/` lock files (**Unverified**) |
 | Hook can prompt the lead check | Added context (**Doc**) | Added context (**Doc**) | **Unverified** | **Unverified** |
 
 | Activity and attention (**provisional**) | `Stop`, `Notification`, `PermissionRequest`, `UserPromptSubmit` (hooked here for tab color) | The same events except `Notification` (hooked here) | **Unverified** | `Stop`, `PreInvocation` (**Doc**) |
+
+### Codex end events
+
+Codex sends `SessionEnd` with one reason on close, archive, delete, and after 30 idle minutes with no client connected. So **the event alone neither ends nor destroys a record.** It counts only when a running check confirms the session isn't running; until then the session is "can't tell". That check is unverified, so expect extra prompts and leftover Codex records.
 
 Command-owned transitions work the same way on every agent. Claude Code runs the command; Codex and agy reach it through a skill, and OpenCode through a command, that points to the same file.
 
