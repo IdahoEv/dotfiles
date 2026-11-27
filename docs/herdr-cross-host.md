@@ -1,6 +1,6 @@
 # Can herdr collect session and workstream data across hosts?
 
-**I recommend extending herdr (`herdr-core`) instead of building our own transport.** Session records stay the source for our metadata. A small collector reads them through herdr, joins them to herdr's live terminal list, and copies a few short values into terminal labels for panes. A test panel in the `herdr-app` window showed emoji labels from both hosts. The recommendation depends on matching each record to its terminal, which is [only partly proven](#what-the-collector-and-records-need). In tests, remote changes arrived in under 0.25 s, but herdr sees only sessions in its own terminals and an unreachable host's rows **vanish from `terminal.list` while the app keeps showing the old ones**.
+**I recommend extending herdr (`herdr-core`) instead of building our own transport.** The [session and workstream records](workstream-schema.md) stay the only stored state. A small collector reads them through herdr, joins them to herdr's live terminal list, and copies a few short values into terminal labels for panes. A test panel in the `herdr-app` window showed emoji labels from both hosts. The recommendation depends on matching each record to its terminal, which is [only partly proven](#what-the-collector-and-records-need). In tests, remote changes arrived in under 0.25 s, but herdr sees only sessions in its own terminals and an unreachable host's rows **vanish from `terminal.list` while the app keeps showing the old ones**.
 
 Why:
 
@@ -20,30 +20,33 @@ Tested on 2026-11-27 with macOS arm64 and a second Linux x86_64 host: `herdr-cor
 
 ## What the collector and records need
 
+The [record schemas](workstream-schema.md) define a [session record](workstream-schema.md#session-record) per session and a [workstream record](workstream-schema.md#workstream-record) in its worktree, plus one file per open workstream in a host's [open-workstream list](workstream-schema.md#open-workstream-list). A session links to its workstream by ID; the workstream keeps no session list.
+
 Collector:
 
-- Keep a last-seen copy for each host. A missing row means unknown, not finished.
+- Keep a last-seen copy of each host's data, with the time it was read. A missing row means unknown, not finished. The [lifecycle](workstream-lifecycle.md#triggers-by-agent) already counts a session on another host as "can't tell".
 - Check host state and do not rely on events to detect an outage.
 - Enforce its own deadline outside `hc` on every call, because `--timeout` [did not bound a hung `hc exec`](#when-a-host-is-unreachable). An outside 5 s deadline ended a hung `hc exec`, and a local call afterwards worked (T). On expiry, treat that host's data from the call as unknown, not empty.
-- Read records by running a workstream command with `hc exec --on <machine>`, because the [concept doc](workstream-concept.md#records-and-storage) routes all reads through those commands. `hc file read` was measured only as a transport.
-- Each monitored host needs that command, with a format version in its output; a stand-in command run through `hc exec` returned JSON in about 20 ms, and a missing one failed with `spawn_failed` (T). A missing or incompatible command means that host's records are unknown, not empty.
+- Read records by running a workstream command with `hc exec --on <machine>`, because the [concept doc](workstream-concept.md#records-and-storage) routes all reads through those commands. `hc file read` was measured only as a transport, and reading the JSON files directly would give up that rule.
+- Each monitored host needs that command, with the records' `schema_version` in its output; a stand-in command run through `hc exec` returned JSON in about 20 ms, and a missing one failed with `spawn_failed` (T). A missing command, or records with a higher `schema_version` than the collector knows, mean that host's records are unknown, not empty. A tool that meets a higher number reports it and does not write ([common rules](workstream-schema.md#common-rules)).
 - Decide who writes and clears each label it copies, since labels have no expiry.
 
-Requirements for the session and workstream records ([#274](https://github.com/IdahoEv/dotfiles/issues/274), [#275](https://github.com/IdahoEv/dotfiles/issues/275)):
+Requirements for the two records ([record schemas](workstream-schema.md), from [#274](https://github.com/IdahoEv/dotfiles/issues/274) and [#275](https://github.com/IdahoEv/dotfiles/issues/275)):
 
-| Need | Reason |
-| --- | --- |
-| Our session ID, the agent's own session ID, tool and transcript location | herdr's terminal record has no lasting native session ID or resume data; OpenCode's ID appears only while working (T) |
-| Role or purpose tag, project, optional workstream ID | herdr has no such fields (T) |
-| A read command that lists a host's sessions and open workstreams, including those with no session, and links them | A workstream without a session is [normal](workstream-concept.md#edge-cases). The command keeps storage layout out of the collector |
-| A per-host list of open workstreams that maps each ID to its record location, readable without any session and updated on create, move, finish and drop | Records live in worktrees, and only sessions link to workstreams, by ID |
-| Optional herdr terminal address plus that core's permanent ID | Joins a record to live state. Addresses are per core, machine names are local to the viewing host, and cores have [permanent IDs](https://github.com/herdrdev/herdr-core/blob/v0.1.22/schema/hc.openrpc.json) (D). A terminal may outlive its session, leaving old labels behind (U) |
-| Last-updated time | A file read carries no sign that its contents are current |
-| What the request holds up and the effort to answer | herdr has neither (T) |
-| Own activity and attention data for sessions outside herdr terminals | herdr reports nothing for them (T) |
-| Latest activity, and attention cause, request and start of waiting, recorded whenever the writer can observe them, including inside herdr; what it can observe is untested (U) | The concept doc requires [activity](workstream-concept.md#two-records) and [attention data](workstream-concept.md#attention). [Coverage varies by agent](#what-herdr-already-tracks), status clears on exit and unreachable rows vanish (T). The collector prefers herdr's value while present; for an unreachable host it has only its last-seen copy |
-| For sessions inside herdr, no copies of turn count, title or folder that herdr reports for that agent | herdr already has them (T). `cwd` is the launch folder; the current one is [`foreground.cwd`](https://github.com/herdrdev/herdr-core/blob/v0.1.22/schema/README.md) (D) |
-| A writer that works despite agent sandboxes, for example outside the agent | [Some agents could not label their own terminal](#can-an-agent-write-its-own-data) |
+| Need | Where in the schemas | Status | Reason |
+| --- | --- | --- | --- |
+| Our session ID, the agent's own session ID, tool and transcript location | Session `id`, `native_id`, `tool`, `transcript_path` | Met | herdr's terminal record has no lasting native session ID or resume data; OpenCode's ID appears only while working (T) |
+| Role or purpose tag, project, optional workstream ID | Session `role`, `purpose`, `repo`, `workstream_id` | Met | herdr has no such fields (T) |
+| Whether a session is open or ended, and why | Session `state`, `end_reason` | Met | A destroyed record and an unreachable host look the same, so the collector still needs its last-seen copy |
+| Optional herdr terminal address plus that core's permanent ID | Session `herdr.terminal`, `herdr.core_id`, **provisional** | Met, provisional | Joins a record to live state. Addresses are per core, machine names are local to the viewing host, and cores have [permanent IDs](https://github.com/herdrdev/herdr-core/blob/v0.1.22/schema/hc.openrpc.json) (D). A terminal may outlive its session, leaving old labels behind (U) |
+| Latest activity, and attention cause, request, start of waiting, what it holds up and effort | Session `activity.value`, `.updated_at`; `attention[].cause`, `.request`, `.since`, `.holds_up`, `.effort`; **provisional** | Met, provisional | The concept doc requires [activity](workstream-concept.md#two-records) and [attention data](workstream-concept.md#attention), and herdr has neither for sessions outside its terminals (T). The `cause` set already names workflow failures such as `auth` and `review-stalled` |
+| For sessions inside herdr, no copies of turn count, title or folder that herdr reports for that agent | [Left out](workstream-schema.md#left-out); session `cwd` is stored for resume and the lead check | Met | herdr already has them (T). `cwd` is the launch folder; the current one is [`foreground.cwd`](https://github.com/herdrdev/herdr-core/blob/v0.1.22/schema/README.md) (D) |
+| Last-updated time on everything it reads | `updated_at` on both records; the [open-workstream list](workstream-schema.md#open-workstream-list) entry has none | Met for records, **missing** on list entries | A file read carries no sign that its contents are current. A stale list entry looks like a live one, and hand edits can leave entries stale or missing |
+| A per-host list of open workstreams that maps each ID to its record location, readable without any session and updated on create, move, finish and drop | [Open-workstream list](workstream-schema.md#open-workstream-list): one file per workstream with `id` and `path`, location tentative | Met, tentative location | Records live in worktrees, and only sessions link to workstreams, by ID. A workstream without a session is [normal](workstream-concept.md#edge-cases) |
+| A read command that lists a host's sessions and open workstreams, including those with no session, and links them | None: the schemas fix file locations and writes only | **Missing** | The concept doc routes all reads through commands. Without one, the collector reads files directly and gives up that rule |
+| A writer that works despite agent sandboxes, for example outside the agent | The [lifecycle](workstream-lifecycle.md#triggers-by-agent) lists writing session records from a sandbox as unverified on all four agents | Requirement stands, untested (U) | [Some agents could not label their own terminal](#can-an-agent-write-its-own-data) |
+
+While a host is connected, the collector shows herdr's value for anything both hold, such as activity; the records are what remain for sessions outside herdr terminals and for a host it cannot reach. [Coverage varies by agent](#what-herdr-already-tracks), status clears on exit and unreachable rows vanish (T).
 
 The record-to-terminal join is partly proven. Claude Code's session-start hook received the terminal address (`HC_TERMINAL_ID`) on both hosts (T). Other agents' hooks are untested (U), and Codex's shell on the Mac [had no address](#can-an-agent-write-its-own-data) (T). Labelling the terminal at launch (`hc run --label`) is an untested alternative (U). One terminal is not always one session: see OpenCode [below](#what-herdr-already-tracks).
 
