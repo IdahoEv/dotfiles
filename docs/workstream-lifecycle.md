@@ -37,7 +37,7 @@ Updates come from the start events below, purpose changes, takeover, promotion, 
 | New session | The agent's start hook creates the record, keyed on agent and native session ID. A repeat updates it. |
 | Resume | Reopens the record, or creates one if it is missing. A former lead that was replaced returns as a helper and says so. |
 | Compact | Updates the same record. |
-| `/clear` with a new ID | The old record ends and the new one notes the old ID, because earlier context is in the old transcript. If linked, the link, role and purpose carry over. If unlinked, the purpose does not. |
+| `/clear` with a new ID | The old record ends and the new one notes the old ID, because earlier context is in the old transcript. If linked, the link, role and purpose carry over, and an old lead becomes a helper. If unlinked, the purpose does not. |
 | Fork | The original is unchanged. The fork gets its own record, as a helper if the original is linked. |
 | Subagent | No record. |
 | Headless run | Helpers spawned by tools get none. Scheduled unattended runs do. |
@@ -82,7 +82,7 @@ The check runs when a session starts or is asked to resume work in a workstream,
 
 - The start hook only prompts the agent to run the check.
 - An unattended session that can't tell does not take the role.
-- **One takeover command** covers abandoned worktrees and agent switches. It marks the old lead `ended` and a helper without its cooperation, makes the new session lead, and gives it the old transcript path if there is one.
+- **One takeover command** covers abandoned worktrees and agent switches. It marks the old lead `ended` without its cooperation and makes the new session lead, which turns the old record into a helper. It gives it the old transcript path if there is one.
 - Replacing a lead that is still running, such as one out of quota, takes your explicit request.
 - A governor can also list workstreams with no running lead and offer to start one. It marks those it can't determine. It reads this host's [open-workstream list](workstream-schema.md#open-workstream-list). Other hosts are **provisional**.
 

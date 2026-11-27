@@ -32,8 +32,8 @@ This is the target design; none of it is built. [Record lifecycles](workstream-l
 | `updated_at` | time | yes | Every write | Lists, triage | Showing how old the information is | File times change on copy |
 | `repo` | string, `owner/name` or directory name | no | Start hook | Lists, final log | Grouping by project | The folder may be gone by the final log |
 | `cwd` | absolute path | no | Start hook | Lead check, resume | Finding the sessions in a worktree | Agents don't all report it afterward |
-| `workstream_id` | string | no | Start hook, promotion, takeover; removed by talk or governor | Everything that joins the two records | The link | A directory can be shared by unlinked sessions |
-| `role` | `lead`, `helper` | when linked | Takeover, promotion, start hook (`helper`, or a declared role) | Lead check, displays | Knowing who moves the work forward | Intent can't be observed |
+| `workstream_id` | string | no | Start hook, promotion, takeover; removed, with `role`, by talk, governor, finish or drop | Everything that joins the two records | The link | A directory can be shared by unlinked sessions |
+| `role` | `lead`, `helper` | when linked | Takeover, lead check, promotion, start hook (`helper`, a declared role, or carried over by `/clear`) | Lead check, displays | Knowing who moves the work forward | Intent can't be observed |
 | `purpose` | `talk`, `governor`, `project-review`, `iterate`, `implement`; open set | no | Launcher, command, agent, or your request | Displays, auto-link | Telling sessions apart | Intent can't be observed |
 | `purpose_source` | `user`, `launcher`, `agent` | with `purpose` | Same | Purpose updates | A guess never overrides you or changes a link | Not recoverable later |
 | `goal` | string | no; unlinked and helpers only | Launcher, agent, or your request | Displays, triage | Saying what the session is for | A transcript summary is costly and unreliable |
@@ -47,7 +47,7 @@ This is the target design; none of it is built. [Record lifecycles](workstream-l
 
 - **A lead has no goal of its own:** displays show the workstream slug.
 - A goal is never asked for.
-- Takeover sets the old record to `helper`, `ended`, `replaced`, so one record holds `lead`.
+- **One record holds `lead`.** When another takes the role, including after `/clear`, the old one becomes `helper`. Takeover first sets it to `ended`, `replaced`; until a successor exists it keeps `lead`, so a failed launch leaves it findable.
 - The format allows more than one lead; v0 commands don't create a second.
 - Not stored: session title, folder name or turn count that herdr already reports.
 
@@ -214,9 +214,10 @@ These rules reproduce the [current tags](2026-11-19-workstream-tag-states.md). N
 | `!` | The workstream or the displayed session has an attention entry, or the workstream is ready to merge. A workstream view includes its linked sessions |
 | `PLAN`, `WIP` | `stage` is `plan` or `wip`, even with planned reviews |
 | Review group, such as `L2✓ G2` | `stage` is `review`. One tag per `source`: highest `round`; `✓` if all accepted, `-` if all planned, otherwise in progress |
-| `MERGED` | No PR is open, the latest is merged, and neither `stage` nor any review changed after `merged_at` |
+| `MERGED` | No PR is open, the latest is merged, and neither `stage` nor any review changed after `merged_at`. It replaces `PLAN`, `WIP` and the review group |
 | `PR` | A PR is open |
 | `DONE` | Written by finish on the session's name as the records are destroyed |
+| `TALK`, `ITERATE` | The displayed session's `purpose` is `talk` or `iterate` |
 
 Compact tags group reviewers; wider displays can show each one.
 
@@ -250,7 +251,7 @@ One small file per workstream on this host.
 
 ## Migrating `.workstream.json`
 
-**Convert on write:** new code reads both formats. The first change to an old record rewrites it as v0, assigns its `id` and adds its list entry. A record with no `schema_version` is old. Until converted, it isn't in the list.
+**Convert on write:** new code reads both formats. The first change to an old record, including linking a session to it or changing its lead, rewrites it as v0, assigns its `id` and adds its list entry. A record with no `schema_version` is old. Until converted, it isn't in the list, so a governor doesn't list it.
 
 | Current field | Result | v0 |
 | --- | --- | --- |
@@ -264,17 +265,17 @@ One small file per workstream on this host.
 | `type` | Kept | `type` |
 | `template_source` | Dropped | Looked up from settings |
 | `tags`: `PLAN`, `WIP` | Moved | `stage` |
-| `tags`: review tags | Moved | `reviews`, with `L`/`G`/`H` as `source` and no `reviewer`. `stage` is `review` if any has started, else `wip` |
-| `tags`: `!` | Moved | One `attention` entry with cause `unknown` |
+| `tags`: review tags | Moved | `reviews`, with `L`/`G`/`H` as `source` and no `reviewer`. The digit is `round`, else `0`. `-` is `planned`, `✓` `accepted`, neither `running`. `stage` is `review` if any has started, else `wip` |
+| `tags`: `!` | Moved | One `attention` entry: cause `unknown`, a placeholder `request`, `since` the conversion time. Dropped if there are review tags, all `✓`, and `PR`: ready to merge is derived |
 | `tags`: `PR` | Dropped | Derived from `prs` |
-| `tags`: `MERGED`, `DONE` | Moved | `stage: review` and a merged PR, with `merged_at` set to the conversion time, after `stage_updated_at` |
+| `tags`: `MERGED`, `DONE` | Moved | `stage: review`; the converted PR is `merged`. With no `pr` object, no PR entry is made and the merge isn't kept |
 | `tags`: `REVIEW`, `REVIEWED`, `READY`, custom | Dropped | None |
-| `pr.number`, `url`, `state`, `head`, `head_source` | Moved | One `prs[]` entry |
-| `reviews.local`, `reviews.remote` | Moved | `round` on the matching source, keeping the larger of this and the tag's. With no tag, a new `planned` entry |
-| `reviews.local_running`, `reviews.remote_running` | Moved | `status: running` on that entry; sets `stage: review` |
+| `pr.number`, `url`, `state`, `head`, `head_source` | Moved | One `prs[]` entry. A missing `state` (normal today) is `merged` with a `MERGED` or `DONE` tag, else `open` until a sync |
+| `reviews.local`, `reviews.remote` | Moved | `round` on the matching source, keeping the larger of this and the tag's. With no tag, a count above 0 makes a `planned` entry; a count of 0 makes none |
+| `reviews.local_running`, `reviews.remote_running` | Moved | `status: running` on that entry, made if missing; sets `stage: review` |
 | `claude_sessions`, `codex_sessions` | Dropped | No session records are made from them |
 
-- `branch` and `stage_updated_at` come from the worktree and conversion time. A record with no stage or review tag gets `wip`.
+- `branch` comes from the worktree. `stage_updated_at`, each review's `updated_at` and any `merged_at` are all the conversion time. A record with no stage or review tag gets `wip`.
 - Older `<git-dir>/chain` files convert the same way, as ticket lists.
 - A converted workstream has no lead record, so the [lead check](workstream-lifecycle.md#lead-check-and-takeover) asks. Codex launch can no longer reuse a thread from `codex_sessions`.
 
@@ -288,13 +289,14 @@ None of these is edited here.
 
 | Item | Effect |
 | --- | --- |
-| [#270](https://github.com/IdahoEv/dotfiles/issues/270) sessions list | Its `sessions[]` list is replaced by session records and a one-way link. `model`, `effort`, `host`, `started_at` and `context_dir` are dropped, so its snapshot criterion for model, effort and host isn't met. Per-agent hook gaps still apply. |
+| [#270](https://github.com/IdahoEv/dotfiles/issues/270) sessions list | Its `sessions[]` list is replaced by session records and a one-way link. `log_path` becomes `transcript_path`. `model`, `effort`, `host`, `started_at`, `ended_at` and `context_dir` are dropped; an end is recorded without its time. Unmet as written: the model, effort and host flags (AC 2), recording at launch (AC 3), last-seen values (AC 4) and the snapshot lookup (AC 5). Per-agent hook gaps still apply. |
 | [#164](https://github.com/IdahoEv/dotfiles/issues/164) talk and iteration | Conflicts: a talk has no workstream until promoted; there is one kind and no key aliases; takeover replaces its resume script. A rename keeps the old branch and worktree names instead of moving them. Its prune sweep isn't part of these lifecycles. |
-| [#255](https://github.com/IdahoEv/dotfiles/pull/255) tag states (merged) | Tags become output. Review counts and tag strings merge into per-reviewer entries. Stored stages are `plan`, `wip`, `review`. `[L- G-]` no longer shows before a review starts. A prompt no longer clears workstream failures. Session names stop being parsed for state. |
+| [#255](https://github.com/IdahoEv/dotfiles/pull/255) tag states (merged) | Tags become output. Review counts and tag strings merge into per-reviewer entries. Stored stages are `plan`, `wip`, `review`. `[L- G-]` no longer shows before a review starts. A prompt no longer clears workstream failures or the ready-to-merge `!`. Session names stop being parsed for state. |
 | [PR #262](https://github.com/IdahoEv/dotfiles/pull/262) layered settings | Its JSON files and `.workstreams/` folder differ from [workstream-config.md](workstream-config.md), which it marks superseded; expect an edit conflict. Nested `settings` works with either. It preserves key aliases, which v0 drops. |
 
 ## Open
 
 - How each GitHub bot's rounds are detected.
+- When a workstream [attention](#attention) entry clears. Entries name no subject, so under the current rule one reviewer's progress clears another's failure, and a PR update can clear an `auth` entry.
 - Which setting keys declare required checks, and how they are enforced.
 - Provisional fields, until the herdr findings are accepted.
