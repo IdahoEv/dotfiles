@@ -2,7 +2,7 @@
 
 A **workstream** is one unit of agent-implemented work toward a change that lands on the base branch, with or without a PR. It keeps one identity from the commitment to change code until it is finished or dropped, and it owns its name. The ticket, branch, worktree, sessions, host and PRs are attached to it and can change.
 
-This is the target model, not a description of the current code. Where an older doc or ticket disagrees, this one wins. Points marked **(proposed)** or **(assumed)** are unconfirmed and replace nothing until confirmed.
+This is the target model, not a description of the current code. Where an older doc or ticket disagrees, this one wins.
 
 ## Identity and lifetime
 
@@ -30,7 +30,7 @@ Steps **describe** the work. The usual order is a default, not a procedure.
 - Any step can be added, skipped, reopened or jumped back to at any time. A workstream can have several PRs.
 - A step can be required. A block applies only when settings declare it, and the defaults declare none.
 - The user can list every active block with the settings file that added it. A refusal names that source and how to override it.
-- Adding or tightening a block needs the user's approval. This applies to prompts too, where an agent can otherwise write a new "refuse if" rule that no settings list shows.
+- Adding, tightening, removing or weakening a block needs the user's approval. This applies to prompts too, where an agent can otherwise write a new "refuse if" rule that no settings list shows.
 
 ## Attention
 
@@ -47,7 +47,17 @@ Sessions report when they need the user, and a workstream adds its own causes, s
 | Updates | Workflow commands. For exceptions, the user asks in plain words and a general editing command, which the user can also run, makes the change. |
 | Authority | git and GitHub are right about their own facts. The record is right about the slug, steps and tickets. |
 | Surprises | When they disagree unexpectedly, pause, flag it, suggest a fix and wait. |
-| Expected changes | **(assumed)** The record picks up expected git and GitHub changes without asking, such as a merged PR when merging is the next step. This updates the record and authorizes no merge. |
+| Expected changes | The record picks them up without asking. |
+
+A change is **expected** only when it fits the next step and leaves no work or required check behind. If unsure, ask. Syncing only updates the record: it authorizes no merge, and picking up a merge neither finishes the workstream nor removes its worktree.
+
+| Update without asking | Pause and ask |
+| --- | --- |
+| A push changes the PR's latest commit | The branch gets unexpected commits, such as someone else's |
+| A PR is opened from the workstream's branch when none is open | A different or second open PR appears unexpectedly |
+| The PR is merged when merging is next, which marks that step done | It is merged with a required step unfinished or local commits unpushed |
+| GitHub deletes the remote branch after a normal merge | The PR is closed without merging, or an unmerged branch disappears |
+| | The local branch is renamed, or the worktree is on a different branch |
 
 ## Names
 
@@ -64,7 +74,7 @@ Sessions report when they need the user, and a workstream adds its own causes, s
 
 ## Settings and code boundaries
 
-- **(proposed)** The record is the top settings layer and holds only values fixed for that workstream. Everything else follows current settings. Kickoff fixes an editable copy of the step plan, and actual branch and worktree names are stored as facts. What kickoff fixes can change later without a new record format.
+- The record is the top [settings layer](workstream-config.md#layers): a value set there applies to that workstream only. Per-workstream changes are expected to be rare. The record holds only settings that differ from the lower layers, and everything else follows current settings. The exception is the step plan: kickoff copies it into the record, where it can be edited. Actual branch and worktree names are stored as facts. What kickoff copies can change later without a new record format.
 - Setup tools (kickoff, worktree management, cleanup) and delivery tools (review, PR, merge) may call the record code. The record code never depends on them.
 - The tool serves its author's needs first and stays configurable enough to extend to other users and workflows. How to package it for others is deferred.
 
@@ -86,6 +96,6 @@ Sessions report when they need the user, and a workstream adds its own causes, s
 - Data formats for the record, sessions and any status report. No reader of a snapshot has been settled.
 - What herdr supports: a view across hosts, emoji in names, renaming and session status. None of this is verified.
 - Attention: a stored level with a reason, or urgency computed from the stored details.
-- Settings layers, including [workstream-config.md](workstream-config.md). It says nothing in `.workstream.json` is read as config, which conflicts with the proposed record layer.
+- The rest of the settings layer design in [workstream-config.md](workstream-config.md), which is still to be reviewed.
 - What the slug of a workstream without a ticket is drafted from.
 - How existing tickets, open PRs and the current tag design change to fit this model. The tags can serve as a compact view of steps and attention, but a fixed set of review sources and a single flag cannot be the underlying data.
