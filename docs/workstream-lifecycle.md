@@ -9,7 +9,7 @@ This is the target design; none of it is built. It extends the [concept](workstr
 | Term | Meaning |
 | --- | --- |
 | Linked | The session record holds a workstream ID. |
-| Unlinked | It holds none: talk, governor, project review and most ad hoc sessions. A talk can gain one later. A link to a workstream that no longer exists is cleaned up like no link. |
+| Unlinked | It holds none: talk, governor, project review and most ad hoc sessions. A talk can gain one later. A link to a workstream that no longer exists is cleaned up like no link; a failed lookup or unreadable record does not show that, so the session record stays. How to confirm it is gone is not yet decided. |
 | Lead | The one linked session responsible for moving the workstream forward. It is a role, not a status: a lead can be working, waiting or exited. v0 has at most one. |
 | Helper | Any other linked session. |
 | Not running | Confirmed from evidence on the same host, never from age. A stopped process may still be resumable. |
@@ -42,8 +42,8 @@ Updates come from the start events below, purpose changes, takeover, promotion, 
 | Subagent | No record. |
 | Headless run | Helpers spawned by tools get none. Scheduled unattended runs do. |
 
-- A session that starts in a worktree with a workstream record is **linked automatically**.
-- Launchers create no records, so a launched session can be invisible until its first hook. A launch that fails before then leaves only launch telemetry.
+- A session that starts in a worktree with a workstream record is **linked automatically**, unless its declared or stored purpose is talk or governor.
+- Launchers create no session records, so a launched session can be invisible until its first hook. A launch that fails before then leaves only launch telemetry.
 - A launcher can declare a link, role or purpose for the start hook to apply. The hook never claims the lead on its own.
 
 ### Purpose
@@ -105,13 +105,13 @@ Finish and drop destroy linked session records first and the workstream record l
 
 | Record | Logged to telemetry |
 | --- | --- |
-| Session | Agent, native session ID, **transcript path**, and the workstream ID if it was linked |
+| Session | Agent, native session ID, repo or project, **transcript path**, and, if it was linked, the workstream ID and any readable tickets |
 | Workstream | Outcome (finished or dropped), workstream ID, repo and tickets |
 
 - Logging the path is a deliberate exception to the [telemetry rule](workflow-telemetry.md#events) against transcript paths.
 - If the write fails, the record stays. If telemetry is disabled, destruction proceeds.
 - Transcripts are not copied. Agents may delete them on their own schedule (`cleanupPeriodDays` is 30 for Claude Code here), so a logged or stored path can point to nothing.
-- **Gap:** today's logger drops events from outside a ticket branch, but every session must be logged.
+- **Gap:** today's logger drops events from outside a ticket branch, but every session must be logged. It also reports success when a write fails and cuts values to 200 characters. Destruction needs to learn of a dropped or failed write, and to log the full path.
 
 ## Triggers by agent
 
@@ -148,6 +148,7 @@ Command-owned transitions work the same way on every agent. Claude Code runs the
 | Purpose, link, promotion | The launching or promoting command; your plain-words request | As above |
 | Lead check, takeover, dismiss, list, drop | New commands | None (**Gap**) |
 | General record edit | New command, which you can also run yourself | None (**Gap**) |
+| Destroy unlinked and broken-link records | A hook or the next workstream command; which ones is not yet decided | None (**Gap**) |
 | Finish | `/finalize`, `/land` | All three |
 
 Hook limits:
