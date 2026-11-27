@@ -86,7 +86,7 @@ When an agent exits, its terminal becomes `finished`, status and title clear, an
 
 ### When a host is unreachable
 
-I broke the link from the Mac with a wrapper passed to `machine add --via`. Failure timing with a plain SSH target is untested (U).
+I broke the link from the Mac with a wrapper passed to `machine add --via`. That let me break it without changing the network or the second host, so failure timing with a plain SSH target is untested (U).
 
 | Behavior | Link cut | Link silently hung |
 | --- | --- | --- |
@@ -100,7 +100,7 @@ All rows are T. The `terminal.list` result also has a [`machines` array](https:/
 
 During a hang, `hc exec --on box --timeout 5` took **40.0 s** despite the timeout. A following `hc file read`, started about 40 s into the hang, failed 4.8 s later with "lost the line" and a warning that the call may have run. `hc machine ls` stayed instant (T).
 
-What the `herdr-app` window shows here is untested. From its [source](https://github.com/herdrdev/herdr-app/blob/v0.1.18/src/hc.rs), I suspect it keeps old rows, since a cut sends no removal event (U). Its [guide](https://github.com/herdrdev/herdr-app/blob/v0.1.18/defaults/AGENTS.md) says an offline host's layout is `unavailable` (D).
+What the `herdr-app` window shows here is untested, because the test would have changed my live app. From its [source](https://github.com/herdrdev/herdr-app/blob/v0.1.18/src/hc.rs), I suspect it keeps old rows, since a cut sends no removal event (U). Its [guide](https://github.com/herdrdev/herdr-app/blob/v0.1.18/defaults/AGENTS.md) says an offline host's layout is `unavailable` (D).
 
 ## What herdr already tracks
 
@@ -152,7 +152,7 @@ Each agent was asked to label its own terminal.
 
 | Use | Pane | Agent |
 | --- | --- | --- |
-| Tags and session state | **Yes** (T): my test script in an `hc` terminal listed both hosts, blocked first, with emoji labels, app, kind, message and host state | **Likely** (U): the script read the same JSON through `hc connect` (T); I did not test an agent reading it |
+| Tags and session state | **Yes** (T): my test script in an `hc` terminal listed both hosts, blocked first, with emoji labels, app, kind, message and host state | **Yes** (T): through my test scripts, Claude Code read both hosts' state and labels from the same `hc connect` JSON |
 | Triage | Same script showed remote blocking questions first (T). Holds-up and effort need our records (T) | the script read herdr fields (T); record files can be read remotely (T). I did not test an agent doing the triage (U) |
 
 For the native `herdr-app` window:
