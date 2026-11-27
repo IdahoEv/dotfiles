@@ -53,12 +53,12 @@ This is the target design; none of it is built. [Record lifecycles](workstream-l
 
 ### Provisional session objects
 
-| Object | Field | Type | Req | Why stored |
-| --- | --- | --- | --- | --- |
-| `activity` | `value` | `working`, `waiting`, `idle` | yes | A past event can't be queried |
-| | `updated_at` | time | yes | Without it, old activity looks current |
-| `herdr` | `terminal` | string, terminal address | no | herdr doesn't know our session ID |
-| | `core_id` | string, herdr's permanent ID | no | As above |
+| Object | Field | Type | Req | Needed for | Why stored |
+| --- | --- | --- | --- | --- | --- |
+| `activity` | `value` | `working`, `waiting`, `idle` | yes | Showing what the session is doing | A past event can't be queried |
+| | `updated_at` | time | yes | Spotting stale activity | Without it, old activity looks current |
+| `herdr` | `terminal` | string, terminal address | no | Finding the session's terminal | herdr doesn't know our session ID |
+| | `core_id` | string, herdr's permanent ID | no | Telling which core the address belongs to; addresses are per core | The join to our session can't be derived |
 
 ### Example
 
@@ -143,6 +143,7 @@ This is the target design; none of it is built. [Record lifecycles](workstream-l
 - **A review starting moves `stage` to `review`.** Listing planned reviews doesn't. It stays there after all are accepted.
 - Setting `stage` to `plan` or `wip` returns every entry to `planned` and keeps its `round`. One reviewer can also be reset alone.
 - A reviewer that is no longer planned is removed.
+- After a merge, an `accepted` entry whose `updated_at` is not later than the latest `merged_at` counts as `planned`, in displays and the ready-to-merge check. The record isn't rewritten, and `round` is kept.
 - Old age alone never marks a review failed.
 - This is step tracking for reviews only. It enforces nothing; [general step tracking](workstream-concept.md#unproven-tracking-step-status) remains unproven.
 - **Gap:** no command records rounds per GitHub bot today.
@@ -254,6 +255,8 @@ One small file per workstream on this host.
 
 **Convert on write:** new code reads both formats. The first change to an old record, including linking a session to it or changing its lead, rewrites it as v0, assigns its `id` and adds its list entry. A record with no `schema_version` is old. Until converted, it isn't in the list, so a governor doesn't list it.
 
+Every reader must handle v0 before any command writes it. That includes code that parses the JSON itself: [`repo-facts.sh`](../tools/lib/repo-facts.sh), [`repo_facts.py`](../tools/lib/repo_facts.py) and [`open-pr.sh`](../tools/open-pr.sh) read the top-level `ticket_provider`, and the first two would take a converted Shortcut workstream for GitHub.
+
 | Current field | Result | v0 |
 | --- | --- | --- |
 | `version` | Moved | `schema_version`, set to `0` |
@@ -276,9 +279,10 @@ One small file per workstream on this host.
 | `reviews.local_running`, `reviews.remote_running` | Moved | `status: running` on that entry, made if missing; sets `stage: review` |
 | `claude_sessions`, `codex_sessions` | Dropped | No session records are made from them |
 
-- `branch` comes from the worktree. `stage_updated_at`, each review's `updated_at` and any `merged_at` are all the conversion time. A record with no stage or review tag gets `wip`.
+- `branch` comes from the worktree. `stage_updated_at`, each review's `updated_at` and any `merged_at` are all the conversion time. A record with no stage or review tag gets `wip`. If the PR is merged but the tags have neither `MERGED` nor `DONE`, work has gone on since the merge, so `merged_at` is one second earlier.
+- The converted `!` entry is also cleared as `!` is today: by your reply in the worktree, or by a stage, review or PR write, including the one that converts the record.
 - Older `<git-dir>/chain` files convert the same way, as ticket lists.
-- A converted workstream has no lead record, so the [lead check](workstream-lifecycle.md#lead-check-and-takeover) asks. Codex launch can no longer reuse a thread from `codex_sessions`.
+- A converted workstream has no lead record, so the [lead check](workstream-lifecycle.md#lead-check-and-takeover) asks. Codex launch can no longer reuse a thread from `codex_sessions`, for converted or new workstreams.
 
 ## Left out
 
@@ -290,7 +294,7 @@ None of these is edited here.
 
 | Item | Effect |
 | --- | --- |
-| [#270](https://github.com/IdahoEv/dotfiles/issues/270) sessions list | Its `sessions[]` list is replaced by session records and a one-way link. `log_path` becomes `transcript_path`. `model`, `effort`, `host`, `started_at`, `ended_at` and `context_dir` are dropped; an end is recorded without its time. Unmet as written: the model, effort and host flags (AC 2), recording at launch (AC 3), last-seen values (AC 4) and the snapshot lookup (AC 5). Per-agent hook gaps still apply. |
+| [#270](https://github.com/IdahoEv/dotfiles/issues/270) sessions list | Its `sessions[]` list is replaced by session records and a one-way link. `log_path` becomes `transcript_path`. `model`, `effort`, `host`, `started_at`, `ended_at` and `context_dir` are dropped; an end is recorded without its time. Unmet as written: `sessions[]` and the version bump (AC 1), the model, effort and host flags (AC 2), recording at launch (AC 3), last-seen values (AC 4), the snapshot lookup (AC 5) and the tests that depend on that shape (AC 6). Per-agent hook gaps still apply. |
 | [#164](https://github.com/IdahoEv/dotfiles/issues/164) talk and iteration | Conflicts: a talk has no workstream until promoted; there is one kind and no key aliases; takeover replaces its resume script. A rename keeps the old branch and worktree names instead of moving them. Its prune sweep isn't part of these lifecycles. |
 | [#255](https://github.com/IdahoEv/dotfiles/pull/255) tag states (merged) | Tags become output. Review counts and tag strings merge into per-reviewer entries. Stored stages are `plan`, `wip`, `review`. `[L- G-]` no longer shows before a review starts. A prompt no longer clears workstream failures or the ready-to-merge `!`, and a review or PR change clears only the failures about it. Session names stop being parsed for state. |
 | [PR #262](https://github.com/IdahoEv/dotfiles/pull/262) layered settings | Its JSON files and `.workstreams/` folder differ from [workstream-config.md](workstream-config.md), which it marks superseded; expect an edit conflict. Nested `settings` works with either. It preserves key aliases, which v0 drops. |
