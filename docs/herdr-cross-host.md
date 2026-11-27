@@ -1,6 +1,6 @@
 # Can herdr collect session and workstream data across hosts?
 
-**I recommend extending herdr (`herdr-core`) instead of building our own transport.** Session records stay the source for our metadata. A small collector reads them through herdr, joins them to herdr's live terminal list, and copies a few short values into terminal labels for panes. A test script showed labels in an `hc` terminal; showing them in the native `herdr-app` window is untested. In tests, remote changes arrived in under 0.25 s, but herdr sees only sessions in its own terminals and **drops an unreachable host's rows instead of marking them stale**.
+**I recommend extending herdr (`herdr-core`) instead of building our own transport.** Session records stay the source for our metadata. A small collector reads them through herdr, joins them to herdr's live terminal list, and copies a few short values into terminal labels for panes. A test script showed labels in an `hc` terminal; showing them in the native `herdr-app` window is untested. The recommendation depends on matching each record to its terminal, and that [join is unproven](#what-the-collector-and-records-need). In tests, remote changes arrived in under 0.25 s, but herdr sees only sessions in its own terminals and **drops an unreachable host's rows instead of marking them stale**.
 
 Why:
 
