@@ -188,11 +188,16 @@ check "github failed request: warns"       "1" "$(grep -c 'review request failed
 check "github failed request: Reviews"     "1" "$(grep -c '^Reviews: request failed' <<<"$out")"
 check "github failed request: no watch"    "watch=skipped" "$(grep '^watch=' <<<"$out")"
 
-phase_review_count() { "$TOOLS/agent-phase.sh" --show 2>/dev/null | grep -c REVIEW; }
+phase_review_count() { "$TOOLS/agent-phase.sh" --show 2>/dev/null | grep -c "G1"; }
 ws_json='{"version":1,"kind":"ticket","tickets":[{"id":"42"}],"ticket_provider":"github"}'
 new_repo 42-foo; printf '%s\n' "$ws_json" > .workstream.json
 REVIEW_STUB_RC=1 run --title "Add foo" --review copilot >/dev/null
-check "github failed request: no REVIEW phase" "0" "$(phase_review_count)"
+check "github failed request: no G review tag" "0" "$(phase_review_count)"
+check "github failed request: needs-you flag"  "1" "$("$TOOLS/agent-phase.sh" --show 2>/dev/null | grep -c '!')"
+new_repo 42-foo; printf '%s\n' "$ws_json" > .workstream.json
+"$TOOLS/agent-phase.sh" --plan-reviews >/dev/null 2>&1
+run --title "Add foo" --review none >/dev/null
+check "github --review none: planned G dropped" "0" "$("$TOOLS/agent-phase.sh" --show 2>/dev/null | grep -c 'G-')"
 new_repo 42-foo; printf '%s\n' "$ws_json" > .workstream.json
 run --title "Add foo" --review copilot >/dev/null
 check "github ok request: REVIEW phase"        "1" "$(phase_review_count)"

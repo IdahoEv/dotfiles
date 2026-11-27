@@ -126,8 +126,9 @@ check "other events and junk ignored" "$n" "$(wc -l < "$LOG")"
 
 # ---- emit points ----------------------------------------------------------------
 cd "$ROOT/repo" || exit 1
-reset; "$TOOLS/agent-phase.sh" WIP; "$TOOLS/agent-phase.sh" --pr; "$TOOLS/agent-phase.sh" --no-review
-check "agent-phase emits set + no-review only" "WIP REVIEWED" "$(jq -r .phase "$LOG" | xargs)"
+reset; "$TOOLS/agent-phase.sh" WIP; "$TOOLS/agent-phase.sh" --pr; "$TOOLS/agent-phase.sh" --plan-reviews
+"$TOOLS/agent-phase.sh" --review L 1; "$TOOLS/agent-phase.sh" --review L 1 ok; "$TOOLS/agent-phase.sh" --attn
+check "agent-phase emits stage and review-start only" "WIP REVIEW" "$(jq -r .phase "$LOG" | xargs)"
 reset
 mkdir -p "$ROOT/bin"; ln -sf "$TOOLS/wf-event.sh" "$ROOT/bin/wf-event.sh"
 PATH="$ROOT/bin:$PATH" bash "$REPO/dot_claude/skills/github-review-procedure/executable_github-review-state.sh" --set-local '1*'
