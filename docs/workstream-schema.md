@@ -195,11 +195,12 @@ Both records use the same entry.
 | `since` | time | yes | How long it has waited | The moment isn't recorded elsewhere |
 | `holds_up` | string | no | Priority | Only the asker knows |
 | `effort` | string, the asking agent's estimate | no | Triage | Only the asker can estimate it |
+| `subject` | a review, `{source, reviewer}` with `reviewer` as in that review, or a PR, `{pr}` by number; workstream entries only | no | Clearing only what changed | The cause doesn't say which review or PR |
 
 | Entry on | Holds | Cleared when |
 | --- | --- | --- |
 | Session | Its own questions and approvals | You reply to that session. A reply to another session leaves it |
-| Workstream | Command failures, such as a stalled review or failed sign-in | The workstream's stage, a review or a PR changes. The entry survives the session |
+| Workstream | Command failures, such as a stalled review or failed sign-in | Its subject changes or is removed, the failed command later succeeds, or `stage` takes a new value, which clears them all. With no subject, only the last two apply. The entry survives the session |
 
 - "Ready to merge" is not an entry. It is worked out when there is at least one review, all are accepted, and a PR is open.
 - **Unverified:** detecting a reply on each agent. A reply to a question dialog may fire no prompt hook, so the agent clears the entry.
@@ -291,12 +292,11 @@ None of these is edited here.
 | --- | --- |
 | [#270](https://github.com/IdahoEv/dotfiles/issues/270) sessions list | Its `sessions[]` list is replaced by session records and a one-way link. `log_path` becomes `transcript_path`. `model`, `effort`, `host`, `started_at`, `ended_at` and `context_dir` are dropped; an end is recorded without its time. Unmet as written: the model, effort and host flags (AC 2), recording at launch (AC 3), last-seen values (AC 4) and the snapshot lookup (AC 5). Per-agent hook gaps still apply. |
 | [#164](https://github.com/IdahoEv/dotfiles/issues/164) talk and iteration | Conflicts: a talk has no workstream until promoted; there is one kind and no key aliases; takeover replaces its resume script. A rename keeps the old branch and worktree names instead of moving them. Its prune sweep isn't part of these lifecycles. |
-| [#255](https://github.com/IdahoEv/dotfiles/pull/255) tag states (merged) | Tags become output. Review counts and tag strings merge into per-reviewer entries. Stored stages are `plan`, `wip`, `review`. `[L- G-]` no longer shows before a review starts. A prompt no longer clears workstream failures or the ready-to-merge `!`. Session names stop being parsed for state. |
+| [#255](https://github.com/IdahoEv/dotfiles/pull/255) tag states (merged) | Tags become output. Review counts and tag strings merge into per-reviewer entries. Stored stages are `plan`, `wip`, `review`. `[L- G-]` no longer shows before a review starts. A prompt no longer clears workstream failures or the ready-to-merge `!`, and a review or PR change clears only the failures about it. Session names stop being parsed for state. |
 | [PR #262](https://github.com/IdahoEv/dotfiles/pull/262) layered settings | Its JSON files and `.workstreams/` folder differ from [workstream-config.md](workstream-config.md), which it marks superseded; expect an edit conflict. Nested `settings` works with either. It preserves key aliases, which v0 drops. |
 
 ## Open
 
 - How each GitHub bot's rounds are detected.
-- When a workstream [attention](#attention) entry clears. Entries name no subject, so under the current rule one reviewer's progress clears another's failure, and a PR update can clear an `auth` entry.
 - Which setting keys declare required checks, and how they are enforced.
 - Provisional fields, until the herdr findings are accepted.
