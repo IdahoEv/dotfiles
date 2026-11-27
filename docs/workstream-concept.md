@@ -118,10 +118,9 @@ A change is **expected** only when it fits the next step on the happy path and l
 
 - Data formats for the session record, workstream record and any status report. No reader of a snapshot has been settled.
 - Whether to track step status at all.
-- Session storage: whether herdr already covers it, how each tool matches its session to a record, whether sandboxed agents can write to the folder, and cleanup of old records. Age alone does not show that a session is dead.
+- Session storage: how each tool matches its session to a record, whether sandboxed agents can write to the folder, and cleanup of old records. Age alone does not show that a session is dead.
 - Where workstreams live: the worktree is the current decision. A per-host folder remains an option now that sessions need one.
-- Collecting records from other hosts, to be investigated separately.
-- What herdr supports: a view across hosts, emoji in names, renaming and session status. Findings and a recommendation are in [herdr-cross-host.md](herdr-cross-host.md).
+- Collecting records from other hosts. [herdr-cross-host.md](herdr-cross-host.md) reports what herdr supports and recommends an approach, which is not yet decided here.
 - Attention: a stored level with a reason, or urgency computed from the stored details.
 - The rest of the settings layer design in [workstream-config.md](workstream-config.md), which is still to be reviewed.
 - What the slug of a workstream without a ticket is drafted from.

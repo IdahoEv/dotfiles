@@ -1,6 +1,6 @@
 # Can herdr collect session and workstream data across hosts?
 
-**I recommend extending herdr (`herdr-core`) instead of building our own transport.** Session record files stay the source for our metadata. A small collector reads them through herdr, joins them to herdr's live terminal list, and copies a few short values into terminal labels for panes. In tests, remote changes arrived in under 0.25 s, but herdr sees only sessions in its own terminals and **drops an unreachable host's rows instead of marking them stale**.
+**I recommend extending herdr (`herdr-core`) instead of building our own transport.** Session records stay the source for our metadata. A small collector reads them through herdr, joins them to herdr's live terminal list, and copies a few short values into terminal labels for panes. In tests, remote changes arrived in under 0.25 s, but herdr sees only sessions in its own terminals and **drops an unreachable host's rows instead of marking them stale**.
 
 Why:
 
@@ -23,24 +23,26 @@ Tested on 2026-11-27 with macOS arm64 and a second Linux x86_64 host: `herdr-cor
 Collector:
 
 - Keep a last-seen copy for each host. A missing row means unknown, not finished.
-- Check `machine.list`, set its own timeout on every call, and do not rely on events to detect an outage.
-- Read record files with `hc file read` or `hc exec` and the `--on <machine>` flag.
+- Check host state, set its own timeout on every call, and do not rely on events to detect an outage.
+- Read records by running a workstream command with `hc exec --on <machine>`, because the [concept doc](workstream-concept.md#records-and-storage) routes all reads through those commands. `hc file read` was measured only as a transport.
+- Decide who writes and clears each label it copies, since labels have no expiry.
 
 Requirements for the session and workstream records ([#274](https://github.com/IdahoEv/dotfiles/issues/274), [#275](https://github.com/IdahoEv/dotfiles/issues/275)):
 
 | Need | Reason |
 | --- | --- |
-| Our session ID, the agent's own session ID, tool and transcript location | herdr's terminal record has no native session ID or resume data (T) |
+| Our session ID, the agent's own session ID, tool and transcript location | herdr's terminal record has no lasting native session ID or resume data; OpenCode's ID appears only while working (T) |
 | Role or purpose tag, project, optional workstream ID | herdr has no such fields (T) |
-| A way to find the workstream record, such as the worktree path | The record lives in the worktree, which a remote reader must locate |
-| Optional herdr terminal address, qualified by host | Joins a record to live state; addresses are per core. A terminal may outlive its session, leaving old labels behind (U) |
+| A read command that lists a host's sessions and resolves each workstream ID there | Keeps worktree paths and storage layout out of the collector |
+| Optional herdr terminal address plus that core's permanent ID | Joins a record to live state. Addresses are per core, machine names are local to the viewing host, and cores have [permanent IDs](https://github.com/herdrdev/herdr-core/blob/v0.1.22/schema/hc.openrpc.json) (D). A terminal may outlive its session, leaving old labels behind (U) |
 | Last-updated time | A file read carries no sign that its contents are current |
 | What the request holds up and the effort to answer | herdr has neither (T) |
 | Own activity and attention data for sessions outside herdr terminals | herdr reports nothing for them (T) |
-| For sessions inside herdr, no copies of activity, blocked kind and text, time of state change, turn count, title or working directory | herdr already has them (T) |
+| For sessions inside herdr, no copies of activity, blocked kind and text, time of state change, turn count, title or folder while herdr's live row reports them | herdr's value wins while present. `cwd` is the launch folder; the current one is [`foreground.cwd`](https://github.com/herdrdev/herdr-core/blob/v0.1.22/schema/README.md) (D) |
+| The record's own attention data wherever herdr reports none, support is untested, or the status or row is gone | [Coverage varies by agent](#what-herdr-already-tracks), status clears on exit and unreachable rows vanish (T). The [concept doc](workstream-concept.md#attention) requires this data |
 | A writer that works despite agent sandboxes, for example outside the agent | [Some agents could not label their own terminal](#can-an-agent-write-its-own-data) |
 
-Whether agent hooks receive the terminal's address (`HC_TERMINAL_ID`) is untested (U).
+The record-to-terminal join is unproven: whether agent hooks receive the terminal's address (`HC_TERMINAL_ID`) is untested (U), and it was [empty in Codex's shell](#can-an-agent-write-its-own-data) on the Mac (T). Labelling the terminal with our session ID at launch (`hc run --label`) is an untested alternative (U).
 
 ## How herdr collects across hosts
 
@@ -92,7 +94,7 @@ I broke the link from the Mac with a wrapper passed to `machine add --via`. Fail
 | Remote calls | `get`, `read`, `label` and `doc.get` fail at once with `unavailable` | see below |
 | Recovery | reconnected 4.2 s after restore (about 2 s with `machine.connect`), then sent a `missed` snapshot | reconnect at about 45 s, with a `missed` snapshot |
 
-All rows are T. The list result has no per-host marker, so a list alone cannot say a host is missing.
+All rows are T. The list result also has a [`machines` array](https://github.com/herdrdev/herdr-core/blob/v0.1.22/schema/hc.openrpc.json) with each host's `state`, `since_ms` and `why` (D). I did not record what it showed during either failure (U).
 
 During a hang, `hc exec --on box --timeout 5` took **40.0 s** despite the timeout. A following `hc file read`, started about 40 s into the hang, failed 4.8 s later with "lost the line" and a warning that the call may have run. `hc machine ls` stayed instant (T).
 
@@ -125,7 +127,7 @@ Agents report their own state through the [OSC 7501 protocol](https://mitchellh.
 | Labels (`hc label`) | emoji tags, IDs, short values | a 5,000-character value and keys with spaces or emoji worked; upper limit unknown (U). No expiry | low | T |
 | Custom status report (OSC 7501) | emoji title, message of about 330 characters | the agent's next report would replace it (U); custom child records untested (U) | low | T |
 | Shared documents (`doc.set`) | structured values | 1 MiB each; API only; name rules as for terminal names | medium | T |
-| Record files read through herdr | anything | we own the format, cache and timeouts; works for sessions outside herdr terminals | medium | T |
+| Records read through herdr (file read tested) | anything | we own the format, cache and timeouts; works for sessions outside herdr terminals | medium | T |
 | Plain `ssh cat` | anything | 88–99 ms without connection reuse, against 13–15 ms for `hc file read` and 20–28 ms for `hc exec` | medium | T |
 | `herdr-app` mod | display only | needs its own data source for our records | medium | [D](https://github.com/herdrdev/herdr-app/blob/v0.1.18/docs/mods.md) |
 
@@ -148,8 +150,8 @@ Each agent was asked to label its own terminal.
 
 | Use | Pane | Agent |
 | --- | --- | --- |
-| Tags and session state | **Yes** (T): my test script in an `hc` terminal listed both hosts, blocked first, with emoji labels, app, kind, message and host state | **Yes** (T): it read the same JSON through `hc connect` that an agent would |
-| Triage | Same script showed remote blocking questions first (T). Holds-up and effort need our records (T) | herdr fields are readable (T); records can be read as files (T). I did not test an agent doing the triage (U) |
+| Tags and session state | **Yes** (T): my test script in an `hc` terminal listed both hosts, blocked first, with emoji labels, app, kind, message and host state | **Likely** (U): the script read the same JSON through `hc connect` (T); I did not test an agent reading it |
+| Triage | Same script showed remote blocking questions first (T). Holds-up and effort need our records (T) | the script read herdr fields (T); record files can be read remotely (T). I did not test an agent doing the triage (U) |
 
 For the native `herdr-app` window:
 
@@ -165,12 +167,12 @@ All D, from the v0.9.5 docs. I made no two-host test because the installed stack
 | Topic | `herdr` v0.9.5 |
 | --- | --- |
 | Cross-host | [Saved SSH machines](https://github.com/herdrdev/herdr/blob/v0.9.5/docs/next/website/src/content/docs/connecting-machines.mdx) in one agent list; each host runs its own server |
-| Unreachable host | last state stays visible but dimmed; reconnect delay grows to 2 min |
+| Unreachable host | last state stays [visible but dimmed](https://github.com/herdrdev/herdr/blob/v0.9.5/docs/next/website/src/content/docs/connecting-machines.mdx); reconnect delay grows to 2 min |
 | Command-line reads | `herdr --machine <label> agent list`, [one host per call](https://github.com/herdrdev/herdr/blob/v0.9.5/docs/next/website/src/content/docs/cli-reference.mdx) |
 | Agent state | Claude Code, Codex and agy from [screen detection](https://github.com/herdrdev/herdr/blob/v0.9.5/docs/next/website/src/content/docs/agents.mdx), so an unknown prompt can show as idle; the OpenCode [integration](https://github.com/herdrdev/herdr/blob/v0.9.5/docs/next/website/src/content/docs/integrations.mdx) reports state |
 | Session identity | integrations report native session IDs and support [resume](https://github.com/herdrdev/herdr/blob/v0.9.5/docs/next/website/src/content/docs/session-state.mdx) |
 | Custom data | [pane metadata](https://github.com/herdrdev/herdr/blob/v0.9.5/docs/next/website/src/content/docs/socket-api.mdx): tokens, titles and state labels, 80 characters each, expiry up to 24 h; usable in the sidebar |
-| Rename | `herdr agent rename` |
+| Rename | [`herdr agent rename`](https://github.com/herdrdev/herdr/blob/v0.9.5/docs/next/website/src/content/docs/cli-reference.mdx) |
 
 Whether its custom tokens cross hosts is unverified (U). I saw only descriptions of the third-party tools `herdr-remote` and `herdrm`, which target this UI, and did not evaluate them (U).
 
