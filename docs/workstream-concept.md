@@ -4,7 +4,7 @@ A **session** is one agent session. Every session you run or want to monitor get
 
 A **workstream** is one unit of agent-implemented work toward a change that lands on the base branch, with or without a PR. It keeps one identity from the commitment to change code until it is finished or dropped, and it owns its name. Its ticket, branch, worktree, sessions, host and PRs can change.
 
-This is the target model, not a description of the current code. Where an older doc or ticket disagrees, this one wins.
+This is the target model, not a description of the current code. Where an older doc or ticket disagrees, this one wins. [Record lifecycles](workstream-lifecycle.md) defines how both records are created, ended and destroyed.
 
 ## Identity and lifetime
 
@@ -15,7 +15,7 @@ This is the target model, not a description of the current code. Where an older 
 | Major rethink | Drop it and start a new one. Nothing is carried over until a real case needs it. |
 | ID | Permanent, and independent of the slug and ticket. |
 | Kinds | One. A ticket, interactive iteration and a promoted talk are ways to start. A ticket is optional, and several can be chained. |
-| Talk and iterate tags | Talk and iterate sessions stay recognisable through a visible tag, in the title or elsewhere. The tag helps the user keep them straight and changes nothing in the model. |
+| Talk and iterate tags | Talk and iterate sessions stay recognisable through a visible tag, in the title or elsewhere. A talk promoted to work is retagged implement. A tag changes nothing in the model; [setting talk or governor](workstream-lifecycle.md#purpose) removes a session's workstream link. |
 | Repos | Each workstream belongs to exactly one repo, and a repo can have several. Related workstreams share a group label, which has no steps, shared context or merge order. |
 
 ## Two records
@@ -30,7 +30,7 @@ This is the target model, not a description of the current code. Where an older 
 - A purpose tag such as talk, governor, project review, iterate or implement helps the user tell sessions apart. It does not create a different record type.
 - Governor and talk sessions have no workstream, even when a governor session makes a small direct change.
 - A project review session is monitored and logged like any other. One running unattended asks for attention only when it is stuck or has something for the user.
-- A workstream supports one lead session, plus any number of helpers and subagents. The data format must not rule out more than one lead.
+- A workstream supports one lead session, plus any number of helpers and subagents. The lead is the session responsible for moving the workstream forward, whether or not it is running. The data format must not rule out more than one lead.
 - Collect what tools can detect. Agents add only what they alone know, such as what they need from the user.
 
 ### Edge cases
@@ -105,20 +105,21 @@ A change is **expected** only when it fits the next step on the happy path and l
 
 | Case | What happens | Not yet decided |
 | --- | --- | --- |
-| A design is rejected | The workstream is dropped and logged as dropped. A replacement gets a new ID and usually a new ticket. | Whether to link the two; what happens to the old branch and PR. |
+| A design is rejected | The workstream is dropped and logged as dropped. The user chooses what happens to the old branch, PR and worktree. A replacement gets a new ID and usually a new ticket. | Whether to link the two. |
 | A design fails during review | The user and agent go back to planning, then implementation. Reviews that no longer apply are run again. | Whether that happens automatically or on request. |
-| Fixes are left unpushed after a merge | The workstream is still open. A second PR is added, then reviewed and merged. | Whether it reuses the branch. |
+| Fixes are left unpushed after a merge | The workstream is still open. A second PR is added, on the same branch or a new one, then reviewed and merged. | |
 | A trivial ticket | The user asks for one local review round and nothing more. A required step needs an explicit waiver. | |
 | A security-critical project | Project settings add an external audit as a third review and can mark it required. | How a required check is enforced without tracked steps. |
-| Quota runs out | One command starts a new lead session, linked to the same workstream, from the old transcript. The old session is marked ended. | How to find each tool's transcript. |
+| Quota runs out | One [takeover command](workstream-lifecycle.md#lead-check-and-takeover) starts a new lead session, linked to the same workstream, from the old transcript. The old session is marked ended. | How to find each tool's transcript where its hooks don't report it. |
 | A change spans two repos | Two workstreams, each with its own agent, reviews and PRs, share a group label. The user coordinates them. | |
-| A talk turns into work | A new workstream is created, and the existing talk session record links to it, keeping its context. | Whether the talk tag stays; how earlier discussion cost is tied to the workstream. |
+| A talk turns into work | A new workstream is created, and the existing talk session record links to it, keeping its context. It is retagged implement. | How earlier discussion cost is tied to the workstream. |
 
 ## Open
 
 - Data formats for the session record, workstream record and any status report. No reader of a snapshot has been settled.
 - Whether to track step status at all.
-- Session storage: whether herdr already covers it, how each tool matches its session to a record, whether sandboxed agents can write to the folder, and cleanup of old records. Age alone does not show that a session is dead.
+- Session storage: whether herdr already covers it, and whether sandboxed agents can write to the folder. Age alone does not show that a session is dead.
+- The unverified agent signals in [record lifecycles](workstream-lifecycle.md#triggers-by-agent).
 - Where workstreams live: the worktree is the current decision. A per-host folder remains an option now that sessions need one.
 - Collecting records from other hosts, to be investigated separately.
 - What herdr supports: a view across hosts, emoji in names, renaming and session status. None of this is verified.
