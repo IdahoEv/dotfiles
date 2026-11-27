@@ -14,7 +14,7 @@ This is the target model, not a description of the current code. Where an older 
 | ID | Permanent, and independent of the slug and ticket. |
 | Kinds | One. A ticket, interactive iteration and a promoted talk are ways to start. A ticket is optional, and several can be chained. |
 | Talk and iterate tags | Talk and iterate sessions stay recognisable through a visible tag, in the title or elsewhere. The tag helps the user keep them straight and changes nothing in the model. |
-| Repos | One workstream per repo. Related ones share a group label, which has no steps, shared context or merge order. |
+| Repos | Each workstream belongs to exactly one repo, and a repo can have several. Related workstreams share a group label, which has no steps, shared context or merge order. |
 
 ## Sessions
 
