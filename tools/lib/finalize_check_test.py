@@ -157,8 +157,8 @@ class VerdictLadder(unittest.TestCase):
             ({"pr_number": "", "pr_state": "OPEN"}, "no-pr", ""),
             ({"pr_state": "unknown"}, "unknown", ""),
             ({"merged": "unknown"}, "unknown", ""),
-            ({"pr_state": "OPEN"}, "not-merged", "REVIEW"),
-            ({"pr_state": "CLOSED"}, "not-merged", "REVIEW"),
+            ({"pr_state": "OPEN"}, "not-merged", ""),
+            ({"pr_state": "CLOSED"}, "not-merged", ""),
             ({"head_matches": "ahead"}, "local-commits", ""),
             ({"head_matches": "diverged"}, "local-commits", ""),
             ({"head_matches": "ahead", "local_commits_in_base": "no"},
@@ -174,7 +174,7 @@ class VerdictLadder(unittest.TestCase):
             ({"head_matches": "ahead", "local_commits_in_base": "yes",
               "shallow": "yes"}, "local-commits", ""),
             ({"head_matches": "unknown"}, "unknown", ""),
-            ({"pr_open_other": "9"}, "not-merged", "REVIEW"),
+            ({"pr_open_other": "9"}, "not-merged", ""),
             ({"merged": "no", "merge_commit_landed": "yes"}, "ready", "MERGED"),
             ({"merged": "no", "merge_commit_landed": "no"}, "not-on-base", ""),
             ({"merged": "no", "merge_commit_landed": "no", "base_fetch": ""},
@@ -255,7 +255,7 @@ class PrQuery(Base):
         self.assertEqual(f["pr_number"], "3")
         self.assertEqual(f["pr_open_other"], "5")
         self.assertEqual(f["verdict"], "not-merged")
-        self.assertEqual(f["agent_phase"], "REVIEW")
+        self.assertEqual(f["agent_phase"], "")
 
 
 class Verdicts(Base):
@@ -270,7 +270,7 @@ class Verdicts(Base):
         self.assertEqual(f["merged"], "no")
         self.assertEqual(f["merge_commit_landed"], "unknown")
         self.assertEqual(f["verdict"], "not-merged")
-        self.assertEqual(f["agent_phase"], "REVIEW")
+        self.assertEqual(f["agent_phase"], "")
 
     def test_merged_ready_full_report(self):
         repo, wt = self.repo_with_wt()
