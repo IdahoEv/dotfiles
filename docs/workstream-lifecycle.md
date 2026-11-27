@@ -56,7 +56,7 @@ Updates come from the start events below, purpose changes, takeover, promotion, 
 
 - Setting talk or governor removes the link. A guessed purpose never changes a link.
 - A talk promoted to work keeps its record, gains the link, and its tag becomes implement. The workstream slug is drafted from the talk's goal, unless a ticket supplies one.
-- A lead has no goal of its own and shows the slug. Helpers and unlinked sessions can have one, declared by you or written by an agent when it's clear. It is never asked for.
+- A lead's goal is the workstream's [title](workstream-schema.md#workstream-record), which defaults to the slug. Helpers and unlinked sessions can have one, declared by you or written by an agent when it's clear. It is never asked for.
 
 ### End and destroy
 

@@ -45,7 +45,7 @@ This is the target design; none of it is built. [Record lifecycles](workstream-l
 | `attention` | list of [attention entries](#attention) | no | Session, agent hooks | Displays, triage | What the session needs from you | Only the session knows |
 | `herdr` | [herdr object](#provisional-session-objects) | no, **provisional** | Start hook | herdr views | Joining to a herdr terminal | The join can't be derived; it is unproven |
 
-- **A lead has no goal of its own:** displays show the workstream slug.
+- **A lead's goal is the workstream's:** its `title`, which defaults to the slug. Compact displays can show the slug.
 - A goal is never asked for.
 - **One record holds `lead`.** When another takes the role, including after `/clear`, the old one becomes `helper`. Takeover first sets it to `ended`, `replaced`; until a successor exists it keeps `lead`, so a failed launch leaves it findable.
 - The format allows more than one lead; v0 commands don't create a second.
@@ -97,7 +97,7 @@ This is the target design; none of it is built. [Record lifecycles](workstream-l
 | `schema_version` | integer | yes | Every write | Every reader | Reading older records | The format can't be guessed safely |
 | `id` | string, `ws-` + 12 random hex digits | yes, never changes | Create | Session link, list, telemetry | Identity across renames and ticket changes | Slug, tickets and branch can all change |
 | `slug` | lowercase words | yes | Create, rename | Naming, displays | [Names](workstream-concept.md#names) | A drafted slug can't be reproduced |
-| `title` | string | no; defaults to the slug | Create, edit command | PR title, displays | A fuller title | Your choice |
+| `title` | string | no; defaults to the slug | Create, edit command; an agent, without asking, when the goal is clearer than the slug | PR title, displays | The workstream's goal in full | You or the agent state it; a slug is too short to hold it |
 | `tickets` | list of [tickets](#tickets); may be empty | yes | Kickoff, edit command | Naming, PR, telemetry | Linking and chaining work | Branch names don't reliably hold them |
 | `branch` | string | yes | Create, commands that switch branches | Commands, surprise check | Noticing an unexpected branch | git shows the current branch, not the expected one |
 | `prs` | list of [PRs](#prs); may be empty | yes | PR commands and sync | Commands, displays, lists | Several PRs over one workstream | History, offline display and surprise checks |
