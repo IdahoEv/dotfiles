@@ -153,7 +153,7 @@ fovea finalize    ── FinishVerdict ─────────▶   workstre
 - A setup command (`start`, `discuss`, `iterate`) fetches a ticket, creates a worktree and launches an agent. It passes those facts to `lifecycle.workstream.create`; it never opens a record file.
 - A delivery command (`open-pr`, `sync`, `merge`, `finalize`, `drop`) reads git and forge state through adapters, then calls one lifecycle use case with the result. The use case decides whether the change is expected; a surprise pauses the command and asks, per the concept.
 - Hooks take the same path: `hook.py` parses an agent payload into a `contracts` fact and calls `lifecycle.session.start`, exactly as a command would.
-- Nothing in `lifecycle` knows that `/open-pr` exists, and `/finalize` adds no record code of its own. Reads work the same way: the statusline, the dashboard and `fovea workstream show` reach records through `record/query.py`, `ui` is the only layer that formats them, and no reader opens a record file.
+- Nothing in `lifecycle` knows that `/open-pr` exists, and `/finalize` adds no record code of its own. Reads work the same way: readers reach records through `record/` — displays through `record/query.py` — `ui` is the only layer that formats them, and no reader opens a record file.
 
 ## What each current entry point becomes
 
@@ -224,15 +224,15 @@ Test suites move with their module. Black-box parity fixtures captured from the 
 2. The worktree adapter creates the branch and worktree; `lifecycle.workstream.create` assigns `ws-…`, writes the workstream record and index entry, registers `.git/info/exclude`, and emits `ticket.start`.
 3. The command resolves the kickoff prose and formats through `settings`, renders them with `ui`, then calls `adapters/launcher/claude.launch` with the declared purpose `implement` and role `lead`. The launcher writes no records.
 4. Claude fires `SessionStart`; `fovea-hook session-start` reads the payload through `adapters/agent/claude`, and `lifecycle.session.start` loads the workstream by `cwd`, creates the session record linked to it, applies the declared role and purpose, and returns added context.
-5. The hook only prompts the agent to run `fovea session check`, which runs on every start: it resolves running state for the lead session through `adapters/agent/<tool>` and passes that fact to `lifecycle.lead.check`, which takes the role when the lead is `ended` or confirmed not running and asks when there is no lead record or it cannot tell.
-6. The statusline command reads the record, gathers local git facts through `adapters/worktree`, builds a view with `ui/view.py`, renders it with `ui/statusline.py`, and hands it to `adapters/ui/claude_statusline.py`.
+5. The hook only prompts the agent to run `fovea session check`, which runs on every start: it reads the lead session with `read_sessions(workstream_id=…)`, resolves running state for it through `adapters/agent/<tool>`, and passes that fact to `lifecycle.lead.check`, which takes the role when the lead is `ended` or confirmed not running and asks when there is no lead record or it cannot tell.
+6. The statusline command reads records through `record/query.py`, gathers local git facts through `adapters/worktree`, builds a view with `ui/view.py`, renders it with `ui/statusline.py`, and hands it to `adapters/ui/claude_statusline.py`.
 
 Codex and agy reach the same lifecycle code through their hook payload adapter; OpenCode reaches it through its plugin or command wrapper. Only steps 3, 4 and 6 differ per agent and surface.
 
 ## Walkthrough: workstream handoff
 
 1. `fovea takeover --workstream ws-9c41e07a52bd --to codex` reads the index entry, then the workstream record.
-2. `fovea takeover` reads the linked lead session through `record/query` and resolves its running state through `adapters/agent/<tool>` from `tool`, `native_id` and `process`; `lifecycle.lead.check` then applies that fact, per the [lead check](workstream-lifecycle.md#lead-check-and-takeover). A running lead is replaced only on the user's explicit request.
+2. `fovea takeover` reads the linked lead session with `read_sessions(workstream_id=…)` and resolves its running state through `adapters/agent/<tool>` from `tool`, `native_id` and `process`; `lifecycle.lead.check` then applies that fact, per the [lead check](workstream-lifecycle.md#lead-check-and-takeover). A running lead is replaced only on the user's explicit request.
 3. `lifecycle.lead.takeover` marks the old record `ended` (`replaced`) and leaves it holding the role, so a failed launch is still findable.
 4. `adapters/launcher/codex.launch` starts the new session in the worktree with the workstream ID, transcript path and purpose `implement`.
 5. The new session's start hook links it through `lifecycle.session.start`; `lifecycle.lead.assign_role` makes it lead and demotes the old record to `helper`.
@@ -248,8 +248,8 @@ Each phase ends with its exit criterion met and is a separate PR in Fovea.
 | 2. Record | Types, validators, store, lock, paths, index, pending queue, queries, legacy conversion | Round-trip and migration fixtures match the schema doc; converting a real old record leaves dotfiles readers working. |
 | 3. Lifecycle and telemetry | Session, workstream, lead, reviews, PRs, attention, gates, names; event schema, emitter and local sink | State-machine tests, including finish/drop ordering and the surprise policy; lifecycle imports no adapter and no command. |
 | 4. Adapters | Agent, tracker, forge, worktree, launcher, host, UI; exec | Fixture parity with the current `gh`, `git` and launcher command shapes; running check agrees with dotfiles on live sessions. |
-| 5. Commands | `phase`, `session`, `workstream`, `context`, then `start` with `discuss` and `iterate`, `open-pr`, `sync`, `merge`, `finalize`, `drop`, `land`, `review`, `prune`, `takeover`, `worktree`, `project_review`; the `ui` modules they render with — `tags`, `view`, `names`, `documents` | Each command passes its parity fixtures; its `tools/*.sh` shim flips in the same PR. |
-| 6. Telemetry reports and UI | `telemetry`; report, usage, memory, gaps, backfill; statusline, snapshot, dashboard, UI surfaces | Statusline byte parity on fixture records and the hot-path budget; telemetry events readable by the dotfiles report. |
+| 5. Commands | `phase`, `session`, `workstream`, `context`, then `start` with `discuss` and `iterate`, `open-pr`, `sync`, `merge`, `finalize`, `drop`, `land`, `review`, `prune`, `takeover`, `worktree`, `project_review`; the `ui` modules they render with — `tags`, `view`, `names`, `documents`, `snapshot` | Each command passes its parity fixtures; its `tools/*.sh` shim flips in the same PR. |
+| 6. Telemetry reports and UI | `telemetry`; report, usage, memory, gaps, backfill; statusline, dashboard, UI surfaces | Statusline byte parity on fixture records and the hot-path budget; telemetry events readable by the dotfiles report. |
 | 7. Assets and install | Default prompts, agents, skills and templates; layer overrides; backend renderers and hooks; release archive and checksums | A clean machine installs Claude, Codex, OpenCode and agy from Fovea alone; a user layer overrides a default without editing Fovea. |
 | 8. Cutover | Switch prompts and hooks to Fovea, keep `.workstream.json` compatibility, move the memory guard, delete dotfiles implementations and shims | One full ticket runs on each backend with no dotfiles workflow code on `PATH`; then delete. |
 
