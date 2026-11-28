@@ -203,7 +203,7 @@ Whether its custom tokens cross hosts is unverified (U). I saw only descriptions
 | Option | Verdict |
 | --- | --- |
 | Use herdr as is | No: misses sessions outside its terminals, our attention fields and our records' last-known values for a lost host |
-| **Extend `herdr-core`** | **Recommended.** Build a collector beside it on the public API, which already carries live state, events and SSH transport; the only change it needs from `herdr-core` itself is a terminal rename |
+| **Extend `herdr-core`** | **Recommended.** Build a collector beside it on the public API, which already carries live state, events and SSH transport; nothing inside `herdr-core` has to change. Terminal names cannot be renamed (T), so a slug changed after launch leaves its terminal name stale; the collector's labels carry the current values, so a rename there would be a convenience, not a requirement |
 | Build our own collection | No: would rebuild the transport, live state and events that work today, including plain `ssh` at 88–99 ms a call |
 
 All three keep the records; the choice is only how a collector reaches the other hosts.
