@@ -102,7 +102,7 @@ Allowed imports are exhaustive. Every module may use the Python standard library
 | **UI view** | `ui/view.py`, `ui/tags.py` | Surface-neutral view model and PLAN/WIP/review/MERGED/PR/`!` tags | `build_view`, `tags` | contracts, settings, record/query |
 | **UI renderers** | `ui/statusline.py`, `ui/snapshot.py`, `ui/documents.py`, `ui/names.py` | Statusline text, list/show text and JSON, kickoff, PR body and titles, commit text, branch/worktree/session/PR names | `render_statusline`, `render_snapshot`, `pr_body`, `kickoff`, `surface_name` | contracts, settings, record/query |
 | **UI dashboard** | `ui/dashboard/*` | tmux dashboard over record reads and caller-supplied host samples | `run_dashboard` | contracts, settings, ui/*, record/query |
-| **Commands** | `commands/*.py` | One handler per CLI verb; gathers facts, calls lifecycle | `main` per command | every layer |
+| **Commands** | `commands/*.py` | One handler per CLI verb; gathers facts, calls lifecycle | `main` per command | all eight layers — `record` includes reads and `record/pending.py`, never `record/write.py` |
 | **Install** | `install/{backend,claude,codex,opencode,agy,cloud,manifest}.py` | Render resolved assets, config and hooks for one backend; release archive and checksums | `install(backend)`, `manifest` | contracts, settings, assets |
 
 Rules the table encodes:
@@ -180,7 +180,7 @@ fovea finalize    ── FinishVerdict ─────────▶   workstre
 | `tools/lib/repo_facts.py`, `tools/lib/repo-facts.sh`, `tools/project-config.sh` | `settings/*`, `adapters/worktree` (branch facts), `commands/config.py` | Consolidate |
 | `tools/project-review-*.sh`, `tools/pending-actions.sh`, `tools/lib/pending_actions.py` | `commands/project_review.py`, `record/pending.py`; lenses stay assets | Consolidate |
 | `tools/agy-tmux.sh`, `tools/lib/agy_tmux_dashboard.py` | `commands/dashboard.py`, `ui/dashboard/*`, `adapters/ui/tmux.py`, `adapters/launcher/tmux.py` | Keep |
-| `tools/codex-workflow.sh`, `tools/lib/codex_{workflow,rpc}.py` | `adapters/{agent,launcher}/codex.py` | Consolidate |
+| `tools/codex-workflow.sh`, `tools/lib/codex_{workflow,rpc}.py` | `adapters/{agent,launcher}/codex.py` for the daemon RPC and thread control, `commands/start.py` and `commands/discuss.py` for `start`, `launch` and `discuss`, `commands/session.py` for the thread verbs `status`, `resume`, `send` and `name`, `commands/context.py` for `instructions`; `codex-workflow.sh` keeps all eight verbs as a shim until `workflow/adapters/codex-local.md` switches in the same phase | Consolidate |
 | `tools/workflow-session.sh` | `commands/session.py`, `commands/takeover.py` | Consolidate |
 | `tools/mem-guard.sh`, `tools/lib/mem_guard.py` | `adapters/host/memory.py`; memory samples become telemetry events and a dashboard column | Keep |
 | `tools/cloud-workflow-bootstrap.sh`, `tools/workflow-manifest.sh` | `install/{cloud,manifest}.py` for post-install cloud rendering and the manifest; a one-file `bootstrap.sh` ships in the release and stays bash (`curl`, `tar`, checksum tool only) because it runs before Python exists, fetching the pinned archive and running its installer | Retire both scripts; keep the pre-Python bootstrap |
@@ -203,7 +203,7 @@ Test suites move with their module. Black-box parity fixtures captured from the 
 
 | Surface | Requirement |
 | --- | --- |
-| `<worktree>/.workstream.json` | Fovea reads both the v0 format and the legacy format, and converts on write exactly per [the migration table](workstream-schema.md#migrating-workstreamjson). Dotfiles readers keep working because phase 2 also teaches `tools/lib/workstream.py` to read v0 (`schema_version`, `slug`, `prs`, `stage`, deriving `key`); the reader change and Fovea's first real conversion ship together, and no legacy key is written back. |
+| `<worktree>/.workstream.json` | Fovea reads both the v0 format and the legacy format, and converts on write exactly per [the migration table](workstream-schema.md#migrating-workstreamjson). Dotfiles readers keep working because phase 2 also teaches `tools/lib/workstream.py` to read v0 (`schema_version`, `slug`, `prs`, `stage`, deriving `key`) and teaches the other readers in that table the v0 shapes they depend on: `repo_facts.py` and `repo-facts.sh` from the file, `open-pr.sh` (`ticket_provider`, `desc`) and `github-review-state.sh` (`pr.head`) through `workstream.sh show`. The reader changes and Fovea's first real conversion ship together, and no legacy key is written back. |
 | Legacy `<git-dir>/chain` | Read-only loader during the overlap; no new files written. |
 | Session records | New format, Fovea-only. Nothing in dotfiles reads them, so no fallback is needed. |
 | CLI invoked by prompts | Same subcommand name, flags, stdout contract and exit codes as the script it replaces; prompts switch in the PR that flips the shim. |
@@ -245,7 +245,7 @@ Each phase ends with its exit criterion met and is a separate PR in Fovea; a pha
 | Phase | Scope | Exit criterion |
 | --- | --- | --- |
 | 1. Skeleton, contracts, settings | Package, two entries, `contracts.py`, dependency rules and boundary test; settings layers, resolve, explain, prose lookup, legacy fallback; `commands/config.py` with `explain` only | A deliberate cross-layer import fails CI; `fovea config explain` matches `repo_facts conf-get` over the fixture matrix. |
-| 2. Record | Types, validators, store, lock, paths, index, pending queue, queries, legacy conversion, with a companion dotfiles change teaching `tools/lib/workstream.py` to read v0 | Round-trip and migration fixtures match the schema doc; converting a real old record leaves the dotfiles readers in `tools/lib/workstream.py` working. |
+| 2. Record | Types, validators, store, lock, paths, index, pending queue, queries, legacy conversion, with a companion dotfiles change teaching `tools/lib/workstream.py` and the other readers in [the migration table](workstream-schema.md#migrating-workstreamjson) — `repo_facts.py`, `repo-facts.sh`, `open-pr.sh`, `github-review-state.sh` — to read v0 | Round-trip and migration fixtures match the schema doc; converting a real old record leaves every dotfiles reader working. |
 | 3. Lifecycle and telemetry | Session, workstream, lead, reviews, PRs, attention, gates, names; event schema, emitter and local sink | State-machine tests, including finish/drop ordering and the surprise policy; lifecycle imports no adapter and no command. |
 | 4. Adapters | Agent, tracker, forge, worktree, launcher, host, UI; exec | Fixture parity with the current `gh`, `git` and launcher command shapes; running check agrees with dotfiles on live sessions. |
 | 5. Commands | `phase`, `session`, `workstream`, `context`, `snapshot`, then `start` with `discuss` and `iterate`, `open-pr`, `sync`, `merge`, `finalize`, `drop`, `land`, `review`, `prune`, `takeover`, `worktree`, `project_review`; the `ui` modules they render with — `tags`, `view`, `names`, `documents`, `snapshot` | Each command passes its parity fixtures; its `tools/*.sh` shim flips in the same PR. |
