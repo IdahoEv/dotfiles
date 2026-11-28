@@ -113,7 +113,7 @@ A change is **expected** only when it fits the next step on the happy path and l
 | A security-critical project | Project settings add an external audit as a third review and can mark it required. | How a required check is enforced without tracked steps. |
 | Quota runs out | One [takeover command](workstream-lifecycle.md#lead-check-and-takeover) starts a new lead session, linked to the same workstream, from the old transcript. The old session is marked ended. | How to find each tool's transcript where its hooks don't report it. |
 | A change spans two repos | Two workstreams, each with its own agent, reviews and PRs, share a group label. The user coordinates them. | |
-| A talk turns into work | A new workstream is created, and the existing talk session record links to it, keeping its context. It is retagged implement. | How earlier discussion cost is tied to the workstream. |
+| A talk turns into work | A new workstream is created, and the existing talk session record links to it, keeping its context. It is retagged implement. | Nothing open: [telemetry](fovea/telemetry-design.md#what-happens-in-common-cases) keeps earlier discussion cost separate. |
 
 ## Open
 

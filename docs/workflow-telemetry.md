@@ -2,6 +2,8 @@
 
 Workflow scripts and session hooks append events to a local JSONL log. `wf-report.sh` joins those events with Claude Code session transcripts and reports wall time, per-stage time, tokens, estimated cost, review rounds and outcomes (including per-reviewer validity and overlap), and test time for each ticket run. Token counts are measured. Cost is an **estimate** from a pinned price table. Anything the sources didn't record is printed as `unknown` with a reason, never as zero.
 
+This page describes what runs today. [Fovea telemetry design](fovea/telemetry-design.md) is the target for the successor project, and [migration](workflow-telemetry-migration.md) maps these events and reports to it.
+
 ## Use
 
 ```bash

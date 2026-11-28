@@ -106,6 +106,8 @@ Finish and drop destroy linked session records first and the workstream record l
 
 ## Before a record is destroyed
 
+The [telemetry design](fovea/telemetry-design.md#what-happens-in-common-cases) defines these events and which writes are required.
+
 | Record | Logged to telemetry |
 | --- | --- |
 | Session | Agent, native session ID, repo or project, **transcript path**, and, if it was linked, the workstream ID and any readable tickets |
@@ -189,7 +191,7 @@ A responsive old agent changes nothing: there are no progress notes to collect. 
 3. The same session record gains the link, takes lead and is retagged implement. Its context is kept.
 4. From then on it is destroyed under the linked rule.
 
-How earlier discussion cost is tied to the workstream is still open. The session ID is the same before and after, so telemetry can be joined later.
+Earlier discussion cost [stays outside the workstream](fovea/telemetry-design.md#what-happens-in-common-cases); reports can show it separately.
 
 ### A merge, then a second PR
 
