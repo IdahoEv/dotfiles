@@ -95,7 +95,7 @@ Listed by priority. **Measured** comes from a clock or a provider's count. **Est
 | `input.active_time` | Seconds the agent counted you as active | `seconds`, `from`, `to` | Claude OpenTelemetry adapter | 14 |
 | `span.completed` | One timed piece of agent work | `kind` (`model_request`, `tool`, `test`, `subagent`, `compaction`), `ended_at`, `outcome`; `started_at`?, `duration_ms`?, `ttft_ms`?, `name`? (tool or subagent type), `model`?, `effort`?, `query_source`?, `error_type`?, `command_fingerprint`?, `source_ref`? (the agent's tool-use, request or subagent ID) | Tool, model and subagent hooks, extractors, OpenTelemetry | 3, 4, 9, 12 |
 
-`cause` is the record's open set (`question`, `plan-approval`, `design-gate`, `auth`, `reviewer-failed`, `review-stalled`, `no-pr`) plus `permission`. `wait_id` is the [attention entry](../workstream-schema.md#attention)'s. For a wait with no entry, the adapter uses the agent's request ID; without one, the wait has no explicit close.
+`cause` is the record's open set (`question`, `plan-approval`, `design-gate`, `auth`, `reviewer-failed`, `review-stalled`, `no-pr`) plus `permission`. `wait_id` is the [attention entry](../workstream-schema.md#attention)'s. For a wait with no entry, the adapter uses the agent's request ID. Without one, the writer assigns a random ID that no close matches.
 
 ### Usage and quota
 
@@ -118,21 +118,23 @@ Listed by priority. **Measured** comes from a clock or a provider's count. **Est
 | `workstream.updated` | The description changed | The same description fields: all current values, except [`category`](#ticket-type) only when set | Record command | 11, 13 |
 | `workstream.stage` | Stage written | `stage` (`plan`, `wip`, `review`) | Stage writes | 1, 3, 10, 11, 13 |
 | `workstream.closed` | Final summary | `outcome` (`finished`, `dropped`), `stage`, `repo`, `slug`, `tickets` with descriptions, `prs`; `title`?, `drop_reason`? | Finish or drop, before destroying the record | 1, 10, 11, 13 |
-| `review.state` | A review was planned, started a round, ended one, was accepted or removed | `source`, `status` (`planned`, `running`, `accepted`, `removed`), `round`, `change` (`planned`, `round_started`, `round_ended`, `accepted`, `reset`, `removed`, or `summary`: cycle or batch totals, with no `status` or `round`); `reviewer`?, `head_sha`?, `fixed`?, `dismissed`?, `deferred`?, `findings_count`? | Review commands | 6–9, 13 |
+| `review.state` | A review was planned, started a round, ended one, was accepted or removed | `source`, `change` (`planned`, `round_started`, `round_ended`, `accepted`, `reset`, `removed`, `summary`); except on `summary`, `status` (`planned`, `running`, `accepted`, `removed`) and `round`; `reviewer`?, `head_sha`?, `fixed`?, `dismissed`?, `deferred`?, `findings_count`? | Review commands | 6–9, 13 |
 | `review.launch` | A reviewer ran | `reviewer`, `round`, `model`; `effort`?, `agent_id`? or `reviewer_session_id`?, `config_ref`? | Review manager | 5–7 |
 | `review.finding` | One triaged finding | `finding_id`, `group_id`, `source`, `reviewer`, `severity`; `round`?, `verdict`?, `validity`?, `reason`?, `claim`?, `path`? (relative to the repo), `line`?, `head_sha`?, `external_id`? | Review triage; bot-comment adapter | 5–7 |
 | `pr.state` | A PR was opened, updated, merged or closed | `number`, `state` (`open`, `merged`, `closed`); `url`?, `branch`?, `head_sha`?, `merged_at`? | PR commands and sync | 6, 8, 11 |
 | `command.completed` | A workflow command ended | `command`, `outcome` (`ok`, `failed`, `stopped`, `handoff`), `duration_ms`; `reason`? (fixed list), `exit_code`? | Each workflow command, including launches and review watches | 9 |
 
-`group_id` is shared by reviewers who raised the same finding. Findings overlap when two different reviewers share one.
+`group_id` is shared by reviewers who raised the same finding, and is unique to that finding within its `workstream_id` (else `session_id`). Findings overlap when two different reviewers in that scope share one.
+
+A `summary` carries cycle or batch totals; its counts are never added to round counts.
 
 **A fact seen twice counts once.** These keys apply beyond `event_id`:
 
 | Event | Same fact when | Merge |
 | --- | --- | --- |
-| `span.completed` | Same `session_id`, `kind` and `source_ref` | Hook fields win; other producers fill blanks. Without `source_ref`, only the one producer the adapter names for that agent and kind counts |
-| `review.finding` | Same `workstream_id` (else `session_id`), `source`, `reviewer` and `finding_id` | Latest wins. `finding_id` is unique to one finding in that scope; the bot adapter derives it from `external_id` |
-| `pr.state` | Same `repo`, `number` and `state` | Latest wins |
+| `span.completed` | Same `session_id`, `kind` and `source_ref` | Hook fields win; other producers fill blanks. Among live events without `source_ref`, only the one producer the adapter names for that agent and kind counts. Imported spans all count |
+| `review.finding` | Same `workstream_id` (else `session_id`), `source`, `reviewer` and `finding_id` | Latest wins. `finding_id` is unique to one finding in that scope. The bot adapter derives it from `external_id`, or without one from a hash of `head_sha`, `path`, `line` and `claim` |
+| `pr.state` | Same `repo`, `number` and `state`, with no other state between them in time | Earliest `time`; other fields from the latest |
 
 ### Hosts and gaps
 
