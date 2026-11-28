@@ -132,7 +132,7 @@ A `summary` carries cycle or batch totals; its counts are never added to round c
 
 | Event | Same fact when | Merge |
 | --- | --- | --- |
-| `span.completed` | Same `session_id`, `kind` and `source_ref` | Hook fields win; other producers fill blanks. Among live events without `source_ref`, only the one producer the adapter names for that agent and kind counts. Imported spans all count |
+| `span.completed` | Same `session_id`, `kind` and `source_ref` | Hook fields win; other producers fill blanks. Among live events without `source_ref`, only the one producer the adapter names for that agent and kind counts. Imported spans without `source_ref` all count |
 | `review.finding` | Same `workstream_id` (else `session_id`), `source`, `reviewer` and `finding_id` | Latest wins. `finding_id` is unique to one finding in that scope. The bot adapter derives it from `external_id`, or without one from a hash of `head_sha`, `path`, `line` and `claim` |
 | `pr.state` | Same `repo`, `number` and `state`, with no other state between them in time | Earliest `time`; other fields from the latest |
 

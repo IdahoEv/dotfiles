@@ -56,8 +56,8 @@ Every imported event has `imported.source: "dotfiles-v1"` and `quality: inferred
 
 | Fovea field | Rule |
 | --- | --- |
-| `finding_id` | Bot: derived as the [bot adapter does](fovea/telemetry-design.md#workstreams-reviews-and-prs), from `comment_id` or else `sha`, `path`, `line` and `claim`. Local: the new `event_id`, because old IDs repeat across cycles |
-| `group_id` | Hash of `repo`, `run_id`, cycle and old `finding_id` or legacy `key`, inferred. A cycle ends at its local `review.result` or where rounds restart. With neither old ID, the new `finding_id` |
+| `finding_id` | Bot: derived as the [bot adapter does](fovea/telemetry-design.md#workstreams-reviews-and-prs), from `comment_id` or else `sha`, `path`, `line` and `claim`. Local: the same hash as `group_id`, so a finding repeated in a later round merges. With no old ID, the new `event_id` |
+| `group_id` | Hash of `repo`, `run_id`, cycle and old `finding_id` or legacy `key`, inferred. A cycle ends at its local `review.result` or where rounds restart. With no old ID, the new `finding_id` |
 | `external_id` | `comment_id` |
 | `verdict`, `validity` | Absent if missing |
 
