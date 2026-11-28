@@ -12,10 +12,20 @@ This is the target design for `IdahoEv/Fovea`. It finalizes the code boundaries 
 | Dependencies | Standard library plus PyYAML for the settings `config.yaml`; nothing else at runtime |
 | Packaging | Provisional, pending the distribution decision in [Open](#open): `pyproject.toml`, `src/` layout, console scripts `fovea` and `fovea-hook`, installed with `uv tool install` (supplies the 3.13 interpreter on hosts that lack it) |
 | Dev tooling | pytest, ruff, mypy strict, import-linter |
-| Hot paths | Targets, not today's numbers: `fovea statusline` ≤ 45 ms p50 and `fovea-hook` ≤ 40 ms p50, against the shell medians of 45.5 ms and 41.2 ms measured in the [spike](2026-10-26-shell-to-python-spike.md#hot-paths). Phase 6 gates each entry on that spike's harness on both machines; an entry that misses on either is replaced by a small compiled shim, not by a daemon. |
+| Hot paths | Targets, not today's numbers: `fovea statusline` ≤ 45 ms p50 and `fovea-hook` ≤ 40 ms p50, against the shell medians of 45.5 ms and 41.2 ms measured in the [spike](2026-10-26-shell-to-python-spike.md#hot-paths). Phase 6 gates each entry on that spike's harness on both machines; an entry that misses on either is replaced by that entry's compiled shim ([below](#hot-path-shims)), not by a daemon. |
 | Outside Fovea | `dot_claude/hooks/executable_no-cd-write.py` stays a standalone hook: it guards Bash calls, owns no workflow state, and already meets its 13 ms budget. |
 
 No daemon or background record writer runs. Records are files, and a hook or the next command notices changes. The only detached process is the post-PR review watch.
+
+### Hot-path shims
+
+A missed budget replaces one entry; it never adds a daemon.
+
+- **Scope.** One shim per entry, covering only that surface's verbs (`fovea statusline`, `fovea-hook <event>`); every other verb stays Python. The shim reads the same record files and settings layers and writes no state.
+- **Artifact.** Source lives in `shims/<entry>/`, outside `src/fovea/`, so no layer imports it and the boundary test is unaffected. It builds into the same release archive and version as the Python package, with its own checksum; the [Open](#open) distribution decision sets how.
+- **Interface.** Same command name, argv, stdin JSON and one-line stdout as the Python entry, held to the same parity fixtures, so no caller can tell which implementation runs.
+- **Selection.** Fixed when the archive is built, per platform: that entry's console script in `pyproject.toml` names the shim, and a source checkout always runs Python. There is no runtime branch or call-time fallback.
+- **Stop.** If no shim brings an entry under budget, Phase 6 does not exit: the phase stops for a decision rather than shipping a slower entry or a daemon.
 
 ## Repository layout
 
@@ -56,6 +66,7 @@ fovea/
 │   ├── prompts/                 kickoff, governor, project-review, backends
 │   ├── templates/               statusline, branch, worktree, session, PR, commit
 │   └── data/                    model pricing, reference tables
+├── shims/                       per-entry hot-path replacements, built per platform
 ├── docs/                        this file and the design docs it links
 └── tests/                       pytest, boundary test, parity fixtures
 ```
@@ -150,7 +161,7 @@ fovea finalize    ── FinishVerdict ─────────▶   workstre
                                                                   ──destroy──▶ session, workstream, index
 ```
 
-- A setup command (`start`, `discuss`, `iterate`) fetches a ticket, creates a worktree and launches an agent. It passes those facts to `lifecycle.workstream.create`; it never opens a record file.
+- `/start` fetches a ticket, creates a worktree and launches an agent, then passes those facts to `lifecycle.workstream.create`; it never opens a record file. `/discuss` creates no workstream — it opens an unlinked talk session in the existing checkout, with no ticket, branch or worktree — and only a later promotion reaches `workstream.create`. `/iterate` will also reach it; it is not built yet.
 - A delivery command (`open-pr`, `sync`, `merge`, `finalize`, `drop`) reads git and forge state through adapters, then calls one lifecycle use case with the result. The use case decides whether the change is expected; a surprise pauses the command and asks, per the concept.
 - Hooks take the same path: `hook.py` parses an agent payload into a `contracts` fact and calls `lifecycle.session.start`, exactly as a command would.
 - Nothing in `lifecycle` knows that `/open-pr` exists, and `/finalize` adds no record code of its own. Reads work the same way: readers reach records through `record/` — displays through `record/query.py` — `ui` is the only layer that formats them, and no reader opens a record file.
@@ -249,7 +260,7 @@ Each phase ends with its exit criterion met and is a separate PR in Fovea; a pha
 | 3. Lifecycle and telemetry | Session, workstream, lead, reviews, PRs, attention, gates, names; event schema, emitter and local sink | State-machine tests, including finish/drop ordering and the surprise policy; lifecycle imports no adapter and no command. |
 | 4. Adapters | Agent, tracker, forge, worktree, launcher, host, UI; exec | Fixture parity with the current `gh`, `git` and launcher command shapes; running check agrees with dotfiles on live sessions. |
 | 5. Commands | `phase`, `session`, `workstream`, `context`, `snapshot`, then `start` with `discuss` and `iterate`, `open-pr`, `sync`, `merge`, `finalize`, `drop`, `land`, `review`, `prune`, `takeover`, `worktree`, `project_review`; the `ui` modules they render with — `tags`, `view`, `names`, `documents`, `snapshot` | Each command passes its parity fixtures; its `tools/*.sh` shim flips in the same PR. |
-| 6. Telemetry reports and UI | `telemetry`, `statusline`, `dashboard`; report, usage, memory, gaps, backfill; the statusline, dashboard and surface renderers | Statusline byte parity on fixture records and the hot-path budget; telemetry events readable by the dotfiles report. |
+| 6. Telemetry reports and UI | `telemetry`, `statusline`, `dashboard`; report, usage, memory, gaps, backfill; the statusline, dashboard and surface renderers | Statusline byte parity on fixture records and each entry's hot-path budget, met by the Python entry or its shim; telemetry events readable by the dotfiles report. |
 | 7. Assets and install | Default prompts, agents, skills and templates; layer overrides; backend renderers and hooks; release archive and checksums | A clean machine installs Claude, Codex, OpenCode and agy from Fovea alone; a user layer overrides a default without editing Fovea. |
 | 8. Cutover | Switch prompts and hooks to Fovea, keep `.workstream.json` compatibility, move the memory guard, delete dotfiles implementations and shims | One full ticket runs on each backend with no dotfiles workflow code on `PATH`; then delete. |
 
