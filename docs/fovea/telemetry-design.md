@@ -217,7 +217,7 @@ Each ticket in `workstream.created`, `updated` and `closed` copies the tracker's
 A batch job on each host reads prompts from local transcripts and stores only labels. It runs periodically and before a record is destroyed. The first list is `question`, `new_work`, `correction`, `review_request`, `approval`, `status_check`, `discussion` and `other`.
 
 - Prompts not labeled before their transcript disappears stay unknown, and old prompts can't be relabeled after that.
-- The classifier sends prompt text to a model. Each pool configures which model and account may receive it.
+- The classifier sends prompt text to a model. Each pool configures which model and account may receive it. There is no default: until a pool configures both, nothing is sent.
 - Its own tokens are logged as a session with purpose `classifier`.
 
 ## Missing data
@@ -297,7 +297,7 @@ Account labels must match across a pool's hosts so quota samples can be joined.
 
 ## Exclusions
 
-**Never stored:** prompts, responses, reasoning, tool input or output, command text, diffs, code, environment values, credentials, email or account IDs, hostnames, IP addresses, error message text, or absolute paths other than `transcript_path`.
+**Excluded** (not guaranteed inside allowed free text): prompts, responses, reasoning, tool input or output, command text, diffs, code, environment values, credentials, email or account IDs, hostnames, IP addresses, error message text, or absolute paths other than `transcript_path`.
 
 | Allowed free text | Cap (characters) |
 | --- | --- |
@@ -310,7 +310,7 @@ Account labels must match across a pool's hosts so quota samples can be joined.
 - Identifiers are also stored: slugs, branches, repo names, ticket URLs, repo-relative file paths, and command, skill, tool, model and subagent type names.
 - `command_fingerprint` is a hash keyed with a per-pool secret. It spots reruns without storing the command.
 - The writer drops fields not on a type's allowlist. Inputs that carry content, such as OpenTelemetry or transcripts, are filtered before anything is written.
-- **A cap can't stop an agent quoting code or a secret in a summary.** Prompts that produce these fields must forbid it, and logs stay private.
+- **A cap can't stop an agent quoting code or a secret in a summary.** The writer doesn't scan free text for excluded content, so this is an open privacy risk. Prompts that produce these fields must forbid it, and logs stay private.
 
 ## Imported data
 
