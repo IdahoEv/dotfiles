@@ -99,9 +99,9 @@ Allowed imports are exhaustive. Every module may use the Python standard library
 | **Exec** | `adapters/exec.py` | Subprocess, environment, `gh` shim awareness, exit codes | `run`, `run_json` | contracts |
 | **Telemetry emit** | `telemetry/events.py`, `telemetry/emit.py` | Event union, current sink, run id, truncation, disable switch | `configure(sink)`, `emit(event)` | telemetry/* |
 | **Telemetry reports** | `telemetry/report.py`, `telemetry/analyze/*.py` | Reports, usage, memory, review gaps, backfill | `report`, `usage`, `review_gaps`, `backfill` | telemetry/* |
-| **UI view** | `ui/view.py`, `ui/tags.py` | Surface-neutral view model and PLAN/WIP/review/MERGED/PR/`!` tags | `build_view`, `tags` | contracts, record (read), settings |
-| **UI renderers** | `ui/statusline.py`, `ui/snapshot.py`, `ui/documents.py`, `ui/names.py` | Statusline text, list/show text and JSON, kickoff, PR body and titles, commit text, branch/worktree/session/PR names | `render_statusline`, `render_snapshot`, `pr_body`, `kickoff`, `surface_name` | contracts, record (read), settings |
-| **UI dashboard** | `ui/dashboard/*` | tmux dashboard over record reads and caller-supplied host samples | `run_dashboard` | record (read), settings, ui/* |
+| **UI view** | `ui/view.py`, `ui/tags.py` | Surface-neutral view model and PLAN/WIP/review/MERGED/PR/`!` tags | `build_view`, `tags` | contracts, settings, record/query |
+| **UI renderers** | `ui/statusline.py`, `ui/snapshot.py`, `ui/documents.py`, `ui/names.py` | Statusline text, list/show text and JSON, kickoff, PR body and titles, commit text, branch/worktree/session/PR names | `render_statusline`, `render_snapshot`, `pr_body`, `kickoff`, `surface_name` | contracts, settings, record/query |
+| **UI dashboard** | `ui/dashboard/*` | tmux dashboard over record reads and caller-supplied host samples | `run_dashboard` | settings, ui/*, record/query |
 | **Commands** | `commands/*.py` | One handler per CLI verb; gathers facts, calls lifecycle | `main` per command | every layer |
 | **Install** | `install/{backend,claude,codex,opencode,agy,cloud,manifest}.py` | Render resolved assets, config and hooks for one backend; release archive and checksums | `install(backend)`, `manifest` | contracts, settings, assets |
 
@@ -111,10 +111,10 @@ Rules the table encodes:
 - `lifecycle` owns every allowed transition and the [expected-versus-surprising](workstream-concept.md#records-and-storage) policy. It never imports `adapters` or `commands`; facts arrive as `contracts` dataclasses. Setup and delivery commands call the same use cases.
 - `adapters` return and accept `contracts` dataclasses, never record types. They may read settings. They never emit telemetry; the caller does. `adapters/ui` may import `ui` and `adapters/telemetry` may import `telemetry`, each to implement its contract.
 - `settings` resolves a key from the layer roots, the shipped defaults and a context; it never reads records. A command reads the workstream record and passes its `settings` object in the context.
-- `telemetry` is a leaf with a configured sink. The entry point that starts the work — `commands`, `hook` or the dashboard — configures it once; lifecycle then emits without importing adapters.
+- `telemetry` is a leaf with a configured sink. `commands` and `hook` configure it once at startup — a dashboard command does so before handing the render to `ui` — and lifecycle then emits without importing adapters.
 - `ui` builds views from record reads and passed facts, and never reads files, git or the network. `adapters/ui` handles the surface protocol.
 - `install` reads `assets/`, settings and the release artifact; it never reads records or lifecycle state.
-- `commands` composes downward and is the only place where a CLI verb is named. The two entry points compose nothing of their own: `cli` dispatches to a command, and `hook` parses a payload and calls one lifecycle use case, with `adapters/agent` as its only adapter import.
+- `commands` composes downward and is the only place where a CLI verb is named. The entry points wire only their own rows: `cli` dispatches to a command, and `hook` parses one agent payload into a fact, configures telemetry and calls one lifecycle use case, with `adapters/agent` as its only adapter import.
 - Writes are narrower than reads: `record/write.py` is importable only from `lifecycle/`; `record/pending.py` also from `commands/` for the project-review queue.
 
 Enforcement: import-linter declares one contract per row plus the write guard, and `tests/test_boundaries.py` fails when a `src/fovea/` directory has no contract. A deliberate violation is the skeleton's exit test.
@@ -224,7 +224,7 @@ Test suites move with their module. Black-box parity fixtures captured from the 
 2. The worktree adapter creates the branch and worktree; `lifecycle.workstream.create` assigns `ws-…`, writes the workstream record and index entry, registers `.git/info/exclude`, and emits `ticket.start`.
 3. The command resolves the kickoff prose and formats through `settings`, renders them with `ui`, then calls `adapters/launcher/claude.launch` with the declared purpose `implement` and role `lead`. The launcher writes no records.
 4. Claude fires `SessionStart`; `fovea-hook session-start` reads the payload through `adapters/agent/claude`, and `lifecycle.session.start` loads the workstream by `cwd`, creates the session record linked to it, applies the declared role and purpose, and returns added context.
-5. The hook only prompts the agent to run the [lead check](workstream-lifecycle.md#lead-check-and-takeover), which runs on every start: `lifecycle.lead.check` reads the lead record, asks `adapters/agent/<tool>` whether it is running, takes the role when the lead is `ended` or confirmed not running, and asks when there is no lead record or it cannot tell.
+5. The hook only prompts the agent to run the [lead check](workstream-lifecycle.md#lead-check-and-takeover), which runs on every start: `lifecycle.lead.check` reads the lead record and the running-state fact the caller resolved through `adapters/agent/<tool>`, takes the role when the lead is `ended` or confirmed not running, and asks when there is no lead record or it cannot tell.
 6. The statusline command reads the record, gathers local git facts through `adapters/worktree`, builds a view with `ui/view.py`, renders it with `ui/statusline.py`, and hands it to `adapters/ui/claude_statusline.py`.
 
 Codex and agy reach the same lifecycle code through their hook payload adapter; OpenCode reaches it through its plugin or command wrapper. Only steps 3, 4 and 6 differ per agent and surface.
@@ -232,7 +232,7 @@ Codex and agy reach the same lifecycle code through their hook payload adapter; 
 ## Walkthrough: workstream handoff
 
 1. `fovea takeover --workstream ws-9c41e07a52bd --to codex` reads the index entry, then the workstream record.
-2. `lifecycle.lead.check` reads the linked session with `role: lead` and asks `adapters/agent/<tool>` whether it is running, using `tool`, `native_id` and `process`. A running lead is replaced only on the user's explicit request.
+2. The command resolves running state for the lead through `adapters/agent/<tool>` from `tool`, `native_id` and `process`, then `lifecycle.lead.check` reads the linked session with `role: lead` and that fact. A running lead is replaced only on the user's explicit request.
 3. `lifecycle.lead.takeover` marks the old record `ended` (`replaced`) and leaves it holding the role, so a failed launch is still findable.
 4. `adapters/launcher/codex.launch` starts the new session in the worktree with the workstream ID, transcript path and purpose `implement`.
 5. The new session's start hook links it through `lifecycle.session.start`; `lifecycle.lead.assign_role` makes it lead and demotes the old record to `helper`.
@@ -244,11 +244,11 @@ Each phase ends with its exit criterion met and is a separate PR in Fovea.
 
 | Phase | Scope | Exit criterion |
 | --- | --- | --- |
-| 1. Skeleton, contracts, settings | Package, two entries, `contracts.py`, dependency rules and boundary test; settings layers, resolve, explain, prose lookup, legacy fallback | A deliberate cross-layer import fails CI; `fovea config explain` matches `repo_facts conf-get` over the fixture matrix. |
+| 1. Skeleton, contracts, settings | Package, two entries, `contracts.py`, dependency rules and boundary test; settings layers, resolve, explain, prose lookup, legacy fallback; `commands/config.py` with `explain` only | A deliberate cross-layer import fails CI; `fovea config explain` matches `repo_facts conf-get` over the fixture matrix. |
 | 2. Record | Types, validators, store, lock, paths, index, pending queue, queries, legacy conversion | Round-trip and migration fixtures match the schema doc; converting a real old record leaves dotfiles readers working. |
 | 3. Lifecycle and telemetry | Session, workstream, lead, reviews, PRs, attention, gates, names; event schema, emitter and local sink | State-machine tests, including finish/drop ordering and the surprise policy; lifecycle imports no adapter and no command. |
 | 4. Adapters | Agent, tracker, forge, worktree, launcher, host, UI; exec | Fixture parity with the current `gh`, `git` and launcher command shapes; running check agrees with dotfiles on live sessions. |
-| 5. Commands | `phase`, `session`, `workstream`, `context`, `config`, then `start` with `discuss` and `iterate`, `open-pr`, `sync`, `merge`, `finalize`, `drop`, `land`, `review`, `prune`, `takeover`, `worktree`, `project_review` | Each command passes its parity fixtures; its `tools/*.sh` shim flips in the same PR. |
+| 5. Commands | `phase`, `session`, `workstream`, `context`, then `start` with `discuss` and `iterate`, `open-pr`, `sync`, `merge`, `finalize`, `drop`, `land`, `review`, `prune`, `takeover`, `worktree`, `project_review` | Each command passes its parity fixtures; its `tools/*.sh` shim flips in the same PR. |
 | 6. Telemetry reports and UI | `telemetry`; report, usage, memory, gaps, backfill; tags, view, statusline, snapshot, documents, dashboard, UI surfaces | Statusline byte parity on fixture records and the hot-path budget; telemetry events readable by the dotfiles report. |
 | 7. Assets and install | Default prompts, agents, skills and templates; layer overrides; backend renderers and hooks; release archive and checksums | A clean machine installs Claude, Codex, OpenCode and agy from Fovea alone; a user layer overrides a default without editing Fovea. |
 | 8. Cutover | Switch prompts and hooks to Fovea, keep `.workstream.json` compatibility, move the memory guard, delete dotfiles implementations and shims | One full ticket runs on each backend with no dotfiles workflow code on `PATH`; then delete. |
