@@ -22,7 +22,7 @@
 | (none) | `workstream_id` | Inferred: `ws-` + 12 hex digits of a hash of pool, `run_id` and `repo`, so each repo gets its own. Work that reused a ticket after being abandoned can't be separated |
 | `session_id` | `<tool>-<native_id>` | The log doesn't name the agent, and Codex hooks can write to it too. `claude` or `codex` only when that agent's transcript or session log has the ID; otherwise `unknown-<id>` |
 | empty `session_id` | absent | Many script events have none |
-| (none) | `event_id` | Hash of the source's host ID, the raw line and its occurrence number among identical lines |
+| (none) | `event_id` | Hash of the source's host ID, the new event's `type`, the raw line and its occurrence number among identical lines |
 | (none) | `host_id`, `pool` | Those of the host that wrote the log. Run the import there |
 | (none) | `seq`, `logged_at` | Assigned by that host's Fovea writer, so imports never collide with its pull cursor; `time` keeps the old `ts` |
 | `job_id` | dropped | No Fovea use |
@@ -41,7 +41,7 @@ Every imported event has `imported.source: "dotfiles-v1"` and `quality: inferred
 | `subagent.stop` | `span.completed` (`subagent`) | End only, so no duration |
 | `phase` `PLAN`, `WIP`, `REVIEW` | `workstream.stage` | |
 | `phase` `REVIEWED` | `workstream.stage` (`review`) | Not proof that any single review was accepted |
-| `phase` `MERGED` | none | Used to infer a merge; no PR number, so no `pr.state` unless another event supplies one |
+| `phase` `MERGED` | `pr.state` (`merged`), when paired | Inferred. `number` comes from the latest earlier successful `pr.open` with the same `run_id`, `repo` and `branch`; without one, no event |
 | `phase` `DONE` | `workstream.closed` (`finished`) | See [outcomes](#outcomes) |
 | `review.round` | `review.state` | `state=start` is `round_started`, `end` is `round_ended`; `end` doesn't mean accepted. Missing `source` is `local`; `status` is absent. A `backfill` line adds no event: its `sha` fills the original's `head_sha` |
 | `review.result` | `review.state` (`summary`) with counts | Cycle or batch totals, not a round's. `source=bot` becomes `github` |
@@ -49,7 +49,7 @@ Every imported event has `imported.source: "dotfiles-v1"` and `quality: inferred
 | `review.finding` | `review.finding` | See [findings](#findings) |
 | `pr.open` | `command.completed` (`open-pr`); on success also `pr.state` (`open`) | |
 | `pr.watch` | `command.completed` (`review-watch`) | The old outcome becomes `reason`; `outcome` is absent |
-| `finalize.check` | `command.completed` (`finalize-check`) | `verdict` becomes `reason`; `outcome` is absent; `ready` implies a merged PR |
+| `finalize.check` | `command.completed` (`finalize-check`); `ready` with a `pr_number` also infers `pr.state` (`merged`) | `verdict` becomes `reason`; `outcome` is absent; `pr_number` becomes `number` |
 | `finalize.run` | `command.completed` (`finalize`) | `ok` also supports a `finished` outcome |
 
 ### Findings
