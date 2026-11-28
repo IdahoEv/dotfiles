@@ -21,10 +21,10 @@ No daemon or background record writer runs. Records are files, and a hook or the
 
 A missed budget replaces one entry; it never adds a daemon.
 
-- **Scope.** One shim per entry, covering only that surface's verbs (`fovea statusline`, `fovea-hook <event>`); every other verb stays Python. The shim reads the same record files and settings layers and writes no state.
+- **Scope.** One shim per entry, covering only that surface's verbs (`fovea statusline`, `fovea-hook <event>`); every other verb stays Python. Both read the same record files and settings layers and take the write rule of the entry they replace: the statusline shim writes no state, while the hook shim performs the same session-record and telemetry writes as `hook.py`.
 - **Artifact.** Source lives in `shims/<entry>/`, outside `src/fovea/`, so no layer imports it and the boundary test is unaffected. It builds into the same release archive and version as the Python package, with its own checksum; the [Open](#open) distribution decision sets how.
 - **Interface.** Same command name, argv, stdin JSON and one-line stdout as the Python entry, held to the same parity fixtures, so no caller can tell which implementation runs.
-- **Selection.** Fixed when the archive is built, per platform: that entry's console script in `pyproject.toml` names the shim, and a source checkout always runs Python. There is no runtime branch or call-time fallback.
+- **Selection.** Fixed when the archive is built, per platform: `fovea-hook` is its own console script, so it names the hook shim outright. `fovea` covers every CLI verb, so when that script names the statusline shim the shim dispatches on its first argument: `statusline` runs the shim, and every other verb runs the Python `cli.main` with argv and stdio unchanged, held to the parity fixtures like any other surface. A source checkout always runs Python. There is no call-time fallback.
 - **Stop.** If no shim brings an entry under budget, Phase 6 does not exit: the phase stops for a decision rather than shipping a slower entry or a daemon.
 
 ## Repository layout
