@@ -81,6 +81,7 @@ This is the target design; none of it is built. [Record lifecycles](workstream-l
   "activity": { "value": "waiting", "updated_at": "2026-11-27T20:40:02Z" },
   "attention": [
     {
+      "wait_id": "w-81d3f0a2",
       "cause": "question",
       "request": "Approve the field list?",
       "since": "2026-11-27T20:40:02Z",
@@ -191,6 +192,7 @@ Both records use the same entry.
 
 | Field | Type | Req | Needed for | Why stored |
 | --- | --- | --- | --- | --- |
+| `wait_id` | string, random | yes | Matching a wait's [telemetry](fovea/telemetry-design.md#event-catalog) open and close | Entries can be open in parallel, and the closer must name the right one |
 | `cause` | `question`, `plan-approval`, `design-gate`, `auth`, `reviewer-failed`, `review-stalled`, `no-pr` (open set) | yes | Sorting the queue | Only the writer knows |
 | `request` | string | yes | What is being asked | Only the writer knows |
 | `since` | time | yes | How long it has waited | The moment isn't recorded elsewhere |

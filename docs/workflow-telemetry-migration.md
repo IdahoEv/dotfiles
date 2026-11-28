@@ -10,7 +10,7 @@
 | --- | --- |
 | Old reports | `wf-report.sh`, `wf-backfill.sh` and `wf-review-gaps.sh` keep working on `${XDG_STATE_HOME:-~/.local/state}/workflow-telemetry/events.jsonl`, or `WF_TELEMETRY_LOG` |
 | Keeping history | Don't run `wf-report.sh --prune`; it deletes events from the original |
-| Tokens, cost, test time | The old reports compute these from transcripts. Once a transcript expires, they show as unknown. Only an import made before then can keep them |
+| Tokens, cost, test time | The old reports compute these from transcripts. With no transcripts, tokens and cost show unknown but tests show zero; with some missing, totals are partial, flagged only by `!` lines. Only an import made before they expire can keep them |
 | Switch-over | Dotfiles logging continues until Fovea replaces it. Where both logged the same period, import only events before Fovea started on that host |
 
 ## Old IDs to new IDs
@@ -23,11 +23,11 @@
 | `session_id` | `<tool>-<native_id>` | The log doesn't name the agent, and Codex hooks can write to it too. `claude` or `codex` only when that agent's transcript or session log has the ID; otherwise `unknown-<id>` |
 | empty `session_id` | absent | Many script events have none |
 | (none) | `event_id` | Hash of the source's host ID, the raw line and its occurrence number among identical lines |
-| (none) | `host_id`, `pool` | You supply them for each source log |
-| (none) | `seq`, `logged_at` | Assigned at import; `time` keeps the old `ts` |
+| (none) | `host_id`, `pool` | Those of the host that wrote the log. Run the import there |
+| (none) | `seq`, `logged_at` | Assigned by that host's Fovea writer, so imports never collide with its pull cursor; `time` keeps the old `ts` |
 | `job_id` | dropped | No Fovea use |
 
-Every imported event has `imported.source: "dotfiles-v1"` and `quality: inferred` wherever a value was derived.
+Every imported event has `imported.source: "dotfiles-v1"` and `quality: inferred` wherever a value was derived. A required field with no source below stays absent ([imports may omit it](fovea/telemetry-design.md#imported-data)). For `command.completed`, `outcome` `fail` becomes `failed`; `ok`, `stopped` and `handoff` carry over.
 
 ## Events
 
@@ -36,21 +36,38 @@ Every imported event has `imported.source: "dotfiles-v1"` and `quality: inferred
 | `ticket.start` | `command.completed` (`kickoff`); first success also infers `workstream.created` | No title, labels or ticket type; `provider` and `chain` carry over |
 | `session.launch` | `command.completed` (`session-launch`) | |
 | `session.start` | `session.started` | `source` becomes `entry`; `interface` is unknown, imported as a gap |
-| `session.end` | `session.ended` | `prompt_input_exit` and `other` become `exit`; `clear` stays |
+| `session.end` | `session.ended` | `clear` stays; any other reason becomes `exit`, inferred |
 | `session.fail` | `turn.ended` (`failed`) | `error` becomes `error_type` |
 | `subagent.stop` | `span.completed` (`subagent`) | End only, so no duration |
 | `phase` `PLAN`, `WIP`, `REVIEW` | `workstream.stage` | |
 | `phase` `REVIEWED` | `workstream.stage` (`review`) | Not proof that any single review was accepted |
 | `phase` `MERGED` | none | Used to infer a merge; no PR number, so no `pr.state` unless another event supplies one |
 | `phase` `DONE` | `workstream.closed` (`finished`) | See [outcomes](#outcomes) |
-| `review.round` | `review.state` | `state=start` is `round_started`, `end` is `round_ended`; `end` doesn't mean accepted. Missing `source` is `local` |
-| `review.result` | `review.state` (`round_ended`) with counts | `source=bot` becomes `github` |
-| `review.launch` | `review.launch` | `tokens_in` and `tokens_out` become an incomplete `usage.snapshot` |
-| `review.finding` | `review.finding` | `finding_id`, or the legacy `key`, becomes `group_id`. A `backfill` event with `matched_ts` fills text into the original instead of adding a finding. `comment_id` becomes `external_id`. Missing verdict or validity stays absent |
+| `review.round` | `review.state` | `state=start` is `round_started`, `end` is `round_ended`; `end` doesn't mean accepted. Missing `source` is `local`; `status` is absent. A `backfill` line adds no event: its `sha` fills the original's `head_sha` |
+| `review.result` | `review.state` (`summary`) with counts | Cycle or batch totals, not a round's. `source=bot` becomes `github` |
+| `review.launch` | `review.launch` | See [launch tokens](#launch-tokens) |
+| `review.finding` | `review.finding` | See [findings](#findings) |
 | `pr.open` | `command.completed` (`open-pr`); on success also `pr.state` (`open`) | |
-| `pr.watch` | `command.completed` (`review-watch`) | The old outcome becomes `reason` |
-| `finalize.check` | `command.completed` (`finalize-check`) | `verdict` becomes `reason`; `ready` implies a merged PR |
+| `pr.watch` | `command.completed` (`review-watch`) | The old outcome becomes `reason`; `outcome` is absent |
+| `finalize.check` | `command.completed` (`finalize-check`) | `verdict` becomes `reason`; `outcome` is absent; `ready` implies a merged PR |
 | `finalize.run` | `command.completed` (`finalize`) | `ok` also supports a `finished` outcome |
+
+### Findings
+
+| Fovea field | Rule |
+| --- | --- |
+| `finding_id` | Bot: derived from `comment_id`. Otherwise the new `event_id`, because old IDs repeat across cycles |
+| `group_id` | Old `finding_id` or legacy `key`; with neither, the new `finding_id` |
+| `external_id` | `comment_id` |
+| `verdict`, `validity` | Absent if missing |
+
+A local `backfill` finding with `matched_ts` fills text into the original. One without it is skipped and counted, as the old reports ignore it. Bot `backfill` findings are imported.
+
+### Launch tokens
+
+If no transcript-derived usage exists for the launch's subagent, `tokens_out` becomes `output` in an incomplete `usage.snapshot`. `tokens_in` is dropped: it mixes cached and uncached input.
+
+### Other lines
 
 - **Undocumented fields** exist on some `review.finding` and `review.launch` lines, such as `disposition`, `file`, `status` and `summary`. The importer ignores them and counts what it ignored. It copies only fields on Fovea's allowlist.
 - **Bad lines** are skipped and counted. At least one line in a real log has a whole argument string as its event name.

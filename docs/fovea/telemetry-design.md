@@ -70,7 +70,7 @@ Listed by priority. **Measured** comes from a clock or a provider's count. **Est
 | `imported` | when imported | `{source, original_id}` |
 
 - **One writer command appends every event.** It takes an exclusive lock, validates fields against the type's allowlist, and returns success or failure. It never truncates a transcript path.
-- **IDs and descriptions travel separately.** Every workstream event repeats `workstream_id`, `repo` and ticket IDs. Titles, labels and types appear in `workstream.created`, `updated` and `closed`.
+- **IDs and descriptions travel separately.** Every workstream event repeats `workstream_id`, `repo` and ticket IDs. Titles, labels and ticket types appear in `workstream.created`, `updated` and `closed`.
 - **Order** within a host is `seq`. Across hosts it is `time`, which depends on host clocks.
 
 ## Event catalog
@@ -83,8 +83,8 @@ Listed by priority. **Measured** comes from a clock or a provider's count. **Est
 | --- | --- | --- | --- | --- |
 | `session.started` | A session began or reopened | `tool`, `native_id`, `entry` (`startup`, `resume`, `clear`, `compact`, `fork`), `interface` (`interactive`, `headless`, `subagent`, `scheduled`); `agent_version`?, `purpose`?, `purpose_source`?, `previous_id`?, `forked_from`?, `parent_session_id`?, `config_ref`? (workflow version) | Start hook | 2, 7, 11, 15 |
 | `session.updated` | Purpose changed | `purpose`, `purpose_source` | Record command | 2, 11, 15 |
-| `session.linked` | Joined a workstream or changed role | `role`, `reason` (`created`, `auto`, `promoted`, `takeover`, `clear`); `replaced_session_id`? | Record command | 1, 11 |
-| `session.unlinked` | Left a workstream | `reason` (`purpose`, `finished`, `dropped`) | Record command | 1, 11 |
+| `session.linked` | Joined a workstream or changed role | `role`, `reason` (`created`, `auto`, `declared`, `promoted`, `takeover`, `lead_check`, `resume`, `fork`, `clear`); `replaced_session_id`? | Record command | 1, 11 |
+| `session.unlinked` | Left a workstream | `reason` (`purpose`, `finished`, `dropped`, `gone`) | Record command | 1, 11 |
 | `session.ended` | An end was seen. Often missing, so nothing depends on it | `end_reason` (`exit`, `clear`, `replaced`, `removed`) | End hook, takeover, removal check | 9, 11 |
 | `session.destroyed` | Final entry before the record goes | `tool`, `native_id`, `transcript_path` or `transcript_gap`; plus `workstream_id` and `tickets` if it was linked | Dismiss, cleanup, finish, drop | 11 |
 | `turn.started` | The agent began working | `trigger` (`prompt`, `command`, `skill`, `agent_message`, `schedule`, `continuation`), `actor` (`user`, `automation`, `unknown`); `name`? (command or skill), `input_chars`?, `pasted_chars`?, `input_kind`? (`typed`, `pasted`, `dictated`, `mixed`, `unknown`) | Prompt-submit hook or adapter | 3, 8, 12–15 |
@@ -93,9 +93,9 @@ Listed by priority. **Measured** comes from a clock or a provider's count. **Est
 | `attention.opened` | Something needs you | `wait_id`, `scope` (`session`, `workstream`), `cause`; `request`?, `effort`?, `subject`? | Question, permission and notification hooks; workflow commands | 3, 8, 13, 15 |
 | `attention.closed` | It no longer does | `wait_id`, `cleared_by` (`reply`, `command`, `subject_changed`, `stage`, `destroyed`), `resolution` (`answered`, `approved`, `denied`, `cancelled`, `unknown`); `input_chars`?, `input_kind`? | Same | 3, 8, 13–15 |
 | `input.active_time` | Seconds the agent counted you as active | `seconds`, `from`, `to` | Claude OpenTelemetry adapter | 14 |
-| `span.completed` | One timed piece of agent work | `kind` (`model_request`, `tool`, `test`, `subagent`, `compaction`), `ended_at`, `outcome`; `started_at`?, `duration_ms`?, `ttft_ms`?, `name`? (tool or subagent type), `model`?, `effort`?, `query_source`?, `error_type`?, `command_fingerprint`? | Tool, model and subagent hooks, extractors, OpenTelemetry | 3, 4, 9, 12 |
+| `span.completed` | One timed piece of agent work | `kind` (`model_request`, `tool`, `test`, `subagent`, `compaction`), `ended_at`, `outcome`; `started_at`?, `duration_ms`?, `ttft_ms`?, `name`? (tool or subagent type), `model`?, `effort`?, `query_source`?, `error_type`?, `command_fingerprint`?, `source_ref`? (the agent's tool-use, request or subagent ID) | Tool, model and subagent hooks, extractors, OpenTelemetry | 3, 4, 9, 12 |
 
-`cause` is the record's open set (`question`, `plan-approval`, `design-gate`, `auth`, `reviewer-failed`, `review-stalled`, `no-pr`) plus `permission`.
+`cause` is the record's open set (`question`, `plan-approval`, `design-gate`, `auth`, `reviewer-failed`, `review-stalled`, `no-pr`) plus `permission`. `wait_id` is the [attention entry](../workstream-schema.md#attention)'s. For a wait with no entry, the adapter uses the agent's request ID; without one, the wait has no explicit close.
 
 ### Usage and quota
 
@@ -104,6 +104,8 @@ Listed by priority. **Measured** comes from a clock or a provider's count. **Est
 | `usage.snapshot` | Tokens that outlive transcripts | `scope_key`, `granularity` (`request`, `turn`, `session`), `from`, `to`, `model`, `tokens`, `extractor`, `extractor_version`, `complete`, `billing` (`api`, `subscription`, `unknown`); `speed`?, `account_ref`?, `api_cost_usd`?, `price_table`?, `agent_cost_usd`? | Usage adapter | 1, 2, 5, 7, 10, 15 |
 | `quota.sample` | How much of an account limit is used | `account_ref` (your label, never an email), `limit_id`, `window_minutes`, `used_pct`, `resets_at`, `source`; `plan`? | Quota adapter, when the value changes | 1, 2 |
 
+- **`scope_key`** is the agent's request ID or the `turn_id`. At `session` granularity it is `total`, a running total.
+- **Link boundaries.** Each link and unlink also captures usage. A `session` source stores that total again under `at:<link or unlink event_id>`; reports only subtract these, to split the running total. Without one, the split is unknown.
 - **Replace, never add.** For one session, subagent, model, speed and `scope_key`, the latest snapshot wins. A report uses one granularity per session, the finest complete one, so totals are never counted twice. Adapters must also drop requests that resumed or forked transcripts repeat.
 - **Token buckets don't overlap:** `input` (excluding cache), `cache_read`, `cache_write_5m`, `cache_write_1h`, `output`, `reasoning`. If a source can't separate reasoning from output, `reasoning` is unknown and `output` is flagged as including it.
 - **Capture** at each turn end, before a record is destroyed, and in a sweep before transcripts expire (Claude Code keeps them 30 days by default). Every report or pull runs the sweep. A host you rarely query also needs it scheduled.
@@ -113,16 +115,24 @@ Listed by priority. **Measured** comes from a clock or a provider's count. **Est
 | Event | Purpose | Req | Producer and trigger | Use |
 | --- | --- | --- | --- | --- |
 | `workstream.created` | Identity and description | `origin` (`ticket`, `iterate`, `talk`, `request`), `slug`, `repo`, `branch`, `tickets` ([with descriptions](#ticket-type)); `title`?, `category`?, `group`?, `from_session_id`? | Kickoff, promotion, record command | 1, 10, 11, 13 |
-| `workstream.updated` | The description changed | The same description fields, all current values | Record command | 11, 13 |
+| `workstream.updated` | The description changed | The same description fields: all current values, except [`category`](#ticket-type) only when set | Record command | 11, 13 |
 | `workstream.stage` | Stage written | `stage` (`plan`, `wip`, `review`) | Stage writes | 1, 3, 10, 11, 13 |
-| `workstream.closed` | Final summary | `outcome` (`finished`, `dropped`), `stage`, `repo`, `slug`, `tickets` with descriptions, `prs`; `title`?, `category`?, `drop_reason`? | Finish or drop, before destroying the record | 1, 10, 11, 13 |
-| `review.state` | A review was planned, started a round, ended one, was accepted or removed | `source`, `status` (`planned`, `running`, `accepted`, `removed`), `round`, `change` (`planned`, `round_started`, `round_ended`, `accepted`, `reset`, `removed`); `reviewer`?, `head_sha`?, `fixed`?, `dismissed`?, `deferred`?, `findings_count`? | Review commands | 6–9, 13 |
+| `workstream.closed` | Final summary | `outcome` (`finished`, `dropped`), `stage`, `repo`, `slug`, `tickets` with descriptions, `prs`; `title`?, `drop_reason`? | Finish or drop, before destroying the record | 1, 10, 11, 13 |
+| `review.state` | A review was planned, started a round, ended one, was accepted or removed | `source`, `status` (`planned`, `running`, `accepted`, `removed`), `round`, `change` (`planned`, `round_started`, `round_ended`, `accepted`, `reset`, `removed`, or `summary`: cycle or batch totals, with no `status` or `round`); `reviewer`?, `head_sha`?, `fixed`?, `dismissed`?, `deferred`?, `findings_count`? | Review commands | 6–9, 13 |
 | `review.launch` | A reviewer ran | `reviewer`, `round`, `model`; `effort`?, `agent_id`? or `reviewer_session_id`?, `config_ref`? | Review manager | 5–7 |
 | `review.finding` | One triaged finding | `finding_id`, `group_id`, `source`, `reviewer`, `severity`; `round`?, `verdict`?, `validity`?, `reason`?, `claim`?, `path`? (relative to the repo), `line`?, `head_sha`?, `external_id`? | Review triage; bot-comment adapter | 5–7 |
 | `pr.state` | A PR was opened, updated, merged or closed | `number`, `state` (`open`, `merged`, `closed`); `url`?, `branch`?, `head_sha`?, `merged_at`? | PR commands and sync | 6, 8, 11 |
 | `command.completed` | A workflow command ended | `command`, `outcome` (`ok`, `failed`, `stopped`, `handoff`), `duration_ms`; `reason`? (fixed list), `exit_code`? | Each workflow command, including launches and review watches | 9 |
 
 `group_id` is shared by reviewers who raised the same finding. Findings overlap when two different reviewers share one.
+
+**A fact seen twice counts once.** These keys apply beyond `event_id`:
+
+| Event | Same fact when | Merge |
+| --- | --- | --- |
+| `span.completed` | Same `session_id`, `kind` and `source_ref` | Hook fields win; other producers fill blanks. Without `source_ref`, only the one producer the adapter names for that agent and kind counts |
+| `review.finding` | Same `workstream_id` (else `session_id`), `source`, `reviewer` and `finding_id` | Latest wins. `finding_id` is unique to one finding in that scope; the bot adapter derives it from `external_id` |
+| `pr.state` | Same `repo`, `number` and `state` | Latest wins |
 
 ### Hosts and gaps
 
@@ -137,7 +147,7 @@ Listed by priority. **Measured** comes from a clock or a provider's count. **Est
 | Case | Events, in order |
 | --- | --- |
 | Standalone session (talk, governor, project review, ad hoc) | `session.started` → turns, spans, usage → `session.ended` if seen → `session.destroyed` |
-| Talk becomes work | Same session: `workstream.created` (`from_session_id`) → `session.updated` (implement) → `session.linked` (`promoted`). Earlier usage stays outside the workstream; reports can add it as a separate "preceding discussion" line using the link time |
+| Talk becomes work | Same session: `workstream.created` (`from_session_id`) → `session.updated` (implement) → `session.linked` (`promoted`). Earlier usage stays outside the workstream; reports can add it as a separate "preceding discussion" line using the link time. If [usage can't be split](#usage-and-quota) there, both figures are unknown |
 | Handoff | Takeover: old `session.ended` (`replaced`) → new `session.started` → `session.linked` (`takeover`, `replaced_session_id`) → old `session.linked` (`helper`). A failed launch leaves only the first event and `command.completed` |
 | Resume or `/clear` | `session.started` with `entry`; `/clear` also sets `previous_id` and relinks |
 | Merge, then a second PR | `pr.state` merged; the workstream stays open → second `pr.state` open |
@@ -153,7 +163,7 @@ Listed by priority. **Measured** comes from a clock or a provider's count. **Est
 {"schema_version":0,"event_id":"7f0c…","type":"workstream.closed","time":"2026-11-27T23:10:04.120Z",
  "logged_at":"2026-11-27T23:10:04.131Z","pool":"personal","host_id":"h-51ac…","seq":18234,
  "producer":"finish","producer_version":"0.1.0","quality":"measured","workstream_id":"ws-9c41e07a52bd",
- "repo":"example/app","slug":"record lifecycles","outcome":"finished","stage":"review","category":"design",
+ "repo":"example/app","slug":"record lifecycles","outcome":"finished","stage":"review",
  "tickets":[{"provider":"github","id":"12","type":"feature","labels":["design"],"estimate":"3"}],
  "prs":[{"number":15,"state":"merged"}]}
 ```
@@ -169,9 +179,9 @@ Events store only timestamps, so you can change these rules and rerun old data. 
 | Agent working | A linked session has a turn running and no open wait. Spans break this down; the rest is `unattributed` |
 | Declared away | You would otherwise be waited on or idle, inside an `away.declared` period |
 | Busy elsewhere | Waiting on you, while you submitted a prompt or answered a wait in another session in the pool |
+| Unknown | Needed signals are missing, including when a session in use during the interval can't report your input or tell it from automation |
 | Away or abandoned | No input from you anywhere in the pool for longer than the threshold (default 30 minutes) |
 | Waiting on you | Any other time with a wait open, a PR ready to merge, or a finished turn awaiting your next prompt |
-| Unknown | Needed signals are missing |
 
 - Only `actor: user` turns and waits cleared by your reply count as your activity.
 - **A pool can't see your activity in another pool,** so time on work looks like time away in personal data.
@@ -198,7 +208,7 @@ All three can be compared per activity. **Quota share is an estimate:**
 
 ### Ticket type
 
-Each ticket in `workstream.created`, `updated` and `closed` copies the tracker's `type`, `labels` and `estimate` word for word through the tracker adapter, plus `provider`, `id` and `url`. The project is `repo`, and a chain is a list of more than one ticket. `category` is Fovea's own optional value from a configurable list (starting `feature`, `bug`, `design`, `research`, `chore`), set at kickoff or edited later. The workstream record needs no new field, because nothing reads category during the work.
+Each ticket in `workstream.created`, `updated` and `closed` copies the tracker's `type`, `labels` and `estimate` word for word through the tracker adapter, plus `provider`, `id` and `url`. The project is `repo`, and a chain is a list of more than one ticket. `category` is Fovea's own optional value from a configurable list (starting `feature`, `bug`, `design`, `research`, `chore`), set at kickoff or edited later. Only the `created` or `updated` event that sets it carries it, and the latest wins. The workstream record needs no new field, because nothing reads category during the work.
 
 ### Prompt labels
 
@@ -306,7 +316,7 @@ Fovea accepts events from outside importers and knows nothing about their source
 
 - write this schema, setting `imported` and a deterministic `event_id`, so reruns add nothing;
 - mark guessed values `quality: inferred`, including any workstream ID it makes;
-- leave unknown fields absent and record a `gap.recorded` rather than guessing zero.
+- leave unknown fields absent and record a `gap.recorded` rather than guessing zero. The writer lets imported events omit required fields beyond the [common ones](#common-fields) when the source lacks them.
 
 Reports can include or exclude imported data. The dotfiles importer is specified [outside this design](../workflow-telemetry-migration.md).
 
