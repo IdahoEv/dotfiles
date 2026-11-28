@@ -18,3 +18,5 @@
 | **2. Backend-agnostic multiplexer** | Rename `agy-tmux` → `ws-tmux`; add `--backend claude\|agy\|codex` and `Backend` column; add `--launcher tmux` to `start-ticket.sh`; custom 256-color palette & `PR` column; record `sessions` in `.workstream.json` (`workstream.sh record-session`, wired per provider as shims join `ws-tmux`) + `resume-workstream` / dashboard `resume` for crash recovery and distilled handoff for provider switches | `dotfiles` (`ws-tmux`) |
 | **3. Cross-machine dashboard** | Async SSH status poller (`Host` column) across laptop + desktop; `Enter` on remote row attaches via `ssh -t <host> tmux attach`; cross-machine handoff via `.workstream.json` + distilled context bundle | `ws-tmux` |
 | **4. Standalone extraction** | Invert `dot_claude/` → neutral workflow core + per-backend installers; extract workflow + `ws-tmux` into its own repository; unify config into layered `config.yaml` under `.workstream/` ([design](workstream-config.md)) | Standalone repo |
+
+Target repository layout, module boundaries and migration order: [workstream-code-layout.md](workstream-code-layout.md).

@@ -2,6 +2,8 @@
 
 State as of 2026-11. **Keep this current:** any change to the dotfiles workflow — commands, agents, skills, hooks, or the scripts behind them — must check whether this document needs updating.
 
+This describes the dotfiles implementation. The target repository layout for its successor is [workstream-code-layout.md](workstream-code-layout.md).
+
 ## Flow: where review happens
 
 ```
